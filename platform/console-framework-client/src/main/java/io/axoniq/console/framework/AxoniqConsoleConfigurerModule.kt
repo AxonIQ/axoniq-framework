@@ -47,6 +47,9 @@ class AxoniqConsoleConfigurerModule(
 ) : ConfigurerModule {
 
     override fun configureModule(configurer: Configurer) {
+        if(properties.applicationName.trim().isEmpty()) {
+            throw IllegalArgumentException("Application Name of AxonIQ Console Properties cannot be empty")
+        }
         val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(properties.threadPoolSize);
         configurer
             .registerComponent(ProcessorMetricsRegistry::class.java) {

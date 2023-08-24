@@ -7,7 +7,7 @@ public class AxoniqConsoleSpringProperties {
     private String host = "connector.inspector.axoniq.io";
     private Integer port = 7000;
     private String credentials = null;
-    private String applicationName;
+    private String applicationName = null;
     private boolean dlqEnabled = true;
     private boolean secure = true;
     private Long initialDelay = 0L;

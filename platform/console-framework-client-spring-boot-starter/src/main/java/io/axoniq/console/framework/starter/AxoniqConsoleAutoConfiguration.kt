@@ -46,9 +46,15 @@ class AxoniqConsoleAutoConfiguration {
         val credentials = properties.credentials
         if (credentials == null) {
             logger.warn("No credentials were provided for the connection to AxonIQ Console. Please provide them as instructed through the 'axoniq.console.credentials' property.")
-            return ConfigurerModule {  }
+            return ConfigurerModule { }
         }
-        val applicationName = properties.applicationName ?: applicationContext.applicationName
+        val applicationName = (properties.applicationName?.trim()?.ifEmpty { null })
+            ?: (applicationContext.applicationName.trim().ifEmpty { null })
+            ?: (applicationContext.id?.removeSuffix("-1"))
+        if (applicationName == null) {
+            logger.warn("Was unable to determine your application's name. Please provide it through the 'axoniq.console.application-name' property.")
+            return ConfigurerModule { }
+        }
         val (environmentId, accessToken) = credentials.split(":")
         logger.info(
             "Setting up client for AxonIQ Console environment {}. This application will be registered as {}",
