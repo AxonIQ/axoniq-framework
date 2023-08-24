@@ -65,5 +65,5 @@ jobs:
           ./mvnw -B -U -Dstyle.color=always -Possrh deploy -DskipTests=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
-          MAVEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASS }}
+          MAVEN_USERNAME: ${{ secrets.DEVBOT_GITHUB_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.DEVBOT_GITHUB_TOKEN }}
