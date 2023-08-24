@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2022-2023. Inspector Axon
+  ~ Copyright (c) 2022-2023. AxonIQ B.V.
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -20,25 +20,25 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.axoniq.inspector</groupId>
-    <artifactId>inspector-axon-parent</artifactId>
-    <version>0.1.9</version>
+    <groupId>io.axoniq.console</groupId>
+    <artifactId>console-framework-client-parent</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
 
     <modules>
-        <module>inspector-axon-api</module>
-        <module>inspector-axon-spring-boot-starter</module>
-        <module>inspector-axon</module>
+        <module>console-framework-client-api</module>
+        <module>console-framework-client-spring-boot-starter</module>
+        <module>console-framework-client</module>
     </modules>
     <packaging>pom</packaging>
 
-    <name>AxonIQ - Inspector Axon Parent</name>
-    <description>Project containing several connectors to Inspector Axon</description>
+    <name>AxonIQ Console Framework Client - Parent</name>
+    <description>Project containing the Framework Client for AxonIQ Console</description>
 
-    <inceptionYear>2022</inceptionYear>
+    <inceptionYear>2023</inceptionYear>
     <url>https://axoniq.io/</url>
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/AxonIQ/inspector-connectors/issues</url>
+        <url>https://github.com/AxonIQ/console-framework-client/issues</url>
     </issueManagement>
     <licenses>
         <license>
@@ -56,7 +56,7 @@
 
         <axon.version>4.6.6</axon.version>
 
-        <projectreactor.version>3.5.6</projectreactor.version>
+        <projectreactor.version>3.5.9</projectreactor.version>
         <spring-boot.version>2.7.12</spring-boot.version>
         <dokka.version>1.8.10</dokka.version>
     </properties>
@@ -100,6 +100,11 @@
         </dependency>
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
             <artifactId>kotlin-test</artifactId>
             <version>${kotlin.version}</version>
             <scope>test</scope>
@@ -112,7 +117,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.1.0</version>
+                    <version>3.1.2</version>
                 </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>
@@ -198,9 +203,9 @@
     </repositories>
 
     <scm>
-        <connection>scm:git:git://github.com/AxonIQ/inspector-connectors.git</connection>
-        <developerConnection>scm:git:git@github.com:AxonIQ/inspector-connectors.git</developerConnection>
-        <url>https://github.com/AxonIQ/inspector-connectors</url>
+        <connection>scm:git:git://github.com/AxonIQ/console-framework-client.git</connection>
+        <developerConnection>scm:git:git@github.com:AxonIQ/console-framework-client.git</developerConnection>
+        <url>https://github.com/AxonIQ/console-framework-client</url>
         <tag>HEAD</tag>
     </scm>
 

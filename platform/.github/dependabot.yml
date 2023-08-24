@@ -12,7 +12,7 @@ updates:
   milestone: 8
   reviewers:
     - "gklijs"
-    - "Morlack" # Main
+    - "CodeDrivenMitch" # Main
     - "smcvb"
 - package-ecosystem: maven
   directory: "/"
@@ -25,5 +25,5 @@ updates:
   milestone: 8
   reviewers:
     - "gklijs"
-    - "Morlack" # Main
+    - "CodeDrivenMitch" # Main
     - "smcvb"

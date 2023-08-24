@@ -1,6 +1,6 @@
 ---
 name: 'Enhancement request'
-about: 'Suggest an enhancement/change to an existing feature for Inspector Axon Connector'
+about: 'Suggest an enhancement/change to an existing feature for AxonIQ Console Framework Client'
 title:
 labels: 'Type: Enhancement'
 ---
@@ -13,11 +13,11 @@ labels: 'Type: Enhancement'
 
 ### Current Behaviour
 
-<!-- Please share the current behaviour of Inspector Axon Connector around this topic, if applicable. -->
+<!-- Please share the current behaviour of AxonIQ Console Framework Client around this topic, if applicable. -->
 
 ### Wanted Behaviour
 
-<!-- Please describe the desired outcome through Inspector Axon Connector around the suggested enhancement. -->
+<!-- Please describe the desired outcome through AxonIQ Console Framework Client around the suggested enhancement. -->
 
 ### Possible Workarounds
 
