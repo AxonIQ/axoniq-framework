@@ -58,7 +58,7 @@
 
         <projectreactor.version>3.5.9</projectreactor.version>
         <spring-boot.version>2.7.12</spring-boot.version>
-        <dokka.version>1.8.10</dokka.version>
+        <dokka.version>1.8.20</dokka.version>
     </properties>
 
     <dependencyManagement>
