@@ -1,6 +1,6 @@
 ---
 name: 'Feature request'
-about: 'Suggest a feature for Inspector Axon Connector'
+about: 'Suggest a feature for AxonIQ Console Framework Client'
 title:
 labels: 'Type: Feature'
 ---
@@ -16,11 +16,11 @@ labels: 'Type: Feature'
 
 ### Current Behaviour
 
-<!-- Please share the current behaviour of Inspector Axon Connector around this topic, if applicable. -->
+<!-- Please share the current behaviour of AxonIQ Console Framework Client around this topic, if applicable. -->
 
 ### Wanted Behaviour
 
-<!-- Please describe the desired outcome through Inspector Axon Connector around the suggested feature. -->
+<!-- Please describe the desired outcome through AxonIQ Console Framework Client around the suggested feature. -->
 
 ### Possible Workarounds
 

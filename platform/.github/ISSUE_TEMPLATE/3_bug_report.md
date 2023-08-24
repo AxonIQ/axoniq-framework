@@ -1,6 +1,6 @@
 ---
 name: 'Bug report'
-about: 'Report a bug in Inspector Axon Connector'
+about: 'Report a bug in AxonIQ Console Framework Client'
 title:
 labels: 'Type: Bug'
 ---
@@ -9,7 +9,7 @@ labels: 'Type: Bug'
 
 ### Basic information
 
-* Inspector Axon Connector version:
+* AxonIQ Console Framework Client version:
 * JDK version:  
 * Axon Framework version (if applicable):
 * Complete executable reproducer if available (e.g. GitHub Repo):

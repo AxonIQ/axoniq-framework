@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2022-2023. Inspector Axon
+  ~ Copyright (c) 2022-2023. AxonIQ B.V.
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -20,25 +20,25 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.axoniq.inspector</groupId>
-    <artifactId>inspector-axon-parent</artifactId>
+    <groupId>io.axoniq.console</groupId>
+    <artifactId>console-framework-client-parent</artifactId>
     <version>0.2.0-SNAPSHOT</version>
 
     <modules>
-        <module>inspector-axon-api</module>
-        <module>inspector-axon-spring-boot-starter</module>
-        <module>inspector-axon</module>
+        <module>console-framework-client-api</module>
+        <module>console-framework-client-spring-boot-starter</module>
+        <module>console-framework-client</module>
     </modules>
     <packaging>pom</packaging>
 
-    <name>AxonIQ - Inspector Axon Parent</name>
-    <description>Project containing several connectors to Inspector Axon</description>
+    <name>AxonIQ Console Framework Client - Parent</name>
+    <description>Project containing the Framework Client for AxonIQ Console</description>
 
-    <inceptionYear>2022</inceptionYear>
+    <inceptionYear>2023</inceptionYear>
     <url>https://axoniq.io/</url>
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/AxonIQ/inspector-connectors/issues</url>
+        <url>https://github.com/AxonIQ/console-framework-client/issues</url>
     </issueManagement>
     <licenses>
         <license>
@@ -96,6 +96,11 @@
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
             <artifactId>kotlin-stdlib-jdk8</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
             <version>${kotlin.version}</version>
         </dependency>
         <dependency>
@@ -198,9 +203,9 @@
     </repositories>
 
     <scm>
-        <connection>scm:git:git://github.com/AxonIQ/inspector-connectors.git</connection>
-        <developerConnection>scm:git:git@github.com:AxonIQ/inspector-connectors.git</developerConnection>
-        <url>https://github.com/AxonIQ/inspector-connectors</url>
+        <connection>scm:git:git://github.com/AxonIQ/console-framework-client.git</connection>
+        <developerConnection>scm:git:git@github.com:AxonIQ/console-framework-client.git</developerConnection>
+        <url>https://github.com/AxonIQ/console-framework-client</url>
         <tag>HEAD</tag>
     </scm>
 

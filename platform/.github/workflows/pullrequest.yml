@@ -1,4 +1,4 @@
-name: Pull Request Build - Inspector Axon Connector
+name: Pull Request
 
 on:
   pull_request:
@@ -46,7 +46,7 @@ jobs:
         if: ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
           ./mvnw -B -Dstyle.color=always sonar:sonar \
-          -Dsonar.projectKey=InspectorConnector \
+          -Dsonar.projectKey=ConsoleFrameworkClient \
           -Dsonar.organization=axoniq \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.login=${{ secrets.SONAR_TOKEN }}
