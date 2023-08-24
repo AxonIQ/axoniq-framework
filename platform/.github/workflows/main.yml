@@ -53,7 +53,7 @@ jobs:
         if: matrix.sonar-enabled
         run: |
           ./mvnw -B -Dstyle.color=always sonar:sonar \
-          -Dsonar.projectKey=InspectorConnector \
+          -Dsonar.projectKey=console-framework-client \
           -Dsonar.organization=axoniq \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.login=${{ secrets.SONAR_TOKEN }}
