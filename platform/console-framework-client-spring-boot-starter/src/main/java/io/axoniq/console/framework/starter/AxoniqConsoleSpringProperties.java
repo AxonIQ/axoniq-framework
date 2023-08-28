@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "axoniq.console")
 public class AxoniqConsoleSpringProperties {
-    private String host = "connector.inspector.axoniq.io";
+    private String host = "framework.console.axoniq.io";
     private Integer port = 7000;
     private String credentials = null;
     private String applicationName = null;
