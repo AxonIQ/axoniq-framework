@@ -52,13 +52,13 @@
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <kotlin.version>1.8.10</kotlin.version>
+        <kotlin.version>1.9.10</kotlin.version>
 
         <axon.version>4.6.6</axon.version>
 
         <projectreactor.version>3.5.9</projectreactor.version>
         <spring-boot.version>2.7.12</spring-boot.version>
-        <dokka.version>1.8.10</dokka.version>
+        <dokka.version>1.8.20</dokka.version>
     </properties>
 
     <dependencyManagement>
@@ -122,7 +122,7 @@
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.8</version>
+                    <version>0.8.10</version>
                 </plugin>
             </plugins>
         </pluginManagement>
