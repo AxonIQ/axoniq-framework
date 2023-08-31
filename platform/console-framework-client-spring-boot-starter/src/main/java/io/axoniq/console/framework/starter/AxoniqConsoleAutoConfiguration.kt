@@ -16,7 +16,7 @@
 
 package io.axoniq.console.framework.starter
 
-import io.axoniq.console.framework.AxoniqConsoleProperties
+import io.axoniq.console.framework.AxoniqConsoleConfigurerModule
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory
 import org.axonframework.config.ConfigurerModule
 import org.axonframework.tracing.MultiSpanFactory
@@ -61,19 +61,15 @@ class AxoniqConsoleAutoConfiguration {
             environmentId,
             applicationName
         )
-        return io.axoniq.console.framework.AxoniqConsoleConfigurerModule(
-            properties = AxoniqConsoleProperties(
-                host = properties.host,
-                port = properties.port,
-                initialDelay = properties.initialDelay,
-                secure = properties.isSecure,
-                environmentId = environmentId,
-                accessToken = accessToken,
-                applicationName = applicationName,
-                dlqEnabled = properties.isDlqEnabled
-            ),
-            configureSpanFactory = false
-        )
+        return AxoniqConsoleConfigurerModule
+            .create(environmentId, accessToken, applicationName)
+            .port(properties.port)
+            .host(properties.host)
+            .dlqMode(properties.dlqMode)
+            .secure(properties.isSecure)
+            .initialDelay(properties.initialDelay)
+            .disableSpanFactoryInConfiguration()
+            .build()
     }
 
     @Bean

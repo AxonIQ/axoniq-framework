@@ -48,6 +48,10 @@
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
         </dependency>
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.rsocket</groupId>

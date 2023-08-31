@@ -35,16 +35,16 @@ import java.time.temporal.TemporalAmount
 
 class SetupPayloadCreator(
     private val configuration: Configuration,
-    private val eventProcessingConfiguration: EventProcessingModule = configuration.eventProcessingConfiguration() as EventProcessingModule,
 ) {
+    private val eventProcessingConfiguration = configuration.eventProcessingConfiguration() as EventProcessingModule
 
-    fun createReport(): io.axoniq.console.framework.api.SetupPayload {
+    fun createReport(): SetupPayload {
         val processors = eventProcessingConfiguration.eventProcessors()
             .filter { it.value is StreamingEventProcessor }
             .map { entry ->
                 entry.key
             }
-        return io.axoniq.console.framework.api.SetupPayload(
+        return SetupPayload(
             commandBus = commandBusInformation(),
             queryBus = queryBusInformation(),
             eventStore = eventBusInformation(),
@@ -173,7 +173,8 @@ class SetupPayloadCreator(
     private fun commandBusInformation(): CommandBusInformation {
         val bus = configuration.commandBus().unwrapPossiblyDecoratedClass(CommandBus::class.java)
         val axonServer = bus::class.java.name == "org.axonframework.axonserver.connector.command.AxonServerCommandBus"
-        val localSegmentType = if (axonServer) bus.getPropertyTypeNested("localSegment", CommandBus::class.java) else null
+        val localSegmentType =
+            if (axonServer) bus.getPropertyTypeNested("localSegment", CommandBus::class.java) else null
         val context = if (axonServer) bus.getPropertyValue<String>("context") else null
         val handlerInterceptors = if (axonServer) {
             bus.getPropertyValue<Any>("localSegment")?.getInterceptors("handlerInterceptors", "invokerInterceptors")
@@ -221,9 +222,13 @@ class SetupPayloadCreator(
     }
 
     private fun StreamingEventProcessor.getBatchSize(): Int = getPropertyValue("batchSize") ?: -1
-    private fun StreamingEventProcessor.getMessageSource(): String = getPropertyTypeNested("messageSource", EventStore::class.java)
+    private fun StreamingEventProcessor.getMessageSource(): String =
+        getPropertyTypeNested("messageSource", EventStore::class.java)
+
     private fun StreamingEventProcessor.getTokenClaimInterval(): Long = getPropertyValue("tokenClaimInterval") ?: -1
-    private fun StreamingEventProcessor.getStoreTokenStoreType(): String = getPropertyTypeNested("tokenStore", TokenStore::class.java)
+    private fun StreamingEventProcessor.getStoreTokenStoreType(): String =
+        getPropertyTypeNested("tokenStore", TokenStore::class.java)
+
     private fun StreamingEventProcessor.getStoreTokenClaimTimeout(): Long = getPropertyValue<Any>("tokenStore")
         ?.getPropertyValue<TemporalAmount>("claimTimeout")?.let { it.get(ChronoUnit.SECONDS) * 1000 } ?: -1
 
