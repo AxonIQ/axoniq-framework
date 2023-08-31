@@ -90,7 +90,6 @@ class SetupPayloadCreator(
         "org.axonframework:axon-spring-boot-autoconfigure",
         "org.axonframework:axon-spring-boot-starter",
         "org.axonframework:axon-tracing-opentelemetry",
-        "org.axonframework:axon-tracing-amqp",
         "org.axonframework.extensions.amqp:axon-amqp",
         "org.axonframework.extensions.jgroups:axon-jgroups",
         "org.axonframework.extensions.kafka:axon-kafka",
