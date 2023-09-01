@@ -62,7 +62,7 @@ class AxoniqConsoleAutoConfiguration {
             applicationName
         )
         return AxoniqConsoleConfigurerModule
-            .create(environmentId, accessToken, applicationName)
+            .builder(environmentId, accessToken, applicationName)
             .port(properties.port)
             .host(properties.host)
             .dlqMode(properties.dlqMode)

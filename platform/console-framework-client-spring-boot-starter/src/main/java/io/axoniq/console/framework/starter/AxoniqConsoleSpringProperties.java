@@ -5,17 +5,38 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "axoniq.console")
 public class AxoniqConsoleSpringProperties {
-    private String host = "framework.console.axoniq.io";
-    private Integer port = 7000;
-    private String credentials = null;
-    private String applicationName = null;
-    private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
-    private boolean secure = true;
-    private Long initialDelay = 0L;
-
     /**
      * The host to connect to. Defaults to {@code framework.console.axoniq.io}.
      */
+    private String host = "framework.console.axoniq.io";
+    /**
+     * The port to connect to. Defaults to {@code 7000}.
+     */
+    private Integer port = 7000;
+    /**
+     * The credentials used to connect to the AxonIQ Console. The module will not work without setting this.
+     */
+    private String credentials = null;
+    /**
+     * The display name of the application in the UI. Defaults to the application name of the Spring Boot application.
+     * Some special characters, such as [ and ] will be filtered out of the name and replaced with a hyphen.
+     */
+    private String applicationName = null;
+    /**
+     * The mode of DLQ operations. Defaults to {@code FULL}, which can return sensitive information to the UI.
+     * If this concerns you, consider {@code MASKED} to mask potentially sensitive data, or {@code NONE} to disable
+     * DLQ visibility.
+     */
+    private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
+    /**
+     * Whether the connection should use SSL/TLs. Defaults to {@code true}.
+     */
+    private boolean secure = true;
+    /**
+     * The initial delay before connecting to the AxonIQ Console in milliseconds. Defaults to {@code 0}.
+     */
+    private Long initialDelay = 0L;
+
     public String getHost() {
         return host;
     }
@@ -24,9 +45,6 @@ public class AxoniqConsoleSpringProperties {
         this.host = host;
     }
 
-    /**
-     * The port to connecto. Defaults to {@code 7000}.
-     */
     public Integer getPort() {
         return port;
     }
@@ -35,9 +53,6 @@ public class AxoniqConsoleSpringProperties {
         this.port = port;
     }
 
-    /**
-     * The credentials used to connect to the AxonIQ Console. The module will not work without setting this.
-     */
     public String getCredentials() {
         return credentials;
     }
@@ -46,9 +61,6 @@ public class AxoniqConsoleSpringProperties {
         this.credentials = credentials;
     }
 
-    /**
-     * The display name of the application in the UI. Defaults to the application name of the Spring Boot application.
-     */
     public String getApplicationName() {
         return applicationName;
     }
@@ -57,11 +69,6 @@ public class AxoniqConsoleSpringProperties {
         this.applicationName = applicationName;
     }
 
-    /**
-     * The mode of DLQ operations. Defaults to {@code FULL}, which can return sensitive information to the UI.
-     * If this concerns you, consider {@code MASKED} to mask potentially sensitive data, or {@code NONE} to disable
-     * DLQ visibility.
-     */
     public AxoniqConsoleDlqMode getDlqMode() {
         return dlqMode;
     }
@@ -70,9 +77,6 @@ public class AxoniqConsoleSpringProperties {
         this.dlqMode = dlqMode;
     }
 
-    /**
-     * Whether the connection should use SSL/TLs. Defaults to {@code true}.
-     */
     public boolean isSecure() {
         return secure;
     }
@@ -81,9 +85,6 @@ public class AxoniqConsoleSpringProperties {
         this.secure = secure;
     }
 
-    /**
-     * The initial delay before connecting to the AxonIQ Console in milliseconds. Defaults to {@code 0}.
-     */
     public Long getInitialDelay() {
         return initialDelay;
     }

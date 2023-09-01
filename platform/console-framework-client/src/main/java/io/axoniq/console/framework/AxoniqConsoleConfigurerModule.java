@@ -35,13 +35,13 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final Boolean secure;
     private final Long initialDelay;
     private final AxoniqConsoleDlqMode dlqMode;
-    private final ScheduledExecutorService executor;
+    private final ScheduledExecutorService executorService;
     private final boolean configureSpanFactory;
 
     /**
-     * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}
+     * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}.
      *
-     * @param builder The configured builder for the {@link AxoniqConsoleConfigurerModule}
+     * @param builder The configured builder for the {@link AxoniqConsoleConfigurerModule}.
      */
     protected AxoniqConsoleConfigurerModule(Builder builder) {
         this.environmentId = builder.environmentId;
@@ -52,7 +52,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.secure = builder.secure;
         this.initialDelay = builder.initialDelay;
         this.dlqMode = builder.dlqMode;
-        executor = Executors.newScheduledThreadPool(builder.threadPoolSize);
+        this.executorService = builder.executorService;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
     }
 
@@ -62,18 +62,15 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
      *
      * @param environmentId   The environment identifier of AxonIQ Console to connect.
      * @param accessToken     The access token needed to authenticate to the environment.
-     * @param applicationName The dispaly name of the application.
+     * @param applicationName The display name of the application. Some special characters may be replaced with a hyphen.
      * @return The builder with which you can further configure this module
      */
-    public static Builder create(String environmentId, String accessToken, String applicationName) {
+    public static Builder builder(String environmentId, String accessToken, String applicationName) {
         return new Builder(environmentId, accessToken, applicationName);
     }
 
     @Override
     public void configureModule(@NotNull Configurer configurer) {
-        if (applicationName.trim().isEmpty()) {
-            throw new IllegalArgumentException("Application Name of AxonIQ Console Properties cannot be empty");
-        }
         configurer
                 .registerComponent(ProcessorMetricsRegistry.class,
                         c -> new ProcessorMetricsRegistry()
@@ -118,7 +115,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                 c.getComponent(SetupPayloadCreator.class),
                                 c.getComponent(RSocketHandlerRegistrar.class),
                                 c.getComponent(RSocketPayloadEncodingStrategy.class),
-                                executor,
+                                executorService,
                                 ManagementFactory.getRuntimeMXBean().getName()
                         )
                 )
@@ -126,12 +123,12 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                         c -> new ServerProcessorReporter(
                                 c.getComponent(AxoniqConsoleRSocketClient.class),
                                 c.getComponent(ProcessorReportCreator.class),
-                                executor)
+                                executorService)
                 )
                 .registerComponent(HandlerMetricsRegistry.class,
                         c -> new HandlerMetricsRegistry(
                                 c.getComponent(AxoniqConsoleRSocketClient.class),
-                                executor,
+                                executorService,
                                 applicationName
                         )
                 )
@@ -182,6 +179,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private Long initialDelay = 0L;
         private Integer threadPoolSize = 2;
         private boolean disableSpanFactoryInConfiguration = false;
+        private ScheduledExecutorService executorService;
 
         /**
          * Constructor to instantiate a {@link Builder} based on the fields contained in the {@link
@@ -190,7 +188,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
          *
          * @param environmentId   The environment identifier of AxonIQ Console to connect.
          * @param accessToken     The access token needed to authenticate to the environment.
-         * @param applicationName The dispaly name of the application.
+         * @param applicationName The display name of the application. Some special characters may be replaced with a hyphen.
          */
         public Builder(String environmentId, String accessToken, String applicationName) {
             BuilderUtils.assertNonEmpty(environmentId, "AxonIQ Console environmentId may not be null or empty");
@@ -264,6 +262,20 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
+         * The {@link ScheduledExecutorService} that should be used for reporting metrics.
+         * Defaults to a {@link Executors#newScheduledThreadPool(int)} with
+         * the {@code threadPoolSize} of this builder if not set.
+         *
+         * @param executorService The executor service.
+         * @return The builder for fluent interfacing
+         */
+        public Builder executorService(ScheduledExecutorService executorService) {
+            BuilderUtils.assertNonNull(threadPoolSize, "AxonIQ Console executorService must be non-null");
+            this.executorService = executorService;
+            return this;
+        }
+
+        /**
          * Disables setting the {@link SpanFactory} if set to {@code true}. Defaults to {@code
          * false}. Useful in case frameworks override this and can cause a split-brain situation.
          *
@@ -291,6 +303,9 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
          * @return The module
          */
         public AxoniqConsoleConfigurerModule build() {
+            if(executorService == null) {
+                executorService = Executors.newScheduledThreadPool(threadPoolSize);
+            }
             return new AxoniqConsoleConfigurerModule(this);
         }
     }
