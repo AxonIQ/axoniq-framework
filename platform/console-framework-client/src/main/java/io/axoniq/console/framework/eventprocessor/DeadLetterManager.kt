@@ -16,18 +16,23 @@
 
 package io.axoniq.console.framework.eventprocessor
 
+import io.axoniq.console.framework.AxoniqConsoleDlqMode
+import org.apache.commons.codec.digest.DigestUtils
 import org.axonframework.config.EventProcessingConfiguration
 import org.axonframework.eventhandling.EventMessage
+import org.axonframework.messaging.MetaData
 import org.axonframework.messaging.deadletter.DeadLetter
 import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue
 import org.axonframework.serialization.Serializer
 import io.axoniq.console.framework.api.DeadLetter as ApiDeadLetter
 
 private const val LETTER_PAYLOAD_SIZE_LIMIT = 1024
+private const val MASKED = "<MASKED>"
 
 class DeadLetterManager(
     private val eventProcessingConfig: EventProcessingConfiguration,
-    private val eventSerializer: Serializer
+    private val eventSerializer: Serializer,
+    private val dlqMode: AxoniqConsoleDlqMode
 ) {
 
     fun deadLetters(
@@ -35,31 +40,51 @@ class DeadLetterManager(
         offset: Int = 0,
         size: Int = 25,
         maxSequenceLetters: Int = 10
-    ): List<List<ApiDeadLetter>> = dlqFor(processingGroup)
-        .deadLetters()
-        .drop(offset)
-        .take(size)
-        .map { sequence ->
-            sequence
-                .asIterable()
-                .take(maxSequenceLetters)
-                .map { toDeadLetter(it, processingGroup) }
+    ): List<List<ApiDeadLetter>> {
+        if (dlqMode == AxoniqConsoleDlqMode.NONE) {
+            return emptyList()
         }
+        return dlqFor(processingGroup)
+            .deadLetters()
+            .drop(offset)
+            .take(size)
+            .map { sequence ->
+                sequence
+                    .asIterable()
+                    .take(maxSequenceLetters)
+                    .map { toDeadLetter(it, processingGroup) }
+            }
+    }
 
     private fun toDeadLetter(letter: DeadLetter<out EventMessage<*>>, processingGroup: String) =
         letter.toApiLetter(sequenceIdentifierFor(processingGroup, letter))
 
-    private fun DeadLetter<out EventMessage<*>>.toApiLetter(sequenceIdentifier: String) = ApiDeadLetter(
-        this.message().identifier,
-        serializePayload(),
-        this.message().payloadType.simpleName,
-        this.cause().map { it.type() }.orElse(null),
-        this.cause().map { it.message() }.orElse(null),
-        this.enqueuedAt(),
-        this.lastTouched(),
-        this.diagnostics(),
-        sequenceIdentifier
-    )
+    private fun DeadLetter<out EventMessage<*>>.toApiLetter(sequenceIdentifier: String): io.axoniq.console.framework.api.DeadLetter {
+        if (dlqMode == AxoniqConsoleDlqMode.MASKED) {
+            return ApiDeadLetter(
+                this.message().identifier,
+                MASKED,
+                this.message().payloadType.simpleName,
+                this.cause().map { it.type() }.orElse(null),
+                this.cause().map { MASKED }.orElse(null),
+                this.enqueuedAt(),
+                this.lastTouched(),
+                MetaData.emptyInstance(),
+                sequenceIdentifier.hashIfNeeded()
+            )
+        }
+        return ApiDeadLetter(
+            this.message().identifier,
+            serializePayload(),
+            this.message().payloadType.simpleName,
+            this.cause().map { it.type() }.orElse(null),
+            this.cause().map { it.message() }.orElse(null),
+            this.enqueuedAt(),
+            this.lastTouched(),
+            this.diagnostics(),
+            sequenceIdentifier
+        )
+    }
 
     private fun DeadLetter<out EventMessage<*>>.serializePayload() =
         try {
@@ -119,7 +144,17 @@ class DeadLetterManager(
         processingGroup: String,
         messageIdentifier: String
     ): Boolean {
-        return letterProcessorFor(processingGroup).process { it.message().identifier == messageIdentifier }
+        return letterProcessorFor(processingGroup).process {
+            it.message().identifier.hashIfNeeded() == messageIdentifier
+        }
+    }
+
+    private fun String.hashIfNeeded(): String {
+        return if (dlqMode == AxoniqConsoleDlqMode.MASKED) {
+            DigestUtils.sha256Hex(this)
+        } else {
+            this
+        }
     }
 
     private fun letterProcessorFor(processingGroup: String) =

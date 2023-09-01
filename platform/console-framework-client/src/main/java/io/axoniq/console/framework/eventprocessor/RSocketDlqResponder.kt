@@ -34,27 +34,27 @@ open class RSocketDlqResponder(
 
     fun start() {
         registrar.registerHandlerWithPayload(
-            io.axoniq.console.framework.api.Routes.ProcessingGroup.DeadLetter.LETTERS,
+            Routes.ProcessingGroup.DeadLetter.LETTERS,
             DeadLetterRequest::class.java,
             this::handleDeadLetterQuery
         )
         registrar.registerHandlerWithPayload(
-            io.axoniq.console.framework.api.Routes.ProcessingGroup.DeadLetter.SEQUENCE_SIZE,
+            Routes.ProcessingGroup.DeadLetter.SEQUENCE_SIZE,
             DeadLetterSequenceSize::class.java,
             this::handleSequenceSizeQuery
         )
         registrar.registerHandlerWithPayload(
-            io.axoniq.console.framework.api.Routes.ProcessingGroup.DeadLetter.DELETE_SEQUENCE,
+            Routes.ProcessingGroup.DeadLetter.DELETE_SEQUENCE,
             DeadLetterSequenceDeleteRequest::class.java,
             this::handleDeleteSequenceCommand
         )
         registrar.registerHandlerWithPayload(
-            io.axoniq.console.framework.api.Routes.ProcessingGroup.DeadLetter.DELETE_LETTER,
+            Routes.ProcessingGroup.DeadLetter.DELETE_LETTER,
             DeadLetterSingleDeleteRequest::class.java,
             this::handleDeleteLetterCommand
         )
         registrar.registerHandlerWithPayload(
-            io.axoniq.console.framework.api.Routes.ProcessingGroup.DeadLetter.PROCESS,
+            Routes.ProcessingGroup.DeadLetter.PROCESS,
             DeadLetterProcessRequest::class.java,
             this::handleProcessCommand
         )

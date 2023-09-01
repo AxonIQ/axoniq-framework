@@ -16,32 +16,36 @@
 
 package io.axoniq.console.framework.client
 
-import io.axoniq.console.framework.AxoniqConsoleProperties
 import io.axoniq.console.framework.client.strategy.RSocketPayloadEncodingStrategy
 import io.netty.buffer.ByteBufAllocator
 import io.netty.buffer.CompositeByteBuf
 import io.rsocket.RSocket
 import io.rsocket.core.RSocketConnector
-import io.rsocket.metadata.*
+import io.rsocket.metadata.WellKnownMimeType
 import io.rsocket.transport.netty.client.TcpClientTransport
 import org.axonframework.lifecycle.Lifecycle
 import org.axonframework.lifecycle.Phase
 import org.slf4j.LoggerFactory
 import reactor.core.publisher.Mono
 import reactor.netty.tcp.TcpClient
-import java.lang.management.ManagementFactory
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 @Suppress("MemberVisibilityCanBePrivate")
 class AxoniqConsoleRSocketClient(
-    private val properties: AxoniqConsoleProperties,
+    private val environmentId: String,
+    private val accessToken: String,
+    private val applicationName: String,
+    private val host: String,
+    private val port: Int,
+    private val secure: Boolean,
+    private val initialDelay: Long,
     private val setupPayloadCreator: SetupPayloadCreator,
     private val registrar: RSocketHandlerRegistrar,
     private val encodingStrategy: RSocketPayloadEncodingStrategy,
     private val executor: ScheduledExecutorService,
-    private val nodeName: String = ManagementFactory.getRuntimeMXBean().name,
+    private val nodeName: String,
 ) : Lifecycle {
     private var scheduledReconnector: ScheduledFuture<*>? = null
     private val logger = LoggerFactory.getLogger(this::class.java)
@@ -74,7 +78,7 @@ class AxoniqConsoleRSocketClient(
                 logger.info("Reconnecting to AxonIQ Console...")
                 connect()
             }
-        }, properties.initialDelay, 10000, TimeUnit.MILLISECONDS)
+        }, initialDelay, 10000, TimeUnit.MILLISECONDS)
     }
 
     fun connect() {
@@ -89,11 +93,11 @@ class AxoniqConsoleRSocketClient(
     private fun createRSocket(): RSocket {
         val authentication = io.axoniq.console.framework.api.ConsoleClientAuthentication(
             identification = io.axoniq.console.framework.api.ConsoleClientIdentifier(
-                environmentId = properties.environmentId,
-                applicationName = properties.applicationName,
+                environmentId = environmentId,
+                applicationName = applicationName,
                 nodeName = nodeName
             ),
-            accessToken = properties.accessToken
+            accessToken = accessToken
         )
 
         val setupPayload =
@@ -128,12 +132,12 @@ class AxoniqConsoleRSocketClient(
 
     private fun tcpClient(): TcpClient {
         val client = TcpClient.create()
-            .host(properties.host)
-            .port(properties.port)
+            .host(host)
+            .port(port)
             .doOnDisconnected {
                 connected = false
             }
-        return if (properties.secure) {
+        return if (secure) {
             return client.secure()
         } else client
     }
