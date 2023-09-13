@@ -31,7 +31,7 @@
     </modules>
     <packaging>pom</packaging>
 
-    <name>AxonIQ Console Framework Client - Parent</name>
+    <name>AxonIQ Console - Framework Client</name>
     <description>Project containing the Framework Client for AxonIQ Console</description>
 
     <inceptionYear>2023</inceptionYear>
