@@ -136,7 +136,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                         c -> new DeadLetterManager(
                                 c.eventProcessingConfiguration(),
                                 c.eventSerializer(),
-                                dlqMode
+                                dlqMode,
+                                executorService
                         ))
                 .registerComponent(RSocketDlqResponder.class,
                         c -> new RSocketDlqResponder(
