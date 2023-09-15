@@ -302,7 +302,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * The {@link ExecutorService} that should be used for management tasks. These thread pool is used for tasks
+         * The {@link ExecutorService} that should be used for management tasks. This thread pool is used for tasks
          * such as processing DLQ messages after requested by the UI. Defaults to a
          * {@link java.util.concurrent.ThreadPoolExecutor} with a minimum of 0 threads, a maximum of
          * {@code managementMaxThreadPoolSize} threads and a keep-alive time of 60 seconds.
