@@ -37,6 +37,12 @@ public class AxoniqConsoleSpringProperties {
      */
     private Long initialDelay = 0L;
 
+    /**
+     * The maximum number of concurrent management tasks. Defaults to {@code 5}.
+     * Management tasks are tasks executed at the request of the user, such as processing DLQ messages.
+     */
+    private int maxConcurrentManagementTasks = 5;
+
     public String getHost() {
         return host;
     }
@@ -91,5 +97,13 @@ public class AxoniqConsoleSpringProperties {
 
     public void setInitialDelay(Long initialDelay) {
         this.initialDelay = initialDelay;
+    }
+
+    public int getMaxConcurrentManagementTasks() {
+        return maxConcurrentManagementTasks;
+    }
+
+    public void setMaxConcurrentManagementTasks(int maxConcurrentManagementTasks) {
+        this.maxConcurrentManagementTasks = maxConcurrentManagementTasks;
     }
 }
