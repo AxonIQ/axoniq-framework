@@ -19,8 +19,12 @@ import org.axonframework.tracing.SpanFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.management.ManagementFactory;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Applies the configuration necessary for AxonIQ Console to the {@link Configurer} of Axon Framework.
@@ -35,7 +39,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final Boolean secure;
     private final Long initialDelay;
     private final AxoniqConsoleDlqMode dlqMode;
-    private final ScheduledExecutorService executorService;
+    private final ScheduledExecutorService reportingTaskExecutor;
+    private final ExecutorService managementTaskExecutor;
     private final boolean configureSpanFactory;
 
     /**
@@ -52,7 +57,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.secure = builder.secure;
         this.initialDelay = builder.initialDelay;
         this.dlqMode = builder.dlqMode;
-        this.executorService = builder.executorService;
+        this.reportingTaskExecutor = builder.reportingTaskExecutor;
+        this.managementTaskExecutor = builder.managementTaskExecutor;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
     }
 
@@ -115,7 +121,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                 c.getComponent(SetupPayloadCreator.class),
                                 c.getComponent(RSocketHandlerRegistrar.class),
                                 c.getComponent(RSocketPayloadEncodingStrategy.class),
-                                executorService,
+                                reportingTaskExecutor,
                                 ManagementFactory.getRuntimeMXBean().getName()
                         )
                 )
@@ -123,12 +129,12 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                         c -> new ServerProcessorReporter(
                                 c.getComponent(AxoniqConsoleRSocketClient.class),
                                 c.getComponent(ProcessorReportCreator.class),
-                                executorService)
+                                reportingTaskExecutor)
                 )
                 .registerComponent(HandlerMetricsRegistry.class,
                         c -> new HandlerMetricsRegistry(
                                 c.getComponent(AxoniqConsoleRSocketClient.class),
-                                executorService,
+                                reportingTaskExecutor,
                                 applicationName
                         )
                 )
@@ -136,7 +142,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                         c -> new DeadLetterManager(
                                 c.eventProcessingConfiguration(),
                                 c.eventSerializer(),
-                                dlqMode
+                                dlqMode,
+                                managementTaskExecutor
                         ))
                 .registerComponent(RSocketDlqResponder.class,
                         c -> new RSocketDlqResponder(
@@ -177,9 +184,13 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private Integer port = 7000;
         private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
         private Long initialDelay = 0L;
-        private Integer threadPoolSize = 2;
         private boolean disableSpanFactoryInConfiguration = false;
-        private ScheduledExecutorService executorService;
+
+        private ScheduledExecutorService reportingTaskExecutor;
+        private Integer reportingThreadPoolSize = 2;
+
+        private ExecutorService managementTaskExecutor;
+        private Integer managementMaxThreadPoolSize = 5;
 
         /**
          * Constructor to instantiate a {@link Builder} based on the fields contained in the {@link
@@ -249,15 +260,16 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * The thread pool's size that is used for various tasks, such as sending metrics to AxonIQ Console.
+         * The thread pool's size that is used for reporting tasks, such as sending metrics to AxonIQ Console.
          * Defaults to {@code 2}.
          *
-         * @param threadPoolSize The thread pool size
+         * @param reportingThreadPoolSize The thread pool size
          * @return The builder for fluent interfacing
          */
-        public Builder threadPoolSize(Integer threadPoolSize) {
-            BuilderUtils.assertPositive(threadPoolSize, "AxonIQ Console threadPoolSize must be positive");
-            this.threadPoolSize = threadPoolSize;
+        public Builder reportingThreadPoolSize(Integer reportingThreadPoolSize) {
+            BuilderUtils.assertPositive(reportingThreadPoolSize,
+                                        "AxonIQ Console reportingThreadPoolSize must be positive");
+            this.reportingThreadPoolSize = reportingThreadPoolSize;
             return this;
         }
 
@@ -269,9 +281,39 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
          * @param executorService The executor service.
          * @return The builder for fluent interfacing
          */
-        public Builder executorService(ScheduledExecutorService executorService) {
-            BuilderUtils.assertNonNull(threadPoolSize, "AxonIQ Console executorService must be non-null");
-            this.executorService = executorService;
+        public Builder reportingTaskExecutor(ScheduledExecutorService executorService) {
+            BuilderUtils.assertNonNull(reportingTaskExecutor, "AxonIQ Console reportingTaskExecutor must be non-null");
+            this.reportingTaskExecutor = executorService;
+            return this;
+        }
+
+        /**
+         * The maximum amount of threads that can be active in the management thread pool. Defaults to {@code 5}. These
+         * threads are used for tasks such as processing DLQ messages after requested by the UI.
+         *
+         * @param managementMaxThreadPoolSize The maximum amount of threads
+         * @return The builder for fluent interfacing
+         */
+        public Builder managementMaxThreadPoolSize(Integer managementMaxThreadPoolSize) {
+            BuilderUtils.assertPositive(managementMaxThreadPoolSize,
+                                        "AxonIQ Console managementMaxThreadPoolSize must be positive");
+            this.managementMaxThreadPoolSize = managementMaxThreadPoolSize;
+            return this;
+        }
+
+        /**
+         * The {@link ExecutorService} that should be used for management tasks. This thread pool is used for tasks
+         * such as processing DLQ messages after requested by the UI. Defaults to a
+         * {@link java.util.concurrent.ThreadPoolExecutor} with a minimum of 0 threads, a maximum of
+         * {@code managementMaxThreadPoolSize} threads and a keep-alive time of 60 seconds.
+         *
+         * @param executorService The executor service
+         * @return The builder for fluent interfacing
+         */
+        public Builder managementTaskExecutor(ExecutorService executorService) {
+            BuilderUtils.assertNonNull(managementTaskExecutor,
+                                       "AxonIQ Console managementTaskExecutor must be non-null");
+            this.managementTaskExecutor = executorService;
             return this;
         }
 
@@ -303,8 +345,17 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
          * @return The module
          */
         public AxoniqConsoleConfigurerModule build() {
-            if(executorService == null) {
-                executorService = Executors.newScheduledThreadPool(threadPoolSize);
+            if (reportingTaskExecutor == null) {
+                reportingTaskExecutor = Executors.newScheduledThreadPool(reportingThreadPoolSize);
+            }
+            if (managementTaskExecutor == null) {
+                managementTaskExecutor = new ThreadPoolExecutor(
+                        0,
+                        managementMaxThreadPoolSize,
+                        60L,
+                        TimeUnit.SECONDS,
+                        new LinkedBlockingQueue<>()
+                );
             }
             return new AxoniqConsoleConfigurerModule(this);
         }

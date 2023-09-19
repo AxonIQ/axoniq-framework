@@ -24,6 +24,8 @@ import org.axonframework.messaging.MetaData
 import org.axonframework.messaging.deadletter.DeadLetter
 import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue
 import org.axonframework.serialization.Serializer
+import java.util.concurrent.*
+import java.util.concurrent.atomic.AtomicReference
 import io.axoniq.console.framework.api.DeadLetter as ApiDeadLetter
 
 private const val LETTER_PAYLOAD_SIZE_LIMIT = 1024
@@ -32,7 +34,8 @@ private const val MASKED = "<MASKED>"
 class DeadLetterManager(
     private val eventProcessingConfig: EventProcessingConfiguration,
     private val eventSerializer: Serializer,
-    private val dlqMode: AxoniqConsoleDlqMode
+    private val dlqMode: AxoniqConsoleDlqMode,
+    private val executor: ExecutorService,
 ) {
 
     fun deadLetters(
@@ -144,9 +147,11 @@ class DeadLetterManager(
         processingGroup: String,
         messageIdentifier: String
     ): Boolean {
-        return letterProcessorFor(processingGroup).process {
-            it.message().identifier.hashIfNeeded() == messageIdentifier
-        }
+        return executor.submit(Callable {
+            letterProcessorFor(processingGroup).process {
+                it.message().identifier.hashIfNeeded() == messageIdentifier
+            }
+        }).get(60, TimeUnit.SECONDS)
     }
 
     private fun String.hashIfNeeded(): String {

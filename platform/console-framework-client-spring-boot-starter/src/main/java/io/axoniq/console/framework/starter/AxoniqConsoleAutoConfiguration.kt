@@ -69,6 +69,7 @@ class AxoniqConsoleAutoConfiguration {
             .secure(properties.isSecure)
             .initialDelay(properties.initialDelay)
             .disableSpanFactoryInConfiguration()
+            .managementMaxThreadPoolSize(properties.maxConcurrentManagementTasks)
             .build()
     }
 
