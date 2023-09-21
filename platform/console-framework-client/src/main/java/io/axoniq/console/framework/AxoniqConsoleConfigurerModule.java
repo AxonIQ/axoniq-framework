@@ -9,10 +9,12 @@ import io.axoniq.console.framework.client.strategy.RSocketPayloadEncodingStrateg
 import io.axoniq.console.framework.eventprocessor.*;
 import io.axoniq.console.framework.eventprocessor.metrics.AxoniqConsoleProcessorInterceptor;
 import io.axoniq.console.framework.eventprocessor.metrics.ProcessorMetricsRegistry;
+import io.axoniq.console.framework.messaging.AxoniqConsoleDispatchInterceptor;
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory;
 import io.axoniq.console.framework.messaging.HandlerMetricsRegistry;
 import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.transaction.TransactionManager;
+import org.axonframework.config.Configuration;
 import org.axonframework.config.Configurer;
 import org.axonframework.config.ConfigurerModule;
 import org.axonframework.tracing.SpanFactory;
@@ -166,6 +168,25 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             c.getComponent(RSocketProcessorResponder.class);
             c.getComponent(RSocketDlqResponder.class);
             c.getComponent(HandlerMetricsRegistry.class);
+        });
+
+        configurer.onStart(() -> {
+            Configuration config = configurer.buildConfiguration();
+
+            AxoniqConsoleDispatchInterceptor interceptor = new AxoniqConsoleDispatchInterceptor(
+                    config.getComponent(HandlerMetricsRegistry.class),
+                    applicationName
+            );
+
+            config.eventBus().registerDispatchInterceptor(interceptor);
+            config.commandBus().registerDispatchInterceptor(interceptor);
+            config.queryBus().registerDispatchInterceptor(interceptor);
+            config.deadlineManager().registerDispatchInterceptor(interceptor);
+        });
+
+        configurer.onShutdown(() -> {
+            managementTaskExecutor.shutdown();
+            reportingTaskExecutor.shutdown();
         });
 
         new AxoniqConsoleAggregateConfigurerModule().configureModule(configurer);
