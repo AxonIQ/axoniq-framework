@@ -24,8 +24,9 @@ import org.axonframework.messaging.MetaData
 import org.axonframework.messaging.deadletter.DeadLetter
 import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue
 import org.axonframework.serialization.Serializer
-import java.util.concurrent.*
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.TimeUnit
 import io.axoniq.console.framework.api.DeadLetter as ApiDeadLetter
 
 private const val LETTER_PAYLOAD_SIZE_LIMIT = 1024

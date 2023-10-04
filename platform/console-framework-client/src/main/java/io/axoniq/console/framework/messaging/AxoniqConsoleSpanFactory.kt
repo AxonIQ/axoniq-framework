@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Supplier
 
 
-class AxoniqConsoleSpanFactory : SpanFactory {
+class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherPredicateMap) : SpanFactory {
 
     companion object {
         private val logger = LoggerFactory.getLogger(this::class.java)
@@ -64,7 +64,7 @@ class AxoniqConsoleSpanFactory : SpanFactory {
         private val metrics: MutableMap<Metric, Long> = mutableMapOf()
 
         fun registerHandler(handlerMetricIdentifier: HandlerStatisticsMetricIdentifier?, time: Long) {
-            if(handlerMetricIdentifier == null) {
+            if (handlerMetricIdentifier == null) {
                 return
             }
             this.handlerMetricIdentifier = handlerMetricIdentifier
@@ -110,15 +110,15 @@ class AxoniqConsoleSpanFactory : SpanFactory {
                 logger.trace("Reporting span for message id $messageId = $handlerMetricIdentifier")
                 val success = handlerSuccessful && transactionSuccessful
                 HandlerMetricsRegistry.getInstance()?.registerMessageHandled(
-                    handler = handlerMetricIdentifier!!,
-                    success = success,
-                    duration = end - timeStarted!!,
-                    metrics = metrics
+                        handler = handlerMetricIdentifier!!,
+                        success = success,
+                        duration = end - timeStarted!!,
+                        metrics = metrics
                 )
                 if (success) {
                     dispatchedMessages.forEach {
                         HandlerMetricsRegistry.getInstance()?.registerMessageDispatchedDuringHandling(
-                            DispatcherStatisticIdentifier(handlerMetricIdentifier, it)
+                                DispatcherStatisticIdentifier(handlerMetricIdentifier, it)
                         )
                     }
                 }
@@ -138,35 +138,35 @@ class AxoniqConsoleSpanFactory : SpanFactory {
     }
 
     override fun createHandlerSpan(
-        operationNameSupplier: Supplier<String>,
-        parentMessage: Message<*>,
-        isChildTrace: Boolean,
-        vararg linkedParents: Message<*>?
+            operationNameSupplier: Supplier<String>,
+            parentMessage: Message<*>,
+            isChildTrace: Boolean,
+            vararg linkedParents: Message<*>?
     ): Span {
         val name = operationNameSupplier.get()
-        if (name == "QueryProcessingTask" || name == "AxonServerCommandBus.handle" || name == "DeadlineJob.execute") {
+        if (spanMatcherPredicateMap[SpanMatcher.HANDLER]!!.test(name)) {
             return startIfNotActive(parentMessage)
         }
         return NOOP_SPAN
     }
 
     override fun createDispatchSpan(
-        operationNameSupplier: Supplier<String>,
-        parentMessage: Message<*>?,
-        vararg linkedSiblings: Message<*>?
+            operationNameSupplier: Supplier<String>,
+            parentMessage: Message<*>?,
+            vararg linkedSiblings: Message<*>?
     ): Span {
         return NOOP_SPAN
     }
 
     override fun createInternalSpan(operationNameSupplier: Supplier<String>): Span {
         val name = operationNameSupplier.get()
-        if (name == "LockingRepository.obtainLock") {
+        if (spanMatcherPredicateMap[SpanMatcher.OBTAIN_LOCK]!!.test(name)) {
             return TimeRecordingSpan(PreconfiguredMetric.AGGREGATE_LOCK_TIME)
         }
-        if (name.contains(".load ")) {
+        if (spanMatcherPredicateMap[SpanMatcher.LOAD]!!.test(name)) {
             return TimeRecordingSpan(PreconfiguredMetric.AGGREGATE_LOAD_TIME)
         }
-        if (name.endsWith(".commit")) {
+        if (spanMatcherPredicateMap[SpanMatcher.COMMIT]!!.test(name)) {
             return TimeRecordingSpan(PreconfiguredMetric.EVENT_COMMIT_TIME)
         }
 
@@ -175,12 +175,15 @@ class AxoniqConsoleSpanFactory : SpanFactory {
 
     override fun createInternalSpan(operationNameSupplier: Supplier<String>, message: Message<*>): Span {
         val name = operationNameSupplier.get()
-        if (name.endsWith("Bus.handle")
-            || name == "SimpleQueryBus.query"
-            || name.startsWith("SimpleQueryBus.scatterGather")
-            || name.startsWith("PooledStreamingEventProcessor")
-            || name.startsWith("TrackingEventProcessor")
-        ) {
+        if (spanMatcherPredicateMap[SpanMatcher.MESSAGE_START]!!.test(name)) {
+            return startIfNotActive(message)
+        }
+        return NOOP_SPAN
+    }
+
+    override fun createChildHandlerSpan(operationNameSupplier: Supplier<String>, message: Message<*>, vararg linkedParents: Message<*>?): Span {
+        val name = operationNameSupplier.get()
+        if (spanMatcherPredicateMap[SpanMatcher.MESSAGE_START]!!.test(name)) {
             return startIfNotActive(message)
         }
         return NOOP_SPAN

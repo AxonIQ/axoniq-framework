@@ -16,8 +16,8 @@
 
 package io.axoniq.console.framework.messaging
 
-import io.axoniq.console.framework.api.ComponentPayload
 import io.axoniq.console.framework.api.AxoniqConsoleMessageOrigin
+import io.axoniq.console.framework.api.ComponentPayload
 import io.axoniq.console.framework.api.metrics.DispatcherStatisticIdentifier
 import io.axoniq.console.framework.api.metrics.HandlerStatisticsMetricIdentifier
 import io.axoniq.console.framework.api.metrics.HandlerType

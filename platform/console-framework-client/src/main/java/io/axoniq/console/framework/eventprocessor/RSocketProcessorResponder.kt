@@ -16,7 +16,10 @@
 
 package io.axoniq.console.framework.eventprocessor
 
-import io.axoniq.console.framework.api.*
+import io.axoniq.console.framework.api.ProcessorSegmentId
+import io.axoniq.console.framework.api.ProcessorStatusReport
+import io.axoniq.console.framework.api.ResetDecision
+import io.axoniq.console.framework.api.SegmentOverview
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar
 import org.axonframework.lifecycle.Lifecycle
 import org.axonframework.lifecycle.Phase

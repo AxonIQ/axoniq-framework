@@ -18,6 +18,8 @@ package io.axoniq.console.framework.starter
 
 import io.axoniq.console.framework.AxoniqConsoleConfigurerModule
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory
+import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
+import io.axoniq.console.framework.messaging.getSpanMatcherPredicateMap
 import org.axonframework.config.ConfigurerModule
 import org.axonframework.tracing.MultiSpanFactory
 import org.axonframework.tracing.NoOpSpanFactory
@@ -25,6 +27,7 @@ import org.axonframework.tracing.SpanFactory
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext
@@ -74,13 +77,21 @@ class AxoniqConsoleAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(SpanMatcherPredicateMap::class)
+    fun spanMatcherPredicateMap(): SpanMatcherPredicateMap {
+        return getSpanMatcherPredicateMap()
+    }
+
+    @Bean
     @ConditionalOnProperty("axoniq.console.credentials", matchIfMissing = false)
-    fun axoniqConsoleSpanFactoryPostProcessor(): BeanPostProcessor = object : BeanPostProcessor {
+    fun axoniqConsoleSpanFactoryPostProcessor(
+            spanMatcherPredicateMap: SpanMatcherPredicateMap
+    ): BeanPostProcessor = object : BeanPostProcessor {
         override fun postProcessAfterInitialization(bean: Any, beanName: String): Any {
             if (bean !is SpanFactory || bean is AxoniqConsoleSpanFactory) {
                 return bean
             }
-            val spanFactory = AxoniqConsoleSpanFactory()
+            val spanFactory = AxoniqConsoleSpanFactory(spanMatcherPredicateMap)
             if (bean is NoOpSpanFactory) {
                 return spanFactory
             }

@@ -17,7 +17,6 @@ package io.axoniq.console.framework
 
 import org.axonframework.common.ReflectionUtils
 import java.lang.reflect.Field
-import kotlin.reflect.KClass
 
 /**
  * Find fields matching its own type. If found, it will unwrap the deeper value.

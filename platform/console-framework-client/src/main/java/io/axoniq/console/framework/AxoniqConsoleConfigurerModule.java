@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2022-2023. AxonIQ B.V.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.axoniq.console.framework;
 
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient;
@@ -6,12 +22,18 @@ import io.axoniq.console.framework.client.ServerProcessorReporter;
 import io.axoniq.console.framework.client.SetupPayloadCreator;
 import io.axoniq.console.framework.client.strategy.CborEncodingStrategy;
 import io.axoniq.console.framework.client.strategy.RSocketPayloadEncodingStrategy;
-import io.axoniq.console.framework.eventprocessor.*;
+import io.axoniq.console.framework.eventprocessor.DeadLetterManager;
+import io.axoniq.console.framework.eventprocessor.EventProcessorManager;
+import io.axoniq.console.framework.eventprocessor.ProcessorReportCreator;
+import io.axoniq.console.framework.eventprocessor.RSocketDlqResponder;
+import io.axoniq.console.framework.eventprocessor.RSocketProcessorResponder;
 import io.axoniq.console.framework.eventprocessor.metrics.AxoniqConsoleProcessorInterceptor;
 import io.axoniq.console.framework.eventprocessor.metrics.ProcessorMetricsRegistry;
 import io.axoniq.console.framework.messaging.AxoniqConsoleDispatchInterceptor;
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory;
 import io.axoniq.console.framework.messaging.HandlerMetricsRegistry;
+import io.axoniq.console.framework.messaging.SpanMatcher;
+import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap;
 import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.transaction.TransactionManager;
 import org.axonframework.config.Configuration;
@@ -27,6 +49,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+
+import static io.axoniq.console.framework.messaging.SpanMatcherKt.getSpanMatcherPredicateMap;
 
 /**
  * Applies the configuration necessary for AxonIQ Console to the {@link Configurer} of Axon Framework.
@@ -44,6 +69,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final ScheduledExecutorService reportingTaskExecutor;
     private final ExecutorService managementTaskExecutor;
     private final boolean configureSpanFactory;
+    private final SpanMatcherPredicateMap spanMatcherPredicateMap;
 
     /**
      * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}.
@@ -62,6 +88,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.reportingTaskExecutor = builder.reportingTaskExecutor;
         this.managementTaskExecutor = builder.managementTaskExecutor;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
+        this.spanMatcherPredicateMap = builder.spanMatcherPredicateMap;
     }
 
     /**
@@ -160,7 +187,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                 ));
 
         if (configureSpanFactory) {
-            configurer.registerComponent(SpanFactory.class, c -> new AxoniqConsoleSpanFactory());
+            configurer.registerComponent(SpanFactory.class, c -> new AxoniqConsoleSpanFactory(spanMatcherPredicateMap));
         }
 
         configurer.onInitialize(c -> {
@@ -206,6 +233,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
         private Long initialDelay = 0L;
         private boolean disableSpanFactoryInConfiguration = false;
+        private final SpanMatcherPredicateMap spanMatcherPredicateMap = getSpanMatcherPredicateMap();
 
         private ScheduledExecutorService reportingTaskExecutor;
         private Integer reportingThreadPoolSize = 2;
@@ -346,6 +374,21 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
          */
         public Builder disableSpanFactoryInConfiguration() {
             this.disableSpanFactoryInConfiguration = true;
+            return this;
+        }
+
+        /**
+         * Overwrites a span predicate. It might be necessary to set these when the naming of the spans is customized.
+         * See {@link SpanMatcher} for the defaults, based on the Axon Framework version.
+         *
+         * @param spanMatcher the type os span to change.
+         * @param predicate   the function to determine is a predicate with a certain name, matches the type.
+         * @return The builder for fluent interfacing
+         */
+        public Builder changeSpanPredicate(SpanMatcher spanMatcher, Predicate<String> predicate) {
+            BuilderUtils.assertNonNull(spanMatcher, "Span matcher to update spanMatcherPredicateMap must be non-null");
+            BuilderUtils.assertNonNull(predicate, "Predicate to update spanMatcherPredicateMap must be non-null");
+            spanMatcherPredicateMap.put(spanMatcher, predicate);
             return this;
         }
 

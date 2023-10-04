@@ -41,7 +41,7 @@ class HandlerMetricsRegistry(
     private val handlers: MutableMap<HandlerStatisticsMetricIdentifier, HandlerRegistryStatistics> = ConcurrentHashMap()
     private val aggregates: MutableMap<AggregateStatisticIdentifier, AggregateRegistryStatistics> = ConcurrentHashMap()
 
-    private val noHanlerIdentifier = HandlerStatisticsMetricIdentifier(HandlerType.Origin, "application", MessageIdentifier("Dispatcher", componentName))
+    private val noHandlerIdentifier = HandlerStatisticsMetricIdentifier(HandlerType.Origin, "application", MessageIdentifier("Dispatcher", componentName))
 
     override fun registerLifecycleHandlers(lifecycle: Lifecycle.LifecycleRegistry) {
         lifecycle.onStart(Phase.INSTRUCTION_COMPONENTS, this::start)
@@ -173,7 +173,7 @@ class HandlerMetricsRegistry(
     fun registerMessageDispatchedWithoutHandling(
             message: MessageIdentifier,
     ) {
-        dispatches.computeIfAbsentWithRetry(DispatcherStatisticIdentifier(noHanlerIdentifier, message)) { _ ->
+        dispatches.computeIfAbsentWithRetry(DispatcherStatisticIdentifier(noHandlerIdentifier, message)) { _ ->
             RollingCountMeasure()
         }.increment()
     }
