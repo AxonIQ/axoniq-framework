@@ -51,7 +51,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
-import static io.axoniq.console.framework.messaging.SpanMatcherKt.getSpanMatcherPredicateMap;
+import static io.axoniq.console.framework.messaging.SpanMatcher.getSpanMatcherPredicateMap;
 
 /**
  * Applies the configuration necessary for AxonIQ Console to the {@link Configurer} of Axon Framework.

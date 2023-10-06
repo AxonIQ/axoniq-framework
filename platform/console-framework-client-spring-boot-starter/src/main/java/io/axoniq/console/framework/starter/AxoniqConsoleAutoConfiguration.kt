@@ -18,8 +18,8 @@ package io.axoniq.console.framework.starter
 
 import io.axoniq.console.framework.AxoniqConsoleConfigurerModule
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory
+import io.axoniq.console.framework.messaging.SpanMatcher.Companion.getSpanMatcherPredicateMap
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
-import io.axoniq.console.framework.messaging.getSpanMatcherPredicateMap
 import org.axonframework.config.ConfigurerModule
 import org.axonframework.tracing.MultiSpanFactory
 import org.axonframework.tracing.NoOpSpanFactory

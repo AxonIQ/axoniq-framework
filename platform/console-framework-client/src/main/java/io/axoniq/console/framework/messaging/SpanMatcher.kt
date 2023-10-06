@@ -58,37 +58,42 @@ enum class SpanMatcher(val pre49Predicate: Predicate<String>, val from49Predicat
                         || name == "QueryBus.query"
                         || name.startsWith("QueryBus.scatterGatherQuery")
                         || name.startsWith("StreamingEventProcessor")
-            })
+            });
+
+    companion object {
+        private fun pre49PredicateMap(): SpanMatcherPredicateMap {
+            val spanMatcherPredicateMap = SpanMatcherPredicateMap()
+            SpanMatcher.values().forEach { s -> spanMatcherPredicateMap[s] = s.pre49Predicate }
+            return spanMatcherPredicateMap
+        }
+
+        private fun from49PredicateMap(): SpanMatcherPredicateMap {
+            val spanMatcherPredicateMap = SpanMatcherPredicateMap()
+            SpanMatcher.values().forEach { s -> spanMatcherPredicateMap[s] = s.from49Predicate }
+            return spanMatcherPredicateMap
+        }
+
+        private fun pre49Version(): Boolean {
+            val version = MavenArtifactVersionResolver(
+                    "org.axonframework",
+                    "axon-messaging",
+                    SpanMatcher::class.java.classLoader
+            ).get() ?: "Unknown"
+            return version.startsWith("4.6") || version.startsWith("4.7") || version.startsWith("4.8")
+        }
+
+        /**
+         * Get the mapping for the spans, based on the version of axon-messaging.
+         */
+        @JvmStatic
+        fun getSpanMatcherPredicateMap(): SpanMatcherPredicateMap =
+                if (pre49Version())
+                    pre49PredicateMap()
+                else
+                    from49PredicateMap()
+    }
 }
 
 class SpanMatcherPredicateMap : EnumMap<SpanMatcher, Predicate<String>>(SpanMatcher::class.java)
 
-private fun pre49PredicateMap(): SpanMatcherPredicateMap {
-    val spanMatcherPredicateMap = SpanMatcherPredicateMap()
-    SpanMatcher.values().forEach { s -> spanMatcherPredicateMap[s] = s.pre49Predicate }
-    return spanMatcherPredicateMap
-}
 
-private fun from49PredicateMap(): SpanMatcherPredicateMap {
-    val spanMatcherPredicateMap = SpanMatcherPredicateMap()
-    SpanMatcher.values().forEach { s -> spanMatcherPredicateMap[s] = s.from49Predicate }
-    return spanMatcherPredicateMap
-}
-
-private fun pre49Version(): Boolean {
-    val version = MavenArtifactVersionResolver(
-            "org.axonframework",
-            "axon-messaging",
-            SpanMatcher::class.java.classLoader
-    ).get() ?: "Unknown"
-    return version.startsWith("4.6") || version.startsWith("4.7") || version.startsWith("4.8")
-}
-
-/**
- * Get the mapping for the spans, based on the version of axon-messaging.
- */
-fun getSpanMatcherPredicateMap(): SpanMatcherPredicateMap =
-        if (pre49Version())
-            pre49PredicateMap()
-        else
-            from49PredicateMap()
