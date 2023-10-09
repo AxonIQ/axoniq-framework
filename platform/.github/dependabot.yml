@@ -11,9 +11,8 @@ updates:
     - "Status: In Progress"
   milestone: 8
   reviewers:
-    - "gklijs"
-    - "CodeDrivenMitch" # Main
-    - "smcvb"
+    - "AxonIQ/axoniq-console"
+
 - package-ecosystem: maven
   directory: "/"
   schedule:
@@ -24,6 +23,4 @@ updates:
     - "Priority 1: Must"
   milestone: 8
   reviewers:
-    - "gklijs"
-    - "CodeDrivenMitch" # Main
-    - "smcvb"
+    - "AxonIQ/axoniq-console"
