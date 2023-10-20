@@ -58,7 +58,7 @@
         <axon.version>4.6.7</axon.version>
 
         <projectreactor.version>3.5.11</projectreactor.version>
-        <spring-boot.version>2.7.16</spring-boot.version>
+        <spring-boot.version>2.7.17</spring-boot.version>
     </properties>
 
     <dependencyManagement>
