@@ -18,6 +18,10 @@ package io.axoniq.console.framework.api
 
 object Routes {
 
+    object Management {
+        const val HEARTBEAT = "heartbeat"
+    }
+
     object EventProcessor {
         const val REPORT = "processor-info-report"
 

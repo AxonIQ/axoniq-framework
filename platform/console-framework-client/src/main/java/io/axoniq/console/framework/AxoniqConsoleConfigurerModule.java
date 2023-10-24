@@ -151,7 +151,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                 c.getComponent(RSocketHandlerRegistrar.class),
                                 c.getComponent(RSocketPayloadEncodingStrategy.class),
                                 reportingTaskExecutor,
-                                ManagementFactory.getRuntimeMXBean().getName()
+                                ManagementFactory.getRuntimeMXBean().getName(),
+                                30
                         )
                 )
                 .registerComponent(ServerProcessorReporter.class,
