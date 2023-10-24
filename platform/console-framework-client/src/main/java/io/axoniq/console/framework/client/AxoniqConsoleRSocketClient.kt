@@ -102,6 +102,9 @@ class AxoniqConsoleRSocketClient(
      * 60 seconds.
      */
     fun start() {
+        if(this.maintenanceTask != null) {
+            return
+        }
         this.maintenanceTask = executor.scheduleWithFixedDelay(
                 this::ensureConnectedAndAlive,
                 initialDelay,
