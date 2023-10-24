@@ -105,6 +105,7 @@ class AxoniqConsoleRSocketClient(
         if(this.maintenanceTask != null) {
             return
         }
+        this.lastReceivedHeartbeat = Instant.now()
         this.maintenanceTask = executor.scheduleWithFixedDelay(
                 this::ensureConnectedAndAlive,
                 initialDelay,
@@ -130,6 +131,7 @@ class AxoniqConsoleRSocketClient(
                 return
             }
             logger.info("Reconnecting to AxonIQ Console...")
+            lastReceivedHeartbeat = Instant.now()
             connectSafely()
         }
     }
