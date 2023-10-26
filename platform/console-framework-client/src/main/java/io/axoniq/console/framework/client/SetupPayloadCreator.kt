@@ -67,7 +67,9 @@ class SetupPayloadCreator(
             },
             versions = versionInformation(),
             upcasters = upcasters(),
-            features = SupportedFeatures(true)
+            features = SupportedFeatures(
+                    heartbeat = true
+            )
         )
     }
 

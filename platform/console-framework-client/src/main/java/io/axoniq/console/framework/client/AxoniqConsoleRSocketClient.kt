@@ -122,7 +122,7 @@ class AxoniqConsoleRSocketClient(
             if (ChronoUnit.SECONDS.between(lastConnectionTry, Instant.now()) < secondsToWaitForReconnect) {
                 return
             }
-            logger.info("Reconnecting to AxonIQ Console...")
+            logger.info("Connecting to AxonIQ Console...")
             connectSafely()
         }
     }
@@ -278,9 +278,6 @@ class AxoniqConsoleRSocketClient(
                     if (it.message?.contains("Access Denied") == true) {
                         logger.info("Was unable to send call to AxonIQ Console since authentication was incorrect!")
                     }
-                }
-                .doOnSuccess {
-                    logger.debug("Heartbeat successfully sent to AxonIQ Console")
                 }
     }
 }
