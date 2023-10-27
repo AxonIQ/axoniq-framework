@@ -18,6 +18,13 @@ package io.axoniq.console.framework.api
 
 object Routes {
 
+    object Management {
+        // Route on both client and server. Client can pull settings whenever, server can push new settings
+        const val SETTINGS = "client-settings"
+        // Route on both client and server to receive/send heartbeats
+        const val HEARTBEAT = "client-heartbeat"
+    }
+
     object EventProcessor {
         const val REPORT = "processor-info-report"
 

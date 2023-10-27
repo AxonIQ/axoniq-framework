@@ -17,6 +17,7 @@
 package io.axoniq.console.framework;
 
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient;
+import io.axoniq.console.framework.client.ClientSettingsService;
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.console.framework.client.ServerProcessorReporter;
 import io.axoniq.console.framework.client.SetupPayloadCreator;
@@ -107,6 +108,9 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     @Override
     public void configureModule(@NotNull Configurer configurer) {
         configurer
+                .registerComponent(ClientSettingsService.class,
+                        c -> new ClientSettingsService()
+                )
                 .registerComponent(ProcessorMetricsRegistry.class,
                         c -> new ProcessorMetricsRegistry()
                 )
@@ -150,6 +154,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                 c.getComponent(SetupPayloadCreator.class),
                                 c.getComponent(RSocketHandlerRegistrar.class),
                                 c.getComponent(RSocketPayloadEncodingStrategy.class),
+                                c.getComponent(ClientSettingsService.class),
                                 reportingTaskExecutor,
                                 ManagementFactory.getRuntimeMXBean().getName()
                         )
@@ -158,11 +163,13 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                         c -> new ServerProcessorReporter(
                                 c.getComponent(AxoniqConsoleRSocketClient.class),
                                 c.getComponent(ProcessorReportCreator.class),
+                                c.getComponent(ClientSettingsService.class),
                                 reportingTaskExecutor)
                 )
                 .registerComponent(HandlerMetricsRegistry.class,
                         c -> new HandlerMetricsRegistry(
                                 c.getComponent(AxoniqConsoleRSocketClient.class),
+                                c.getComponent(ClientSettingsService.class),
                                 reportingTaskExecutor,
                                 applicationName
                         )

@@ -83,12 +83,17 @@ data class ConsoleClientIdentifier(
 )
 
 data class SetupPayload(
-    val commandBus: CommandBusInformation,
-    val queryBus: QueryBusInformation,
-    val eventStore: EventStoreInformation,
-    val processors: List<ProcessorInformation>,
-    val versions: Versions,
-    val upcasters: List<String>,
+        val features: SupportedFeatures? = SupportedFeatures(),
+        val commandBus: CommandBusInformation,
+        val queryBus: QueryBusInformation,
+        val eventStore: EventStoreInformation,
+        val processors: List<ProcessorInformation>,
+        val versions: Versions,
+        val upcasters: List<String>,
+)
+
+data class SupportedFeatures(
+        val heartbeat: Boolean? = false,
 )
 
 data class Versions(
