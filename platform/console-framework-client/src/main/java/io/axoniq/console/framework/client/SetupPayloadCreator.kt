@@ -51,7 +51,7 @@ class SetupPayloadCreator(
             processors = processors.map {
                 val processor =
                     eventProcessingConfiguration.eventProcessor(it, StreamingEventProcessor::class.java).get()
-                io.axoniq.console.framework.api.ProcessorInformation(
+                ProcessorInformation(
                     name = it,
                     supportsReset = processor.supportsReset(),
                     batchSize = processor.getBatchSize(),
@@ -66,7 +66,10 @@ class SetupPayloadCreator(
                 )
             },
             versions = versionInformation(),
-            upcasters = upcasters()
+            upcasters = upcasters(),
+            features = SupportedFeatures(
+                    heartbeat = true
+            )
         )
     }
 

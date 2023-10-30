@@ -16,41 +16,44 @@
 
 package io.axoniq.console.framework.client
 
+import io.axoniq.console.framework.api.ClientSettings
 import io.axoniq.console.framework.eventprocessor.ProcessorReportCreator
 import mu.KotlinLogging
-import org.axonframework.lifecycle.Lifecycle
-import org.axonframework.lifecycle.Phase
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 class ServerProcessorReporter(
     private val client: AxoniqConsoleRSocketClient,
     private val processorReportCreator: ProcessorReportCreator,
+    private val clientSettingsService: ClientSettingsService,
     private val executor: ScheduledExecutorService,
-) : Lifecycle {
-
+) : ClientSettingsObserver {
+    private var reportTask: ScheduledFuture<*>? = null
     private val logger = KotlinLogging.logger { }
 
-    override fun registerLifecycleHandlers(lifecycleRegistry: Lifecycle.LifecycleRegistry) {
-        lifecycleRegistry.onStart(Phase.INSTRUCTION_COMPONENTS, this::schedule)
+    init {
+        clientSettingsService.subscribeToSettings(this)
     }
 
-    fun start() {
-        schedule()
-    }
-
-    private fun schedule() {
-        executor.scheduleWithFixedDelay({
+    override fun onConnectedWithSettings(settings: ClientSettings) {
+        logger.info { "Sending processor information every ${settings.processorReportInterval}ms to AxonIQ console" }
+        this.reportTask = executor.scheduleWithFixedDelay({
             try {
                 this.report()
             } catch (e: Exception) {
                 logger.error("Was unable to report processor metrics: {}", e.message, e)
             }
-        }, 1000, 1000, TimeUnit.MILLISECONDS)
+        }, 0, settings.processorReportInterval, TimeUnit.MILLISECONDS)
     }
 
     private fun report() {
         client.send(io.axoniq.console.framework.api.Routes.EventProcessor.REPORT, processorReportCreator.createReport()).block()
+    }
+
+    override fun onDisconnected() {
+        reportTask?.cancel(true)
+        reportTask = null
     }
 }
 
