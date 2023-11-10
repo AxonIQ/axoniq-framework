@@ -18,48 +18,42 @@ package io.axoniq.console.framework.eventprocessor
 
 import io.axoniq.console.framework.api.*
 import io.axoniq.console.framework.eventprocessor.metrics.ProcessorMetricsRegistry
+import org.axonframework.common.ReflectionUtils
 import org.axonframework.config.EventProcessingConfiguration
-import org.axonframework.eventhandling.EventTrackerStatus
-import org.axonframework.eventhandling.Segment
-import org.axonframework.eventhandling.StreamingEventProcessor
-import org.axonframework.eventhandling.TrackingEventProcessor
+import org.axonframework.eventhandling.*
+import org.axonframework.eventhandling.deadletter.DeadLetteringEventHandlerInvoker
 import org.axonframework.eventhandling.pooled.PooledStreamingEventProcessor
-
+import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue
 class ProcessorReportCreator(
-    private val processingConfig: EventProcessingConfiguration,
-    private val metricsRegistry: ProcessorMetricsRegistry,
+        private val processingConfig: EventProcessingConfiguration,
+        private val metricsRegistry: ProcessorMetricsRegistry,
 ) {
 
     fun createReport() = ProcessorStatusReport(
-        processingConfig.eventProcessors()
-            .filter { it.value is StreamingEventProcessor }
-            .map { entry ->
-                val sep = entry.value as StreamingEventProcessor
-                ProcessorStatus(
-                    entry.key,
-                    listOf(
-                        ProcessingGroupStatus(
-                            entry.key,
-                            processingConfig.deadLetterQueue(entry.key).map { it.amountOfSequences() }.orElse(null)
+            processingConfig.eventProcessors()
+                    .filter { it.value is StreamingEventProcessor }
+                    .map { entry ->
+                        val sep = entry.value as StreamingEventProcessor
+                        ProcessorStatus(
+                                entry.key,
+                                entry.value.toProcessingGroupStatuses(),
+                                sep.tokenStoreIdentifier,
+                                sep.toType(),
+                                sep.isRunning,
+                                sep.isError,
+                                sep.maxCapacity(),
+                                sep.processingStatus().filterValues { !it.isErrorState }.size,
+                                sep.processingStatus().map { (_, segment) -> segment.toStatus(entry.key) },
                         )
-                    ),
-                    sep.tokenStoreIdentifier,
-                    sep.toType(),
-                    sep.isRunning,
-                    sep.isError,
-                    sep.maxCapacity(),
-                    sep.processingStatus().filterValues { !it.isErrorState }.size,
-                    sep.processingStatus().map { (_, segment) -> segment.toStatus(entry.key) },
-                )
-            }
+                    }
     )
 
     fun createSegmentOverview(processorName: String): SegmentOverview {
         val tokenStore = processingConfig.tokenStore(processorName)
         val segments = tokenStore.fetchSegments(processorName)
         return SegmentOverview(
-            segments.map { Segment.computeSegment(it, *segments) }
-                .map { SegmentDetails(it.segmentId, it.mergeableSegmentId(), it.mask) }
+                segments.map { Segment.computeSegment(it, *segments) }
+                        .map { SegmentDetails(it.segmentId, it.mergeableSegmentId(), it.mask) }
         )
     }
 
@@ -72,15 +66,47 @@ class ProcessorReportCreator(
     }
 
     private fun EventTrackerStatus.toStatus(name: String) = SegmentStatus(
-        segment = this.segment.segmentId,
-        mergeableSegment = this.segment.mergeableSegmentId(),
-        mask = this.segment.mask,
-        oneOf = this.segment.mask + 1,
-        caughtUp = this.isCaughtUp,
-        error = this.isErrorState,
-        errorType = this.error?.javaClass?.typeName,
-        errorMessage = this.error?.message,
-        ingestLatency = metricsRegistry.ingestLatencyForProcessor(name, this.segment.segmentId).getValue(),
-        commitLatency = metricsRegistry.commitLatencyForProcessor(name, this.segment.segmentId).getValue(),
+            segment = this.segment.segmentId,
+            mergeableSegment = this.segment.mergeableSegmentId(),
+            mask = this.segment.mask,
+            oneOf = this.segment.mask + 1,
+            caughtUp = this.isCaughtUp,
+            error = this.isErrorState,
+            errorType = this.error?.javaClass?.typeName,
+            errorMessage = this.error?.message,
+            ingestLatency = metricsRegistry.ingestLatencyForProcessor(name, this.segment.segmentId).getValue(),
+            commitLatency = metricsRegistry.commitLatencyForProcessor(name, this.segment.segmentId).getValue(),
     )
+
+    private fun EventProcessor.toProcessingGroupStatuses(): List<ProcessingGroupStatus> =
+            if (this is AbstractEventProcessor) {
+                val invoker = this.eventHandlerInvoker()
+                if (invoker is MultiEventHandlerInvoker) {
+                    invoker.delegates().map { i -> i.toProcessingGroupStatus(this.name) }
+                } else {
+                    listOf(invoker.toProcessingGroupStatus(this.name))
+                }
+            } else {
+                listOf(ProcessingGroupStatus(this.name, null))
+            }
+
+    private fun EventHandlerInvoker.toProcessingGroupStatus(processorName: String): ProcessingGroupStatus =
+            if (this is DeadLetteringEventHandlerInvoker) {
+                this.getStatusByReflectionOrDefault(processorName)
+            } else {
+                ProcessingGroupStatus(processorName, null)
+            }
+
+    private fun DeadLetteringEventHandlerInvoker.getStatusByReflectionOrDefault(processorName: String): ProcessingGroupStatus {
+        val queueField = this.getField("queue") ?: return ProcessingGroupStatus(processorName, null)
+        val queue = ReflectionUtils.getFieldValue<SequencedDeadLetterQueue<EventMessage<Any>>>(queueField, this)
+        val processingGroupField = queue.getField("processingGroup")
+                ?: return ProcessingGroupStatus(processorName, null)
+        val processingGroup = ReflectionUtils.getFieldValue<String>(processingGroupField, queue)
+        return ProcessingGroupStatus(processingGroup, queue.amountOfSequences())
+    }
+
+    private fun Any.getField(name: String) =
+            this::class.java.declaredFields.firstOrNull { it.name == name }
+
 }
