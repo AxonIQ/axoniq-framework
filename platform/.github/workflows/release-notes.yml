@@ -47,7 +47,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
       with:
-        tag_name: axon-${{ env.VERSION }}
+        tag_name: ${{ env.VERSION }}
         release_name:  Console Framework client v${{ env.VERSION }}
         body_path: ${{ env.RELEASE_NOTES_FILE }}
         draft: true

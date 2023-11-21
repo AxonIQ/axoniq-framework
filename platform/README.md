@@ -43,3 +43,12 @@ The following data will be sent to the servers of AxonIQ:
 
 If you are concerned about the message data being sent to AxonIQ, please contact us at,
 disabling the DLQ functionality will prevent that in all cases.
+
+## How to Release
+
+1. Run `mvn versions:set -DnewVersion=1.x.x` to update the version in the pom files
+2. Commit and push the change
+3. Close the milestone on GitHub
+4. Wait for the release to be created on Github and publish it
+5. Run `mvn versions:set -DnewVersion=1.x.x-SNAPSHOT`
+6. Commit and push the new development version
