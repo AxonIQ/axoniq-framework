@@ -1,4 +1,4 @@
-name: Pull Request
+name: PR - Test and Build
 
 on:
   pull_request:
@@ -19,25 +19,25 @@ jobs:
       fail-fast: false # run both to the end
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v3.13.0
         with:
-          distribution: 'zulu'
+          distribution: "zulu"
           java-version: ${{ matrix.java-version }}
           cache: "maven"
           server-id: sonatype
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
-      - name: Regular Build
+      - name: Test and Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
           ./mvnw -B -U -Dstyle.color=always -Possrh clean verify
 
-      - name: Build with Coverage reports
+      - name: Test and Build with Coverage reports
         if: matrix.sonar-enabled
         run: |
           ./mvnw -B -U -Dstyle.color=always -Possrh -Dcoverage clean verify

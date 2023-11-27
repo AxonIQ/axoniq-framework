@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Main - Test, Build, and Deploy
 
 on:
   push:
@@ -25,25 +25,25 @@ jobs:
             deploy-enabled: false
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v3.13.0
         with:
-          distribution: 'zulu'
+          distribution: "zulu"
           java-version: ${{ matrix.java-version }}
           cache: "maven"
           server-id: axoniq-nexus
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
-      - name: Regular Build
+      - name: Test and Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
           ./mvnw -B -U -Dstyle.color=always -Possrh clean verify
 
-      - name: Build with Coverage reports
+      - name: Test and Build with Coverage reports
         if: matrix.sonar-enabled
         run: |
           ./mvnw -B -U -Dstyle.color=always -Dcoverage clean verify
