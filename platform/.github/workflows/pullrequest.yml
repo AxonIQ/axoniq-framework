@@ -1,4 +1,4 @@
-name: Pull Request
+name: PR - Test and Build
 
 on:
   pull_request:
@@ -16,39 +16,37 @@ jobs:
             sonar-enabled: false
           - java-version: 17
             sonar-enabled: true
+          - java-version: 21
+            sonar-enabled: false
       fail-fast: false # run both to the end
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v3.13.0
         with:
-          distribution: 'zulu'
+          distribution: "zulu"
           java-version: ${{ matrix.java-version }}
           cache: "maven"
           server-id: sonatype
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
-      - name: Regular Build
+      - name: Test and Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
           ./mvnw -B -U -Dstyle.color=always -Possrh clean verify
 
-      - name: Build with Coverage reports
+      - name: Test and Build with Coverage reports
         if: matrix.sonar-enabled
         run: |
           ./mvnw -B -U -Dstyle.color=always -Possrh -Dcoverage clean verify
 
       - name: Sonar Analysis
-        if: ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }}
-        run: |
-          ./mvnw -B -Dstyle.color=always sonar:sonar \
-          -Dsonar.projectKey=AxonIQ_console-framework-client \
-          -Dsonar.organization=axoniq \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        if: ${{ success() && matrix.sonar-enabled }}
+        run: ./mvnw -B -Dstyle.color=always org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=AxonIQ_console-framework-client
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.CONSOLE_SONAR_TOKEN }}
