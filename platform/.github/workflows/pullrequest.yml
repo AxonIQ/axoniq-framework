@@ -16,6 +16,8 @@ jobs:
             sonar-enabled: false
           - java-version: 17
             sonar-enabled: true
+          - java-version: 21
+            sonar-enabled: false
       fail-fast: false # run both to the end
 
     steps:
