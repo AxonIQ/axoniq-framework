@@ -36,7 +36,7 @@ jobs:
 
     - name: Add Release Notes to cache
       id: cache-notes
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ${{ env.RELEASE_NOTES_FILE }}
         key: notes
