@@ -51,6 +51,10 @@ class AxoniqConsoleAutoConfiguration {
             logger.warn("No credentials were provided for the connection to AxonIQ Console. Please provide them as instructed through the 'axoniq.console.credentials' property.")
             return ConfigurerModule { }
         }
+        if (!credentials.contains(":")) {
+            logger.warn("The credentials for the connection to AxonIQ Console don't have the right format. Please provide them as instructed through the 'axoniq.console.credentials' property.")
+            return ConfigurerModule { }
+        }
         val applicationName = (properties.applicationName?.trim()?.ifEmpty { null })
             ?: (applicationContext.applicationName.trim().ifEmpty { null })
             ?: (applicationContext.id?.removeSuffix("-1"))
