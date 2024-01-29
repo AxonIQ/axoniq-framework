@@ -18,6 +18,8 @@ package io.axoniq.console.framework.client
 
 import io.axoniq.console.framework.api.ClientSettings
 import io.axoniq.console.framework.api.Routes
+import io.axoniq.console.framework.api.notifications.NotificationLevel
+import io.axoniq.console.framework.api.notifications.NotificationList
 import io.axoniq.console.framework.client.strategy.RSocketPayloadEncodingStrategy
 import io.netty.buffer.ByteBufAllocator
 import io.netty.buffer.CompositeByteBuf
@@ -28,6 +30,7 @@ import io.rsocket.metadata.WellKnownMimeType
 import io.rsocket.transport.netty.client.TcpClientTransport
 import org.axonframework.lifecycle.Lifecycle
 import org.axonframework.lifecycle.Phase
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import reactor.core.publisher.Mono
 import reactor.netty.tcp.TcpClient
@@ -52,19 +55,19 @@ import kotlin.math.pow
  */
 @Suppress("MemberVisibilityCanBePrivate")
 class AxoniqConsoleRSocketClient(
-    private val environmentId: String,
-    private val accessToken: String,
-    private val applicationName: String,
-    private val host: String,
-    private val port: Int,
-    private val secure: Boolean,
-    private val initialDelay: Long,
-    private val setupPayloadCreator: SetupPayloadCreator,
-    private val registrar: RSocketHandlerRegistrar,
-    private val encodingStrategy: RSocketPayloadEncodingStrategy,
-    private val clientSettingsService: ClientSettingsService,
-    private val executor: ScheduledExecutorService,
-    private val nodeName: String,
+        private val environmentId: String,
+        private val accessToken: String,
+        private val applicationName: String,
+        private val host: String,
+        private val port: Int,
+        private val secure: Boolean,
+        private val initialDelay: Long,
+        private val setupPayloadCreator: SetupPayloadCreator,
+        private val registrar: RSocketHandlerRegistrar,
+        private val encodingStrategy: RSocketPayloadEncodingStrategy,
+        private val clientSettingsService: ClientSettingsService,
+        private val executor: ScheduledExecutorService,
+        private val nodeName: String,
 ) : Lifecycle {
     private val heartbeatOrchestrator = HeartbeatOrchestrator()
     private var maintenanceTask: ScheduledFuture<*>? = null
@@ -92,10 +95,13 @@ class AxoniqConsoleRSocketClient(
      * Sends a message to the AxonIQ Console. If there is no connection active, does nothing silently.
      * The connection will automatically be setup. Losing a few reports is no problem.
      */
-    fun send(route: String, payload: Any): Mono<Void> {
+    fun send(route: String, payload: Any): Mono<Unit> {
         return rsocket
                 ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
-                ?.then()
+                ?.map {
+                    val notifications = encodingStrategy.decode(it, NotificationList::class.java)
+                    logger.log(notifications)
+                }
                 ?: Mono.empty()
     }
 
@@ -106,7 +112,7 @@ class AxoniqConsoleRSocketClient(
      * 60 seconds.
      */
     fun start() {
-        if(this.maintenanceTask != null) {
+        if (this.maintenanceTask != null) {
             return
         }
         this.maintenanceTask = executor.scheduleWithFixedDelay(
@@ -143,12 +149,12 @@ class AxoniqConsoleRSocketClient(
 
     private fun createRSocket(): RSocket {
         val authentication = io.axoniq.console.framework.api.ConsoleClientAuthentication(
-            identification = io.axoniq.console.framework.api.ConsoleClientIdentifier(
-                environmentId = environmentId,
-                applicationName = applicationName,
-                nodeName = nodeName
-            ),
-            accessToken = accessToken
+                identification = io.axoniq.console.framework.api.ConsoleClientIdentifier(
+                        environmentId = environmentId,
+                        applicationName = applicationName,
+                        nodeName = nodeName
+                ),
+                accessToken = accessToken
         )
 
         val setupPayload = encodingStrategy.encode(
@@ -156,14 +162,14 @@ class AxoniqConsoleRSocketClient(
                 createSetupMetadata(authentication)
         )
         val rsocket = RSocketConnector.create()
-            .metadataMimeType(WellKnownMimeType.MESSAGE_RSOCKET_COMPOSITE_METADATA.string)
-            .dataMimeType(encodingStrategy.getMimeType().string)
-            .setupPayload(setupPayload)
-            .acceptor { _, rsocket ->
-                Mono.just(registrar.createRespondingRSocketFor(rsocket))
-            }
-            .connect(tcpClientTransport())
-            .block()!!
+                .metadataMimeType(WellKnownMimeType.MESSAGE_RSOCKET_COMPOSITE_METADATA.string)
+                .dataMimeType(encodingStrategy.getMimeType().string)
+                .setupPayload(setupPayload)
+                .acceptor { _, rsocket ->
+                    Mono.just(registrar.createRespondingRSocketFor(rsocket))
+                }
+                .connect(tcpClientTransport())
+                .block()!!
         return rsocket
     }
 
@@ -181,15 +187,15 @@ class AxoniqConsoleRSocketClient(
     }
 
     private fun tcpClientTransport() =
-        TcpClientTransport.create(tcpClient())
+            TcpClientTransport.create(tcpClient())
 
     private fun tcpClient(): TcpClient {
         val client = TcpClient.create()
-            .host(host)
-            .port(port)
-            .doOnDisconnected {
-                disposeCurrentConnection()
-            }
+                .host(host)
+                .port(port)
+                .doOnDisconnected {
+                    disposeCurrentConnection()
+                }
         return if (secure) {
             return client.secure()
         } else client
@@ -279,5 +285,15 @@ class AxoniqConsoleRSocketClient(
                         logger.info("Was unable to send call to AxonIQ Console since authentication was incorrect!")
                     }
                 }
+    }
+
+    private fun Logger.log(notificationList: NotificationList) {
+        notificationList.messages.forEach {
+            when (it.level) {
+                NotificationLevel.Debug -> this.debug(it.message)
+                NotificationLevel.Info -> this.info(it.message)
+                NotificationLevel.Warn -> this.warn(it.message)
+            }
+        }
     }
 }
