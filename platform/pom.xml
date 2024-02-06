@@ -391,10 +391,6 @@
                                 <goals>
                                     <goal>jar</goal>
                                 </goals>
-                                <configuration>
-                                    <attach>true</attach>
-                                    <forceCreation>true</forceCreation>
-                                </configuration>
                             </execution>
                         </executions>
                     </plugin>
