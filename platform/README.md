@@ -50,5 +50,7 @@ disabling the DLQ functionality will prevent that in all cases.
 2. Commit and push the change
 3. Close the milestone on GitHub
 4. Wait for the release to be created on Github and publish it
-5. Run `mvn versions:set -DnewVersion=1.x.x-SNAPSHOT`
-6. Commit and push the new development version
+5. A Github action will automatically release this to Maven Central
+6. Run `mvn versions:set -DnewVersion=1.x.x-SNAPSHOT`
+7. Commit and push the new development version
+8. Wait for the version to become available [here](https://repo1.maven.org/maven2/io/axoniq/console/console-framework-client-parent/). Can take minutes, can take hours.
