@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import org.axonframework.config.ConfigurerModule
 import org.axonframework.eventsourcing.EventSourcingRepository
 import org.axonframework.eventsourcing.eventstore.EventStore
 import org.axonframework.modelling.command.Repository
+import kotlin.reflect.full.superclasses
 
 class AxoniqConsoleAggregateConfigurerModule : ConfigurerModule {
     override fun configureModule(configurer: Configurer) {
@@ -32,13 +33,9 @@ class AxoniqConsoleAggregateConfigurerModule : ConfigurerModule {
                 it.findModules(AggregateConfiguration::class.java).forEach { ac ->
                     val repo = ac.repository().unwrapPossiblyDecoratedClass(Repository::class.java)
                     if (repo is EventSourcingRepository) {
-                        val field =
-                            ReflectionUtils.fieldsOf(repo::class.java).firstOrNull { f -> f.name == "eventStore" }
-                        if (field != null) {
-                            val current = ReflectionUtils.getFieldValue<EventStore>(field, repo)
-                            if (current !is AxoniqConsoleWrappedEventStore) {
-                                ReflectionUtils.setFieldValue(field, repo, AxoniqConsoleWrappedEventStore(current))
-                            }
+                        wrapIfPresentAndNotWrapped(repo, repo::class.java)
+                        repo::class.superclasses.forEach { superClass ->
+                            wrapIfPresentAndNotWrapped(repo, superClass.java)
                         }
                     }
                 }
@@ -46,5 +43,14 @@ class AxoniqConsoleAggregateConfigurerModule : ConfigurerModule {
         }
     }
 
-
+    private fun wrapIfPresentAndNotWrapped(repo: EventSourcingRepository<*>, clazz: Class<*>) {
+        val field =
+                ReflectionUtils.fieldsOf(clazz).firstOrNull { f -> f.name == "eventStore" }
+        if (field != null) {
+            val current = ReflectionUtils.getFieldValue<EventStore>(field, repo)
+            if (current !is AxoniqConsoleWrappedEventStore) {
+                ReflectionUtils.setFieldValue(field, repo, AxoniqConsoleWrappedEventStore(current))
+            }
+        }
+    }
 }

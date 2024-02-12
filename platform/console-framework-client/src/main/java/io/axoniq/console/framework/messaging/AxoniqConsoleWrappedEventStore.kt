@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,11 +54,21 @@ class AxoniqConsoleWrappedEventStore(
         return delegate.openStream(trackingToken)
     }
 
-    override fun readEvents(p0: String): DomainEventStream {
-        val result = delegate.readEvents(p0)
+    override fun readEvents(aggregateIdentifier: String): DomainEventStream {
+        val result = delegate.readEvents(aggregateIdentifier)
         val events = result.asStream().map { it }.collect(Collectors.toList())
         onTopLevelSpanIfActive {
             it.registerMetricValue(PreconfiguredMetric.AGGREGATE_EVENTS_SIZE, events.size.toLong())
+        }
+        return DomainEventStream.of(events)
+    }
+
+    override fun readEvents(aggregateIdentifier: String, firstSequenceNumber: Long): DomainEventStream {
+        val result = delegate.readEvents(aggregateIdentifier, firstSequenceNumber)
+        val events = result.asStream().map { it }.collect(Collectors.toList())
+        val size = events.lastOrNull()?.sequenceNumber?.plus(1) ?: 0
+        onTopLevelSpanIfActive {
+            it.registerMetricValue(PreconfiguredMetric.AGGREGATE_EVENTS_SIZE, size)
         }
         return DomainEventStream.of(events)
     }
