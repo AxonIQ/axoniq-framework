@@ -245,8 +245,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private String host = "framework.console.axoniq.io";
         private Boolean secure = true;
         private Integer port = 7000;
-        private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
-        private List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
+        private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.NONE;
+        private final List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
         private Long initialDelay = 0L;
         private boolean disableSpanFactoryInConfiguration = false;
         private final SpanMatcherPredicateMap spanMatcherPredicateMap = getSpanMatcherPredicateMap();
@@ -301,8 +301,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * The mode of the DLQ to operate in. Defaults to {@link AxoniqConsoleDlqMode#FULL}, which means that all
-         * information can be accessed from AxonIQ Console.
+         * The mode of the DLQ to operate in. Defaults to {@link AxoniqConsoleDlqMode#NONE}, which means that no DLQ
+         * data is available.
          *
          * @param dlqMode The mode to set the DLQ to
          * @return The builder for fluent interfacing

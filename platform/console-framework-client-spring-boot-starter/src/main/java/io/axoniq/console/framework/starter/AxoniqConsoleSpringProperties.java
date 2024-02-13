@@ -47,7 +47,7 @@ public class AxoniqConsoleSpringProperties {
      * concerns you, consider {@code MASKED} to mask potentially sensitive data, or {@code NONE} to disable DLQ
      * visibility.
      */
-    private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
+    private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.NONE;
     /**
      * The list which can be used in combination with setting the {@code dlqMode} to
      * {@link AxoniqConsoleDlqMode#LIMITED}. In that mode it will filter the diagnostics based on this list. It will use
