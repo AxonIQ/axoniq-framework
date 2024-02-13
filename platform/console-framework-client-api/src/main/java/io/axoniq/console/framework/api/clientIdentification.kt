@@ -111,9 +111,9 @@ data class CommandBusInformation(
     val axonServer: Boolean,
     val localSegmentType: String?,
     val context: String?,
-    val handlerInterceptors: List<io.axoniq.console.framework.api.InterceptorInformation> = emptyList(),
-    val dispatchInterceptors: List<io.axoniq.console.framework.api.InterceptorInformation> = emptyList(),
-    val messageSerializer: io.axoniq.console.framework.api.SerializerInformation?,
+    val handlerInterceptors: List<InterceptorInformation> = emptyList(),
+    val dispatchInterceptors: List<InterceptorInformation> = emptyList(),
+    val messageSerializer: SerializerInformation?,
 )
 
 data class QueryBusInformation(
@@ -121,19 +121,20 @@ data class QueryBusInformation(
     val axonServer: Boolean,
     val localSegmentType: String?,
     val context: String?,
-    val handlerInterceptors: List<io.axoniq.console.framework.api.InterceptorInformation> = emptyList(),
-    val dispatchInterceptors: List<io.axoniq.console.framework.api.InterceptorInformation> = emptyList(),
-    val messageSerializer: io.axoniq.console.framework.api.SerializerInformation?,
-    val serializer: io.axoniq.console.framework.api.SerializerInformation?,
+    val handlerInterceptors: List<InterceptorInformation> = emptyList(),
+    val dispatchInterceptors: List<InterceptorInformation> = emptyList(),
+    val messageSerializer: SerializerInformation?,
+    val serializer: SerializerInformation?,
 )
 
 data class EventStoreInformation(
     val type: String,
     val axonServer: Boolean,
     val context: String?,
-    val dispatchInterceptors: List<io.axoniq.console.framework.api.InterceptorInformation> = emptyList(),
-    val eventSerializer: io.axoniq.console.framework.api.SerializerInformation?,
-    val snapshotSerializer: io.axoniq.console.framework.api.SerializerInformation?,
+    val dispatchInterceptors: List<InterceptorInformation> = emptyList(),
+    val eventSerializer: SerializerInformation?,
+    val snapshotSerializer: SerializerInformation?,
+    val approximateSize: Long? = null,
 )
 
 data class ProcessorInformation(
@@ -147,7 +148,7 @@ data class ProcessorInformation(
     val tokenStoreClaimTimeout: Long,
     val errorHandler: String,
     val invocationErrorHandler: String,
-    val interceptors: List<io.axoniq.console.framework.api.InterceptorInformation>,
+    val interceptors: List<InterceptorInformation>,
 )
 
 data class InterceptorInformation(
