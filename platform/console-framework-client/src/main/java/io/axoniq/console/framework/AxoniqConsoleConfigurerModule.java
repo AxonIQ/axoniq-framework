@@ -44,6 +44,8 @@ import org.axonframework.tracing.SpanFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -55,10 +57,11 @@ import java.util.function.Predicate;
 import static io.axoniq.console.framework.messaging.SpanMatcher.getSpanMatcherPredicateMap;
 
 /**
- * Applies the configuration necessary for AxonIQ Console to the {@link Configurer} of Axon Framework.
- * The module will automatically start when Axon Framework does.
+ * Applies the configuration necessary for AxonIQ Console to the {@link Configurer} of Axon Framework. The module will
+ * automatically start when Axon Framework does.
  */
 public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
+
     private final String environmentId;
     private final String accessToken;
     private final String applicationName;
@@ -67,6 +70,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final Boolean secure;
     private final Long initialDelay;
     private final AxoniqConsoleDlqMode dlqMode;
+    private final List<String> dlqDiagnosticsWhitelist;
     private final ScheduledExecutorService reportingTaskExecutor;
     private final ExecutorService managementTaskExecutor;
     private final boolean configureSpanFactory;
@@ -86,6 +90,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.secure = builder.secure;
         this.initialDelay = builder.initialDelay;
         this.dlqMode = builder.dlqMode;
+        this.dlqDiagnosticsWhitelist = builder.dlqDiagnosticsWhitelist;
         this.reportingTaskExecutor = builder.reportingTaskExecutor;
         this.managementTaskExecutor = builder.managementTaskExecutor;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
@@ -98,7 +103,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
      *
      * @param environmentId   The environment identifier of AxonIQ Console to connect.
      * @param accessToken     The access token needed to authenticate to the environment.
-     * @param applicationName The display name of the application. Some special characters may be replaced with a hyphen.
+     * @param applicationName The display name of the application. Some special characters may be replaced with a
+     *                        hyphen.
      * @return The builder with which you can further configure this module
      */
     public static Builder builder(String environmentId, String accessToken, String applicationName) {
@@ -109,86 +115,87 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     public void configureModule(@NotNull Configurer configurer) {
         configurer
                 .registerComponent(ClientSettingsService.class,
-                        c -> new ClientSettingsService()
+                                   c -> new ClientSettingsService()
                 )
                 .registerComponent(ProcessorMetricsRegistry.class,
-                        c -> new ProcessorMetricsRegistry()
+                                   c -> new ProcessorMetricsRegistry()
                 )
                 .registerComponent(ProcessorReportCreator.class,
-                        c -> new ProcessorReportCreator(
-                                c.eventProcessingConfiguration(),
-                                c.getComponent(ProcessorMetricsRegistry.class)
-                        )
+                                   c -> new ProcessorReportCreator(
+                                           c.eventProcessingConfiguration(),
+                                           c.getComponent(ProcessorMetricsRegistry.class)
+                                   )
                 )
                 .registerComponent(SetupPayloadCreator.class,
-                        SetupPayloadCreator::new
+                                   SetupPayloadCreator::new
                 )
                 .registerComponent(EventProcessorManager.class,
-                        c -> new EventProcessorManager(
-                                c.eventProcessingConfiguration(),
-                                c.getComponent(TransactionManager.class)
-                        )
+                                   c -> new EventProcessorManager(
+                                           c.eventProcessingConfiguration(),
+                                           c.getComponent(TransactionManager.class)
+                                   )
                 )
                 .registerComponent(RSocketPayloadEncodingStrategy.class,
-                        c -> new CborEncodingStrategy()
+                                   c -> new CborEncodingStrategy()
                 )
                 .registerComponent(RSocketHandlerRegistrar.class,
-                        c -> new RSocketHandlerRegistrar(c.getComponent(RSocketPayloadEncodingStrategy.class))
+                                   c -> new RSocketHandlerRegistrar(c.getComponent(RSocketPayloadEncodingStrategy.class))
                 )
                 .registerComponent(RSocketProcessorResponder.class,
-                        c -> new RSocketProcessorResponder(
-                                c.getComponent(EventProcessorManager.class),
-                                c.getComponent(ProcessorReportCreator.class),
-                                c.getComponent(RSocketHandlerRegistrar.class)
-                        )
+                                   c -> new RSocketProcessorResponder(
+                                           c.getComponent(EventProcessorManager.class),
+                                           c.getComponent(ProcessorReportCreator.class),
+                                           c.getComponent(RSocketHandlerRegistrar.class)
+                                   )
                 )
                 .registerComponent(AxoniqConsoleRSocketClient.class,
-                        c -> new AxoniqConsoleRSocketClient(
-                                environmentId,
-                                accessToken,
-                                applicationName,
-                                host,
-                                port,
-                                secure,
-                                initialDelay,
-                                c.getComponent(SetupPayloadCreator.class),
-                                c.getComponent(RSocketHandlerRegistrar.class),
-                                c.getComponent(RSocketPayloadEncodingStrategy.class),
-                                c.getComponent(ClientSettingsService.class),
-                                reportingTaskExecutor,
-                                ManagementFactory.getRuntimeMXBean().getName()
-                        )
+                                   c -> new AxoniqConsoleRSocketClient(
+                                           environmentId,
+                                           accessToken,
+                                           applicationName,
+                                           host,
+                                           port,
+                                           secure,
+                                           initialDelay,
+                                           c.getComponent(SetupPayloadCreator.class),
+                                           c.getComponent(RSocketHandlerRegistrar.class),
+                                           c.getComponent(RSocketPayloadEncodingStrategy.class),
+                                           c.getComponent(ClientSettingsService.class),
+                                           reportingTaskExecutor,
+                                           ManagementFactory.getRuntimeMXBean().getName()
+                                   )
                 )
                 .registerComponent(ServerProcessorReporter.class,
-                        c -> new ServerProcessorReporter(
-                                c.getComponent(AxoniqConsoleRSocketClient.class),
-                                c.getComponent(ProcessorReportCreator.class),
-                                c.getComponent(ClientSettingsService.class),
-                                reportingTaskExecutor)
+                                   c -> new ServerProcessorReporter(
+                                           c.getComponent(AxoniqConsoleRSocketClient.class),
+                                           c.getComponent(ProcessorReportCreator.class),
+                                           c.getComponent(ClientSettingsService.class),
+                                           reportingTaskExecutor)
                 )
                 .registerComponent(HandlerMetricsRegistry.class,
-                        c -> new HandlerMetricsRegistry(
-                                c.getComponent(AxoniqConsoleRSocketClient.class),
-                                c.getComponent(ClientSettingsService.class),
-                                reportingTaskExecutor,
-                                applicationName
-                        )
+                                   c -> new HandlerMetricsRegistry(
+                                           c.getComponent(AxoniqConsoleRSocketClient.class),
+                                           c.getComponent(ClientSettingsService.class),
+                                           reportingTaskExecutor,
+                                           applicationName
+                                   )
                 )
                 .registerComponent(DeadLetterManager.class,
-                        c -> new DeadLetterManager(
-                                c.eventProcessingConfiguration(),
-                                c.eventSerializer(),
-                                dlqMode,
-                                managementTaskExecutor
-                        ))
+                                   c -> new DeadLetterManager(
+                                           c.eventProcessingConfiguration(),
+                                           c.eventSerializer(),
+                                           dlqMode,
+                                           dlqDiagnosticsWhitelist,
+                                           managementTaskExecutor
+                                   ))
                 .registerComponent(RSocketDlqResponder.class,
-                        c -> new RSocketDlqResponder(
-                                c.getComponent(DeadLetterManager.class),
-                                c.getComponent(RSocketHandlerRegistrar.class)
-                        ))
+                                   c -> new RSocketDlqResponder(
+                                           c.getComponent(DeadLetterManager.class),
+                                           c.getComponent(RSocketHandlerRegistrar.class)
+                                   ))
                 .eventProcessing()
                 .registerDefaultHandlerInterceptor((
-                        c, name) -> new AxoniqConsoleProcessorInterceptor(
+                                                           c, name) -> new AxoniqConsoleProcessorInterceptor(
                         c.getComponent(ProcessorMetricsRegistry.class),
                         name
                 ));
@@ -230,6 +237,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
      * Builder class to instantiate a {@link AxoniqConsoleConfigurerModule}.
      */
     public static class Builder {
+
         private final String environmentId;
         private final String accessToken;
         private final String applicationName;
@@ -238,6 +246,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private Boolean secure = true;
         private Integer port = 7000;
         private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
+        private List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
         private Long initialDelay = 0L;
         private boolean disableSpanFactoryInConfiguration = false;
         private final SpanMatcherPredicateMap spanMatcherPredicateMap = getSpanMatcherPredicateMap();
@@ -249,13 +258,14 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private Integer managementMaxThreadPoolSize = 5;
 
         /**
-         * Constructor to instantiate a {@link Builder} based on the fields contained in the {@link
-         * AxoniqConsoleConfigurerModule.Builder}. Requires the {@code environmentId}, {@code accessToken} and {@code
-         * applicationName} to be set.
+         * Constructor to instantiate a {@link Builder} based on the fields contained in the
+         * {@link AxoniqConsoleConfigurerModule.Builder}. Requires the {@code environmentId}, {@code accessToken} and
+         * {@code applicationName} to be set.
          *
          * @param environmentId   The environment identifier of AxonIQ Console to connect.
          * @param accessToken     The access token needed to authenticate to the environment.
-         * @param applicationName The display name of the application. Some special characters may be replaced with a hyphen.
+         * @param applicationName The display name of the application. Some special characters may be replaced with a
+         *                        hyphen.
          */
         public Builder(String environmentId, String accessToken, String applicationName) {
             BuilderUtils.assertNonEmpty(environmentId, "AxonIQ Console environmentId may not be null or empty");
@@ -304,6 +314,21 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
+         * Adding a key to the whitelist. Will only be used in combination with setting the {@code dlqMode} to
+         * {@link AxoniqConsoleDlqMode#LIMITED}. It will filter the diagnostics, and only show the ones included in the
+         * whitelist.
+         *
+         * @param key The value to add to the whitelist
+         * @return The builder for fluent interfacing
+         */
+        public Builder addDlqDiagnosticsWhitelistKey(String key) {
+            BuilderUtils.assertNonEmpty(key, "Dlq diagnostics whitelist key may not be null");
+            this.dlqDiagnosticsWhitelist.add(key);
+            return this;
+        }
+
+
+        /**
          * The initial delay before attempting to establish a connection. Defaults to {@code 0}.
          *
          * @param initialDelay The delay in milliseconds
@@ -316,8 +341,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * The thread pool's size that is used for reporting tasks, such as sending metrics to AxonIQ Console.
-         * Defaults to {@code 2}.
+         * The thread pool's size that is used for reporting tasks, such as sending metrics to AxonIQ Console. Defaults
+         * to {@code 2}.
          *
          * @param reportingThreadPoolSize The thread pool size
          * @return The builder for fluent interfacing
@@ -330,9 +355,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * The {@link ScheduledExecutorService} that should be used for reporting metrics.
-         * Defaults to a {@link Executors#newScheduledThreadPool(int)} with
-         * the {@code threadPoolSize} of this builder if not set.
+         * The {@link ScheduledExecutorService} that should be used for reporting metrics. Defaults to a
+         * {@link Executors#newScheduledThreadPool(int)} with the {@code threadPoolSize} of this builder if not set.
          *
          * @param executorService The executor service.
          * @return The builder for fluent interfacing
@@ -358,8 +382,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * The {@link ExecutorService} that should be used for management tasks. This thread pool is used for tasks
-         * such as processing DLQ messages after requested by the UI. Defaults to a
+         * The {@link ExecutorService} that should be used for management tasks. This thread pool is used for tasks such
+         * as processing DLQ messages after requested by the UI. Defaults to a
          * {@link java.util.concurrent.ThreadPoolExecutor} with a minimum of 0 threads, a maximum of
          * {@code managementMaxThreadPoolSize} threads and a keep-alive time of 60 seconds.
          *
@@ -374,8 +398,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * Disables setting the {@link SpanFactory} if set to {@code true}. Defaults to {@code
-         * false}. Useful in case frameworks override this and can cause a split-brain situation.
+         * Disables setting the {@link SpanFactory} if set to {@code true}. Defaults to {@code false}. Useful in case
+         * frameworks override this and can cause a split-brain situation.
          *
          * @return The builder for fluent interfacing
          */

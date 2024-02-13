@@ -3,6 +3,9 @@ package io.axoniq.console.framework.starter;
 import io.axoniq.console.framework.AxoniqConsoleDlqMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @ConfigurationProperties(prefix = "axoniq.console")
 public class AxoniqConsoleSpringProperties {
     /**
@@ -28,6 +31,11 @@ public class AxoniqConsoleSpringProperties {
      * DLQ visibility.
      */
     private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.FULL;
+    /**
+     * The list which can be used in combination with setting the {@code dlqMode} to
+     * {@link AxoniqConsoleDlqMode#LIMITED}. In that mode it will filter the diagnostics based on this list.
+     */
+    private List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
     /**
      * Whether the connection should use SSL/TLs. Defaults to {@code true}.
      */
@@ -81,6 +89,14 @@ public class AxoniqConsoleSpringProperties {
 
     public void setDlqMode(AxoniqConsoleDlqMode dlqMode) {
         this.dlqMode = dlqMode;
+    }
+
+    public List<String> getDlqDiagnosticsWhitelist() {
+        return dlqDiagnosticsWhitelist;
+    }
+
+    public void setDlqDiagnosticsWhitelist(List<String> dlqDiagnosticsWhitelist) {
+        this.dlqDiagnosticsWhitelist = dlqDiagnosticsWhitelist;
     }
 
     public boolean isSecure() {

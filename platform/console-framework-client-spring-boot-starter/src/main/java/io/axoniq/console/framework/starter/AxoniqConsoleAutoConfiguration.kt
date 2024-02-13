@@ -43,8 +43,8 @@ class AxoniqConsoleAutoConfiguration {
     @Bean
     @ConditionalOnProperty("axoniq.console.credentials", matchIfMissing = false)
     fun axoniqConsoleConfigurerModule(
-        properties: AxoniqConsoleSpringProperties,
-        applicationContext: ApplicationContext
+            properties: AxoniqConsoleSpringProperties,
+            applicationContext: ApplicationContext
     ): ConfigurerModule {
         val credentials = properties.credentials
         if (credentials == null) {
@@ -56,28 +56,29 @@ class AxoniqConsoleAutoConfiguration {
             return ConfigurerModule { }
         }
         val applicationName = (properties.applicationName?.trim()?.ifEmpty { null })
-            ?: (applicationContext.applicationName.trim().ifEmpty { null })
-            ?: (applicationContext.id?.removeSuffix("-1"))
+                ?: (applicationContext.applicationName.trim().ifEmpty { null })
+                ?: (applicationContext.id?.removeSuffix("-1"))
         if (applicationName == null) {
             logger.warn("Was unable to determine your application's name. Please provide it through the 'axoniq.console.application-name' property.")
             return ConfigurerModule { }
         }
         val (environmentId, accessToken) = credentials.split(":")
         logger.info(
-            "Setting up client for AxonIQ Console environment {}. This application will be registered as {}",
-            environmentId,
-            applicationName
+                "Setting up client for AxonIQ Console environment {}. This application will be registered as {}",
+                environmentId,
+                applicationName
         )
-        return AxoniqConsoleConfigurerModule
-            .builder(environmentId, accessToken, applicationName)
-            .port(properties.port)
-            .host(properties.host)
-            .dlqMode(properties.dlqMode)
-            .secure(properties.isSecure)
-            .initialDelay(properties.initialDelay)
-            .disableSpanFactoryInConfiguration()
-            .managementMaxThreadPoolSize(properties.maxConcurrentManagementTasks)
-            .build()
+        val builder = AxoniqConsoleConfigurerModule
+                .builder(environmentId, accessToken, applicationName)
+                .port(properties.port)
+                .host(properties.host)
+                .dlqMode(properties.dlqMode)
+                .secure(properties.isSecure)
+                .initialDelay(properties.initialDelay)
+                .disableSpanFactoryInConfiguration()
+                .managementMaxThreadPoolSize(properties.maxConcurrentManagementTasks)
+        properties.dlqDiagnosticsWhitelist.forEach { builder.addDlqDiagnosticsWhitelistKey(it) }
+        return builder.build()
     }
 
     @Bean
@@ -100,10 +101,10 @@ class AxoniqConsoleAutoConfiguration {
                 return spanFactory
             }
             return MultiSpanFactory(
-                listOf(
-                    spanFactory,
-                    bean
-                )
+                    listOf(
+                            spanFactory,
+                            bean
+                    )
             )
         }
     }

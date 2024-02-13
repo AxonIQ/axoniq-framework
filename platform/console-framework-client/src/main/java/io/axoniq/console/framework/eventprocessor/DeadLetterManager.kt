@@ -31,11 +31,13 @@ import io.axoniq.console.framework.api.DeadLetter as ApiDeadLetter
 
 private const val LETTER_PAYLOAD_SIZE_LIMIT = 1024
 private const val MASKED = "<MASKED>"
+private const val LIMITED = "<LIMITED>"
 
 class DeadLetterManager(
     private val eventProcessingConfig: EventProcessingConfiguration,
     private val eventSerializer: Serializer,
     private val dlqMode: AxoniqConsoleDlqMode,
+    private val dlqDiagnosticsWhitelist: List<String>,
     private val executor: ExecutorService,
 ) {
 
@@ -75,6 +77,18 @@ class DeadLetterManager(
                 this.lastTouched(),
                 MetaData.emptyInstance(),
                 sequenceIdentifier.hashIfNeeded()
+            )
+        } else if (dlqMode == AxoniqConsoleDlqMode.LIMITED) {
+            return ApiDeadLetter(
+                    this.message().identifier,
+                    LIMITED,
+                    this.message().payloadType.simpleName,
+                    this.cause().map { it.type() }.orElse(null),
+                    this.cause().map { LIMITED }.orElse(null),
+                    this.enqueuedAt(),
+                    this.lastTouched(),
+                    this.diagnostics().filtered(),
+                    sequenceIdentifier
             )
         }
         return ApiDeadLetter(
@@ -171,4 +185,6 @@ class DeadLetterManager(
                     "There's no dead-letter queue configured for Processing Group [$processingGroup]!"
                 )
             }
+
+    private fun MetaData.filtered() = this.subset(*dlqDiagnosticsWhitelist.toTypedArray())
 }
