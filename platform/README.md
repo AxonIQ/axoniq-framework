@@ -16,8 +16,16 @@ For actual configuration, please consult the setup instructions that will be pro
 
 ### application properties
 
-* `axoniq.console.enabled` - allows disabling the autoconfiguration, default: `true`
-* `axoniq.console.dlq-enabled` - allows access to the messages in the DLQ, default: `true`
+* `axoniq.console.credentials` - this need to be set, otherwise the auto configuration won't do anything. The correct
+  value can be retrieved via the AxonIQ console UI.
+* `axoniq.console.dlq-mode` - change the mode to access the messages in the DLQ and be able to retry them from console,
+  default: `none`. Several options are available:
+    * `none` - nothing is accessed, it will seem as if the dead letters are not even there.
+    * `masked` - message payloads and diagnostic data won't be shown. The aggregate identifier will be hashed. The event
+      type and the optional exception will be shown as-is.
+    * `limited` - message payloads won't be shown. The aggregate identifier will be shown as-is. From the diagnostics
+      only the keys set in the `axoniq.console.dlq-diagnostics-whitelist` will be shown.
+    * `full` - all the message payloads, aggregate identifier, and the diagnostics data will be visible.
 
 ## Data sent to AxonIQ
 
@@ -39,7 +47,7 @@ The following data will be sent to the servers of AxonIQ:
 - Dead Letter Information
   - Contains message name, error information and event payload
   - Occurs upon user request
-  - Can be disabled by 
+  - Disabled by default
 
 If you are concerned about the message data being sent to AxonIQ, please contact us at,
 disabling the DLQ functionality will prevent that in all cases.
