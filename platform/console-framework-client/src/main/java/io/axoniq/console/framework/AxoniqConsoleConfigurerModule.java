@@ -314,7 +314,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * Adding a key to the whitelist. Will only be used in combination with setting the {@code dlqMode} to
+         * Adding a key to the diagnostics whitelist. Will only be used in combination with setting the {@code dlqMode} to
          * {@link AxoniqConsoleDlqMode#LIMITED}. It will filter the diagnostics, and only show the ones included in the
          * whitelist.
          *
