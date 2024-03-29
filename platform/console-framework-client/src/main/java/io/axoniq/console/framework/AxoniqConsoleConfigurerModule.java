@@ -36,6 +36,7 @@ import io.axoniq.console.framework.messaging.HandlerMetricsRegistry;
 import io.axoniq.console.framework.messaging.SpanMatcher;
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap;
 import org.axonframework.common.BuilderUtils;
+import org.axonframework.common.transaction.NoTransactionManager;
 import org.axonframework.common.transaction.TransactionManager;
 import org.axonframework.config.Configuration;
 import org.axonframework.config.Configurer;
@@ -132,7 +133,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                 .registerComponent(EventProcessorManager.class,
                                    c -> new EventProcessorManager(
                                            c.eventProcessingConfiguration(),
-                                           c.getComponent(TransactionManager.class)
+                                           c.getComponent(TransactionManager.class, NoTransactionManager::instance)
                                    )
                 )
                 .registerComponent(RSocketPayloadEncodingStrategy.class,
