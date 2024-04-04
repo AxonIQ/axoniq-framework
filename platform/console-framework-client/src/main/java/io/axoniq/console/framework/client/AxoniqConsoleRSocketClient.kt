@@ -128,6 +128,8 @@ class AxoniqConsoleRSocketClient(
             if (ChronoUnit.SECONDS.between(lastConnectionTry, Instant.now()) < secondsToWaitForReconnect) {
                 return
             }
+            connectionRetryCount += 1
+            lastConnectionTry = Instant.now()
             logger.info("Connecting to AxonIQ Console...")
             connectSafely()
         }
@@ -141,6 +143,7 @@ class AxoniqConsoleRSocketClient(
                     ?: throw IllegalStateException("Could not receive the settings from AxonIQ console!")
             clientSettingsService.updateSettings(settings)
             logger.info("Connection to AxonIQ Console set up successfully! Settings: $settings")
+            connectionRetryCount = 0
         } catch (e: Exception) {
             disposeCurrentConnection()
             logger.info("Failed to connect to AxonIQ Console", e)
