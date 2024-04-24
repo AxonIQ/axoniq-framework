@@ -29,8 +29,8 @@ For actual configuration, please consult the setup instructions that will be pro
 
 ## Data sent to AxonIQ
 
-AxonIQ Console is an [AxonIQ](https://axoniq.io) SaaS product. Your application will periodically or upon request send
-information to the servers of AxonIQ. Please check our [legal documentation](https://console.axoniq.io/legal) for the
+AxonIQ Console is an [AxonIQ](https://axoniq.io) SaaS product. Your application will periodically, or upon request, send
+information to the servers of AxonIQ. Please check our [Privacy Policy](https://www.axoniq.io/privacy-policy) and [Data Processing Addendum](https://lp.axoniq.io/axoniq-data-processing-addendum) for the
 measures we implemented to protect your data.
 
 The following data will be sent to the servers of AxonIQ:
