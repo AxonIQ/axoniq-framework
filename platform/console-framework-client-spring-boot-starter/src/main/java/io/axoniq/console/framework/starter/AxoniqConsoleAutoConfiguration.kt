@@ -17,13 +17,9 @@
 package io.axoniq.console.framework.starter
 
 import io.axoniq.console.framework.AxoniqConsoleConfigurerModule
-import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory
 import io.axoniq.console.framework.messaging.SpanMatcher.Companion.getSpanMatcherPredicateMap
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
 import org.axonframework.config.ConfigurerModule
-import org.axonframework.tracing.MultiSpanFactory
-import org.axonframework.tracing.NoOpSpanFactory
-import org.axonframework.tracing.SpanFactory
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -93,19 +89,7 @@ class AxoniqConsoleAutoConfiguration {
             spanMatcherPredicateMap: SpanMatcherPredicateMap
     ): BeanPostProcessor = object : BeanPostProcessor {
         override fun postProcessAfterInitialization(bean: Any, beanName: String): Any {
-            if (bean !is SpanFactory || bean is AxoniqConsoleSpanFactory) {
-                return bean
-            }
-            val spanFactory = AxoniqConsoleSpanFactory(spanMatcherPredicateMap)
-            if (bean is NoOpSpanFactory) {
-                return spanFactory
-            }
-            return MultiSpanFactory(
-                    listOf(
-                            spanFactory,
-                            bean
-                    )
-            )
+            return PostProcessHelper.enhance(bean, beanName, spanMatcherPredicateMap)
         }
     }
 }
