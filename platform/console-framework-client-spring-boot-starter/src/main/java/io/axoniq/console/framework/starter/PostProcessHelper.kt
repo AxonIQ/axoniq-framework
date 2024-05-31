@@ -64,7 +64,7 @@ class PostProcessHelper {
                 return false
             }
             if (this is MultiSpanFactory) {
-                return this.spanFactories().none { it is AxoniqConsoleSpanFactory }
+                return this.spanFactories().all { it.needsEnhancement() }
             }
             return true
         }
