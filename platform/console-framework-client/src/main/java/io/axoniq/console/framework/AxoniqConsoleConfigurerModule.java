@@ -32,6 +32,7 @@ import io.axoniq.console.framework.eventprocessor.metrics.AxoniqConsoleProcessor
 import io.axoniq.console.framework.eventprocessor.metrics.ProcessorMetricsRegistry;
 import io.axoniq.console.framework.messaging.AxoniqConsoleDispatchInterceptor;
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory;
+import io.axoniq.console.framework.messaging.AxoniqConsoleWrappedEventScheduler;
 import io.axoniq.console.framework.messaging.HandlerMetricsRegistry;
 import io.axoniq.console.framework.messaging.SpanMatcher;
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap;
@@ -41,12 +42,14 @@ import org.axonframework.common.transaction.TransactionManager;
 import org.axonframework.config.Configuration;
 import org.axonframework.config.Configurer;
 import org.axonframework.config.ConfigurerModule;
+import org.axonframework.eventhandling.scheduling.EventScheduler;
 import org.axonframework.tracing.SpanFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -76,6 +79,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final ExecutorService managementTaskExecutor;
     private final boolean configureSpanFactory;
     private final SpanMatcherPredicateMap spanMatcherPredicateMap;
+    private final EventScheduler eventScheduler;
 
     /**
      * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}.
@@ -96,6 +100,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.managementTaskExecutor = builder.managementTaskExecutor;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
         this.spanMatcherPredicateMap = builder.spanMatcherPredicateMap;
+        this.eventScheduler = builder.eventScheduler;
     }
 
     /**
@@ -205,6 +210,15 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             configurer.registerComponent(SpanFactory.class, c -> new AxoniqConsoleSpanFactory(spanMatcherPredicateMap));
         }
 
+        if (Objects.nonNull(eventScheduler)) {
+            configurer.registerComponent(
+                    EventScheduler.class,
+                    c -> new AxoniqConsoleWrappedEventScheduler(
+                            eventScheduler,
+                            c.getComponent(HandlerMetricsRegistry.class),
+                            applicationName));
+        }
+
         configurer.onInitialize(c -> {
             c.getComponent(ServerProcessorReporter.class);
             c.getComponent(RSocketProcessorResponder.class);
@@ -257,6 +271,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
 
         private ExecutorService managementTaskExecutor;
         private Integer managementMaxThreadPoolSize = 5;
+        private EventScheduler eventScheduler;
 
         /**
          * Constructor to instantiate a {@link Builder} based on the fields contained in the
@@ -315,9 +330,9 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         }
 
         /**
-         * Adding a key to the diagnostics whitelist. Will only be used in combination with setting the {@code dlqMode} to
-         * {@link AxoniqConsoleDlqMode#LIMITED}. It will filter the diagnostics, and only show the ones included in the
-         * whitelist.
+         * Adding a key to the diagnostics whitelist. Will only be used in combination with setting the {@code dlqMode}
+         * to {@link AxoniqConsoleDlqMode#LIMITED}. It will filter the diagnostics, and only show the ones included in
+         * the whitelist.
          *
          * @param key The value to add to the whitelist
          * @return The builder for fluent interfacing
@@ -432,6 +447,18 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
          */
         public Builder secure(boolean secure) {
             this.secure = secure;
+            return this;
+        }
+
+        /**
+         * Set the event scheduler, this will be wrapped to be able to include these messages in the message flow.
+         *
+         * @param eventScheduler the event scheduler to use
+         * @return The builder for fluent interfacing
+         */
+        public Builder eventScheduler(EventScheduler eventScheduler) {
+            BuilderUtils.assertNonNull(eventScheduler, "Event scheduler must be non-null");
+            this.eventScheduler = eventScheduler;
             return this;
         }
 

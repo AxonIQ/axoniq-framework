@@ -17,9 +17,12 @@
 package io.axoniq.console.framework.starter
 
 import io.axoniq.console.framework.AxoniqConsoleConfigurerModule
+import io.axoniq.console.framework.messaging.AxoniqConsoleWrappedEventScheduler
+import io.axoniq.console.framework.messaging.HandlerMetricsRegistry
 import io.axoniq.console.framework.messaging.SpanMatcher.Companion.getSpanMatcherPredicateMap
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
 import org.axonframework.config.ConfigurerModule
+import org.axonframework.eventhandling.scheduling.EventScheduler
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -51,9 +54,7 @@ class AxoniqConsoleAutoConfiguration {
             logger.warn("The credentials for the connection to AxonIQ Console don't have the right format. Please provide them as instructed through the 'axoniq.console.credentials' property.")
             return ConfigurerModule { }
         }
-        val applicationName = (properties.applicationName?.trim()?.ifEmpty { null })
-                ?: (applicationContext.applicationName.trim().ifEmpty { null })
-                ?: (applicationContext.id?.removeSuffix("-1"))
+        val applicationName = getApplicationName(properties, applicationContext)
         if (applicationName == null) {
             logger.warn("Was unable to determine your application's name. Please provide it through the 'axoniq.console.application-name' property.")
             return ConfigurerModule { }
@@ -86,10 +87,40 @@ class AxoniqConsoleAutoConfiguration {
     @Bean
     @ConditionalOnProperty("axoniq.console.credentials", matchIfMissing = false)
     fun axoniqConsoleSpanFactoryPostProcessor(
-            spanMatcherPredicateMap: SpanMatcherPredicateMap
+            spanMatcherPredicateMap: SpanMatcherPredicateMap,
+            configuration: org.axonframework.config.Configuration,
+            properties: AxoniqConsoleSpringProperties,
+            applicationContext: ApplicationContext
     ): BeanPostProcessor = object : BeanPostProcessor {
         override fun postProcessAfterInitialization(bean: Any, beanName: String): Any {
-            return PostProcessHelper.enhance(bean, beanName, spanMatcherPredicateMap)
+            return when {
+                bean is EventScheduler -> enhanceEventScheduler(bean, configuration, properties, applicationContext)
+                else -> PostProcessHelper.enhance(bean, beanName, spanMatcherPredicateMap)
+            }
         }
+    }
+
+    private fun enhanceEventScheduler(
+            eventScheduler: EventScheduler,
+            configuration: org.axonframework.config.Configuration,
+            properties: AxoniqConsoleSpringProperties,
+            applicationContext: ApplicationContext
+    ): EventScheduler {
+        return if (eventScheduler is AxoniqConsoleWrappedEventScheduler) {
+            eventScheduler
+        } else {
+            getApplicationName(properties, applicationContext)?.let {
+                AxoniqConsoleWrappedEventScheduler(eventScheduler, configuration.getComponent(HandlerMetricsRegistry::class.java), it)
+            } ?: eventScheduler
+        }
+    }
+
+    private fun getApplicationName(
+            properties: AxoniqConsoleSpringProperties,
+            applicationContext: ApplicationContext
+    ): String? {
+        return (properties.applicationName?.trim()?.ifEmpty { null })
+                ?: (applicationContext.applicationName.trim().ifEmpty { null })
+                ?: (applicationContext.id?.removeSuffix("-1"))
     }
 }
