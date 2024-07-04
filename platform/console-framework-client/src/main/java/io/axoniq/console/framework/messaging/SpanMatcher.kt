@@ -29,12 +29,14 @@ enum class SpanMatcher(val pre49Predicate: Predicate<String>, val from49Predicat
             Predicate { name: String ->
                 name == "QueryProcessingTask" ||
                         name == "AxonServerCommandBus.handle" ||
-                        name == "DeadlineJob.execute"
+                        name == "DeadlineJob.execute" ||
+                        name.contains("].invokeSaga ")
             },
             Predicate { name: String ->
                 name == "QueryBus.processQueryMessage" ||
                         name == "CommandBus.handleCommand" ||
-                        name.startsWith("DeadlineManager.executeDeadline(")
+                        name.startsWith("DeadlineManager.executeDeadline(") ||
+                        name.startsWith("SagaManager.invokeSaga(")
             }),
     OBTAIN_LOCK(
             Predicate { name: String -> name == "LockingRepository.obtainLock" },
