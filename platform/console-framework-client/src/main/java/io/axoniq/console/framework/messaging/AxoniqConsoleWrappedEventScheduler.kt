@@ -100,7 +100,7 @@ class AxoniqConsoleWrappedEventScheduler(
                 DispatcherStatisticIdentifier(HandlerStatisticsMetricIdentifier(
                         type = HandlerType.Message,
                         component = handlerName,
-                        message = MessageIdentifier("Dispatcher", handlerName)), event.toInformation())
+                        message = MessageIdentifier("EventMessage", handlerName)), event.toInformation())
         )
     }
 
