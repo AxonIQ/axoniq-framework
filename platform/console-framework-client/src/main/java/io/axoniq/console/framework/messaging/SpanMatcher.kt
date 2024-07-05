@@ -29,14 +29,12 @@ enum class SpanMatcher(val pre49Predicate: Predicate<String>, val from49Predicat
             Predicate { name: String ->
                 name == "QueryProcessingTask" ||
                         name == "AxonServerCommandBus.handle" ||
-                        name == "DeadlineJob.execute" ||
-                        name.contains("].invokeSaga ")
+                        name == "DeadlineJob.execute"
             },
             Predicate { name: String ->
                 name == "QueryBus.processQueryMessage" ||
                         name == "CommandBus.handleCommand" ||
-                        name.startsWith("DeadlineManager.executeDeadline(") ||
-                        name.startsWith("SagaManager.invokeSaga(")
+                        name.startsWith("DeadlineManager.executeDeadline(")
             }),
     OBTAIN_LOCK(
             Predicate { name: String -> name == "LockingRepository.obtainLock" },
@@ -49,17 +47,21 @@ enum class SpanMatcher(val pre49Predicate: Predicate<String>, val from49Predicat
             Predicate { name: String -> name == "EventBus.commitEvents" }),
     MESSAGE_START(
             Predicate { name: String ->
-                name.endsWith("Bus.handle")
-                        || name == "SimpleQueryBus.query"
-                        || name.startsWith("SimpleQueryBus.scatterGather")
-                        || name.startsWith("PooledStreamingEventProcessor")
-                        || name.startsWith("TrackingEventProcessor")
+                name.endsWith("Bus.handle") ||
+                        name == "SimpleQueryBus.query" ||
+                        name.startsWith("SimpleQueryBus.scatterGather") ||
+                        name.startsWith("PooledStreamingEventProcessor") ||
+                        name.startsWith("TrackingEventProcessor") ||
+                        name.endsWith("].startNewSaga") ||
+                        name.contains("].invokeSaga ")
             },
             Predicate { name: String ->
-                name == "CommandBus.dispatchCommand"
-                        || name == "QueryBus.query"
-                        || name.startsWith("QueryBus.scatterGatherQuery")
-                        || name.startsWith("StreamingEventProcessor")
+                name == "CommandBus.dispatchCommand" ||
+                        name == "QueryBus.query" ||
+                        name.startsWith("QueryBus.scatterGatherQuery") ||
+                        name.startsWith("StreamingEventProcessor") ||
+                        name.startsWith("SagaManager.createSaga(") ||
+                        name.startsWith("SagaManager.invokeSaga(")
             });
 
     companion object {
