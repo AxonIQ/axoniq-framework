@@ -81,9 +81,8 @@ class AxoniqConsoleWrappedEventScheduler(
             }
             reportMessageDispatchedFromOrigin(origin, event)
         } else {
-            reportMessageDispatchedFromHandler(CurrentUnitOfWork.get().message.payload.javaClass.simpleName, event)
+            reportMessageDispatchedFromHandler(event)
         }
-
     }
 
     private fun reportMessageDispatchedFromOrigin(originName: String, event: Any) {
@@ -95,7 +94,7 @@ class AxoniqConsoleWrappedEventScheduler(
         )
     }
 
-    private fun reportMessageDispatchedFromHandler(handlerName: String, event: Any) {
+    private fun reportMessageDispatchedFromHandler(event: Any) {
         AxoniqConsoleSpanFactory.onTopLevelSpanIfActive {
             it.registerMessageDispatched(event.toInformation())
         }
