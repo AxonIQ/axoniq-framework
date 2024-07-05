@@ -96,12 +96,9 @@ class AxoniqConsoleWrappedEventScheduler(
     }
 
     private fun reportMessageDispatchedFromHandler(handlerName: String, event: Any) {
-        registry.registerMessageDispatchedDuringHandling(
-                DispatcherStatisticIdentifier(HandlerStatisticsMetricIdentifier(
-                        type = HandlerType.Message,
-                        component = handlerName,
-                        message = MessageIdentifier("EventMessage", handlerName)), event.toInformation())
-        )
+        AxoniqConsoleSpanFactory.onTopLevelSpanIfActive {
+            it.registerMessageDispatched(event.toInformation())
+        }
     }
 
     private fun Any.toInformation() = MessageIdentifier(
