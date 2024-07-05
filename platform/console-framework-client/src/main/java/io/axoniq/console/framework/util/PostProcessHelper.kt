@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.axoniq.console.framework.starter
+package io.axoniq.console.framework.util
 
 import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory
 import io.axoniq.console.framework.messaging.SpanMatcher

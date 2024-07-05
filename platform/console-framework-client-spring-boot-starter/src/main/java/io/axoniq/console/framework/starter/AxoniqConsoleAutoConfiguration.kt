@@ -21,6 +21,7 @@ import io.axoniq.console.framework.messaging.AxoniqConsoleWrappedEventScheduler
 import io.axoniq.console.framework.messaging.HandlerMetricsRegistry
 import io.axoniq.console.framework.messaging.SpanMatcher.Companion.getSpanMatcherPredicateMap
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
+import io.axoniq.console.framework.util.PostProcessHelper
 import org.axonframework.config.ConfigurerModule
 import org.axonframework.eventhandling.scheduling.EventScheduler
 import org.slf4j.LoggerFactory
@@ -93,8 +94,8 @@ class AxoniqConsoleAutoConfiguration {
             applicationContext: ApplicationContext
     ): BeanPostProcessor = object : BeanPostProcessor {
         override fun postProcessAfterInitialization(bean: Any, beanName: String): Any {
-            return when {
-                bean is EventScheduler -> enhanceEventScheduler(bean, configuration, properties, applicationContext)
+            return when (bean) {
+                is EventScheduler -> enhanceEventScheduler(bean, configuration, properties, applicationContext)
                 else -> PostProcessHelper.enhance(bean, beanName, spanMatcherPredicateMap)
             }
         }

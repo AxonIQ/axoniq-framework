@@ -246,6 +246,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         });
 
         new AxoniqConsoleAggregateConfigurerModule().configureModule(configurer);
+        new AxoniqConsoleEnhancingConfigurerModule(spanMatcherPredicateMap).configureModule(configurer);
     }
 
     /**
