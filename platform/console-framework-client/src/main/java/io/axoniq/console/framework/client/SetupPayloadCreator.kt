@@ -79,7 +79,7 @@ class SetupPayloadCreator(
 
     private fun commonProcessorInformation(processor: EventProcessor) =
             CommonProcessorInformation(
-                    messageSource = toMessageSource(processor.getPropertyValue("messageSource")),
+                    messageSource = toMessageSource(processor, processor.getPropertyValue("messageSource")),
                     errorHandler = eventProcessingConfiguration.errorHandler(processor.name)::class.java.name,
                     invocationErrorHandler = eventProcessingConfiguration.listenerInvocationErrorHandler(processor.name)::class.java.name,
                     interceptors = processor.getInterceptors("interceptors"),
@@ -121,19 +121,20 @@ class SetupPayloadCreator(
             tokenStoreClaimTimeout = processor.getStoreTokenClaimTimeout("tokenStore"),
     )
 
-    private fun toMessageSource(messageSource: StreamableMessageSource<*>?): MessageSourceInformation {
+    private fun toMessageSource(processor: EventProcessor, messageSource: StreamableMessageSource<*>?): MessageSourceInformation {
         if (messageSource == null) {
             return UnspecifiedMessageSourceInformation("Unknown")
         }
         return when {
             messageSource is MultiStreamableMessageSource -> MultiStreamableMessageSourceInformation(
                     messageSource::class.java.name,
-                    messageSource.getPropertyValue<List<StreamableMessageSource<*>>>("eventStreams")?.map { toMessageSource(it) }
+                    messageSource.getPropertyValue<List<StreamableMessageSource<*>>>("eventStreams")?.map { toMessageSource(processor, it) }
                             ?: emptyList()
             )
 
             messageSource is EmbeddedEventStore -> createEmbeddedMessageSourceInformation(messageSource)
             messageSource::class.java.simpleName == "AxonServerEventStore" -> createAxonServerMessageSourceInfoFromStore(messageSource)
+            messageSource::class.java.simpleName == "AxonServerMessageSource" -> createAxonServerMessageSourceInfoFromMessageSource(messageSource)
             messageSource::class.java.simpleName == "AxonIQEventStorageEngine" -> createAxonServerMessageSourceInfoFromStorageEngine(messageSource)
             else -> UnspecifiedMessageSourceInformation(messageSource::class.java.name)
         }
@@ -141,6 +142,15 @@ class SetupPayloadCreator(
 
     private fun createAxonServerMessageSourceInfoFromStorageEngine(messageSource: StreamableMessageSource<*>): MessageSourceInformation {
         val context = messageSource.getPropertyValue<String>("context")
+
+        return AxonServerEventStoreMessageSourceInformation(
+                messageSource::class.java.name,
+                listOfNotNull(context)
+        )
+    }
+
+    private fun createAxonServerMessageSourceInfoFromMessageSource(messageSource: StreamableMessageSource<*>): MessageSourceInformation {
+        val context = messageSource.getPropertyValue<Any>("eventStorageEngine")?.getPropertyValue<String>("context")
 
         return AxonServerEventStoreMessageSourceInformation(
                 messageSource::class.java.name,
