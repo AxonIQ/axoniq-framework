@@ -45,6 +45,9 @@ enum class SpanMatcher(val pre49Predicate: Predicate<String>, val from49Predicat
     COMMIT(
             Predicate { name: String -> name.endsWith(".commit") },
             Predicate { name: String -> name == "EventBus.commitEvents" }),
+    SUBCRIBING_EVENT_HANDLER(
+            Predicate { name: String -> name.startsWith("SubscribingEventProcessor[") && name.endsWith(".process")},
+            Predicate { name: String -> name == "EventProcessor.process" }),
     MESSAGE_START(
             Predicate { name: String ->
                 name.endsWith("Bus.handle")

@@ -16,7 +16,7 @@
 
 package io.axoniq.console.framework.eventprocessor.metrics
 
-import io.axoniq.console.framework.messaging.CONSOLE_PROCESSING_GROUP
+import io.axoniq.console.framework.messaging.AxoniqConsoleSpanFactory
 import org.axonframework.eventhandling.EventMessage
 import org.axonframework.messaging.InterceptorChain
 import org.axonframework.messaging.Message
@@ -41,7 +41,9 @@ class AxoniqConsoleProcessorInterceptor(
             return interceptorChain.proceed()
         }
         try {
-            unitOfWork.resources()[CONSOLE_PROCESSING_GROUP] = processorName
+            AxoniqConsoleSpanFactory.onTopLevelSpanIfActive {
+                it.reportProcessorName(processorName)
+            }
             val message = unitOfWork.message
             if (message is EventMessage) {
                 val segment = unitOfWork.resources()["Processor[$processorName]/SegmentId"] as? Int ?: -1

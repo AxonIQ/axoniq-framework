@@ -37,11 +37,7 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
         private val CURRENT_MESSAGE_ID = ThreadLocal<String>()
 
         fun onTopLevelSpanIfActive(block: (MeasuringConsoleSpan) -> Unit) {
-            if (CURRENT_MESSAGE_ID.get() == null) {
-                return
-            }
-
-            ACTIVE_ROOT_SPANS[CURRENT_MESSAGE_ID.get()]?.let {
+            currentSpan()?.let {
                 try {
                     block(it)
                 } catch (e: Exception) {
@@ -49,11 +45,17 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
                 }
             }
         }
+
+        fun currentSpan(): MeasuringConsoleSpan? {
+            return CURRENT_MESSAGE_ID.get()?.let { ACTIVE_ROOT_SPANS[it] }
+        }
     }
 
     inner class MeasuringConsoleSpan(private val messageId: String) : Span {
+        var processorName: String? = null
         private var timeStarted: Long? = null
         private var transactionSuccessful = true
+        private var parentMessageId: String? = null
 
         // Fields that should be set by the handler enhancer
         private var handlerMetricIdentifier: HandlerStatisticsMetricIdentifier? = null
@@ -76,12 +78,18 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
         }
 
         fun registerMetricValue(metric: Metric, value: Long) {
-            val actualValue = value - metric.breakDownMetrics.sumOf { metrics[it] ?: 0 }
-            metrics[metric] = actualValue
+            metrics[metric] = value
+        }
+
+        private fun registerChildHandler(identifier: HandlerStatisticsMetricIdentifier, value: Long) {
+            metrics[ChildHandlerMetric(identifier)] = value
         }
 
         override fun start(): Span {
             logger.trace("Starting span for message id $messageId")
+            if(CURRENT_MESSAGE_ID.get() != null) {
+                parentMessageId = CURRENT_MESSAGE_ID.get()
+            }
             ACTIVE_ROOT_SPANS[messageId] = this
             CURRENT_MESSAGE_ID.set(messageId)
             timeStarted = System.nanoTime()
@@ -93,11 +101,17 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
 
         override fun end() {
             val end = System.nanoTime()
+            if(parentMessageId != null) {
+                CURRENT_MESSAGE_ID.set(parentMessageId)
+            } else {
+                CURRENT_MESSAGE_ID.remove()
+            }
             ACTIVE_ROOT_SPANS.remove(messageId)
-            CURRENT_MESSAGE_ID.remove()
-            logger.trace("Ending span for message id $messageId  = $handlerMetricIdentifier")
 
             if (handlerMetricIdentifier == null || timeStarted == null) return
+            if(parentMessageId != null) {
+                ACTIVE_ROOT_SPANS[parentMessageId]?.registerChildHandler(handlerMetricIdentifier!!, end - timeStarted!!)
+            }
             CurrentUnitOfWork.map {
                 it.onCleanup { report(end) }
             }.orElseGet {
@@ -130,6 +144,10 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
         override fun recordException(t: Throwable): Span {
             transactionSuccessful = false
             return this
+        }
+
+        fun reportProcessorName(processorName: String) {
+            this.processorName = processorName
         }
     }
 
@@ -175,6 +193,9 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
 
     override fun createInternalSpan(operationNameSupplier: Supplier<String>, message: Message<*>): Span {
         val name = operationNameSupplier.get()
+        if (spanMatcherPredicateMap[SpanMatcher.SUBCRIBING_EVENT_HANDLER]!!.test(name)) {
+            return startEvenIfActive(message)
+        }
         if (spanMatcherPredicateMap[SpanMatcher.MESSAGE_START]!!.test(name)) {
             return startIfNotActive(message)
         }
@@ -183,6 +204,9 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
 
     override fun createChildHandlerSpan(operationNameSupplier: Supplier<String>, message: Message<*>, vararg linkedParents: Message<*>?): Span {
         val name = operationNameSupplier.get()
+        if (spanMatcherPredicateMap[SpanMatcher.SUBCRIBING_EVENT_HANDLER]!!.test(name)) {
+            return startEvenIfActive(message)
+        }
         if (spanMatcherPredicateMap[SpanMatcher.MESSAGE_START]!!.test(name)) {
             return startIfNotActive(message)
         }
@@ -201,6 +225,12 @@ class AxoniqConsoleSpanFactory(private val spanMatcherPredicateMap: SpanMatcherP
         if (ACTIVE_ROOT_SPANS.containsKey(message.identifier)) {
             return NOOP_SPAN
         }
+        return ACTIVE_ROOT_SPANS.computeIfAbsentWithRetry(message.identifier) {
+            MeasuringConsoleSpan(message.identifier)
+        }
+    }
+
+    private fun startEvenIfActive(message: Message<*>): Span {
         return ACTIVE_ROOT_SPANS.computeIfAbsentWithRetry(message.identifier) {
             MeasuringConsoleSpan(message.identifier)
         }

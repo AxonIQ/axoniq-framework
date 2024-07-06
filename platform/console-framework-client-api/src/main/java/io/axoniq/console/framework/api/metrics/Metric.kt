@@ -16,14 +16,14 @@
 
 package io.axoniq.console.framework.api.metrics
 
-import io.axoniq.console.framework.api.metrics.MetricTargetType.*
+import io.axoniq.console.framework.api.metrics.MetricTargetType.AGGREGATE
+import io.axoniq.console.framework.api.metrics.MetricTargetType.HANDLER
 
 
 interface Metric {
     val type: MetricType
     val identifier: String
     val description: String
-    val breakDownMetrics: List<Metric>
     val targetTypes: List<MetricTargetType>
 
 
@@ -31,51 +31,58 @@ interface Metric {
         get() = "${type.metricPrefix}_${identifier}"
 }
 
+data class ChildHandlerMetric(
+        val handler: HandlerStatisticsMetricIdentifier
+) : Metric {
+    override val type: MetricType = MetricType.TIMER
+    override val description: String = "Time it took for the event handler to process an event as subscriber"
+    override val identifier: String = "${handler.type.shortIdentifier}_\"${handler.component}\"_\"${handler.message.type}\"_\"${handler.message.name}\""
+    override val targetTypes: List<MetricTargetType> = listOf(HANDLER)
+
+}
+
 data class UserHandlerInterceptorMetric(
-    override val type: MetricType = MetricType.TIMER,
-    override val identifier: String,
-    override val description: String = "User defined metric",
-    override val breakDownMetrics: List<Metric> = emptyList(),
-    override val targetTypes: List<MetricTargetType> = listOf(HANDLER, AGGREGATE),
+        override val type: MetricType = MetricType.TIMER,
+        override val identifier: String,
+        override val description: String = "User defined metric",
+        override val targetTypes: List<MetricTargetType> = listOf(HANDLER, AGGREGATE),
 ) : Metric
 
 enum class PreconfiguredMetric(
-    override val type: MetricType,
-    override val identifier: String,
-    override val description: String,
-    override val breakDownMetrics: List<Metric> = listOf(),
-    override val targetTypes: List<MetricTargetType>,
+        override val type: MetricType,
+        override val identifier: String,
+        override val description: String,
+        override val targetTypes: List<MetricTargetType>,
 ) : Metric {
     MESSAGE_HANDLER_TIME(
-        type = MetricType.TIMER,
-        identifier = "handler",
-        description = "Time it took for the actual user-made handler function to be invoked",
-        targetTypes = listOf(AGGREGATE, HANDLER),
+            type = MetricType.TIMER,
+            identifier = "handler",
+            description = "Time it took for the actual user-made handler function to be invoked",
+            targetTypes = listOf(AGGREGATE, HANDLER),
     ),
     AGGREGATE_LOCK_TIME(
-        type = MetricType.TIMER,
-        identifier = "aggregate_lock",
-        description = "Time it took for a command to acquire a lock for the aggregate identifier",
-        targetTypes = listOf(AGGREGATE, HANDLER),
+            type = MetricType.TIMER,
+            identifier = "aggregate_lock",
+            description = "Time it took for a command to acquire a lock for the aggregate identifier",
+            targetTypes = listOf(AGGREGATE, HANDLER),
     ),
     AGGREGATE_LOAD_TIME(
-        type = MetricType.TIMER,
-        identifier = "aggregate_load",
-        description = "Time it took for a command to load the target aggregate",
-        targetTypes = listOf(AGGREGATE, HANDLER),
-        breakDownMetrics = listOf(AGGREGATE_LOCK_TIME)
+            type = MetricType.TIMER,
+            identifier = "aggregate_load",
+            description = "Time it took for a command to load the target aggregate",
+            targetTypes = listOf(AGGREGATE, HANDLER),
     ),
     EVENT_COMMIT_TIME(
-        type = MetricType.TIMER,
-        identifier = "event_commit",
-        description = "Time it took to commit events to the event store",
-        targetTypes = listOf(AGGREGATE, HANDLER)
+            type = MetricType.TIMER,
+            identifier = "event_commit",
+            description = "Time it took to commit events to the event store",
+            targetTypes = listOf(AGGREGATE, HANDLER)
     ),
     AGGREGATE_EVENTS_SIZE(
-        type = MetricType.COUNTER,
-        identifier = "agg_events_size",
-        description = "Amount of events loaded during aggregate initialization",
-        targetTypes = listOf(AGGREGATE)
+            type = MetricType.COUNTER,
+            identifier = "agg_events_size",
+            description = "Amount of events loaded during aggregate initialization",
+            targetTypes = listOf(AGGREGATE)
     )
 
     ;

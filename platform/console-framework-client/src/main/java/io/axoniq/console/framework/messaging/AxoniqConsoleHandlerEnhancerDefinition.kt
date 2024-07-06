@@ -16,7 +16,6 @@
 
 package io.axoniq.console.framework.messaging
 
-import io.axoniq.console.framework.computeIfAbsentWithRetry
 import org.axonframework.common.Priority
 import org.axonframework.config.ProcessingGroup
 import org.axonframework.messaging.Message
@@ -24,9 +23,6 @@ import org.axonframework.messaging.annotation.HandlerEnhancerDefinition
 import org.axonframework.messaging.annotation.MessageHandlingMember
 import org.axonframework.messaging.annotation.WrappedMessageHandlingMember
 import org.axonframework.messaging.unitofwork.CurrentUnitOfWork
-
-internal const val CONSOLE_DECLARING_CLASS = "___axoniqConsoleDeclaringClass"
-internal const val CONSOLE_PROCESSING_GROUP = "___axoniqConsoleProcessor"
 
 @Priority((Int.MIN_VALUE * 0.95).toInt())
 class AxoniqConsoleHandlerEnhancerDefinition : HandlerEnhancerDefinition {
@@ -45,20 +41,17 @@ class AxoniqConsoleHandlerEnhancerDefinition : HandlerEnhancerDefinition {
                     return super.handle(message, target)
                 }
                 val uow = CurrentUnitOfWork.get()
-                uow.resources()[CONSOLE_DECLARING_CLASS] = declaringClassName
-                uow.resources().computeIfAbsentWithRetry(CONSOLE_PROCESSING_GROUP) { processingGroup }
-
                 val start = System.nanoTime()
                 try {
                     val result = super.handle(message, target)
                     AxoniqConsoleSpanFactory.onTopLevelSpanIfActive {
-                        it.registerHandler(uow.extractHandler(), System.nanoTime() - start)
+                        it.registerHandler(uow.extractHandler(declaringClassName, processingGroup), System.nanoTime() - start)
                     }
                     return result
                 } catch (e: Exception) {
                     AxoniqConsoleSpanFactory.onTopLevelSpanIfActive {
                         it.recordException(e)
-                        it.registerHandler(uow.extractHandler(), System.nanoTime() - start)
+                        it.registerHandler(uow.extractHandler(declaringClassName, processingGroup), System.nanoTime() - start)
                     }
                     throw e
                 }
