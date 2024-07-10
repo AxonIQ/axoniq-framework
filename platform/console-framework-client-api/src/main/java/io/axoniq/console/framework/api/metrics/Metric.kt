@@ -64,13 +64,13 @@ enum class PreconfiguredMetric(
             type = MetricType.TIMER,
             identifier = "aggregate_lock",
             description = "Time it took for a command to acquire a lock for the aggregate identifier",
-            targetTypes = listOf(AGGREGATE, HANDLER),
+            targetTypes = listOf(AGGREGATE),
     ),
     AGGREGATE_LOAD_TIME(
             type = MetricType.TIMER,
             identifier = "aggregate_load",
             description = "Time it took for a command to load the target aggregate",
-            targetTypes = listOf(AGGREGATE, HANDLER),
+            targetTypes = listOf(AGGREGATE),
     ),
     EVENT_COMMIT_TIME(
             type = MetricType.TIMER,
