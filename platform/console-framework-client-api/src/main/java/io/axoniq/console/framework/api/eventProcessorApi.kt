@@ -25,6 +25,7 @@ data class ProcessorStatusReport(
 enum class ProcessorMode {
     POOLED,
     TRACKING,
+    SUBSCRIBING,
     UNKNOWN,
 }
 
