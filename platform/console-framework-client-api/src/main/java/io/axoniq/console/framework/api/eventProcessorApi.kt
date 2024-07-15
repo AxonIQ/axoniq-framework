@@ -19,7 +19,7 @@ package io.axoniq.console.framework.api
 import java.time.Instant
 
 data class ProcessorStatusReport(
-    val processors: List<ProcessorStatus>
+        val processors: List<ProcessorStatus>
 )
 
 enum class ProcessorMode {
@@ -30,38 +30,40 @@ enum class ProcessorMode {
 }
 
 data class ProcessorStatus(
-    val name: String,
-    val processingGroups: List<ProcessingGroupStatus>,
-    val tokenStoreIdentifier: String,
-    val mode: ProcessorMode,
-    val started: Boolean,
-    val error: Boolean,
-    val segmentCapacity: Int,
-    val activeSegments: Int,
-    val segments: List<SegmentStatus>,
+        val name: String,
+        val processingGroups: List<ProcessingGroupStatus>,
+        val tokenStoreIdentifier: String,
+        val mode: ProcessorMode,
+        val started: Boolean,
+        val error: Boolean,
+        val segmentCapacity: Int,
+        val activeSegments: Int,
+        val segments: List<SegmentStatus>,
 )
 
 data class ProcessingGroupStatus(
-    val name: String,
-    val dlqSize: Long?,
+        val name: String,
+        val dlqSize: Long?,
 )
 
 data class SegmentStatus(
-    val segment: Int,
-    val mergeableSegment: Int,
-    val mask: Int = -1,
-    val oneOf: Int,
-    val caughtUp: Boolean,
-    val error: Boolean,
-    val errorType: String?,
-    val errorMessage: String?,
-    val ingestLatency: Double?,
-    val commitLatency: Double?,
+        val segment: Int,
+        val mergeableSegment: Int,
+        val mask: Int = -1,
+        val oneOf: Int,
+        val caughtUp: Boolean,
+        val error: Boolean,
+        val errorType: String?,
+        val errorMessage: String?,
+        val ingestLatency: Double?,
+        val commitLatency: Double?,
+        val position: Long? = -1,
+        val resetPosition: Long? = -1,
 )
 
 data class ProcessorSegmentId(
-    val processorName: String,
-    val segmentId: Int
+        val processorName: String,
+        val segmentId: Int
 )
 
 enum class ResetDecisions {
@@ -69,18 +71,18 @@ enum class ResetDecisions {
 }
 
 data class ResetDecision(
-    val processorName: String,
-    val decision: ResetDecisions,
-    val from: Instant? = null
+        val processorName: String,
+        val decision: ResetDecisions,
+        val from: Instant? = null
 )
 
 data class SegmentOverview(
-    val segments: List<SegmentDetails>
+        val segments: List<SegmentDetails>
 )
 
 data class SegmentDetails(
 
-    val segment: Int,
-    val mergeableSegment: Int,
-    val mask: Int,
+        val segment: Int,
+        val mergeableSegment: Int,
+        val mask: Int,
 )

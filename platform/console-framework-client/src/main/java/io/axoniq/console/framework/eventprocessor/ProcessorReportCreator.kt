@@ -91,6 +91,8 @@ class ProcessorReportCreator(
             errorMessage = this.error?.message,
             ingestLatency = metricsRegistry.ingestLatencyForProcessor(name, this.segment.segmentId).getValue(),
             commitLatency = metricsRegistry.commitLatencyForProcessor(name, this.segment.segmentId).getValue(),
+            position = this.currentPosition?.orElse(-1) ?: -1,
+            resetPosition = this.resetPosition?.orElse(-1) ?: -1,
     )
 
     private fun EventProcessor.toProcessingGroupStatuses(): List<ProcessingGroupStatus> =
