@@ -23,7 +23,9 @@ import org.axonframework.common.ReflectionUtils
 import org.axonframework.config.Configuration
 import org.axonframework.config.EventProcessingModule
 import org.axonframework.eventhandling.*
+import org.axonframework.eventhandling.pooled.PooledStreamingEventProcessor
 import org.axonframework.eventhandling.tokenstore.TokenStore
+import org.axonframework.eventsourcing.eventstore.EmbeddedEventStore
 import org.axonframework.eventsourcing.eventstore.EventStore
 import org.axonframework.messaging.StreamableMessageSource
 import org.axonframework.queryhandling.QueryBus
@@ -38,37 +40,142 @@ class SetupPayloadCreator(
     private val eventProcessingConfiguration = configuration.eventProcessingConfiguration() as EventProcessingModule
 
     fun createReport(): SetupPayload {
-        val processors = eventProcessingConfiguration.eventProcessors()
-                .filter { it.value is StreamingEventProcessor }
-                .map { entry ->
-                    entry.key
-                }
+        val processors = eventProcessingConfiguration.eventProcessors().keys
         return SetupPayload(
                 commandBus = commandBusInformation(),
                 queryBus = queryBusInformation(),
                 eventStore = eventBusInformation(),
-                processors = processors.map {
-                    val processor =
-                            eventProcessingConfiguration.eventProcessor(it, StreamingEventProcessor::class.java).get()
-                    ProcessorInformation(
-                            name = it,
-                            supportsReset = processor.supportsReset(),
-                            batchSize = processor.getBatchSize(),
-                            messageSourceType = processor.getMessageSource(),
-                            tokenClaimInterval = processor.getTokenClaimInterval(),
-                            tokenStoreClaimTimeout = processor.getStoreTokenClaimTimeout(),
-                            errorHandler = eventProcessingConfiguration.errorHandler(it)::class.java.name,
-                            invocationErrorHandler = eventProcessingConfiguration.listenerInvocationErrorHandler(it)::class.java.name,
-                            interceptors = processor.getInterceptors("interceptors"),
-                            tokenStoreType = processor.getStoreTokenStoreType(),
-                            contexts = processor.contexts()
-                    )
+                processors = processors.mapNotNull {
+                    toProcessor(it)
                 },
                 versions = versionInformation(),
                 upcasters = upcasters(),
                 features = SupportedFeatures(
                         heartbeat = true
                 )
+        )
+    }
+
+    private fun toProcessor(name: String): EventProcessorInformation? {
+        val processor = eventProcessingConfiguration.eventProcessor(name, EventProcessor::class.java).orElse(null)
+        return when (processor) {
+            is PooledStreamingEventProcessor -> toPooledStreamingProcessorInformation(processor)
+            is TrackingEventProcessor -> toTrackingProcessorInformation(processor)
+            is SubscribingEventProcessor -> toSubscribingProcessorInformation(processor)
+            else -> null
+        }
+    }
+
+    private fun toSubscribingProcessorInformation(processor: SubscribingEventProcessor): EventProcessorInformation {
+        return EventProcessorInformation(
+                name = processor.name,
+                processorType = ProcessorType.SUBSCRIBING,
+                commonProcessorInformation = commonProcessorInformation(processor),
+                subscribingProcessorInformation = SubscribingProcessorInformation(
+                        processingStrategy = processor.getPropertyType("processingStrategy")
+                )
+        )
+    }
+
+    private fun commonProcessorInformation(processor: EventProcessor) =
+            CommonProcessorInformation(
+                    messageSource = toMessageSource(processor, processor.getPropertyValue("messageSource")),
+                    errorHandler = eventProcessingConfiguration.errorHandler(processor.name)::class.java.name,
+                    invocationErrorHandler = eventProcessingConfiguration.listenerInvocationErrorHandler(processor.name)::class.java.name,
+                    interceptors = processor.getInterceptors("interceptors"),
+            )
+
+    private fun toPooledStreamingProcessorInformation(processor: PooledStreamingEventProcessor): EventProcessorInformation {
+        return EventProcessorInformation(
+                name = processor.name,
+                processorType = ProcessorType.POOLED_STREAMING,
+                commonProcessorInformation = commonProcessorInformation(processor),
+                streamingInformation = streamingEventProcessorInformation(processor),
+                pooledStreamingInformation = PooledStreamingEventProcessorInformation(
+                        maxClaimedSegments = processor.getPropertyValue("maxClaimedSegments"),
+                        claimExtensionThreshold = processor.getPropertyValue("claimExtensionThreshold"),
+                        coordinatorExtendsClaims = processor.getPropertyValue<Any>("coordinator")?.getPropertyValue("coordinatorExtendsClaims")
+                ),
+        )
+    }
+
+    private fun toTrackingProcessorInformation(processor: TrackingEventProcessor): EventProcessorInformation {
+        return EventProcessorInformation(
+                name = processor.name,
+                processorType = ProcessorType.TRACKING,
+                commonProcessorInformation = commonProcessorInformation(processor),
+                streamingInformation = streamingEventProcessorInformation(processor),
+                trackingInformation = TrackingEventProcessorInformation(
+                        maxThreadCount = processor.getPropertyValue("maxThreadCount"),
+                        eventAvailabilityTimeout = processor.getPropertyValue("eventAvailabilityTimeout"),
+                        storeTokenBeforeProcessing = processor.getPropertyValue("storeTokenBeforeProcessing"),
+                ),
+        )
+    }
+
+    private fun streamingEventProcessorInformation(processor: StreamingEventProcessor) = StreamingEventProcessorInformation(
+            batchSize = processor.getPropertyValue("batchSize"),
+            tokenClaimInterval = processor.getPropertyValue("tokenClaimInterval"),
+            tokenStoreType = processor.getPropertyType("tokenStore", TokenStore::class.java),
+            supportsReset = processor.supportsReset(),
+            tokenStoreClaimTimeout = processor.getStoreTokenClaimTimeout("tokenStore"),
+    )
+
+    private fun toMessageSource(processor: EventProcessor, messageSource: StreamableMessageSource<*>?): MessageSourceInformation {
+        if (messageSource == null) {
+            return UnspecifiedMessageSourceInformation("Unknown")
+        }
+        return when {
+            messageSource is MultiStreamableMessageSource -> MultiStreamableMessageSourceInformation(
+                    messageSource::class.java.name,
+                    messageSource.getPropertyValue<List<StreamableMessageSource<*>>>("eventStreams")?.map { toMessageSource(processor, it) }
+                            ?: emptyList()
+            )
+
+            messageSource is EmbeddedEventStore -> createEmbeddedMessageSourceInformation(messageSource)
+            messageSource::class.java.simpleName == "AxonServerEventStore" -> createAxonServerMessageSourceInfoFromStore(messageSource)
+            messageSource::class.java.simpleName == "AxonServerMessageSource" -> createAxonServerMessageSourceInfoFromMessageSource(messageSource)
+            messageSource::class.java.simpleName == "AxonIQEventStorageEngine" -> createAxonServerMessageSourceInfoFromStorageEngine(messageSource)
+            else -> UnspecifiedMessageSourceInformation(messageSource::class.java.name)
+        }
+    }
+
+    private fun createAxonServerMessageSourceInfoFromStorageEngine(messageSource: StreamableMessageSource<*>): MessageSourceInformation {
+        val context = messageSource.getPropertyValue<String>("context")
+
+        return AxonServerEventStoreMessageSourceInformation(
+                messageSource::class.java.name,
+                listOfNotNull(context)
+        )
+    }
+
+    private fun createAxonServerMessageSourceInfoFromMessageSource(messageSource: StreamableMessageSource<*>): MessageSourceInformation {
+        val context = messageSource.getPropertyValue<Any>("eventStorageEngine")?.getPropertyValue<String>("context")
+
+        return AxonServerEventStoreMessageSourceInformation(
+                messageSource::class.java.name,
+                listOfNotNull(context)
+        )
+    }
+
+    private fun createAxonServerMessageSourceInfoFromStore(messageSource: StreamableMessageSource<*>): MessageSourceInformation {
+        val context = messageSource.getPropertyValue<Any>("storageEngine")?.getPropertyValue<String>("context")
+
+        return AxonServerEventStoreMessageSourceInformation(
+                messageSource::class.java.name,
+                listOfNotNull(context)
+        )
+    }
+
+    private fun createEmbeddedMessageSourceInformation(messageSource: EmbeddedEventStore): MessageSourceInformation {
+        return EmbeddedEventStoreMessageSourceInformation(
+                className = messageSource::class.java.name,
+                optimizeEventConsumption = messageSource.getPropertyValue("optimizeEventConsumption"),
+                fetchDelay = messageSource.getPropertyValue<Int?>("producer")?.getPropertyValue<Long>("fetchDelayNanos")?.let { it / 1_000_000 },
+                cachedEvents = messageSource.getPropertyValue<Int?>("producer")?.getPropertyValue("cachedEvents"),
+                cleanupDelay = messageSource.getPropertyValue("cleanupDelayMillis"),
+                eventStorageEngineType = messageSource.getPropertyType("storageEngine")
+
         )
     }
 
@@ -127,7 +234,7 @@ class SetupPayloadCreator(
     private fun queryBusInformation(): QueryBusInformation {
         val bus = configuration.queryBus().unwrapPossiblyDecoratedClass(QueryBus::class.java)
         val axonServer = bus::class.java.name == "org.axonframework.axonserver.connector.query.AxonServerQueryBus"
-        val localSegmentType = if (axonServer) bus.getPropertyTypeNested("localSegment", QueryBus::class.java) else null
+        val localSegmentType = if (axonServer) bus.getPropertyType("localSegment", QueryBus::class.java) else null
         val context = if (axonServer) bus.getPropertyValue<String>("context") else null
         val handlerInterceptors = if (axonServer) {
             bus.getPropertyValue<Any>("localSegment")?.getInterceptors("handlerInterceptors") ?: emptyList()
@@ -188,6 +295,7 @@ class SetupPayloadCreator(
                 is MultiSourceTrackingToken -> token.trackingTokens.values.sumOf {
                     getSizeFromToken(it) ?: 0
                 }
+
                 else -> null
             }
 
@@ -195,7 +303,7 @@ class SetupPayloadCreator(
         val bus = configuration.commandBus().unwrapPossiblyDecoratedClass(CommandBus::class.java)
         val axonServer = bus::class.java.name == "org.axonframework.axonserver.connector.command.AxonServerCommandBus"
         val localSegmentType =
-                if (axonServer) bus.getPropertyTypeNested("localSegment", CommandBus::class.java) else null
+                if (axonServer) bus.getPropertyType("localSegment", CommandBus::class.java) else null
         val context = if (axonServer) bus.getPropertyValue<String>("context") else null
         val handlerInterceptors = if (axonServer) {
             bus.getPropertyValue<Any>("localSegment")?.getInterceptors("handlerInterceptors", "invokerInterceptors")
@@ -233,7 +341,7 @@ class SetupPayloadCreator(
         ).let { it::class.java.name }
     }
 
-    private fun Any.getPropertyTypeNested(fieldName: String, clazz: Class<out Any>): String {
+    private fun Any.getPropertyType(fieldName: String, clazz: Class<out Any>): String {
         return ReflectionUtils.getMemberValue<Any>(
                 ReflectionUtils.fieldsOf(this::class.java).first { it.name == fieldName },
                 this
@@ -242,16 +350,8 @@ class SetupPayloadCreator(
                 .let { it::class.java.name }
     }
 
-    private fun StreamingEventProcessor.getBatchSize(): Int = getPropertyValue("batchSize") ?: -1
-    private fun StreamingEventProcessor.getMessageSource(): String =
-            getPropertyTypeNested("messageSource", EventStore::class.java)
-
-    private fun StreamingEventProcessor.getTokenClaimInterval(): Long = getPropertyValue("tokenClaimInterval") ?: -1
-    private fun StreamingEventProcessor.getStoreTokenStoreType(): String =
-            getPropertyTypeNested("tokenStore", TokenStore::class.java)
-
-    private fun StreamingEventProcessor.getStoreTokenClaimTimeout(): Long = getPropertyValue<Any>("tokenStore")
-            ?.getPropertyValue<TemporalAmount>("claimTimeout")?.let { it.get(ChronoUnit.SECONDS) * 1000 } ?: -1
+    private fun Any.getStoreTokenClaimTimeout(fieldName: String): Long? = getPropertyValue<Any>(fieldName)
+            ?.getPropertyValue<TemporalAmount>("claimTimeout")?.let { it.get(ChronoUnit.SECONDS) * 1000 }
 
 
     private fun Any.getInterceptors(vararg fieldNames: String): List<InterceptorInformation> {
@@ -280,28 +380,6 @@ class SetupPayloadCreator(
         }
         return SerializerInformation(serializer::class.java.name, false)
     }
-
-    private fun StreamingEventProcessor.contexts(): List<String> {
-        val messageSource = getPropertyValue<StreamableMessageSource<*>>("messageSource") ?: return emptyList()
-        val sources = if (messageSource is MultiStreamableMessageSource) {
-            messageSource.getPropertyValue<List<StreamableMessageSource<*>>>("eventStreams") ?: emptyList()
-        } else {
-            listOf(messageSource)
-        }
-        return sources.mapNotNull { toContext(it) }.distinct()
-    }
-
-    private fun toContext(it: StreamableMessageSource<*>): String? {
-        if (it::class.java.simpleName == "AxonServerEventStore") {
-            return it.getPropertyValue<Any>("storageEngine")?.getPropertyValue("context")
-        }
-        if (it::class.java.simpleName == "AxonIQEventStorageEngine") {
-            return it.getPropertyValue("context")
-        }
-        // Fallback
-        return it.getPropertyValue("context")
-    }
-
 }
 
 

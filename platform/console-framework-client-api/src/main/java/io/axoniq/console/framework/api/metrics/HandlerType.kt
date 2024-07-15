@@ -16,9 +16,9 @@
 
 package io.axoniq.console.framework.api.metrics
 
-enum class HandlerType {
-    Origin,
-    EventProcessor,
-    Aggregate,
-    Message,
+enum class HandlerType(val shortIdentifier: String) {
+    Origin("o"),
+    EventProcessor("ep"),
+    Aggregate("ag"),
+    Message("m"),
 }

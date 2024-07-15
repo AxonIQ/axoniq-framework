@@ -24,6 +24,7 @@ import org.axonframework.eventhandling.*
 import org.axonframework.eventhandling.deadletter.DeadLetteringEventHandlerInvoker
 import org.axonframework.eventhandling.pooled.PooledStreamingEventProcessor
 import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue
+
 class ProcessorReportCreator(
         private val processingConfig: EventProcessingConfiguration,
         private val metricsRegistry: ProcessorMetricsRegistry,
@@ -31,20 +32,34 @@ class ProcessorReportCreator(
 
     fun createReport() = ProcessorStatusReport(
             processingConfig.eventProcessors()
-                    .filter { it.value is StreamingEventProcessor }
                     .map { entry ->
-                        val sep = entry.value as StreamingEventProcessor
-                        ProcessorStatus(
-                                entry.key,
-                                entry.value.toProcessingGroupStatuses(),
-                                sep.tokenStoreIdentifier,
-                                sep.toType(),
-                                sep.isRunning,
-                                sep.isError,
-                                sep.maxCapacity(),
-                                sep.processingStatus().filterValues { !it.isErrorState }.size,
-                                sep.processingStatus().map { (_, segment) -> segment.toStatus(entry.key) },
-                        )
+                        if(entry.value is StreamingEventProcessor) {
+                            val sep = entry.value as StreamingEventProcessor
+                            ProcessorStatus(
+                                    entry.key,
+                                    entry.value.toProcessingGroupStatuses(),
+                                    sep.tokenStoreIdentifier,
+                                    sep.toType(),
+                                    sep.isRunning,
+                                    sep.isError,
+                                    sep.maxCapacity(),
+                                    sep.processingStatus().filterValues { !it.isErrorState }.size,
+                                    sep.processingStatus().map { (_, segment) -> segment.toStatus(entry.key) },
+                            )
+                        } else {
+                            val sep = entry.value as SubscribingEventProcessor
+                            ProcessorStatus(
+                                    sep.name,
+                                    emptyList(),
+                                    "",
+                                    ProcessorMode.SUBSCRIBING,
+                                    sep.isRunning,
+                                    sep.isError,
+                                    0,
+                                    0,
+                                    emptyList(),
+                            )
+                        }
                     }
     )
 
@@ -76,6 +91,8 @@ class ProcessorReportCreator(
             errorMessage = this.error?.message,
             ingestLatency = metricsRegistry.ingestLatencyForProcessor(name, this.segment.segmentId).getValue(),
             commitLatency = metricsRegistry.commitLatencyForProcessor(name, this.segment.segmentId).getValue(),
+            position = this.currentPosition?.orElse(-1) ?: -1,
+            resetPosition = this.resetPosition?.orElse(-1) ?: -1,
     )
 
     private fun EventProcessor.toProcessingGroupStatuses(): List<ProcessingGroupStatus> =

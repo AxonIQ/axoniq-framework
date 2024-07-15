@@ -55,15 +55,14 @@ fun Message<*>.toInformation() = MessageIdentifier(
 
 fun String.toSimpleName() = split(".").last()
 
-fun UnitOfWork<*>.extractHandler(): HandlerStatisticsMetricIdentifier? = try {
-    val processingGroup = resources()[CONSOLE_PROCESSING_GROUP] as? String?
+fun UnitOfWork<*>.extractHandler(declaringClassName: String, processingGroup: String?): HandlerStatisticsMetricIdentifier? = try {
     val isAggregate = message is CommandMessage<*> && isAggregateLifecycleActive()
     val isProcessor = processingGroup != null
 
     val component = when {
         isAggregate -> (AggregateLifecycle.describeCurrentScope() as AggregateScopeDescriptor).type
-        isProcessor -> processingGroup
-        else -> resources()[CONSOLE_DECLARING_CLASS] as String?
+        isProcessor -> processingGroup ?: AxoniqConsoleSpanFactory.currentSpan()?.processorName
+        else -> declaringClassName
     }
     val type = when {
         isAggregate -> HandlerType.Aggregate
