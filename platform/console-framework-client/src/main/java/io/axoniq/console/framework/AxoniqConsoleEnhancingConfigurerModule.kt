@@ -33,9 +33,9 @@ class AxoniqConsoleEnhancingConfigurerModule(private val spanMatcherPredicateMap
             configuration.onStart {
                 enhance(configuration.eventStore())
                 enhance(configuration.commandBus())
-                enhanceExecutorService(configuration.commandBus(), BusType.QUERY, configuration.getComponent(ApplicationMetricRegistry::class.java))
+                enhanceExecutorService(configuration.commandBus(), BusType.COMMAND, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryBus())
-                enhanceExecutorService(configuration.queryBus(), BusType.COMMAND, configuration.getComponent(ApplicationMetricRegistry::class.java))
+                enhanceExecutorService(configuration.queryBus(), BusType.QUERY, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryUpdateEmitter())
                 enhance(configuration.snapshotter())
                 enhance(configuration.deadlineManager())
