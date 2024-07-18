@@ -43,10 +43,8 @@ class MeasuringExecutorServiceDecorator(
             delegate.execute(command)
             return
         }
-        val queueStart = clock.monotonicTime()
         val instrumentedRunnable = PriorityRunnable({
             val start: Long = clock.monotonicTime()
-            applicationMetricRegistry.reportBusWorkQueue(busType, start - queueStart)
             try {
                 command.run()
             } finally {

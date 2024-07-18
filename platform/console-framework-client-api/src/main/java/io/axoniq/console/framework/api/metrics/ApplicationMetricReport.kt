@@ -17,14 +17,11 @@
 package io.axoniq.console.framework.api.metrics
 
 data class ApplicationMetricReport(
-        val availableProcessors: Int,
         val loadAverage: Double,
         val systemCpuUsage: Double,
         val processCpuUsage: Double,
-        val maxOpenFiles: Long,
-        val currentOpenFiles: Long,
-        val memoryPools: Map<String, MemoryPoolReport>,
         val liveThreadCount: Int,
+        val memoryPools: Map<String, MemoryPoolReport>,
         val commandBus: BusMetricReport?,
         val queryBus: BusMetricReport?,
 )
@@ -32,7 +29,6 @@ data class ApplicationMetricReport(
 data class BusMetricReport(
         val capacity: Int,
         val usedCapacity: Double,
-        val workQueueTimer: StatisticDistribution
 )
 
 data class MemoryPoolReport(

@@ -28,8 +28,6 @@ import java.util.concurrent.TimeUnit
  * It also holds the decorators for the work queues of the query and command bus, if present in the application.
  */
 class ApplicationMetricRegistry(meterRegistry: MeterRegistry) {
-    private val queryBusWorkQueueTimer = createTimer(meterRegistry, "query_bus_work_queue_timer")
-    private val commandBusWorkQueueTimer = createTimer(meterRegistry, "command_bus_work_queue_timer")
     private val busDecorators = mutableMapOf<BusType, MeasuringExecutorServiceDecorator>()
 
     fun getQueryBusMetrics() = getBusMetrics(BusType.QUERY)
@@ -40,24 +38,10 @@ class ApplicationMetricRegistry(meterRegistry: MeterRegistry) {
         return BusMetricReport(
                 capacity = decorator.getMaxCapacity(),
                 usedCapacity = decorator.getUsedCapacity(),
-                workQueueTimer = timerForBus(type).takeSnapshot().toDistribution()
         )
     }
-
-    fun reportBusWorkQueue(busType: BusType, duration: Long) {
-        timerForBus(busType).record(duration / 1000000, TimeUnit.MILLISECONDS)
-    }
-
     fun registerWorkQueueDecorator(busType: BusType, decorator: MeasuringExecutorServiceDecorator) {
         busDecorators[busType] = decorator
-    }
-
-    private fun timerForBus(busType: BusType): Timer {
-        return when (busType) {
-            BusType.COMMAND -> commandBusWorkQueueTimer
-            BusType.QUERY -> queryBusWorkQueueTimer
-            BusType.EVENT -> throw IllegalArgumentException("Event bus is not supported")
-        }
     }
 }
 

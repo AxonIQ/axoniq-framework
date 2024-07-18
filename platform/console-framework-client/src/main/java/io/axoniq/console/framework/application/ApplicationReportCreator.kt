@@ -28,16 +28,12 @@ class ApplicationReportCreator(
     private val threadBean = ManagementFactory.getThreadMXBean()
     private val osBean = ManagementFactory.getOperatingSystemMXBean()
     private val cpuMetricsProvider = CpuMetricsProvider()
-    private val fileDescriptorProvider = FileDescriptorProvider()
 
     fun createReport(): ApplicationMetricReport {
         return ApplicationMetricReport(
-                availableProcessors = osBean.availableProcessors,
                 loadAverage = osBean.systemLoadAverage,
                 processCpuUsage = cpuMetricsProvider.getProcessCpuUsage(),
                 systemCpuUsage = cpuMetricsProvider.getSystemCpuUsage(),
-                currentOpenFiles = fileDescriptorProvider.getOpenFileDescriptors(),
-                maxOpenFiles = fileDescriptorProvider.getMaxOpenFileDescriptors(),
                 memoryPools = memoryBeans.associate {
                     it.name to MemoryPoolReport(
                             heap = it.type == MemoryType.HEAP,
