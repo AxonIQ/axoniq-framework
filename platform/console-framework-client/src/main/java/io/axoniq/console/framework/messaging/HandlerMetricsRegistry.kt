@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,17 +25,16 @@ import io.axoniq.console.framework.computeIfAbsentWithRetry
 import io.micrometer.core.instrument.Timer
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import mu.KotlinLogging
-import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 class HandlerMetricsRegistry(
-    private val axoniqConsoleRSocketClient: AxoniqConsoleRSocketClient,
-    private val clientSettingsService: ClientSettingsService,
-    private val executor: ScheduledExecutorService,
-    private val componentName: String,
+        private val axoniqConsoleRSocketClient: AxoniqConsoleRSocketClient,
+        private val clientSettingsService: ClientSettingsService,
+        private val executor: ScheduledExecutorService,
+        private val componentName: String,
 ) : ClientSettingsObserver {
     private val logger = KotlinLogging.logger { }
     private var reportTask: ScheduledFuture<*>? = null
@@ -48,7 +47,7 @@ class HandlerMetricsRegistry(
     private val noHandlerIdentifier = HandlerStatisticsMetricIdentifier(HandlerType.Origin, "application", MessageIdentifier("Dispatcher", componentName))
 
     init {
-        if(instance != null) {
+        if (instance != null) {
             logger.warn("HandlerMetricsRegistry already initialized. The new one will be the active.")
             // Clear it to be sure. This is a situation that should not happen though.
             instance?.onDisconnected()
@@ -121,12 +120,7 @@ class HandlerMetricsRegistry(
     }
 
     private fun createTimer(handler: Any, name: String): Timer {
-        return Timer
-                .builder("${handler}_timer_$name")
-                .publishPercentiles(1.00, 0.95, 0.90, 0.50, 0.01)
-                .distributionStatisticExpiry(Duration.ofMinutes(1))
-                .distributionStatisticBufferLength(1)
-                .register(meterRegistry)
+        return io.axoniq.console.framework.createTimer(meterRegistry, "${handler}_timer_$name")
     }
 
     fun registerMessageHandled(

@@ -14,12 +14,27 @@
  * limitations under the License.
  */
 
-package io.axoniq.console.framework.api
+package io.axoniq.console.framework.application
 
-data class ClientSettings(
-        val heartbeatInterval: Long,
-        val heartbeatTimeout: Long,
-        val processorReportInterval: Long,
-        val handlerReportInterval: Long,
-        val applicationReportInterval: Long,
-)
+import java.lang.reflect.Method
+
+
+fun Class<*>.detectMethod(bean: Any, name: String): Method? {
+    return try {
+        this.cast(bean)
+        this.getMethod(name)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+fun List<String>.firstExistingClass(): Class<*>? {
+    for (className in this) {
+        try {
+            return Class.forName(className)
+        } catch (e: ClassNotFoundException) {
+            // ignore
+        }
+    }
+    return null
+}

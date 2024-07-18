@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,10 @@ object Routes {
             const val DELETE_LETTER = "dlq-command-delete-letter"
             const val PROCESS = "dlq-command-process"
         }
+    }
+
+    object Application {
+        const val REPORT = "application-info-report"
     }
 
     object MessageFlow {

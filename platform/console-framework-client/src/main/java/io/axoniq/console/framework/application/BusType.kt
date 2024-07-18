@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-package io.axoniq.console.framework.api
+package io.axoniq.console.framework.application
 
-data class ClientSettings(
-        val heartbeatInterval: Long,
-        val heartbeatTimeout: Long,
-        val processorReportInterval: Long,
-        val handlerReportInterval: Long,
-        val applicationReportInterval: Long,
-)
+enum class BusType {
+    COMMAND,
+    QUERY,
+    EVENT,
+}
