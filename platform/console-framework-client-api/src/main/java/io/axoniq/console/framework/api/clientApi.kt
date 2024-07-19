@@ -16,7 +16,20 @@
 
 package io.axoniq.console.framework.api
 
+@Deprecated("Use ClientSettingsV2 instead")
 data class ClientSettings(
+        val heartbeatInterval: Long,
+        val heartbeatTimeout: Long,
+        val processorReportInterval: Long,
+        val handlerReportInterval: Long,
+)
+
+/**
+ * Unfortunately the original [ClientSettings] was not backwards compatible :(
+ * Unrecognized field "applicationReportInterval" (class io.axoniq.console.framework.api.ClientSettings), not marked as ignorable (4 known properties: "heartbeatInterval", "processorReportInterval", "heartbeatTimeout", "handlerReportInterval"])
+ * Made a new version of the class, and will adjust future serializer versions to be lenient
+ */
+data class ClientSettingsV2(
         val heartbeatInterval: Long,
         val heartbeatTimeout: Long,
         val processorReportInterval: Long,

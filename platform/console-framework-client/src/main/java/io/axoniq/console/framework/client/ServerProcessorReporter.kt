@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package io.axoniq.console.framework.client
 
-import io.axoniq.console.framework.api.ClientSettings
+import io.axoniq.console.framework.api.ClientSettingsV2
 import io.axoniq.console.framework.eventprocessor.ProcessorReportCreator
 import mu.KotlinLogging
 import java.util.concurrent.ScheduledExecutorService
@@ -24,10 +24,10 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 class ServerProcessorReporter(
-    private val client: AxoniqConsoleRSocketClient,
-    private val processorReportCreator: ProcessorReportCreator,
-    private val clientSettingsService: ClientSettingsService,
-    private val executor: ScheduledExecutorService,
+        private val client: AxoniqConsoleRSocketClient,
+        private val processorReportCreator: ProcessorReportCreator,
+        private val clientSettingsService: ClientSettingsService,
+        private val executor: ScheduledExecutorService,
 ) : ClientSettingsObserver {
     private var reportTask: ScheduledFuture<*>? = null
     private val logger = KotlinLogging.logger { }
@@ -36,7 +36,7 @@ class ServerProcessorReporter(
         clientSettingsService.subscribeToSettings(this)
     }
 
-    override fun onConnectedWithSettings(settings: ClientSettings) {
+    override fun onConnectedWithSettings(settings: ClientSettingsV2) {
         logger.info { "Sending processor information every ${settings.processorReportInterval}ms to AxonIQ console" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {

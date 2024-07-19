@@ -21,6 +21,7 @@ object Routes {
     object Management {
         // Route on both client and server. Client can pull settings whenever, server can push new settings
         const val SETTINGS = "client-settings"
+        const val SETTINGS_V2 = "client-settings-v2"
         // Route on both client and server to receive/send heartbeats
         const val HEARTBEAT = "client-heartbeat"
     }

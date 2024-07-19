@@ -16,7 +16,7 @@
 
 package io.axoniq.console.framework.application
 
-import io.axoniq.console.framework.api.ClientSettings
+import io.axoniq.console.framework.api.ClientSettingsV2
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient
 import io.axoniq.console.framework.client.ClientSettingsObserver
 import io.axoniq.console.framework.client.ClientSettingsService
@@ -38,7 +38,7 @@ class ApplicationMetricReporter(
         clientSettingsService.subscribeToSettings(this)
     }
 
-    override fun onConnectedWithSettings(settings: ClientSettings) {
+    override fun onConnectedWithSettings(settings: ClientSettingsV2) {
         logger.info { "Sending application information every ${settings.applicationReportInterval}ms to AxonIQ console" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {
