@@ -56,7 +56,7 @@ fun createTimer(meterRegistry: MeterRegistry, name: String): Timer {
     return Timer
             .builder(name)
             .publishPercentiles(1.00, 0.95, 0.90, 0.50, 0.01)
-            .distributionStatisticExpiry(Duration.ofMinutes(1))
+            .distributionStatisticExpiry(Duration.ofMinutes(5))
             .distributionStatisticBufferLength(5)
             .register(meterRegistry)
 }
