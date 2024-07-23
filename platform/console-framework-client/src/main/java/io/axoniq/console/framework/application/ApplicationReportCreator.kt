@@ -34,17 +34,24 @@ class ApplicationReportCreator(
                 loadAverage = osBean.systemLoadAverage,
                 processCpuUsage = cpuMetricsProvider.getProcessCpuUsage(),
                 systemCpuUsage = cpuMetricsProvider.getSystemCpuUsage(),
-                memoryPools = memoryBeans.associate {
-                    it.name to MemoryPoolReport(
-                            heap = it.type == MemoryType.HEAP,
-                            used = it.usage.used,
-                            committed = it.usage.committed,
-                            max = it.usage.max
-                    )
-                },
+                heapUsage = determineMemoryUsage(),
                 liveThreadCount = threadBean.threadCount,
                 commandBus = registry.getCommandBusMetrics(),
                 queryBus = registry.getQueryBusMetrics()
         )
     }
+
+    private fun determineMemoryUsage(): MemoryPoolReport {
+        return memoryBeans
+                .filter { it.type == MemoryType.HEAP && it.usage.max > 0 }
+                .fold(MemoryPoolReport(0.0, 0.0, 0.0)) { acc, bean ->
+                    MemoryPoolReport(
+                            acc.committed + bean.usage.used.toMb(),
+                            acc.used + bean.usage.committed.toMb(),
+                            acc.max + bean.usage.max.toMb(),
+                    )
+                }
+    }
+
+    private fun Number.toMb(): Double = this.toDouble() / 1024 / 1024
 }

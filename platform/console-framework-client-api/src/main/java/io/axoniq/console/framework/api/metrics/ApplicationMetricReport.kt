@@ -21,7 +21,7 @@ data class ApplicationMetricReport(
         val systemCpuUsage: Double,
         val processCpuUsage: Double,
         val liveThreadCount: Int,
-        val memoryPools: Map<String, MemoryPoolReport>,
+        val heapUsage: MemoryPoolReport,
         val commandBus: BusMetricReport?,
         val queryBus: BusMetricReport?,
 )
@@ -32,8 +32,7 @@ data class BusMetricReport(
 )
 
 data class MemoryPoolReport(
-        val heap: Boolean,
-        val used: Long,
-        val committed: Long,
-        val max: Long,
+        val used: Double,
+        val committed: Double,
+        val max: Double,
 )
