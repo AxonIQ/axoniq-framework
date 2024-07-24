@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,11 @@ package io.axoniq.console.framework.messaging
 
 import java.util.concurrent.ConcurrentHashMap
 
-const val BUCKET_SIZE = 2500
-const val BUCKET_COUNT = 60000 / BUCKET_SIZE
+const val BUCKET_SIZE = 1000L
 
 /**
- * Keeps a count values, returning the times the counter was incremented in the last minute.
- * This is done by keeping an integer in buckets of 2.5 seconds. When the value is queried,
- * all buckets of the last minute + 2.5 seconds are queried, excluding the last one to exclude incomplete buckets.
- *
- * Data is not cleaned automatically for performance reasons. It is only cleaned when the value is retrieved.
+ * Keeps a statistic on the amount of messages received in the last 20 seconds, then tripled to
+ * get the message rate per minute.
  */
 class RollingCountMeasure {
     private val countMap = ConcurrentHashMap<Long, Int>()
@@ -37,11 +33,11 @@ class RollingCountMeasure {
 
     fun count(): Double {
         val bucket = currentBucket()
-        val minimumBucket = (bucket - BUCKET_COUNT)
+        val minimumBucket = (bucket - 11)
         val toRemove = countMap.keys.filter { it < minimumBucket }
         toRemove.forEach { countMap.remove(it) }
 
-        return countMap.filter { it.key in minimumBucket until bucket }.values.sum().toDouble()
+        return countMap.filter { it.key in minimumBucket until bucket }.values.sum().toDouble() * 6
     }
 
     private fun currentBucket(): Long {

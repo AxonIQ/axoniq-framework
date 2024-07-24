@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package io.axoniq.console.framework.client
 
 import io.axoniq.console.framework.api.ClientSettings
+import io.axoniq.console.framework.api.ClientSettingsV2
 import io.axoniq.console.framework.api.Routes
 import io.axoniq.console.framework.api.notifications.NotificationLevel
 import io.axoniq.console.framework.api.notifications.NotificationList
@@ -81,7 +82,7 @@ class AxoniqConsoleRSocketClient(
         clientSettingsService.subscribeToSettings(heartbeatOrchestrator)
 
         // Server can send updated settings if necessary
-        registrar.registerHandlerWithPayload(Routes.Management.SETTINGS, ClientSettings::class.java) {
+        registrar.registerHandlerWithPayload(Routes.Management.SETTINGS, ClientSettingsV2::class.java) {
             clientSettingsService.updateSettings(it)
         }
     }
@@ -235,7 +236,7 @@ class AxoniqConsoleRSocketClient(
             }
         }
 
-        override fun onConnectedWithSettings(settings: ClientSettings) {
+        override fun onConnectedWithSettings(settings: ClientSettingsV2) {
             lastReceivedHeartbeat = Instant.now()
             this.heartbeatSendTask = executor.scheduleWithFixedDelay(
                     { sendHeartbeat().subscribe() },
@@ -277,11 +278,11 @@ class AxoniqConsoleRSocketClient(
         }
     }
 
-    private fun retrieveSettings(): Mono<ClientSettings> {
+    private fun retrieveSettings(): Mono<ClientSettingsV2> {
         return rsocket!!
-                .requestResponse(encodingStrategy.encode("", createRoutingMetadata(Routes.Management.SETTINGS)))
+                .requestResponse(encodingStrategy.encode("", createRoutingMetadata(Routes.Management.SETTINGS_V2)))
                 .map {
-                    encodingStrategy.decode(it, ClientSettings::class.java)
+                    encodingStrategy.decode(it, ClientSettingsV2::class.java)
                 }
                 .doOnError {
                     if (it.message?.contains("Access Denied") == true) {

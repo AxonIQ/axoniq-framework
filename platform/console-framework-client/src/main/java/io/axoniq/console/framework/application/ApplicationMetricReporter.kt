@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-package io.axoniq.console.framework.client
+package io.axoniq.console.framework.application
 
 import io.axoniq.console.framework.api.ClientSettingsV2
-import io.axoniq.console.framework.eventprocessor.ProcessorReportCreator
+import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient
+import io.axoniq.console.framework.client.ClientSettingsObserver
+import io.axoniq.console.framework.client.ClientSettingsService
 import mu.KotlinLogging
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
-class ServerProcessorReporter(
+class ApplicationMetricReporter(
         private val client: AxoniqConsoleRSocketClient,
-        private val processorReportCreator: ProcessorReportCreator,
+        private val reportCreator: ApplicationReportCreator,
         private val clientSettingsService: ClientSettingsService,
         private val executor: ScheduledExecutorService,
 ) : ClientSettingsObserver {
@@ -37,18 +39,18 @@ class ServerProcessorReporter(
     }
 
     override fun onConnectedWithSettings(settings: ClientSettingsV2) {
-        logger.info { "Sending processor information every ${settings.processorReportInterval}ms to AxonIQ console" }
+        logger.info { "Sending application information every ${settings.applicationReportInterval}ms to AxonIQ console" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {
                 this.report()
             } catch (e: Exception) {
-                logger.error("Was unable to report processor metrics: {}", e.message, e)
+                logger.error("Was unable to report application metrics: {}", e.message, e)
             }
-        }, 0, settings.processorReportInterval, TimeUnit.MILLISECONDS)
+        }, 0, settings.applicationReportInterval, TimeUnit.MILLISECONDS)
     }
 
     private fun report() {
-        client.send(io.axoniq.console.framework.api.Routes.EventProcessor.REPORT, processorReportCreator.createReport()).block()
+        client.send(io.axoniq.console.framework.api.Routes.Application.REPORT, reportCreator.createReport()).block()
     }
 
     override fun onDisconnected() {

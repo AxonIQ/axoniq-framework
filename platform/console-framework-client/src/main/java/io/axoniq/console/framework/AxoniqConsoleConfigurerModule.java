@@ -16,6 +16,9 @@
 
 package io.axoniq.console.framework;
 
+import io.axoniq.console.framework.application.ApplicationMetricRegistry;
+import io.axoniq.console.framework.application.ApplicationMetricReporter;
+import io.axoniq.console.framework.application.ApplicationReportCreator;
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient;
 import io.axoniq.console.framework.client.ClientSettingsService;
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar;
@@ -36,6 +39,8 @@ import io.axoniq.console.framework.messaging.AxoniqConsoleWrappedEventScheduler;
 import io.axoniq.console.framework.messaging.HandlerMetricsRegistry;
 import io.axoniq.console.framework.messaging.SpanMatcher;
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.transaction.NoTransactionManager;
 import org.axonframework.common.transaction.TransactionManager;
@@ -80,6 +85,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final boolean configureSpanFactory;
     private final SpanMatcherPredicateMap spanMatcherPredicateMap;
     private final EventScheduler eventScheduler;
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     /**
      * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}.
@@ -126,10 +132,18 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                 .registerComponent(ProcessorMetricsRegistry.class,
                                    c -> new ProcessorMetricsRegistry()
                 )
+                .registerComponent(ApplicationMetricRegistry.class,
+                                   c -> new ApplicationMetricRegistry(meterRegistry)
+                )
                 .registerComponent(ProcessorReportCreator.class,
                                    c -> new ProcessorReportCreator(
                                            c.eventProcessingConfiguration(),
                                            c.getComponent(ProcessorMetricsRegistry.class)
+                                   )
+                )
+                .registerComponent(ApplicationReportCreator.class,
+                                   c -> new ApplicationReportCreator(
+                                           c.getComponent(ApplicationMetricRegistry.class)
                                    )
                 )
                 .registerComponent(SetupPayloadCreator.class,
@@ -178,6 +192,13 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                            c.getComponent(ClientSettingsService.class),
                                            reportingTaskExecutor)
                 )
+                .registerComponent(ApplicationMetricReporter.class,
+                                   c -> new ApplicationMetricReporter(
+                                           c.getComponent(AxoniqConsoleRSocketClient.class),
+                                           c.getComponent(ApplicationReportCreator.class),
+                                           c.getComponent(ClientSettingsService.class),
+                                           reportingTaskExecutor)
+                )
                 .registerComponent(HandlerMetricsRegistry.class,
                                    c -> new HandlerMetricsRegistry(
                                            c.getComponent(AxoniqConsoleRSocketClient.class),
@@ -221,6 +242,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
 
         configurer.onInitialize(c -> {
             c.getComponent(ServerProcessorReporter.class);
+            c.getComponent(ApplicationMetricReporter.class);
             c.getComponent(RSocketProcessorResponder.class);
             c.getComponent(RSocketDlqResponder.class);
             c.getComponent(HandlerMetricsRegistry.class);

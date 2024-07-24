@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ object Routes {
     object Management {
         // Route on both client and server. Client can pull settings whenever, server can push new settings
         const val SETTINGS = "client-settings"
+        const val SETTINGS_V2 = "client-settings-v2"
         // Route on both client and server to receive/send heartbeats
         const val HEARTBEAT = "client-heartbeat"
     }
@@ -51,6 +52,10 @@ object Routes {
             const val DELETE_LETTER = "dlq-command-delete-letter"
             const val PROCESS = "dlq-command-process"
         }
+    }
+
+    object Application {
+        const val REPORT = "application-info-report"
     }
 
     object MessageFlow {

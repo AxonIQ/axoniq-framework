@@ -16,10 +16,16 @@
 
 package io.axoniq.console.framework
 
+import io.axoniq.console.framework.application.ApplicationMetricRegistry
+import io.axoniq.console.framework.application.BusType
+import io.axoniq.console.framework.application.MeasuringExecutorServiceDecorator
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
 import io.axoniq.console.framework.util.PostProcessHelper
+import org.axonframework.common.ReflectionUtils
 import org.axonframework.config.Configurer
 import org.axonframework.config.ConfigurerModule
+import java.lang.reflect.Field
+import java.util.concurrent.ExecutorService
 
 class AxoniqConsoleEnhancingConfigurerModule(private val spanMatcherPredicateMap: SpanMatcherPredicateMap) : ConfigurerModule {
     override fun configureModule(configurer: Configurer) {
@@ -27,7 +33,9 @@ class AxoniqConsoleEnhancingConfigurerModule(private val spanMatcherPredicateMap
             configuration.onStart {
                 enhance(configuration.eventStore())
                 enhance(configuration.commandBus())
+                enhanceExecutorService(configuration.commandBus(), BusType.COMMAND, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryBus())
+                enhanceExecutorService(configuration.queryBus(), BusType.QUERY, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryUpdateEmitter())
                 enhance(configuration.snapshotter())
                 enhance(configuration.deadlineManager())
@@ -39,5 +47,18 @@ class AxoniqConsoleEnhancingConfigurerModule(private val spanMatcherPredicateMap
 
     private fun enhance(any: Any) {
         PostProcessHelper.enhance(any, any::class.java.simpleName, spanMatcherPredicateMap)
+    }
+
+    private fun enhanceExecutorService(any: Any, query: BusType, registry: ApplicationMetricRegistry) {
+        val field = getExecutorServiceField(any::class.java) ?: return
+        val original = ReflectionUtils.getFieldValue(field, any) as ExecutorService
+        val enhanced = MeasuringExecutorServiceDecorator(query, original, registry)
+        ReflectionUtils.setFieldValue(field, any, enhanced)
+    }
+
+    private fun getExecutorServiceField(clazz: Class<*>): Field? {
+        return ReflectionUtils.fieldsOf(clazz).firstOrNull { f ->
+            f.type.isAssignableFrom(ExecutorService::class.java)
+        }
     }
 }

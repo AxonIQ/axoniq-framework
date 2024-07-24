@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,11 @@
  */
 package io.axoniq.console.framework
 
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.axonframework.common.ReflectionUtils
 import java.lang.reflect.Field
+import java.time.Duration
 
 /**
  * Find fields matching its own type. If found, it will unwrap the deeper value.
@@ -47,4 +50,13 @@ fun <K, V> MutableMap<K, V>.computeIfAbsentWithRetry(key: K, retries: Int = 0, d
         // We cannot get it from the map. Return the default value without putting it in, so the code can continue.
         return defaultValue(key)
     }
+}
+
+fun createTimer(meterRegistry: MeterRegistry, name: String): Timer {
+    return Timer
+            .builder(name)
+            .publishPercentiles(1.00, 0.95, 0.90, 0.50, 0.01)
+            .distributionStatisticExpiry(Duration.ofMinutes(5))
+            .distributionStatisticBufferLength(5)
+            .register(meterRegistry)
 }

@@ -23,9 +23,11 @@ jobs:
           - java-version: 17
             sonar-enabled: true
             deploy-enabled: false
-          - java-version: 21
-            sonar-enabled: false
-            deploy-enabled: false
+# Disabled due to https://youtrack.jetbrains.com/issue/KT-62389/JDK-21-Cannot-access-class-TimeUnit.-Check-your-module-classpath-for-missing-or-conflicting-dependencies
+# Still runs perfectly fine on 21, just doesn't compile
+#          - java-version: 21
+#            sonar-enabled: false
+#            deploy-enabled: false
 
     steps:
       - name: Checkout Code
