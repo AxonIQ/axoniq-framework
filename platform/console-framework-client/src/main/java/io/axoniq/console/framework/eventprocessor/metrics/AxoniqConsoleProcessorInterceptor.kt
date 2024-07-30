@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ class AxoniqConsoleProcessorInterceptor(
                 }
             }
         } catch (e: Exception) {
-            logger.info("AxonIQ Console could not register metrics for processor $processorName", e)
+            logger.debug("AxonIQ Console could not register metrics for processor $processorName", e)
         }
         return interceptorChain.proceed()
     }

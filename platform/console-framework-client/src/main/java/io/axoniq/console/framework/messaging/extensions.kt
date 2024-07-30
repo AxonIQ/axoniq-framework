@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ fun UnitOfWork<*>.extractHandler(declaringClassName: String, processingGroup: St
         message = message.toInformation(),
     )
 } catch (e: Exception) {
-    logger.warn("Could not extract handler from AxonIQ Console invocation. Skipping registration of message.", e)
+    logger.debug("Could not extract handler from AxonIQ Console invocation. Skipping registration of message.", e)
     null
 }
 

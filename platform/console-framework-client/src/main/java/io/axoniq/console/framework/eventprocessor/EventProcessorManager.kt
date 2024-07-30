@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,13 +88,13 @@ class EventProcessorManager(
         while (loop < 300) {
             Thread.sleep(100)
             if (processor.processingStatus().containsKey(segmentId)) {
-                logger.info("Processor [${processor.name}] successfully claimed segment [$segmentId] in approx. [${loop * 100}ms].")
+                logger.debug("Processor [${processor.name}] successfully claimed segment [$segmentId] in approx. [${loop * 100}ms].")
                 return true
             }
             loop++
         }
 
-        logger.info("Processor [${processor.name}] failed to claim [$segmentId] in approx. [${loop * 100}ms].")
+        logger.debug("Processor [${processor.name}] failed to claim [$segmentId] in approx. [${loop * 100}ms].")
         return false
     }
 
@@ -106,13 +106,13 @@ class EventProcessorManager(
         while (loop < 300) {
             Thread.sleep(100)
             if (!processor.processingStatus().containsKey(segmentId) || processor.processingStatus().get(segmentId)!!.isErrorState) {
-                logger.info("Processor [${processor.name}] successfully unclaimed segment [$segmentId] in approx. [${loop * 100}ms].")
+                logger.debug("Processor [${processor.name}] successfully unclaimed segment [$segmentId] in approx. [${loop * 100}ms].")
                 return true
             }
             loop++
         }
 
-        logger.info("Processor [${processor.name}] failed to unclaim [$segmentId] in approx. [${loop * 100}ms].")
+        logger.debug("Processor [${processor.name}] failed to unclaim [$segmentId] in approx. [${loop * 100}ms].")
         return false
     }
 

@@ -37,12 +37,12 @@ class ServerProcessorReporter(
     }
 
     override fun onConnectedWithSettings(settings: ClientSettingsV2) {
-        logger.info { "Sending processor information every ${settings.processorReportInterval}ms to AxonIQ console" }
+        logger.debug { "Sending processor information every ${settings.processorReportInterval}ms to AxonIQ console" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {
                 this.report()
             } catch (e: Exception) {
-                logger.error("Was unable to report processor metrics: {}", e.message, e)
+                logger.debug("Was unable to report processor metrics: {}", e.message, e)
             }
         }, 0, settings.processorReportInterval, TimeUnit.MILLISECONDS)
     }

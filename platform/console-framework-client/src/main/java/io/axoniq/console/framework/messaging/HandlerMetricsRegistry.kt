@@ -57,7 +57,7 @@ class HandlerMetricsRegistry(
     }
 
     override fun onConnectedWithSettings(settings: ClientSettingsV2) {
-        logger.info { "Sending handler information every ${settings.handlerReportInterval}ms to AxonIQ console" }
+        logger.debug { "Sending handler information every ${settings.handlerReportInterval}ms to AxonIQ console" }
         this.reportTask = executor.scheduleAtFixedRate({
             try {
                 val stats = getStats()
