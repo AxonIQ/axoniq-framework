@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,12 +32,12 @@ class RSocketHandlerRegistrar(
     private val handlers: MutableList<RegisteredRsocketMessageHandler> = mutableListOf()
 
     fun registerHandlerWithoutPayload(route: String, handler: () -> Any) {
-        logger.info("Registered AxonIQ Console handler for route {}", route)
+        logger.debug("Registered AxonIQ Console handler for route {}", route)
         handlers.add(PayloadlessRegisteredRsocketMessageHandler(route, handler))
     }
 
     fun <T> registerHandlerWithPayload(route: String, payloadType: Class<T>, handler: (T) -> Any) {
-        logger.info("Registered AxonIQ Console handler for route {}", route)
+        logger.debug("Registered AxonIQ Console handler for route {}", route)
         handlers.add(PayloadRegisteredRsocketMessageHandler(route, payloadType, handler))
     }
 

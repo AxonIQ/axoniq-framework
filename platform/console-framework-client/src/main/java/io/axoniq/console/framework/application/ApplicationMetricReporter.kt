@@ -39,12 +39,12 @@ class ApplicationMetricReporter(
     }
 
     override fun onConnectedWithSettings(settings: ClientSettingsV2) {
-        logger.info { "Sending application information every ${settings.applicationReportInterval}ms to AxonIQ console" }
+        logger.debug { "Sending application information every ${settings.applicationReportInterval}ms to AxonIQ console" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {
                 this.report()
             } catch (e: Exception) {
-                logger.error("Was unable to report application metrics: {}", e.message, e)
+                logger.debug("Was unable to report application metrics: {}", e.message, e)
             }
         }, 0, settings.applicationReportInterval, TimeUnit.MILLISECONDS)
     }

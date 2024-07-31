@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,12 +61,12 @@ open class RSocketDlqResponder(
     }
 
     private fun handleDeadLetterQuery(request: DeadLetterRequest): DeadLetterResponse {
-        logger.info("Handling AxonIQ Console DEAD_LETTERS query for request [{}]", request)
+        logger.debug("Handling AxonIQ Console DEAD_LETTERS query for request [{}]", request)
         return DeadLetterResponse(deadLetterManager.deadLetters(request.processingGroup, request.offset, request.size))
     }
 
     private fun handleSequenceSizeQuery(request: DeadLetterSequenceSize): Long {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console DEAD_LETTER_SEQUENCE_SIZE query for processing group [{}]",
             request.processingGroup
         )
@@ -74,7 +74,7 @@ open class RSocketDlqResponder(
     }
 
     private fun handleDeleteSequenceCommand(request: DeadLetterSequenceDeleteRequest) {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console DELETE_FULL_DEAD_LETTER_SEQUENCE command for processing group [{}]",
             request.processingGroup
         )
@@ -82,7 +82,7 @@ open class RSocketDlqResponder(
     }
 
     private fun handleDeleteLetterCommand(request: DeadLetterSingleDeleteRequest) {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console DELETE_DEAD_LETTER_IN_SEQUENCE command for processing group [{}]",
             request.processingGroup
         )
@@ -90,7 +90,7 @@ open class RSocketDlqResponder(
     }
 
     private fun handleProcessCommand(request: DeadLetterProcessRequest): Boolean {
-        logger.info("Handling AxonIQ Console DEAD LETTERS query for processing group [{}]", request.processingGroup)
+        logger.debug("Handling AxonIQ Console DEAD LETTERS query for processing group [{}]", request.processingGroup)
         return deadLetterManager.process(request.processingGroup, request.messageIdentifier)
     }
 }

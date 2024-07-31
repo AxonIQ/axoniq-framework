@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,12 +69,12 @@ open class RSocketProcessorResponder(
     }
 
     private fun handleStart(processorName: String) {
-        logger.info("Handling AxonIQ Console START command for processor [{}]", processorName)
+        logger.debug("Handling AxonIQ Console START command for processor [{}]", processorName)
         eventProcessorManager.start(processorName)
     }
 
     private fun handleStop(processorName: String) {
-        logger.info("Handling AxonIQ Console STOP command for processor [{}]", processorName)
+        logger.debug("Handling AxonIQ Console STOP command for processor [{}]", processorName)
         eventProcessorManager.stop(processorName)
     }
 
@@ -89,7 +89,7 @@ open class RSocketProcessorResponder(
     }
 
     fun handleRelease(processorSegmentId: ProcessorSegmentId) {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console RELEASE command for processor [{}] and segment [{}]",
             processorSegmentId.processorName,
             processorSegmentId.segmentId
@@ -98,7 +98,7 @@ open class RSocketProcessorResponder(
     }
 
     private fun handleSplit(processorSegmentId: ProcessorSegmentId): Boolean {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console SPLIT command for processor [{}] and segment [{}]",
             processorSegmentId.processorName,
             processorSegmentId.segmentId
@@ -108,7 +108,7 @@ open class RSocketProcessorResponder(
     }
 
     private fun handleMerge(processorSegmentId: ProcessorSegmentId): Boolean {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console MERGE command for processor [{}] and segment [{}]",
             processorSegmentId.processorName,
             processorSegmentId.segmentId
@@ -118,12 +118,12 @@ open class RSocketProcessorResponder(
     }
 
     private fun handleReset(resetDecision: ResetDecision) {
-        logger.info("Handling AxonIQ Console RESET command for processor [{}]", resetDecision.processorName)
+        logger.debug("Handling AxonIQ Console RESET command for processor [{}]", resetDecision.processorName)
         eventProcessorManager.resetTokens(resetDecision)
     }
 
     fun handleClaim(processorSegmentId: ProcessorSegmentId): Boolean {
-        logger.info(
+        logger.debug(
             "Handling AxonIQ Console CLAIM command for processor [{}] and segment [{}]",
             processorSegmentId.processorName,
             processorSegmentId.segmentId

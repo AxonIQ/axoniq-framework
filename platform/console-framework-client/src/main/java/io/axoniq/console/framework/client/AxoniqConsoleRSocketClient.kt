@@ -77,6 +77,7 @@ class AxoniqConsoleRSocketClient(
     private var rsocket: RSocket? = null
     private var lastConnectionTry = Instant.EPOCH
     private var connectionRetryCount = 0
+    private var hasConnected = false
 
     init {
         clientSettingsService.subscribeToSettings(heartbeatOrchestrator)
@@ -131,7 +132,7 @@ class AxoniqConsoleRSocketClient(
             }
             connectionRetryCount += 1
             lastConnectionTry = Instant.now()
-            logger.info("Connecting to AxonIQ Console...")
+            logger.debug("Connecting to AxonIQ Console...")
             connectSafely()
         }
     }
@@ -146,8 +147,11 @@ class AxoniqConsoleRSocketClient(
             logger.info("Connection to AxonIQ Console set up successfully! Settings: $settings")
             connectionRetryCount = 0
         } catch (e: Exception) {
+            if(connectionRetryCount == 5) {
+                logger.error("Failed to connect to AxonIQ Console. Error: ${e.message}. Will keep trying to connect...")
+            }
             disposeCurrentConnection()
-            logger.info("Failed to connect to AxonIQ Console", e)
+            logger.debug("Failed to connect to AxonIQ Console", e)
         }
     }
 
@@ -255,7 +259,7 @@ class AxoniqConsoleRSocketClient(
         }
 
         override fun onDisconnected() {
-            logger.info("Disconnected, stopping heartbeat tasks")
+            logger.info("This application has lost it's connection to AxonIQ Console. Reconnection will be automatically attempted.")
             this.heartbeatSendTask?.cancel(true)
             this.heartbeatCheckTask?.cancel(true)
         }
@@ -263,7 +267,7 @@ class AxoniqConsoleRSocketClient(
 
         private fun checkHeartbeats(heartbeatTimeout: Long) {
             if (lastReceivedHeartbeat < Instant.now().minusMillis(heartbeatTimeout)) {
-                logger.info("Haven't received a heartbeat for {} seconds from AxonIQ Console. Reconnecting...", ChronoUnit.SECONDS.between(lastReceivedHeartbeat, Instant.now()))
+                logger.debug("Haven't received a heartbeat for {} seconds from AxonIQ Console. Reconnecting...", ChronoUnit.SECONDS.between(lastReceivedHeartbeat, Instant.now()))
                 disposeCurrentConnection()
             }
         }
@@ -286,7 +290,7 @@ class AxoniqConsoleRSocketClient(
                 }
                 .doOnError {
                     if (it.message?.contains("Access Denied") == true) {
-                        logger.info("Was unable to send call to AxonIQ Console since authentication was incorrect!")
+                        logger.error("Was unable to send call to AxonIQ Console since authentication was incorrect!")
                     }
                 }
     }
