@@ -36,7 +36,6 @@ import java.time.Instant
  */
 class AxoniqConsoleWrappedEventScheduler(
         private val delegate: EventScheduler,
-        private val registry: HandlerMetricsRegistry,
         private val componentName: String,
 ) : EventScheduler, Lifecycle {
     override fun schedule(triggerDateTime: Instant, event: Any): ScheduleToken {
@@ -86,7 +85,7 @@ class AxoniqConsoleWrappedEventScheduler(
     }
 
     private fun reportMessageDispatchedFromOrigin(originName: String, event: Any) {
-        registry.registerMessageDispatchedDuringHandling(
+        HandlerMetricsRegistry.getInstance()?.registerMessageDispatchedDuringHandling(
                 DispatcherStatisticIdentifier(HandlerStatisticsMetricIdentifier(
                         type = HandlerType.Origin,
                         component = originName,

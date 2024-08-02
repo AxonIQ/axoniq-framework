@@ -236,7 +236,6 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                     EventScheduler.class,
                     c -> new AxoniqConsoleWrappedEventScheduler(
                             eventScheduler,
-                            c.getComponent(HandlerMetricsRegistry.class),
                             applicationName));
         }
 
