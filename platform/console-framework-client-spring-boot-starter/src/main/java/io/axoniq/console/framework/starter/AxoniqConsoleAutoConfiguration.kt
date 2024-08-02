@@ -18,7 +18,6 @@ package io.axoniq.console.framework.starter
 
 import io.axoniq.console.framework.AxoniqConsoleConfigurerModule
 import io.axoniq.console.framework.messaging.AxoniqConsoleWrappedEventScheduler
-import io.axoniq.console.framework.messaging.HandlerMetricsRegistry
 import io.axoniq.console.framework.messaging.SpanMatcher.Companion.getSpanMatcherPredicateMap
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
 import io.axoniq.console.framework.util.PostProcessHelper
@@ -89,13 +88,12 @@ class AxoniqConsoleAutoConfiguration {
     @ConditionalOnProperty("axoniq.console.credentials", matchIfMissing = false)
     fun axoniqConsoleSpanFactoryPostProcessor(
             spanMatcherPredicateMap: SpanMatcherPredicateMap,
-            configuration: org.axonframework.config.Configuration,
             properties: AxoniqConsoleSpringProperties,
             applicationContext: ApplicationContext
     ): BeanPostProcessor = object : BeanPostProcessor {
         override fun postProcessAfterInitialization(bean: Any, beanName: String): Any {
             return when (bean) {
-                is EventScheduler -> enhanceEventScheduler(bean, configuration, properties, applicationContext)
+                is EventScheduler -> enhanceEventScheduler(bean, properties, applicationContext)
                 else -> PostProcessHelper.enhance(bean, beanName, spanMatcherPredicateMap)
             }
         }
@@ -103,7 +101,6 @@ class AxoniqConsoleAutoConfiguration {
 
     private fun enhanceEventScheduler(
             eventScheduler: EventScheduler,
-            configuration: org.axonframework.config.Configuration,
             properties: AxoniqConsoleSpringProperties,
             applicationContext: ApplicationContext
     ): EventScheduler {
@@ -111,7 +108,7 @@ class AxoniqConsoleAutoConfiguration {
             eventScheduler
         } else {
             getApplicationName(properties, applicationContext)?.let {
-                AxoniqConsoleWrappedEventScheduler(eventScheduler, configuration.getComponent(HandlerMetricsRegistry::class.java), it)
+                AxoniqConsoleWrappedEventScheduler(eventScheduler, it)
             } ?: eventScheduler
         }
     }
