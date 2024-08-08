@@ -30,7 +30,6 @@ class ProcessorReportCreator(
         private val metricsRegistry: ProcessorMetricsRegistry,
 ) {
     companion object {
-        const val TENANT_SEPARATOR = "~t~"
         const val MULTI_TENANT_PROCESSOR_CLASS = "org.axonframework.extensions.multitenancy.components.eventhandeling.MultiTenantEventProcessor"
     }
 
@@ -40,7 +39,7 @@ class ProcessorReportCreator(
                         when (val processor = entry.value) {
                             is StreamingEventProcessor -> listOf(streamingStatus(entry.key, processor))
                             is SubscribingEventProcessor -> listOf(subscribingStatus(entry.key, processor))
-                            else -> extractTenantProcessorsOrDefault(entry.key, processor)
+                            else -> ignoreMultiTenantProcessorOrDefault(entry.key, processor)
                         }
                     }
     )
@@ -84,24 +83,14 @@ class ProcessorReportCreator(
                     emptyList(),
             )
 
-
-    private fun extractTenantProcessorsOrDefault(name: String, processor: EventProcessor): List<ProcessorStatus> {
+    /**
+     * In the case of the multi tenant event processor, they are also registered individually. So we can ignore the
+     * combining event processor containing a map which each individual tenant.
+     */
+    private fun ignoreMultiTenantProcessorOrDefault(name: String, processor: EventProcessor): List<ProcessorStatus> {
         return if (processor.javaClass.name == MULTI_TENANT_PROCESSOR_CLASS) {
-            val segmentsField = ReflectionUtils.fieldsOf(processor.javaClass).first { it.name == "tenantEventProcessorsSegments" }
-            val segments = ReflectionUtils.getFieldValue(segmentsField, processor) as Map<Any, EventProcessor>
-            segments.map { toStatus(name, it) }
+            emptyList()
         } else listOf(defaultStatus(name, processor))
-    }
-
-    private fun toStatus(name: String, entry: Map.Entry<Any, EventProcessor>): ProcessorStatus {
-        val tenantIdField = ReflectionUtils.fieldsOf(entry.key.javaClass).first { it.name == "tenantId" }
-        val tenantId = ReflectionUtils.getFieldValue(tenantIdField, entry.key) as String
-        val combinedName = "${name}${TENANT_SEPARATOR}${tenantId}"
-        return when (val processor = entry.value) {
-            is StreamingEventProcessor -> streamingStatus(combinedName, processor)
-            is SubscribingEventProcessor -> subscribingStatus(combinedName, processor)
-            else -> defaultStatus(combinedName, processor)
-        }
     }
 
     fun createSegmentOverview(processorName: String): SegmentOverview {
