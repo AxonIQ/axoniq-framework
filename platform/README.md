@@ -49,8 +49,7 @@ The following data will be sent to the servers of AxonIQ:
   - Occurs upon user request
   - Disabled by default
 
-If you are concerned about the message data being sent to AxonIQ, please contact us at,
-disabling the DLQ functionality will prevent that in all cases.
+If you are concerned about the message data being sent to AxonIQ, disabling the DLQ functionality will prevent that in all cases.
 
 ## How to Release
 
