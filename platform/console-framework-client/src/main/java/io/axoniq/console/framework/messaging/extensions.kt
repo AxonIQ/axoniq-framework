@@ -6,7 +6,7 @@
  * You may obtain a copy of the License at
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *    
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -57,11 +57,13 @@ fun String.toSimpleName() = split(".").last()
 
 fun UnitOfWork<*>.extractHandler(declaringClassName: String, processingGroup: String?): HandlerStatisticsMetricIdentifier? = try {
     val isAggregate = message is CommandMessage<*> && isAggregateLifecycleActive()
-    val isProcessor = processingGroup != null
+
+    val processorName = AxoniqConsoleSpanFactory.currentSpan()?.processorName
+    val isProcessor = processorName != null
 
     val component = when {
         isAggregate -> (AggregateLifecycle.describeCurrentScope() as AggregateScopeDescriptor).type
-        isProcessor -> processingGroup ?: AxoniqConsoleSpanFactory.currentSpan()?.processorName
+        isProcessor -> createCombinedProcessorAndGroupIdentifier(processorName!!, processingGroup)
         else -> declaringClassName
     }
     val type = when {
@@ -77,6 +79,17 @@ fun UnitOfWork<*>.extractHandler(declaringClassName: String, processingGroup: St
 } catch (e: Exception) {
     logger.debug("Could not extract handler from AxonIQ Console invocation. Skipping registration of message.", e)
     null
+}
+
+/**
+ * If the processing group name differents from the processor, we can assume multiple groups are under the same one.
+ * Using the [::] operator to separate the processor name from the processing group, we can filter in the UI.
+ */
+fun createCombinedProcessorAndGroupIdentifier(processorName: String, processingGroup: String?): String {
+    if (processingGroup == null || processingGroup == processorName) {
+        return processorName
+    }
+    return "$processorName::$processingGroup"
 }
 
 

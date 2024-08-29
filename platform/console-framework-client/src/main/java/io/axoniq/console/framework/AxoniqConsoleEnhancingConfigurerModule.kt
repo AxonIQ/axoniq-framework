@@ -6,7 +6,7 @@
  * You may obtain a copy of the License at
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *    
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,9 +21,11 @@ import io.axoniq.console.framework.application.BusType
 import io.axoniq.console.framework.application.MeasuringExecutorServiceDecorator
 import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
 import io.axoniq.console.framework.util.PostProcessHelper
+import org.axonframework.commandhandling.CommandBus
 import org.axonframework.common.ReflectionUtils
 import org.axonframework.config.Configurer
 import org.axonframework.config.ConfigurerModule
+import org.axonframework.queryhandling.QueryBus
 import java.lang.reflect.Field
 import java.util.concurrent.ExecutorService
 
@@ -31,11 +33,14 @@ class AxoniqConsoleEnhancingConfigurerModule(private val spanMatcherPredicateMap
     override fun configureModule(configurer: Configurer) {
         configurer.onInitialize { configuration ->
             configuration.onStart {
+                enhance(configuration.spanFactory())
                 enhance(configuration.eventStore())
                 enhance(configuration.commandBus())
-                enhanceExecutorService(configuration.commandBus(), BusType.COMMAND, configuration.getComponent(ApplicationMetricRegistry::class.java))
+                val commandBus = configuration.commandBus().unwrapPossiblyDecoratedClass(CommandBus::class.java)
+                enhanceExecutorService(commandBus, BusType.COMMAND, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryBus())
-                enhanceExecutorService(configuration.queryBus(), BusType.QUERY, configuration.getComponent(ApplicationMetricRegistry::class.java))
+                val queryBus = configuration.queryBus().unwrapPossiblyDecoratedClass(QueryBus::class.java)
+                enhanceExecutorService(queryBus, BusType.QUERY, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryUpdateEmitter())
                 enhance(configuration.snapshotter())
                 enhance(configuration.deadlineManager())
