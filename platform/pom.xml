@@ -22,7 +22,7 @@
 
     <groupId>io.axoniq.console</groupId>
     <artifactId>console-framework-client-parent</artifactId>
-    <version>1.7.3-SNAPSHOT</version>
+    <version>1.7.3</version>
 
     <modules>
         <module>console-framework-client-api</module>
