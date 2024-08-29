@@ -6,7 +6,7 @@
  * You may obtain a copy of the License at
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *    
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,7 +37,7 @@ private fun <T : Any> T.fieldOfMatchingType(clazz: Class<out T>): Field? {
     // When we reach our own AS-classes, stop unwrapping
     if (this::class.java.name.startsWith("org.axonframework") && this::class.java.simpleName.startsWith("AxonServer")) return null
     return ReflectionUtils.fieldsOf(this::class.java)
-        .firstOrNull { f -> f.type.isAssignableFrom(clazz) }
+        .firstOrNull { f -> clazz.isAssignableFrom(f.type) }
 }
 
 fun <K, V> MutableMap<K, V>.computeIfAbsentWithRetry(key: K, retries: Int = 0, defaultValue: (K) -> V): V {
