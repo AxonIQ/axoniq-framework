@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ *    
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -125,18 +125,19 @@ class SetupPayloadCreator(
         if (messageSource == null) {
             return UnspecifiedMessageSourceInformation("Unknown")
         }
+        val unwrapped = messageSource.unwrapPossiblyDecoratedClass(StreamableMessageSource::class.java)
         return when {
-            messageSource is MultiStreamableMessageSource -> MultiStreamableMessageSourceInformation(
+            unwrapped is MultiStreamableMessageSource -> MultiStreamableMessageSourceInformation(
                     messageSource::class.java.name,
                     messageSource.getPropertyValue<List<StreamableMessageSource<*>>>("eventStreams")?.map { toMessageSource(processor, it) }
                             ?: emptyList()
             )
 
-            messageSource is EmbeddedEventStore -> createEmbeddedMessageSourceInformation(messageSource)
-            messageSource::class.java.simpleName == "AxonServerEventStore" -> createAxonServerMessageSourceInfoFromStore(messageSource)
-            messageSource::class.java.simpleName == "AxonServerMessageSource" -> createAxonServerMessageSourceInfoFromMessageSource(messageSource)
-            messageSource::class.java.simpleName == "AxonIQEventStorageEngine" -> createAxonServerMessageSourceInfoFromStorageEngine(messageSource)
-            else -> UnspecifiedMessageSourceInformation(messageSource::class.java.name)
+            unwrapped is EmbeddedEventStore -> createEmbeddedMessageSourceInformation(unwrapped)
+            unwrapped::class.java.simpleName == "AxonServerEventStore" -> createAxonServerMessageSourceInfoFromStore(unwrapped)
+            unwrapped::class.java.simpleName == "AxonServerMessageSource" -> createAxonServerMessageSourceInfoFromMessageSource(unwrapped)
+            unwrapped::class.java.simpleName == "AxonIQEventStorageEngine" -> createAxonServerMessageSourceInfoFromStorageEngine(unwrapped)
+            else -> UnspecifiedMessageSourceInformation(unwrapped::class.java.name)
         }
     }
 
@@ -171,8 +172,8 @@ class SetupPayloadCreator(
         return EmbeddedEventStoreMessageSourceInformation(
                 className = messageSource::class.java.name,
                 optimizeEventConsumption = messageSource.getPropertyValue("optimizeEventConsumption"),
-                fetchDelay = messageSource.getPropertyValue<Int?>("producer")?.getPropertyValue<Long>("fetchDelayNanos")?.let { it / 1_000_000 },
-                cachedEvents = messageSource.getPropertyValue<Int?>("producer")?.getPropertyValue("cachedEvents"),
+                fetchDelay = messageSource.getPropertyValue<Any?>("producer")?.getPropertyValue<Long>("fetchDelayNanos")?.let { it / 1_000_000 },
+                cachedEvents = messageSource.getPropertyValue<Any?>("producer")?.getPropertyValue<Int>("cachedEvents"),
                 cleanupDelay = messageSource.getPropertyValue("cleanupDelayMillis"),
                 eventStorageEngineType = messageSource.getPropertyType("storageEngine")
 
