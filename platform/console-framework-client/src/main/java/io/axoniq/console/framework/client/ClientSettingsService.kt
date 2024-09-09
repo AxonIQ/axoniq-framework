@@ -16,7 +16,6 @@
 
 package io.axoniq.console.framework.client
 
-import io.axoniq.console.framework.api.ClientSettings
 import io.axoniq.console.framework.api.ClientSettingsV2
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -28,7 +27,7 @@ class ClientSettingsService {
     private var settings: ClientSettingsV2? = null
 
     fun clearSettings() {
-        if(settings != null) {
+        if (settings != null) {
             settings = null
             observers.forEach { it.onDisconnected() }
         }
@@ -36,7 +35,7 @@ class ClientSettingsService {
 
     fun subscribeToSettings(observer: ClientSettingsObserver) {
         this.observers.add(observer)
-        if(settings != null) {
+        if (settings != null) {
             observer.onConnectedWithSettings(settings!!)
         }
     }

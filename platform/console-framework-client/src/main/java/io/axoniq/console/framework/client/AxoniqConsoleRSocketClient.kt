@@ -16,9 +16,9 @@
 
 package io.axoniq.console.framework.client
 
-import io.axoniq.console.framework.api.ClientSettings
 import io.axoniq.console.framework.api.ClientSettingsV2
 import io.axoniq.console.framework.api.Routes
+import io.axoniq.console.framework.api.notifications.Notification
 import io.axoniq.console.framework.api.notifications.NotificationLevel
 import io.axoniq.console.framework.api.notifications.NotificationList
 import io.axoniq.console.framework.client.strategy.RSocketPayloadEncodingStrategy
@@ -77,7 +77,7 @@ class AxoniqConsoleRSocketClient(
     private var rsocket: RSocket? = null
     private var lastConnectionTry = Instant.EPOCH
     private var connectionRetryCount = 0
-    private var hasConnected = false
+    private var pausedReports = false
 
     init {
         clientSettingsService.subscribeToSettings(heartbeatOrchestrator)
@@ -85,6 +85,21 @@ class AxoniqConsoleRSocketClient(
         // Server can send updated settings if necessary
         registrar.registerHandlerWithPayload(Routes.Management.SETTINGS, ClientSettingsV2::class.java) {
             clientSettingsService.updateSettings(it)
+        }
+
+        // Server can block and unblock reports
+        registrar.registerHandlerWithoutPayload(Routes.Management.STOP_REPORTS) {
+            pausedReports = true
+            true
+        }
+        registrar.registerHandlerWithoutPayload(Routes.Management.START_REPORTS) {
+            pausedReports = false
+            true
+        }
+
+        // Server can send log requests
+        registrar.registerHandlerWithPayload(Routes.Management.LOG, Notification::class.java) {
+            logger.logNotification(it)
         }
     }
 
@@ -94,18 +109,26 @@ class AxoniqConsoleRSocketClient(
     }
 
     /**
-     * Sends a message to the AxonIQ Console. If there is no connection active, does nothing silently.
-     * The connection will automatically be setup. Losing a few reports is no problem.
+     * Sends a report to AxonIQ Console
      */
-    fun send(route: String, payload: Any): Mono<Unit> {
-        return rsocket
-                ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
-                ?.map {
-                    val notifications = encodingStrategy.decode(it, NotificationList::class.java)
-                    logger.log(notifications)
-                }
-                ?: Mono.empty()
+    fun sendReport(route: String, payload: Any): Mono<Unit> {
+        if(pausedReports) {
+            return Mono.empty()
+        }
+        return sendMessage(payload, route)
     }
+
+    /**
+     * Sends a message to the AxonIQ Console. If there is no connection active, does nothing silently.
+     * Do not use this method for reports, as it does not check if reports are paused. Use [sendReport] instead.
+     */
+    fun sendMessage(payload: Any, route: String) = (rsocket
+            ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
+            ?.map {
+                val notifications = encodingStrategy.decode(it, NotificationList::class.java)
+                logger.log(notifications)
+            }
+            ?: Mono.empty())
 
     /**
      * Starts the connection, and starts the maintenance task.
@@ -147,7 +170,7 @@ class AxoniqConsoleRSocketClient(
             logger.info("Connection to AxonIQ Console set up successfully! Settings: $settings")
             connectionRetryCount = 0
         } catch (e: Exception) {
-            if(connectionRetryCount == 5) {
+            if (connectionRetryCount == 5) {
                 logger.error("Failed to connect to AxonIQ Console. Error: ${e.message}. Will keep trying to connect...")
             }
             disposeCurrentConnection()
@@ -264,7 +287,6 @@ class AxoniqConsoleRSocketClient(
             this.heartbeatCheckTask?.cancel(true)
         }
 
-
         private fun checkHeartbeats(heartbeatTimeout: Long) {
             if (lastReceivedHeartbeat < Instant.now().minusMillis(heartbeatTimeout)) {
                 logger.debug("Haven't received a heartbeat for {} seconds from AxonIQ Console. Reconnecting...", ChronoUnit.SECONDS.between(lastReceivedHeartbeat, Instant.now()))
@@ -297,11 +319,16 @@ class AxoniqConsoleRSocketClient(
 
     private fun Logger.log(notificationList: NotificationList) {
         notificationList.messages.forEach {
-            when (it.level) {
-                NotificationLevel.Debug -> this.debug(it.message)
-                NotificationLevel.Info -> this.info(it.message)
-                NotificationLevel.Warn -> this.warn(it.message)
-            }
+            logNotification(it)
+        }
+    }
+
+    private fun Logger.logNotification(it: Notification) {
+        val text = it.message
+        when (it.level) {
+            NotificationLevel.Debug -> this.debug(text)
+            NotificationLevel.Info -> this.info(text)
+            NotificationLevel.Warn -> this.warn(text)
         }
     }
 }

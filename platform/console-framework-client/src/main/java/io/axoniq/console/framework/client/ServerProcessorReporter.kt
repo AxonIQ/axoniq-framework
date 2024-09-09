@@ -48,7 +48,7 @@ class ServerProcessorReporter(
     }
 
     private fun report() {
-        client.send(io.axoniq.console.framework.api.Routes.EventProcessor.REPORT, processorReportCreator.createReport()).block()
+        client.sendReport(io.axoniq.console.framework.api.Routes.EventProcessor.REPORT, processorReportCreator.createReport()).block()
     }
 
     override fun onDisconnected() {

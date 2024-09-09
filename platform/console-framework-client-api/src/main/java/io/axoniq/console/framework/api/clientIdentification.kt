@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2024. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -95,7 +95,12 @@ data class SetupPayload(
 )
 
 data class SupportedFeatures(
+        /* Whether the client supports heartbeats to keep the connection alive.*/
         val heartbeat: Boolean? = false,
+        /* Whether the client supports direct logging.*/
+        val logDirect: Boolean? = false,
+        /* Whether the client supports pause/resume of reports.*/
+        val pauseReports: Boolean? = false,
 )
 
 data class Versions(

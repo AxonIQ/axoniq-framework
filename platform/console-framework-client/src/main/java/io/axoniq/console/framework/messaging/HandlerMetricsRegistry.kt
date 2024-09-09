@@ -62,7 +62,7 @@ class HandlerMetricsRegistry(
             try {
                 val stats = getStats()
                 logger.debug("Sending metrics: {}", stats)
-                axoniqConsoleRSocketClient.send(io.axoniq.console.framework.api.Routes.MessageFlow.STATS, stats).block()
+                axoniqConsoleRSocketClient.sendReport(io.axoniq.console.framework.api.Routes.MessageFlow.STATS, stats).block()
             } catch (e: Exception) {
                 logger.warn("No metrics could be reported to AxonIQ Console: {}", e.message)
             }
