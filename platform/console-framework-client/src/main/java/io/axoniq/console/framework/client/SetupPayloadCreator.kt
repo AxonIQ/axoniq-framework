@@ -204,7 +204,10 @@ class SetupPayloadCreator(
         val batchSize = persistentStreamConnection.getPropertyValue<Int>("batchSize")
 
         val sequencingPolicy = persistentStreamProperties.getPropertyValue<String>("sequencingPolicyName")
-        val sequencingPolicyParameters = persistentStreamProperties.getPropertyValue<String>("sequencingPolicyParameters")
+        val sequencingPolicyParameters = persistentStreamProperties
+                .getPropertyValue<List<String>>("sequencingPolicyParameters")
+                ?.reduceOrNull { acc, s -> "$acc,$s" }
+                ?: "none"
         val query = persistentStreamProperties.getPropertyValue<String>("filter")
 
         return PersistentStreamMessageSourceInformation(
