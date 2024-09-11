@@ -177,6 +177,7 @@ data class EventProcessorInformation(
         JsonSubTypes.Type(value = AxonServerEventStoreMessageSourceInformation::class, name = "AxonServer"),
         JsonSubTypes.Type(value = EmbeddedEventStoreMessageSourceInformation::class, name = "Embedded"),
         JsonSubTypes.Type(value = MultiStreamableMessageSourceInformation::class, name = "MultiStreamable"),
+        JsonSubTypes.Type(value = PersistentStreamMessageSourceInformation::class, name = "PersistentStream"),
         JsonSubTypes.Type(value = UnspecifiedMessageSourceInformation::class, name = "Unspecified"),
 )
 interface MessageSourceInformation {
@@ -202,10 +203,19 @@ data class MultiStreamableMessageSourceInformation(
         val sources: List<MessageSourceInformation>,
 ) : MessageSourceInformation
 
+data class PersistentStreamMessageSourceInformation(
+        override val className: String,
+        val context: String?,
+        val streamIdentifier: String?,
+        val batchSize: Int?,
+        val sequencingPolicy: String?,
+        val sequencingPolicyParameters: String?,
+        val query: String?,
+) : MessageSourceInformation
+
 data class UnspecifiedMessageSourceInformation(
         override val className: String,
 ) : MessageSourceInformation
-
 
 enum class ProcessorType {
     SUBSCRIBING,
