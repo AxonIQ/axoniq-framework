@@ -24,6 +24,12 @@ object Routes {
         const val SETTINGS_V2 = "client-settings-v2"
         // Route on both client and server to receive/send heartbeats
         const val HEARTBEAT = "client-heartbeat"
+        // Request to log something in the application
+        const val LOG = "client-log"
+        // Request to stop sending reports to the server in case a client goes over the limit and credits
+        const val STOP_REPORTS = "client-reporting-stop"
+        // Request to start sending reports again.
+        const val START_REPORTS = "client-reporting-start"
     }
 
     object EventProcessor {
