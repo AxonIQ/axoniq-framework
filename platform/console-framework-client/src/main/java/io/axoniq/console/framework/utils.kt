@@ -26,18 +26,19 @@ import java.time.Duration
  * Useful for when users wrap components as decorators, like Axon FireStarter does.
  */
 fun <T : Any> T.unwrapPossiblyDecoratedClass(clazz: Class<out T>): T {
-    return fieldOfMatchingType(clazz)
-        ?.let { ReflectionUtils.getFieldValue(it, this) as T }
-        ?.unwrapPossiblyDecoratedClass(clazz)
-    // No field of provided type - reached end of decorator chain
-        ?: this
+    return fieldsOfMatchingType(clazz)
+            .mapNotNull { ReflectionUtils.getFieldValue(it, this) as T? }
+            .map { it.unwrapPossiblyDecoratedClass(clazz) }
+            .firstOrNull()
+            // No field of provided type - reached end of decorator chain
+            ?: this
 }
 
-private fun <T : Any> T.fieldOfMatchingType(clazz: Class<out T>): Field? {
+private fun <T : Any> T.fieldsOfMatchingType(clazz: Class<out T>): List<Field> {
     // When we reach our own AS-classes, stop unwrapping
-    if (this::class.java.name.startsWith("org.axonframework") && this::class.java.simpleName.startsWith("AxonServer")) return null
+    if (this::class.java.name.startsWith("org.axonframework") && this::class.java.simpleName.startsWith("AxonServer")) return listOf()
     return ReflectionUtils.fieldsOf(this::class.java)
-        .firstOrNull { f -> clazz.isAssignableFrom(f.type) }
+            .filter { f -> clazz.isAssignableFrom(f.type) }
 }
 
 fun <K, V> MutableMap<K, V>.computeIfAbsentWithRetry(key: K, retries: Int = 0, defaultValue: (K) -> V): V {
