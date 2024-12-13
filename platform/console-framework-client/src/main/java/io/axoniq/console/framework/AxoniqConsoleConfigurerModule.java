@@ -55,6 +55,7 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -86,6 +87,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final SpanMatcherPredicateMap spanMatcherPredicateMap;
     private final EventScheduler eventScheduler;
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final String instanceName;
 
     /**
      * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}.
@@ -96,6 +98,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.environmentId = builder.environmentId;
         this.accessToken = builder.accessToken;
         this.applicationName = builder.applicationName.replaceAll("([\\[\\]])", "-");
+        this.instanceName = builder.hostname + "-" + builder.nodeId;
         this.host = builder.host;
         this.port = builder.port;
         this.secure = builder.secure;
@@ -182,7 +185,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                            c.getComponent(RSocketPayloadEncodingStrategy.class),
                                            c.getComponent(ClientSettingsService.class),
                                            reportingTaskExecutor,
-                                           ManagementFactory.getRuntimeMXBean().getName()
+                                           instanceName
                                    )
                 )
                 .registerComponent(ServerProcessorReporter.class,
@@ -282,6 +285,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private String host = "framework.console.axoniq.io";
         private Boolean secure = true;
         private Integer port = 7000;
+        private String hostname = ManagementFactory.getRuntimeMXBean().getName();
+        private String nodeId = randomNodeId();
         private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.NONE;
         private final List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
         private Long initialDelay = 0L;
@@ -312,6 +317,30 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             this.environmentId = environmentId;
             this.accessToken = accessToken;
             this.applicationName = applicationName;
+        }
+
+        /**
+         * The hostname of the application. Defaults to the runtime name of the JVM.
+         * Needs to be unique in combination with the {@code nodeId}.
+         * @param hostname The hostname of the application
+         * @return The builder for fluent interfacing
+         */
+        public Builder hostname(String hostname) {
+            BuilderUtils.assertNonEmpty(hostname, "Hostname may not be null or empty");
+            this.hostname = hostname;
+            return this;
+        }
+
+        /**
+         * The node id of the application. Defaults to a random four character string.
+         * This is to prevent conflicts when multiple instances of the same application are running on the same host.
+         * @param nodeId The node id of the application
+         * @return The builder for fluent interfacing
+         */
+        public Builder nodeId(String nodeId) {
+            BuilderUtils.assertNonEmpty(nodeId, "Node id may not be null or empty");
+            this.nodeId = nodeId;
+            return this;
         }
 
         /**
@@ -503,6 +532,11 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                 );
             }
             return new AxoniqConsoleConfigurerModule(this);
+        }
+
+        private String randomNodeId() {
+            String uuid = UUID.randomUUID().toString();
+            return uuid.substring(uuid.length() - 4);
         }
     }
 }
