@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,6 +121,7 @@ class ProcessorReportCreator(
             errorMessage = this.error?.message,
             ingestLatency = metricsRegistry.ingestLatencyForProcessor(name, this.segment.segmentId).getValue(),
             commitLatency = metricsRegistry.commitLatencyForProcessor(name, this.segment.segmentId).getValue(),
+            processingLatency = metricsRegistry.processingMessageLatencyForProcessor(name, this.segment.segmentId)?.toDouble() ?: -1.0,
             position = this.currentPosition?.orElse(-1) ?: -1,
             resetPosition = this.resetPosition?.orElse(-1) ?: -1,
     )
