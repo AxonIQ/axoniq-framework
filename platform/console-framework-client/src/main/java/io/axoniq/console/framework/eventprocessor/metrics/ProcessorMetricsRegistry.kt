@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,10 @@
 package io.axoniq.console.framework.eventprocessor.metrics
 
 import io.axoniq.console.framework.computeIfAbsentWithRetry
+import org.axonframework.messaging.unitofwork.CurrentUnitOfWork
 import java.time.Clock
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -25,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference
 class ProcessorMetricsRegistry {
     private val ingestLatencyRegistry: MutableMap<String, MutableMap<Int, ExpiringLatencyValue>> = ConcurrentHashMap()
     private val commitLatencyRegistry: MutableMap<String, MutableMap<Int, ExpiringLatencyValue>> = ConcurrentHashMap()
+    private val processingLatencyRegistry: MutableMap<String, MutableMap<Int, Instant?>> = ConcurrentHashMap()
 
     fun registerIngested(processor: String, segment: Int, latencyInNanos: Long) {
         ingestLatencyForProcessor(processor, segment).setValue(latencyInNanos.toDouble() / 1000000)
@@ -34,17 +38,43 @@ class ProcessorMetricsRegistry {
         commitLatencyForProcessor(processor, segment).setValue(latencyInNanos.toDouble() / 1000000)
     }
 
+    fun <T> doWithActiveMessageForSegment(processor: String, segment: Int, messageTimestamp: Instant, action: () -> T?): T? {
+        val processingMessageTimestampsForSegment = getProcessingLatencySegmentMap(processor)
+
+        try {
+            processingMessageTimestampsForSegment[segment] = messageTimestamp
+            return action()
+        } finally {
+            CurrentUnitOfWork.get().afterCommit {
+                getProcessingLatencySegmentMap(processor)
+                        .remove(segment)
+            }
+        }
+    }
+
     fun ingestLatencyForProcessor(processor: String, segment: Int): ExpiringLatencyValue {
         return ingestLatencyRegistry
-            .computeIfAbsentWithRetry(processor) { mutableMapOf() }
-            .computeIfAbsentWithRetry(segment) { ExpiringLatencyValue() }
+                .computeIfAbsentWithRetry(processor) { ConcurrentHashMap() }
+                .computeIfAbsentWithRetry(segment) { ExpiringLatencyValue() }
     }
 
     fun commitLatencyForProcessor(processor: String, segment: Int): ExpiringLatencyValue {
         return commitLatencyRegistry
-            .computeIfAbsentWithRetry(processor) { mutableMapOf() }
-            .computeIfAbsentWithRetry(segment) { ExpiringLatencyValue() }
+                .computeIfAbsentWithRetry(processor) { ConcurrentHashMap() }
+                .computeIfAbsentWithRetry(segment) { ExpiringLatencyValue() }
     }
+
+    fun processingMessageLatencyForProcessor(processor: String, segment: Int): Long? {
+        val processingTimestamp = getProcessingLatencySegmentMap(processor)
+                .computeIfAbsentWithRetry(segment) { null }
+        if (processingTimestamp == null) {
+            return null
+        }
+        return ChronoUnit.MILLIS.between(processingTimestamp, Instant.now())
+    }
+
+    private fun getProcessingLatencySegmentMap(processor: String) = processingLatencyRegistry
+            .computeIfAbsentWithRetry(processor) { ConcurrentHashMap() }
 
     class ExpiringLatencyValue(
         private val expiryTime: Long = 30 * 60 * 1000 // Default to 1 hour

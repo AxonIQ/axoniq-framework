@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 class AxoniqConsoleProcessorInterceptor(
-    private val processorMetricsRegistry: ProcessorMetricsRegistry,
-    private val processorName: String,
+        private val processorMetricsRegistry: ProcessorMetricsRegistry,
+        private val processorName: String,
 ) : MessageHandlerInterceptor<Message<*>> {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -40,31 +40,36 @@ class AxoniqConsoleProcessorInterceptor(
         if (uow == null || unitOfWork.message.payload is UnknownSerializedType) {
             return interceptorChain.proceed()
         }
+        val message = unitOfWork.message
+        if (message !is EventMessage) {
+            return interceptorChain.proceed()
+        }
         try {
             AxoniqConsoleSpanFactory.onTopLevelSpanIfActive {
                 it.reportProcessorName(processorName)
             }
-            val message = unitOfWork.message
-            if (message is EventMessage) {
-                val segment = unitOfWork.resources()["Processor[$processorName]/SegmentId"] as? Int ?: -1
-                processorMetricsRegistry.registerIngested(
+            val segment = unitOfWork.resources()["Processor[$processorName]/SegmentId"] as? Int ?: -1
+            processorMetricsRegistry.registerIngested(
                     processorName,
                     segment,
                     ChronoUnit.NANOS.between(message.timestamp, Instant.now())
-                )
-                if (unitOfWork !is BatchingUnitOfWork<*> || unitOfWork.isLastMessage) {
-                    unitOfWork.afterCommit {
-                        processorMetricsRegistry.registerCommitted(
+            )
+            if (unitOfWork !is BatchingUnitOfWork<*> || unitOfWork.isFirstMessage) {
+                unitOfWork.afterCommit {
+                    processorMetricsRegistry.registerCommitted(
                             processorName,
                             segment,
                             ChronoUnit.NANOS.between(message.timestamp, Instant.now())
-                        )
-                    }
+                    )
                 }
+            }
+
+            return processorMetricsRegistry.doWithActiveMessageForSegment(processorName, segment, message.timestamp) {
+                interceptorChain.proceed()
             }
         } catch (e: Exception) {
             logger.debug("AxonIQ Console could not register metrics for processor $processorName", e)
+            return interceptorChain.proceed()
         }
-        return interceptorChain.proceed()
     }
 }

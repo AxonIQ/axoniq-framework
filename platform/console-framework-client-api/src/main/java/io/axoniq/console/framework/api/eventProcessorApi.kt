@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,6 +57,7 @@ data class SegmentStatus(
         val errorMessage: String?,
         val ingestLatency: Double?,
         val commitLatency: Double?,
+        val processingLatency: Double?,
         val position: Long? = -1,
         val resetPosition: Long? = -1,
 )
