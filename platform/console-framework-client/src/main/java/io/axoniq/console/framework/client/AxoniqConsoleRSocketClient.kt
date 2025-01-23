@@ -37,6 +37,7 @@ import reactor.core.publisher.Mono
 import reactor.netty.tcp.TcpClient
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.*
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -68,7 +69,7 @@ class AxoniqConsoleRSocketClient(
         private val encodingStrategy: RSocketPayloadEncodingStrategy,
         private val clientSettingsService: ClientSettingsService,
         private val executor: ScheduledExecutorService,
-        private val nodeName: String,
+        private val instanceName: String,
 ) : Lifecycle {
     private val heartbeatOrchestrator = HeartbeatOrchestrator()
     private var maintenanceTask: ScheduledFuture<*>? = null
@@ -167,7 +168,7 @@ class AxoniqConsoleRSocketClient(
             val settings = retrieveSettings().block()
                     ?: throw IllegalStateException("Could not receive the settings from AxonIQ console!")
             clientSettingsService.updateSettings(settings)
-            logger.info("Connection to AxonIQ Console set up successfully! Settings: $settings")
+            logger.info("Connection to AxonIQ Console set up successfully! This instance's name: $instanceName, settings: $settings")
             connectionRetryCount = 0
         } catch (e: Exception) {
             if (connectionRetryCount == 5) {
@@ -183,7 +184,7 @@ class AxoniqConsoleRSocketClient(
                 identification = io.axoniq.console.framework.api.ConsoleClientIdentifier(
                         environmentId = environmentId,
                         applicationName = applicationName,
-                        nodeName = nodeName
+                        nodeName = instanceName
                 ),
                 accessToken = accessToken
         )
