@@ -17,6 +17,7 @@
 package io.axoniq.console.framework.eventprocessor.metrics
 
 import io.axoniq.console.framework.computeIfAbsentWithRetry
+import org.axonframework.messaging.unitofwork.BatchingUnitOfWork
 import org.axonframework.messaging.unitofwork.CurrentUnitOfWork
 import java.time.Clock
 import java.time.Instant
@@ -45,9 +46,12 @@ class ProcessorMetricsRegistry {
             processingMessageTimestampsForSegment[segment] = messageTimestamp
             return action()
         } finally {
-            CurrentUnitOfWork.get().afterCommit {
-                getProcessingLatencySegmentMap(processor)
-                        .remove(segment)
+            val uow = CurrentUnitOfWork.get()
+            if(uow !is BatchingUnitOfWork || uow.isFirstMessage) {
+                uow.afterCommit {
+                    getProcessingLatencySegmentMap(processor)
+                            .remove(segment)
+                }
             }
         }
     }
