@@ -101,6 +101,8 @@ data class SupportedFeatures(
         val logDirect: Boolean? = false,
         /* Whether the client supports pause/resume of reports.*/
         val pauseReports: Boolean? = false,
+        /* Whether the client supports thread dumps.*/
+        val threadDump: Boolean? = false
 )
 
 data class Versions(

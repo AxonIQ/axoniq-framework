@@ -30,6 +30,8 @@ object Routes {
         const val STOP_REPORTS = "client-reporting-stop"
         // Request to start sending reports again.
         const val START_REPORTS = "client-reporting-start"
+        // Request to send a thread dump
+        const val THREAD_DUMP = "client-thread-dump"
     }
 
     object EventProcessor {

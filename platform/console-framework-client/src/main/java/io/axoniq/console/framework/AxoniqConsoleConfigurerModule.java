@@ -19,6 +19,8 @@ package io.axoniq.console.framework;
 import io.axoniq.console.framework.application.ApplicationMetricRegistry;
 import io.axoniq.console.framework.application.ApplicationMetricReporter;
 import io.axoniq.console.framework.application.ApplicationReportCreator;
+import io.axoniq.console.framework.application.ApplicationThreadDumpProvider;
+import io.axoniq.console.framework.application.RSocketThreadDumpResponder;
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient;
 import io.axoniq.console.framework.client.ClientSettingsService;
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar;
@@ -218,9 +220,17 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                            dlqDiagnosticsWhitelist,
                                            managementTaskExecutor
                                    ))
+                .registerComponent(ApplicationThreadDumpProvider.class,
+                                   c -> new ApplicationThreadDumpProvider()
+                )
                 .registerComponent(RSocketDlqResponder.class,
                                    c -> new RSocketDlqResponder(
                                            c.getComponent(DeadLetterManager.class),
+                                           c.getComponent(RSocketHandlerRegistrar.class)
+                                   ))
+                .registerComponent(RSocketThreadDumpResponder.class,
+                                   c -> new RSocketThreadDumpResponder(
+                                           c.getComponent(ApplicationThreadDumpProvider.class),
                                            c.getComponent(RSocketHandlerRegistrar.class)
                                    ))
                 .eventProcessing()
@@ -248,6 +258,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             c.getComponent(RSocketProcessorResponder.class);
             c.getComponent(RSocketDlqResponder.class);
             c.getComponent(HandlerMetricsRegistry.class);
+            c.getComponent(RSocketThreadDumpResponder.class);
         });
 
         configurer.onStart(() -> {
