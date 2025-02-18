@@ -26,6 +26,6 @@ open class RSocketThreadDumpResponder (
 
     private fun handleThreadDumpQuery(query: ThreadDumpQuery): ThreadDumpResult {
         logger.debug("Handling AxonIQ Console THREAD_DUMP query for request [{}]", query)
-        return applicationThreadDumpProvider.collectThreadDumps(query.instanceName)
+        return applicationThreadDumpProvider.collectThreadDumps(query.instance)
     }
 }

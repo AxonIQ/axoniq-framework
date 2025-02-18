@@ -1,9 +1,9 @@
 package io.axoniq.console.framework.api
 
 data class ThreadDumpEntry(
-        val instanceName: String,
-        val threadName: String,
-        val threadDump: String,
+        val instance: String,
+        val thread: String,
+        val trace: String,
 )
 
 data class ThreadDumpResult(
@@ -12,5 +12,5 @@ data class ThreadDumpResult(
 )
 
 data class ThreadDumpQuery(
-        val instanceName: String
+        val instance: String
 )

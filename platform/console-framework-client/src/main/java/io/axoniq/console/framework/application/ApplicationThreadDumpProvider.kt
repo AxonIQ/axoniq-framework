@@ -6,12 +6,12 @@ import java.lang.management.ManagementFactory
 class ApplicationThreadDumpProvider() {
     private val threadBean = ManagementFactory.getThreadMXBean()
 
-    fun collectThreadDumps(instanceName: String): ThreadDumpResult {
+    fun collectThreadDumps(instance: String): ThreadDumpResult {
         val threadDumpEntries = threadBean.dumpAllThreads(true, true).map { threadInfo ->
             ThreadDumpEntry(
-                    instanceName = instanceName,
-                    threadName = threadInfo.threadName,
-                    threadDump = threadInfo.toString()
+                    instance = instance,
+                    thread = threadInfo.threadName,
+                    trace = threadInfo.toString()
             )
         }
         return ThreadDumpResult(timestamp = System.currentTimeMillis(), threadDumpEntries = threadDumpEntries)
