@@ -52,7 +52,8 @@ class SetupPayloadCreator(
                 versions = versionInformation(),
                 upcasters = upcasters(),
                 features = SupportedFeatures(
-                        heartbeat = true
+                        heartbeat = true,
+                        threadDump = true,
                 )
         )
     }
