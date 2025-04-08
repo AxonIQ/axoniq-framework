@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import io.axoniq.console.framework.messaging.SpanMatcherPredicateMap
 import io.axoniq.console.framework.util.PostProcessHelper
 import org.axonframework.commandhandling.CommandBus
 import org.axonframework.common.ReflectionUtils
+import org.axonframework.config.AggregateConfiguration
 import org.axonframework.config.Configurer
 import org.axonframework.config.ConfigurerModule
 import org.axonframework.queryhandling.QueryBus
@@ -42,7 +43,11 @@ class AxoniqConsoleEnhancingConfigurerModule(private val spanMatcherPredicateMap
                 val queryBus = configuration.queryBus().unwrapPossiblyDecoratedClass(QueryBus::class.java)
                 enhanceExecutorService(queryBus, BusType.QUERY, configuration.getComponent(ApplicationMetricRegistry::class.java))
                 enhance(configuration.queryUpdateEmitter())
-                enhance(configuration.snapshotter())
+
+                if (configuration.findModules(AggregateConfiguration::class.java).isNotEmpty()) {
+                    // The default Snapshotter will throw an exception if there are no aggregates.
+                    enhance(configuration.snapshotter())
+                }
                 enhance(configuration.deadlineManager())
                 configuration.eventProcessingConfiguration().sagaConfigurations().forEach { enhance(it.manager()) }
                 configuration.eventProcessingConfiguration().eventProcessors().values.forEach { enhance(it) }
