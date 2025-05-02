@@ -74,6 +74,7 @@ class AxoniqConsoleAutoConfiguration {
                 .initialDelay(properties.initialDelay)
                 .disableSpanFactoryInConfiguration()
                 .managementMaxThreadPoolSize(properties.maxConcurrentManagementTasks)
+                .domainEventAccessMode(properties.domainEventAccessMode)
         properties.dlqDiagnosticsWhitelist.forEach { builder.addDlqDiagnosticsWhitelistKey(it) }
         return builder.build()
     }

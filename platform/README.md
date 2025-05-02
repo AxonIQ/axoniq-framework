@@ -27,6 +27,22 @@ For actual configuration, please consult the setup instructions that will be pro
       only the keys set in the `axoniq.console.dlq-diagnostics-whitelist` will be shown.
     * `full` - all the message payloads, aggregate identifier, and the diagnostics data will be visible.
 
+
+* `axoniq.console.dlq-diagnostics-whitelist` - a comma-separated list of messages that will be shown in the DLQ
+  diagnostics.
+
+
+* `axoniq.console.domain-event-access-mode` – change the visibility and access level of Domain Events in the system,
+default: `none`. Several options are available:
+
+    * `none` – no payloads are visible, and aggregate loading is disabled.
+
+    * `preview_payload_only` – payloads of events are visible via the API or UI, but snapshot loading is disabled.
+
+    * `load_snapshot_only` – event payloads are not shown, but snapshot loading is enabled for aggregate reconstruction.
+
+    * `full` – full access: event payloads are visible, and aggregate loading is supported.
+
 ## Data sent to AxonIQ
 
 AxonIQ Console is an [AxonIQ](https://axoniq.io) SaaS product. Your application will periodically, or upon request, send

@@ -16,10 +16,12 @@
 
 package io.axoniq.console.framework;
 
+import io.axoniq.console.framework.application.AggregateEventStreamProvider;
 import io.axoniq.console.framework.application.ApplicationMetricRegistry;
 import io.axoniq.console.framework.application.ApplicationMetricReporter;
 import io.axoniq.console.framework.application.ApplicationReportCreator;
 import io.axoniq.console.framework.application.ApplicationThreadDumpProvider;
+import io.axoniq.console.framework.application.RSocketAggregateDataResponder;
 import io.axoniq.console.framework.application.RSocketThreadDumpResponder;
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient;
 import io.axoniq.console.framework.client.ClientSettingsService;
@@ -83,6 +85,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final Long initialDelay;
     private final AxoniqConsoleDlqMode dlqMode;
     private final List<String> dlqDiagnosticsWhitelist;
+    private final DomainEventAccessMode domainEventAccessMode;
     private final ScheduledExecutorService reportingTaskExecutor;
     private final ExecutorService managementTaskExecutor;
     private final boolean configureSpanFactory;
@@ -107,6 +110,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.initialDelay = builder.initialDelay;
         this.dlqMode = builder.dlqMode;
         this.dlqDiagnosticsWhitelist = builder.dlqDiagnosticsWhitelist;
+        this.domainEventAccessMode = builder.domainEventAccessMode;
         this.reportingTaskExecutor = builder.reportingTaskExecutor;
         this.managementTaskExecutor = builder.managementTaskExecutor;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
@@ -223,6 +227,11 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                 .registerComponent(ApplicationThreadDumpProvider.class,
                                    c -> new ApplicationThreadDumpProvider()
                 )
+                .registerComponent(AggregateEventStreamProvider.class,
+                                   c -> new AggregateEventStreamProvider(
+                                           configurer.buildConfiguration()
+                                   )
+                )
                 .registerComponent(RSocketDlqResponder.class,
                                    c -> new RSocketDlqResponder(
                                            c.getComponent(DeadLetterManager.class),
@@ -232,6 +241,12 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                    c -> new RSocketThreadDumpResponder(
                                            c.getComponent(ApplicationThreadDumpProvider.class),
                                            c.getComponent(RSocketHandlerRegistrar.class)
+                                   ))
+                .registerComponent(RSocketAggregateDataResponder.class,
+                                   c -> new RSocketAggregateDataResponder(
+                                           c.getComponent(AggregateEventStreamProvider.class),
+                                           c.getComponent(RSocketHandlerRegistrar.class),
+                                           domainEventAccessMode
                                    ))
                 .eventProcessing()
                 .registerDefaultHandlerInterceptor((
@@ -259,6 +274,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             c.getComponent(RSocketDlqResponder.class);
             c.getComponent(HandlerMetricsRegistry.class);
             c.getComponent(RSocketThreadDumpResponder.class);
+            c.getComponent(RSocketAggregateDataResponder.class);
         });
 
         configurer.onStart(() -> {
@@ -300,6 +316,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private String nodeId = randomNodeId();
         private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.NONE;
         private final List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
+        private DomainEventAccessMode domainEventAccessMode = DomainEventAccessMode.NONE;
         private Long initialDelay = 0L;
         private boolean disableSpanFactoryInConfiguration = false;
         private final SpanMatcherPredicateMap spanMatcherPredicateMap = getSpanMatcherPredicateMap();
@@ -405,6 +422,18 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             return this;
         }
 
+        /**
+         * The mode of domain event access. Defaults to {@link DomainEventAccessMode#NONE}, which means
+         * that no domain event payload is visible and aggregate reconstruction is not supported.
+         *
+         * @param domainEventAccessMode The access mode to set for domain events
+         * @return The builder for fluent interfacing
+         */
+        public Builder domainEventAccessMode(DomainEventAccessMode domainEventAccessMode) {
+            BuilderUtils.assertNonNull(domainEventAccessMode, "Domain event access mode may not be null");
+            this.domainEventAccessMode = domainEventAccessMode;
+            return this;
+        }
 
         /**
          * The initial delay before attempting to establish a connection. Defaults to {@code 0}.
