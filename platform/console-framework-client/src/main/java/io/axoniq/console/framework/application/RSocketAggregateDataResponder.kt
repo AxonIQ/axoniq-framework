@@ -5,12 +5,14 @@ import io.axoniq.console.framework.api.*
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar
 import org.axonframework.lifecycle.Lifecycle
 import org.axonframework.lifecycle.Phase
+import org.axonframework.serialization.Serializer
 import org.slf4j.LoggerFactory
 
 open class RSocketAggregateDataResponder(
         private val aggregateEventStreamProvider: AggregateEventStreamProvider,
         private val registrar: RSocketHandlerRegistrar,
         private val domainEventAccessMode: DomainEventAccessMode,
+        private val serializer: Serializer,
 ) : Lifecycle {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -41,19 +43,47 @@ open class RSocketAggregateDataResponder(
         val includePayload = domainEventAccessMode == DomainEventAccessMode.FULL ||
                 domainEventAccessMode == DomainEventAccessMode.PREVIEW_PAYLOAD_ONLY
 
-        return DomainEventsResult(
-                aggregateId = events.first().aggregateIdentifier,
-                aggregateType = events.first().type,
-                domainEvents = events.map { event ->
+        val totalEvents = events.size.toLong()
+        val startIndex = query.page * query.pageSize
+
+        if (startIndex >= totalEvents) {
+            val fallbackEvent = events.minByOrNull { it.sequenceNumber }
+            return DomainEventsResult(
+                    aggregateId = fallbackEvent?.aggregateIdentifier ?: query.aggregateId,
+                    aggregateType = fallbackEvent?.type ?: "",
+                    domainEvents = emptyList(),
+                    page = query.page,
+                    pageSize = query.pageSize,
+                    totalCount = totalEvents
+            )
+        }
+
+        val pagedEvents = events.asSequence()
+                .sortedBy { it.sequenceNumber }
+                .drop(startIndex)
+                .take(query.pageSize)
+                .map { event ->
                     DomainEvent(
                             sequenceNumber = event.sequenceNumber,
                             timestamp = event.timestamp,
                             payloadType = event.payloadType.toString(),
-                            payload = if (includePayload) event.payload.toString() else ""
+                            payload = if (includePayload)
+                                serializer.serialize(event.payload, String::class.java).data else ""
                     )
-                }.sortedBy { it.sequenceNumber }
+                }.toList()
+
+        val firstEvent = events.minByOrNull { it.sequenceNumber }
+
+        return DomainEventsResult(
+                aggregateId = firstEvent?.aggregateIdentifier ?: query.aggregateId,
+                aggregateType = firstEvent?.type ?: "",
+                domainEvents = pagedEvents,
+                page = query.page,
+                pageSize = query.pageSize,
+                totalCount = totalEvents
         )
     }
+
 
     private fun handleLoadForAggregateQuery(query: AggregateSnapshotQuery): AggregateSnapshotResult {
         logger.debug("Handling AxonIQ Console LOAD_FOR_AGGREGATE query for request [{}]", query)
@@ -70,7 +100,7 @@ open class RSocketAggregateDataResponder(
                         type = query.type,
                         aggregateId = query.aggregateId,
                         maxSequenceNumber = query.maxSequenceNumber,
-                        snapshot = it.toString()
+                        snapshot = it
                 )
             } ?: throw IllegalArgumentException("Could not load snapshot for aggregateId: ${query.aggregateId}")
         } ?: throw IllegalArgumentException("Access mode is set on: $domainEventAccessMode. Cannot load the aggregate.")

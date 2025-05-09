@@ -19,7 +19,7 @@ class AggregateEventStreamProvider(
 ) {
 
     fun getDomainEventStream(aggregateIdentifier: String): List<DomainEventMessage<*>>? =
-            configuration.eventStore().readEvents(aggregateIdentifier).asStream().toList()
+            configuration.eventStore().readEvents(aggregateIdentifier, 0).asStream().toList()
 
 
     fun <T> loadForAggregate(type: String, identifier: String, maxSequenceNumber: Long): String? {

@@ -5,7 +5,10 @@ import java.time.Instant
 data class DomainEventsResult(
         val aggregateId: String,
         val aggregateType: String,
-        val domainEvents: List<DomainEvent>
+        val domainEvents: List<DomainEvent>,
+        val page: Int,
+        val pageSize: Int,
+        val totalCount: Long,
 )
 
 data class DomainEvent(
@@ -16,7 +19,9 @@ data class DomainEvent(
 )
 
 data class DomainEventsQuery(
-        val aggregateId: String
+        val aggregateId: String,
+        val page: Int = 0,
+        val pageSize: Int = 10,
 )
 
 data class AggregateSnapshotResult(

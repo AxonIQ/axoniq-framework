@@ -246,7 +246,8 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                    c -> new RSocketAggregateDataResponder(
                                            c.getComponent(AggregateEventStreamProvider.class),
                                            c.getComponent(RSocketHandlerRegistrar.class),
-                                           domainEventAccessMode
+                                           domainEventAccessMode,
+                                           c.eventSerializer()
                                    ))
                 .eventProcessing()
                 .registerDefaultHandlerInterceptor((
