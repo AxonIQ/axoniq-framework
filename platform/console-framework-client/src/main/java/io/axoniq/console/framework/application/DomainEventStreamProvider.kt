@@ -1,5 +1,6 @@
 package io.axoniq.console.framework.application
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.axonframework.common.ReflectionUtils
 import org.axonframework.config.AggregateConfiguration
 import org.axonframework.config.Configuration
@@ -14,34 +15,39 @@ import org.axonframework.modelling.command.Repository
 import org.axonframework.modelling.command.RepositoryProvider
 import org.axonframework.modelling.command.inspection.AggregateModel
 
-class AggregateEventStreamProvider(
-        private val configuration: Configuration
+class DomainEventStreamProvider(
+        private val configuration: Configuration,
+        private val objectMapper: ObjectMapper
 ) {
 
-    fun getDomainEventStream(aggregateIdentifier: String): List<DomainEventMessage<*>>? =
-            configuration.eventStore().readEvents(aggregateIdentifier, 0).asStream().toList()
+    fun getDomainEventStream(entityIdentifier: String, firstSequenceNumber: Long = 0): List<DomainEventMessage<*>>? =
+            configuration.eventStore()
+                    .readEvents(entityIdentifier, firstSequenceNumber)
+                    .iterator()
+                    .asSequence()
+                    .toList()
+                    .takeIf { it.isNotEmpty() }
 
-
-    fun <T> loadForAggregate(type: String, identifier: String, maxSequenceNumber: Long): String? {
-        val aggregateConfiguration = configuration.modules
+    fun <T> loadDomainStateAtSequence(type: String, entityIdentifier: String, maxSequenceNumber: Long): String? {
+        val entityConfiguration = configuration.modules
                 .filterIsInstance<AggregateConfiguration<*>>()
                 .firstOrNull { it.aggregateType().simpleName == type }
-                ?: throw IllegalArgumentException("No aggregate found for type $type")
+                ?: throw IllegalArgumentException("No domain entity found for type $type")
 
         val eventStore = configuration.eventStore()
 
-        val factory: AggregateFactory<T> = aggregateConfiguration.aggregateFactory() as AggregateFactory<T>
-        val model: AggregateModel<T> = aggregateConfiguration.repository().getPropertyValue<AggregateModel<T>>("aggregateModel")
-                ?: throw IllegalArgumentException("No aggregate model found for type $type")
+        val factory: AggregateFactory<T> = entityConfiguration.aggregateFactory() as AggregateFactory<T>
+        val model: AggregateModel<T> = entityConfiguration.repository().getPropertyValue<AggregateModel<T>>("aggregateModel")
+                ?: throw IllegalArgumentException("No domain entity model found for type $type")
 
-        val stream = readEvents(identifier)
-        val loadingAggregate: EventSourcedAggregate<T> = EventSourcedAggregate
-                .initialize(factory.createAggregateRoot(identifier, stream.peek()),
+        val stream = readEvents(entityIdentifier)
+        val loadingEntity: EventSourcedAggregate<T> = EventSourcedAggregate
+                .initialize(factory.createAggregateRoot(entityIdentifier, stream.peek()),
                         model,
                         eventStore,
                         object : RepositoryProvider {
                             override fun <T> repositoryFor(aggregateType: Class<T>): Repository<T> {
-                                return aggregateConfiguration.repository() as Repository<T>
+                                return entityConfiguration.repository() as Repository<T>
                             }
 
                         },
@@ -55,15 +61,15 @@ class AggregateEventStreamProvider(
                             }
                         })
 
-        loadingAggregate.initializeState(stream.filter { it.sequenceNumber <= maxSequenceNumber })
+        loadingEntity.initializeState(stream.filter { it.sequenceNumber <= maxSequenceNumber })
 
-        return configuration.serializer().serialize(loadingAggregate.aggregateRoot, String::class.java).data
+        return objectMapper.writeValueAsString(loadingEntity.aggregateRoot)
     }
 
-    private fun readEvents(identifier: String): DomainEventStream =
+    private fun readEvents(identifier: String, firstSequenceNumber: Long = 0): DomainEventStream =
             configuration.eventStore()
                     .getPropertyValue<AbstractEventStorageEngine>("storageEngine")
-                    ?.readEvents(identifier, 0)
+                    ?.readEvents(identifier, firstSequenceNumber)
                     ?: throw IllegalStateException("Unable to find AbstractEventStorageEngine in event store")
 
     @Suppress("UNCHECKED_CAST")

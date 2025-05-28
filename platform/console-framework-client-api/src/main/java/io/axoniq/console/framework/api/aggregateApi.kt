@@ -3,8 +3,8 @@ package io.axoniq.console.framework.api
 import java.time.Instant
 
 data class DomainEventsResult(
-        val aggregateId: String,
-        val aggregateType: String,
+        val entityId: String,
+        val entityType: String,
         val domainEvents: List<DomainEvent>,
         val page: Int,
         val pageSize: Int,
@@ -19,20 +19,20 @@ data class DomainEvent(
 )
 
 data class DomainEventsQuery(
-        val aggregateId: String,
+        val entityId: String,
         val page: Int = 0,
         val pageSize: Int = 10,
 )
 
-data class AggregateSnapshotResult(
+data class EntityStateResult(
         val type: String,
-        val aggregateId: String,
+        val entityId: String,
         val maxSequenceNumber: Long = 0,
-        val snapshot: String,
+        val state: String,
 )
 
-data class AggregateSnapshotQuery(
+data class EntityStateAtSequenceQuery(
         val type: String,
-        val aggregateId: String,
+        val entityId: String,
         val maxSequenceNumber: Long = 0,
 )

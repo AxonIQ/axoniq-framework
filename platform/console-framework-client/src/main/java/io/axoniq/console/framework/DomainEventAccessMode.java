@@ -2,22 +2,22 @@ package io.axoniq.console.framework;
 
 public enum DomainEventAccessMode {
     /**
-     * Full access: payload is visible and LoadForAggregate is supported.
+     * Full access: payload is visible and loading domain state is supported.
      */
     FULL,
 
     /**
-     * Payload is hidden (e.g., masked or removed), but LoadForAggregate is still supported.
+     * Payload is hidden (e.g., masked), but loading domain state is still supported.
      */
-    LOAD_SNAPSHOT_ONLY,
+    LOAD_DOMAIN_STATE_ONLY,
 
     /**
-     * Payload is visible, but LoadForAggregate is not supported.
+     * Payload is visible, but loading domain state is not supported.
      */
     PREVIEW_PAYLOAD_ONLY,
 
     /**
-     * No access: payload is hidden and LoadForAggregate is not supported.
+     * No access: payload is hidden and loading domain state is not supported.
      */
     NONE
 }

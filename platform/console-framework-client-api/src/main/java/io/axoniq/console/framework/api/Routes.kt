@@ -66,9 +66,9 @@ object Routes {
         const val REPORT = "application-info-report"
     }
 
-    object Aggregate {
-        const val DOMAIN_EVENTS = "aggregate-domain-events"
-        const val LOAD_FOR_AGGREGATE = "load-for-aggregate"
+    object Enity {
+        const val DOMAIN_EVENTS = "domain-events"
+        const val ENTITY_STATE_AT_SEQUENCE = "entity-state-at-sequence"
     }
 
     object MessageFlow {

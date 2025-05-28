@@ -8,8 +8,8 @@ import org.axonframework.lifecycle.Phase
 import org.axonframework.serialization.Serializer
 import org.slf4j.LoggerFactory
 
-open class RSocketAggregateDataResponder(
-        private val aggregateEventStreamProvider: AggregateEventStreamProvider,
+open class RSocketDomainEntityDataResponder(
+        private val domainEventStreamProvider: DomainEventStreamProvider,
         private val registrar: RSocketHandlerRegistrar,
         private val domainEventAccessMode: DomainEventAccessMode,
         private val serializer: Serializer,
@@ -22,14 +22,14 @@ open class RSocketAggregateDataResponder(
 
     fun start() {
         registrar.registerHandlerWithPayload(
-                Routes.Aggregate.DOMAIN_EVENTS,
+                Routes.Enity.DOMAIN_EVENTS,
                 DomainEventsQuery::class.java,
                 this::handleDomainEventsQuery
         )
         registrar.registerHandlerWithPayload(
-                Routes.Aggregate.LOAD_FOR_AGGREGATE,
-                AggregateSnapshotQuery::class.java,
-                this::handleLoadForAggregateQuery
+                Routes.Enity.ENTITY_STATE_AT_SEQUENCE,
+                EntityStateAtSequenceQuery::class.java,
+                this::handleEntityStateAtSequenceQuery
         )
     }
 
@@ -37,30 +37,31 @@ open class RSocketAggregateDataResponder(
         logger.debug("Handling AxonIQ Console DOMAIN_EVENTS query for request [{}]", query)
         logger.debug("Access mode is set on: {}.", domainEventAccessMode)
 
-        val events = aggregateEventStreamProvider.getDomainEventStream(query.aggregateId)
-                ?: throw IllegalArgumentException("No events found for aggregateId: ${query.aggregateId}")
+        val startIndex = query.page * query.pageSize
 
+        // Determine whether to include payload based on the access mode
         val includePayload = domainEventAccessMode == DomainEventAccessMode.FULL ||
                 domainEventAccessMode == DomainEventAccessMode.PREVIEW_PAYLOAD_ONLY
 
-        val totalEvents = events.size.toLong()
-        val startIndex = query.page * query.pageSize
+        // Fetch domain events starting from the calculated sequence number (offset)
+        val events = domainEventStreamProvider
+                .getDomainEventStream(query.entityId, startIndex.toLong()) ?: emptyList()
 
-        if (startIndex >= totalEvents) {
-            val fallbackEvent = events.minByOrNull { it.sequenceNumber }
+        // If the result is empty, return an empty result but still indicate position
+        if (events.isEmpty()) {
             return DomainEventsResult(
-                    aggregateId = fallbackEvent?.aggregateIdentifier ?: query.aggregateId,
-                    aggregateType = fallbackEvent?.type ?: "",
+                    entityId = query.entityId,
+                    entityType = "",
                     domainEvents = emptyList(),
                     page = query.page,
                     pageSize = query.pageSize,
-                    totalCount = totalEvents
+                    totalCount = startIndex.toLong() // Total so far is up to this offset
             )
         }
 
-        val pagedEvents = events.asSequence()
-                .sortedBy { it.sequenceNumber }
-                .drop(startIndex)
+        // Map the first 'pageSize' events into the response model
+        val pagedEvents = events
+                .asSequence()
                 .take(query.pageSize)
                 .map { event ->
                     DomainEvent(
@@ -68,41 +69,44 @@ open class RSocketAggregateDataResponder(
                             timestamp = event.timestamp,
                             payloadType = event.payloadType.toString(),
                             payload = if (includePayload)
-                                serializer.serialize(event.payload, String::class.java).data else ""
+                                serializer.serialize(event.payload, String::class.java).data
+                            else ""
                     )
-                }.toList()
+                }
+                .toCollection(ArrayList())
 
-        val firstEvent = events.minByOrNull { it.sequenceNumber }
+        // Total count is approximated as startIndex + number of events returned
+        val totalEvents = startIndex + events.size
 
         return DomainEventsResult(
-                aggregateId = firstEvent?.aggregateIdentifier ?: query.aggregateId,
-                aggregateType = firstEvent?.type ?: "",
+                entityId = events.first().aggregateIdentifier,
+                entityType = events.first().type,
                 domainEvents = pagedEvents,
                 page = query.page,
                 pageSize = query.pageSize,
-                totalCount = totalEvents
+                totalCount = totalEvents.toLong()
         )
     }
 
 
-    private fun handleLoadForAggregateQuery(query: AggregateSnapshotQuery): AggregateSnapshotResult {
-        logger.debug("Handling AxonIQ Console LOAD_FOR_AGGREGATE query for request [{}]", query)
+    private fun handleEntityStateAtSequenceQuery(query: EntityStateAtSequenceQuery): EntityStateResult {
+        logger.debug("Handling AxonIQ Console ENTITY_STATE_AT_SEQUENCE query for request [{}]", query)
         takeIf {
             logger.debug("Access mode is set on: {}.", domainEventAccessMode)
             domainEventAccessMode == DomainEventAccessMode.FULL ||
-                    domainEventAccessMode == DomainEventAccessMode.LOAD_SNAPSHOT_ONLY
+                    domainEventAccessMode == DomainEventAccessMode.LOAD_DOMAIN_STATE_ONLY
         }?.let {
-            aggregateEventStreamProvider.loadForAggregate<String>(
+            domainEventStreamProvider.loadDomainStateAtSequence<String>(
                     type = query.type,
-                    identifier = query.aggregateId,
+                    entityIdentifier = query.entityId,
                     maxSequenceNumber = query.maxSequenceNumber)?.let {
-                return AggregateSnapshotResult(
+                return EntityStateResult(
                         type = query.type,
-                        aggregateId = query.aggregateId,
+                        entityId = query.entityId,
                         maxSequenceNumber = query.maxSequenceNumber,
-                        snapshot = it
+                        state = it
                 )
-            } ?: throw IllegalArgumentException("Could not load snapshot for aggregateId: ${query.aggregateId}")
-        } ?: throw IllegalArgumentException("Access mode is set on: $domainEventAccessMode. Cannot load the aggregate.")
+            } ?: throw IllegalArgumentException("Could not load domain state for entityId: ${query.entityId}")
+        } ?: throw IllegalArgumentException("Access mode is set on: $domainEventAccessMode. Cannot load the domain.")
     }
 }

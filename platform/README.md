@@ -39,7 +39,7 @@ default: `none`. Several options are available:
 
     * `preview_payload_only` – payloads of events are visible via the API or UI, but snapshot loading is disabled.
 
-    * `load_snapshot_only` – event payloads are not shown, but snapshot loading is enabled for aggregate reconstruction.
+    * `load_domain_state_only` – event payloads are not shown, but domain state loading is enabled for the domain entity.
 
     * `full` – full access: event payloads are visible, and aggregate loading is supported.
 
