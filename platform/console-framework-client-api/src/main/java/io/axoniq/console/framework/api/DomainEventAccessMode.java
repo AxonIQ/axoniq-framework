@@ -1,4 +1,4 @@
-package io.axoniq.console.framework;
+package io.axoniq.console.framework.api;
 
 public enum DomainEventAccessMode {
     /**

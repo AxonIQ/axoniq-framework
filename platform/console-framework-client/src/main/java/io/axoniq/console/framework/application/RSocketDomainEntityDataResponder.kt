@@ -1,6 +1,5 @@
 package io.axoniq.console.framework.application
 
-import io.axoniq.console.framework.DomainEventAccessMode
 import io.axoniq.console.framework.api.*
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar
 import org.axonframework.lifecycle.Lifecycle

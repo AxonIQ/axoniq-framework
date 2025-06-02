@@ -34,8 +34,6 @@ class DomainEventStreamProvider(
                 .firstOrNull { it.aggregateType().simpleName == type }
                 ?: throw IllegalArgumentException("No domain entity found for type $type")
 
-        val eventStore = configuration.eventStore()
-
         val factory: AggregateFactory<T> = entityConfiguration.aggregateFactory() as AggregateFactory<T>
         val model: AggregateModel<T> = entityConfiguration.repository().getPropertyValue<AggregateModel<T>>("aggregateModel")
                 ?: throw IllegalArgumentException("No domain entity model found for type $type")
@@ -44,7 +42,7 @@ class DomainEventStreamProvider(
         val loadingEntity: EventSourcedAggregate<T> = EventSourcedAggregate
                 .initialize(factory.createAggregateRoot(entityIdentifier, stream.peek()),
                         model,
-                        eventStore,
+                        configuration.eventStore(),
                         object : RepositoryProvider {
                             override fun <T> repositoryFor(aggregateType: Class<T>): Repository<T> {
                                 return entityConfiguration.repository() as Repository<T>
