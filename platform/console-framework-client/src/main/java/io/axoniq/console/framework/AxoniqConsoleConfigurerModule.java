@@ -163,7 +163,11 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                    )
                 )
                 .registerComponent(SetupPayloadCreator.class,
-                                   SetupPayloadCreator::new
+                                   c -> new SetupPayloadCreator(
+                                           c,
+                                           dlqMode,
+                                           domainEventAccessMode
+                                   )
                 )
                 .registerComponent(EventProcessorManager.class,
                                    c -> new EventProcessorManager(

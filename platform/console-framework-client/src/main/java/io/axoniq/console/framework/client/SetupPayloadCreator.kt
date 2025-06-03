@@ -37,6 +37,8 @@ import java.time.temporal.TemporalAmount
 
 class SetupPayloadCreator(
         private val configuration: Configuration,
+        private val dlqMode: AxoniqConsoleDlqMode,
+        private val domainEventAccessMode: DomainEventAccessMode
 ) {
     private val eventProcessingConfiguration = configuration.eventProcessingConfiguration() as EventProcessingModule
 
@@ -54,6 +56,8 @@ class SetupPayloadCreator(
                 features = SupportedFeatures(
                         heartbeat = true,
                         threadDump = true,
+                        deadLetterQueuesInsights = dlqMode,
+                        domainEventsInsights = domainEventAccessMode,
                 )
         )
     }
