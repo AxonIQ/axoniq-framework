@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 package io.axoniq.console.framework.starter;
 
-import io.axoniq.console.framework.AxoniqConsoleDlqMode;
-import io.axoniq.console.framework.DomainEventAccessMode;
+import io.axoniq.console.framework.api.AxoniqConsoleDlqMode;
+import io.axoniq.console.framework.api.DomainEventAccessMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.ArrayList;

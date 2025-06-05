@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package io.axoniq.console.framework;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.axoniq.console.framework.api.AxoniqConsoleDlqMode;
+import io.axoniq.console.framework.api.DomainEventAccessMode;
 import io.axoniq.console.framework.application.DomainEventStreamProvider;
 import io.axoniq.console.framework.application.ApplicationMetricRegistry;
 import io.axoniq.console.framework.application.ApplicationMetricReporter;
@@ -161,7 +163,11 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                    )
                 )
                 .registerComponent(SetupPayloadCreator.class,
-                                   SetupPayloadCreator::new
+                                   c -> new SetupPayloadCreator(
+                                           c,
+                                           dlqMode,
+                                           domainEventAccessMode
+                                   )
                 )
                 .registerComponent(EventProcessorManager.class,
                                    c -> new EventProcessorManager(
