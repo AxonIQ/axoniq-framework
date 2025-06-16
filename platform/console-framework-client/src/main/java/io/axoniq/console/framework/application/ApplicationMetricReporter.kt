@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import io.axoniq.console.framework.api.ClientSettingsV2
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient
 import io.axoniq.console.framework.client.ClientSettingsObserver
 import io.axoniq.console.framework.client.ClientSettingsService
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
