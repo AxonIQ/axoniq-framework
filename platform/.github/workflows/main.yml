@@ -63,7 +63,7 @@ jobs:
       - name: Deploy to Sonatype
         if: matrix.deploy-enabled
         run: |
-          ./mvnw -B -U -Dstyle.color=always -Possrh deploy -DskipTests=true
+          ./mvnw -B -U -Dstyle.color=always -Prelease deploy -DskipTests=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_USERNAME: ${{ secrets.DEVBOT_GITHUB_USERNAME }}
