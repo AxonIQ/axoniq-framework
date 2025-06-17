@@ -218,12 +218,18 @@
         </plugins>
     </build>
 
-    <repositories>
+    <distributionManagement>
         <repository>
             <id>axoniq-nexus</id>
             <url>https://nexus.dev.axoniq.net/repository/products/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
         </repository>
-    </repositories>
+    </distributionManagement>
 
     <scm>
         <connection>scm:git:git://github.com/AxonIQ/console-framework-client.git</connection>
