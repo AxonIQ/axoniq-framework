@@ -25,10 +25,10 @@ data class DomainEventsQuery(
 )
 
 data class EntityStateResult(
-        val type: String,
-        val entityId: String,
-        val maxSequenceNumber: Long = 0,
-        val state: String,
+    val type: String,
+    val entityId: String,
+    val maxSequenceNumber: Long = 0,
+    val state: String?,
 )
 
 data class EntityStateAtSequenceQuery(

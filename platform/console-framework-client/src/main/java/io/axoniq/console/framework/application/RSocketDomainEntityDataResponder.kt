@@ -2,6 +2,7 @@ package io.axoniq.console.framework.application
 
 import io.axoniq.console.framework.api.*
 import io.axoniq.console.framework.client.RSocketHandlerRegistrar
+import io.axoniq.console.framework.truncateToBytes
 import org.axonframework.lifecycle.Lifecycle
 import org.axonframework.lifecycle.Phase
 import org.axonframework.serialization.Serializer
@@ -21,12 +22,12 @@ open class RSocketDomainEntityDataResponder(
 
     fun start() {
         registrar.registerHandlerWithPayload(
-                Routes.Enity.DOMAIN_EVENTS,
+                Routes.Entity.DOMAIN_EVENTS,
                 DomainEventsQuery::class.java,
                 this::handleDomainEventsQuery
         )
         registrar.registerHandlerWithPayload(
-                Routes.Enity.ENTITY_STATE_AT_SEQUENCE,
+                Routes.Entity.ENTITY_STATE_AT_SEQUENCE,
                 EntityStateAtSequenceQuery::class.java,
                 this::handleEntityStateAtSequenceQuery
         )
@@ -68,7 +69,9 @@ open class RSocketDomainEntityDataResponder(
                             timestamp = event.timestamp,
                             payloadType = event.payloadType.toString(),
                             payload = if (includePayload)
-                                serializer.serialize(event.payload, String::class.java).data
+                                serializer.serialize(event.payload, String::class.java)
+                                        .data
+                                        .truncateToBytes(50 * 1024)
                             else ""
                     )
                 }
@@ -87,10 +90,9 @@ open class RSocketDomainEntityDataResponder(
         )
     }
 
-
     private fun handleEntityStateAtSequenceQuery(query: EntityStateAtSequenceQuery): EntityStateResult {
         logger.debug("Handling AxonIQ Console ENTITY_STATE_AT_SEQUENCE query for request [{}]", query)
-        takeIf {
+        return takeIf {
             logger.debug("Access mode is set on: {}.", domainEventAccessMode)
             domainEventAccessMode == DomainEventAccessMode.FULL ||
                     domainEventAccessMode == DomainEventAccessMode.LOAD_DOMAIN_STATE_ONLY
@@ -98,12 +100,12 @@ open class RSocketDomainEntityDataResponder(
             domainEventStreamProvider.loadDomainStateAtSequence<String>(
                     type = query.type,
                     entityIdentifier = query.entityId,
-                    maxSequenceNumber = query.maxSequenceNumber)?.let {
-                return EntityStateResult(
+                    maxSequenceNumber = query.maxSequenceNumber)?.let { state ->
+                EntityStateResult(
                         type = query.type,
                         entityId = query.entityId,
                         maxSequenceNumber = query.maxSequenceNumber,
-                        state = it
+                        state = state.truncateToBytes(2 * 1024 * 1024)
                 )
             } ?: throw IllegalArgumentException("Could not load domain state for entityId: ${query.entityId}")
         } ?: throw IllegalArgumentException("Access mode is set on: $domainEventAccessMode. Cannot load the domain.")

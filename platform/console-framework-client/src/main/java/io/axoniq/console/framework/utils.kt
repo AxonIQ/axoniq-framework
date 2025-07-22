@@ -61,3 +61,51 @@ fun createTimer(meterRegistry: MeterRegistry, name: String): Timer {
             .distributionStatisticBufferLength(5)
             .register(meterRegistry)
 }
+
+/**
+ * Truncates the string to ensure it doesn't exceed the specified maximum byte size.
+ *
+ * If the string's byte representation (UTF-8 encoding) is larger than [maxBytes],
+ * it will be truncated and a truncation message will be appended. The final result
+ * (including the truncation message) will not exceed [maxBytes] when encoded as UTF-8.
+ *
+ * @param maxBytes The maximum allowed byte size for the final string (including truncation message).
+ *                 Must be at least 16 bytes to accommodate the truncation message.
+ * @return The original string if it's within the byte limit, null if input is null,
+ *         or a truncated string with truncation message if it exceeds the byte limit.
+ * @throws IllegalArgumentException if [maxBytes] is too small to accommodate the truncation message.
+ */
+fun String?.truncateToBytes(maxBytes: Int): String? {
+    if (this == null) return null
+
+    val originalBytes = this.toByteArray(Charsets.UTF_8)
+    if (originalBytes.size <= maxBytes) {
+        return this
+    }
+
+    val truncationMessage = "... [truncated]"
+    val messageBytes = truncationMessage.toByteArray(Charsets.UTF_8)
+
+    if (maxBytes < messageBytes.size) {
+        throw IllegalArgumentException(
+                "maxBytes ($maxBytes) must be at least ${messageBytes.size} bytes to accommodate truncation message"
+        )
+    }
+
+    val contentBytesLimit = maxBytes - messageBytes.size
+
+    // Safely truncate at character boundary to avoid invalid UTF-8
+    var truncatedContent = ""
+    var currentBytes = 0
+
+    for (char in this) {
+        val charBytes = char.toString().toByteArray(Charsets.UTF_8).size
+        if (currentBytes + charBytes > contentBytesLimit) {
+            break
+        }
+        truncatedContent += char
+        currentBytes += charBytes
+    }
+
+    return truncatedContent + truncationMessage
+}

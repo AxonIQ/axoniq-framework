@@ -66,7 +66,7 @@ object Routes {
         const val REPORT = "application-info-report"
     }
 
-    object Enity {
+    object Entity {
         const val DOMAIN_EVENTS = "domain-events"
         const val ENTITY_STATE_AT_SEQUENCE = "entity-state-at-sequence"
     }
