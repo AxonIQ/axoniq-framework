@@ -34,14 +34,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v4.0.0
+        uses: actions/setup-java@v4.7.1
         with:
           distribution: "zulu"
           java-version: ${{ matrix.java-version }}
           cache: "maven"
-          server-id: axoniq-nexus
+          server-id: central
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.SONATYPE_GPG_KEY }} # Value of the GPG private key to import
+          gpg-passphrase: ${{ secrets.SONATYPE_GPG_PASSWORD }}
 
       - name: Test and Build
         if: ${{ !matrix.sonar-enabled }}
@@ -63,8 +65,9 @@ jobs:
       - name: Deploy to Sonatype
         if: matrix.deploy-enabled
         run: |
-          ./mvnw -B -U -Dstyle.color=always -Possrh deploy -DskipTests=true
+          ./mvnw -B -U -Dstyle.color=always -Prelease deploy -DskipTests=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAVEN_USERNAME: ${{ secrets.DEVBOT_GITHUB_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.DEVBOT_GITHUB_TOKEN }}
+          MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
+          MAVEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASS }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.SONATYPE_GPG_PASSWORD }}

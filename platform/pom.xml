@@ -54,13 +54,16 @@
         <sonar.organization>axoniq</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
 
-        <kotlin.version>1.6.21</kotlin.version>
-        <dokka.version>${kotlin.version}</dokka.version>
+        <kotlin.version>1.9.25</kotlin.version>
+        <dokka.version>1.9.20</dokka.version>
 
         <axon.version>4.6.7</axon.version>
 
         <projectreactor.version>3.6.0</projectreactor.version>
         <spring-boot.version>2.7.18</spring-boot.version>
+
+
+        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -215,26 +218,6 @@
         </plugins>
     </build>
 
-    <distributionManagement>
-        <snapshotRepository>
-            <id>axoniq-nexus</id>
-            <url>https://nexus.dev.axoniq.net/repository/products-snapshots</url>
-            <uniqueVersion>false</uniqueVersion>
-        </snapshotRepository>
-        <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
-            <uniqueVersion>false</uniqueVersion>
-        </repository>
-    </distributionManagement>
-
-    <repositories>
-        <repository>
-            <id>axoniq-nexus</id>
-            <url>https://nexus.dev.axoniq.net/repository/products/</url>
-        </repository>
-    </repositories>
-
     <scm>
         <connection>scm:git:git://github.com/AxonIQ/console-framework-client.git</connection>
         <developerConnection>scm:git:git@github.com:AxonIQ/console-framework-client.git</developerConnection>
@@ -320,14 +303,12 @@
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>org.sonatype.plugins</groupId>
-                        <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <version>1.7.0</version>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
                         <extensions>true</extensions>
                         <configuration>
-                            <serverId>ossrh</serverId>
-                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                            <publishingServerId>central</publishingServerId>
                         </configuration>
                     </plugin>
                     <plugin>
@@ -398,4 +379,18 @@
             </build>
         </profile>
     </profiles>
+
+    <distributionManagement>
+        <repository>
+            <name>Central Portal Snapshots</name>
+            <id>central-portal-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </distributionManagement>
 </project>
