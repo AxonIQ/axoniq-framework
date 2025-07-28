@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,17 @@
 
 package io.axoniq.console.framework;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.axoniq.console.framework.api.AxoniqConsoleDlqMode;
+import io.axoniq.console.framework.api.DomainEventAccessMode;
+import io.axoniq.console.framework.application.DomainEventStreamProvider;
 import io.axoniq.console.framework.application.ApplicationMetricRegistry;
 import io.axoniq.console.framework.application.ApplicationMetricReporter;
 import io.axoniq.console.framework.application.ApplicationReportCreator;
 import io.axoniq.console.framework.application.ApplicationThreadDumpProvider;
+import io.axoniq.console.framework.application.RSocketDomainEntityDataResponder;
 import io.axoniq.console.framework.application.RSocketThreadDumpResponder;
 import io.axoniq.console.framework.client.AxoniqConsoleRSocketClient;
 import io.axoniq.console.framework.client.ClientSettingsService;
@@ -83,6 +90,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final Long initialDelay;
     private final AxoniqConsoleDlqMode dlqMode;
     private final List<String> dlqDiagnosticsWhitelist;
+    private final DomainEventAccessMode domainEventAccessMode;
     private final ScheduledExecutorService reportingTaskExecutor;
     private final ExecutorService managementTaskExecutor;
     private final boolean configureSpanFactory;
@@ -90,6 +98,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
     private final EventScheduler eventScheduler;
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final String instanceName;
+    private final ObjectMapper objectMapper;
 
     /**
      * Creates the {@link AxoniqConsoleConfigurerModule} with the given {@code builder}.
@@ -107,11 +116,13 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         this.initialDelay = builder.initialDelay;
         this.dlqMode = builder.dlqMode;
         this.dlqDiagnosticsWhitelist = builder.dlqDiagnosticsWhitelist;
+        this.domainEventAccessMode = builder.domainEventAccessMode;
         this.reportingTaskExecutor = builder.reportingTaskExecutor;
         this.managementTaskExecutor = builder.managementTaskExecutor;
         this.configureSpanFactory = !builder.disableSpanFactoryInConfiguration;
         this.spanMatcherPredicateMap = builder.spanMatcherPredicateMap;
         this.eventScheduler = builder.eventScheduler;
+        this.objectMapper = builder.objectMapper;
     }
 
     /**
@@ -152,7 +163,11 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                    )
                 )
                 .registerComponent(SetupPayloadCreator.class,
-                                   SetupPayloadCreator::new
+                                   c -> new SetupPayloadCreator(
+                                           c,
+                                           dlqMode,
+                                           domainEventAccessMode
+                                   )
                 )
                 .registerComponent(EventProcessorManager.class,
                                    c -> new EventProcessorManager(
@@ -223,6 +238,12 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                 .registerComponent(ApplicationThreadDumpProvider.class,
                                    c -> new ApplicationThreadDumpProvider()
                 )
+                .registerComponent(DomainEventStreamProvider.class,
+                                   c -> new DomainEventStreamProvider(
+                                           configurer.buildConfiguration(),
+                                           objectMapper
+                                   )
+                )
                 .registerComponent(RSocketDlqResponder.class,
                                    c -> new RSocketDlqResponder(
                                            c.getComponent(DeadLetterManager.class),
@@ -232,6 +253,13 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
                                    c -> new RSocketThreadDumpResponder(
                                            c.getComponent(ApplicationThreadDumpProvider.class),
                                            c.getComponent(RSocketHandlerRegistrar.class)
+                                   ))
+                .registerComponent(RSocketDomainEntityDataResponder.class,
+                                   c -> new RSocketDomainEntityDataResponder(
+                                           c.getComponent(DomainEventStreamProvider.class),
+                                           c.getComponent(RSocketHandlerRegistrar.class),
+                                           domainEventAccessMode,
+                                           c.eventSerializer()
                                    ))
                 .eventProcessing()
                 .registerDefaultHandlerInterceptor((
@@ -259,6 +287,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             c.getComponent(RSocketDlqResponder.class);
             c.getComponent(HandlerMetricsRegistry.class);
             c.getComponent(RSocketThreadDumpResponder.class);
+            c.getComponent(RSocketDomainEntityDataResponder.class);
         });
 
         configurer.onStart(() -> {
@@ -300,6 +329,7 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private String nodeId = randomNodeId();
         private AxoniqConsoleDlqMode dlqMode = AxoniqConsoleDlqMode.NONE;
         private final List<String> dlqDiagnosticsWhitelist = new ArrayList<>();
+        private DomainEventAccessMode domainEventAccessMode = DomainEventAccessMode.NONE;
         private Long initialDelay = 0L;
         private boolean disableSpanFactoryInConfiguration = false;
         private final SpanMatcherPredicateMap spanMatcherPredicateMap = getSpanMatcherPredicateMap();
@@ -310,6 +340,9 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         private ExecutorService managementTaskExecutor;
         private Integer managementMaxThreadPoolSize = 5;
         private EventScheduler eventScheduler;
+
+        private ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules()
+                .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
 
         /**
          * Constructor to instantiate a {@link Builder} based on the fields contained in the
@@ -405,6 +438,18 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
             return this;
         }
 
+        /**
+         * The mode of domain event access. Defaults to {@link DomainEventAccessMode#NONE}, which means
+         * that no domain event payload is visible and aggregate reconstruction is not supported.
+         *
+         * @param domainEventAccessMode The access mode to set for domain events
+         * @return The builder for fluent interfacing
+         */
+        public Builder domainEventAccessMode(DomainEventAccessMode domainEventAccessMode) {
+            BuilderUtils.assertNonNull(domainEventAccessMode, "Domain event access mode may not be null");
+            this.domainEventAccessMode = domainEventAccessMode;
+            return this;
+        }
 
         /**
          * The initial delay before attempting to establish a connection. Defaults to {@code 0}.
@@ -521,6 +566,19 @@ public class AxoniqConsoleConfigurerModule implements ConfigurerModule {
         public Builder eventScheduler(EventScheduler eventScheduler) {
             BuilderUtils.assertNonNull(eventScheduler, "Event scheduler must be non-null");
             this.eventScheduler = eventScheduler;
+            return this;
+        }
+
+        /**
+         * Set the object mapper to be used for serialization and deserialization of domain events.
+         * Defaults to a new {@link ObjectMapper} with all modules registered and field visibility set to any.
+         *
+         * @param objectMapper the object mapper to use
+         * @return The builder for fluent interfacing
+         */
+        public Builder objectMapper(ObjectMapper objectMapper) {
+            BuilderUtils.assertNonNull(objectMapper, "Object mapper must be non-null");
+            this.objectMapper = objectMapper;
             return this;
         }
 

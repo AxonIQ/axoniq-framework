@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024. AxonIQ B.V.
+ * Copyright (c) 2022-2025. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,13 +85,13 @@ data class ConsoleClientIdentifier(
 )
 
 data class SetupPayload(
-        val features: SupportedFeatures? = SupportedFeatures(),
         val commandBus: CommandBusInformation,
         val queryBus: QueryBusInformation,
         val eventStore: EventStoreInformation,
         val processors: List<EventProcessorInformation>,
         val versions: Versions,
         val upcasters: List<String>,
+        val features: SupportedFeatures = SupportedFeatures(),
 )
 
 data class SupportedFeatures(
@@ -102,7 +102,11 @@ data class SupportedFeatures(
         /* Whether the client supports pause/resume of reports.*/
         val pauseReports: Boolean? = false,
         /* Whether the client supports thread dumps.*/
-        val threadDump: Boolean? = false
+        val threadDump: Boolean? = false,
+        /* Whether the client supports DLQ insights. Can be FULL, LIMITED, MASKED, or NONE (default).*/
+        val deadLetterQueuesInsights: AxoniqConsoleDlqMode = AxoniqConsoleDlqMode.NONE,
+        /* Whether the client supports domain events insights. Can be FULL, LOAD_DOMAIN_STATE_ONLY, PREVIEW_PAYLOAD_ONLY, or NONE (default).*/
+        val domainEventsInsights: DomainEventAccessMode = DomainEventAccessMode.NONE,
 )
 
 data class Versions(
