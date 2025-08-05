@@ -48,7 +48,7 @@ class ProcessorMetricsRegistry {
         } finally {
             val uow = CurrentUnitOfWork.get()
             if(uow !is BatchingUnitOfWork || uow.isFirstMessage) {
-                uow.afterCommit {
+                uow.onCleanup {
                     getProcessingLatencySegmentMap(processor)
                             .remove(segment)
                 }
@@ -81,7 +81,7 @@ class ProcessorMetricsRegistry {
             .computeIfAbsentWithRetry(processor) { ConcurrentHashMap() }
 
     class ExpiringLatencyValue(
-        private val expiryTime: Long = 30 * 60 * 1000 // Default to 1 hour
+        private val expiryTime: Long = 2 * 60 * 1000 // Default to 2 minutes
     ) {
         private val clock = Clock.systemUTC()
         private val value: AtomicReference<Double> = AtomicReference(-1.0)

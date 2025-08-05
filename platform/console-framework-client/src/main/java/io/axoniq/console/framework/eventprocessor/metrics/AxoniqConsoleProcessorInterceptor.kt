@@ -49,17 +49,18 @@ class AxoniqConsoleProcessorInterceptor(
                 it.reportProcessorName(processorName)
             }
             val segment = unitOfWork.resources()["Processor[$processorName]/SegmentId"] as? Int ?: -1
+            val ingestTimestamp = Instant.now()
             processorMetricsRegistry.registerIngested(
                     processorName,
                     segment,
-                    ChronoUnit.NANOS.between(message.timestamp, Instant.now())
+                    ChronoUnit.NANOS.between(message.timestamp, ingestTimestamp)
             )
             if (unitOfWork !is BatchingUnitOfWork<*> || unitOfWork.isFirstMessage) {
                 unitOfWork.afterCommit {
                     processorMetricsRegistry.registerCommitted(
                             processorName,
                             segment,
-                            ChronoUnit.NANOS.between(message.timestamp, Instant.now())
+                            ChronoUnit.NANOS.between(ingestTimestamp, Instant.now())
                     )
                 }
             }
