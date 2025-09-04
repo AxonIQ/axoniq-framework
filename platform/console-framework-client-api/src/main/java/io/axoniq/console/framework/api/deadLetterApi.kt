@@ -31,7 +31,8 @@ data class DeadLetter(
 )
 
 data class DeadLetterResponse(
-    val sequences: List<List<DeadLetter>>
+    val sequences: List<List<DeadLetter>>,
+    val totalCount: Int
 )
 
 data class DeadLetterRequest(

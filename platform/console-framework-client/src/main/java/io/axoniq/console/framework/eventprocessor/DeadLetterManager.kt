@@ -28,6 +28,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import io.axoniq.console.framework.api.DeadLetter as ApiDeadLetter
+import io.axoniq.console.framework.api.DeadLetterResponse
 
 private const val LETTER_PAYLOAD_SIZE_LIMIT = 1024
 private const val MASKED = "<MASKED>"
@@ -46,11 +47,11 @@ class DeadLetterManager(
         offset: Int = 0,
         size: Int = 25,
         maxSequenceLetters: Int = 10
-    ): List<List<ApiDeadLetter>> {
+    ): DeadLetterResponse {
         if (dlqMode == AxoniqConsoleDlqMode.NONE) {
-            return emptyList()
+            return DeadLetterResponse(emptyList(), 0)
         }
-        return dlqFor(processingGroup)
+        val sequences = dlqFor(processingGroup)
             .deadLetters()
             .drop(offset)
             .take(size)
@@ -60,6 +61,8 @@ class DeadLetterManager(
                     .take(maxSequenceLetters)
                     .map { toDeadLetter(it, processingGroup) }
             }
+        val totalCount = totalDeadLetters(processingGroup)
+        return DeadLetterResponse(sequences, totalCount)
     }
 
     private fun toDeadLetter(letter: DeadLetter<out EventMessage<*>>, processingGroup: String) =
@@ -123,6 +126,13 @@ class DeadLetterManager(
             if (it is String) it else it.hashCode().toString()
         }
         ?: letter.message().identifier
+
+    fun totalDeadLetters(processingGroup: String): Int {
+        if (dlqMode == AxoniqConsoleDlqMode.NONE) {
+            return 0
+        }
+        return dlqFor(processingGroup).deadLetters().sumOf { it.asIterable().count() }
+    }
 
     fun sequenceSize(
         processingGroup: String,

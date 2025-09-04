@@ -62,7 +62,7 @@ open class RSocketDlqResponder(
 
     private fun handleDeadLetterQuery(request: DeadLetterRequest): DeadLetterResponse {
         logger.debug("Handling AxonIQ Console DEAD_LETTERS query for request [{}]", request)
-        return DeadLetterResponse(deadLetterManager.deadLetters(request.processingGroup, request.offset, request.size))
+        return deadLetterManager.deadLetters(request.processingGroup, request.offset, request.size)
     }
 
     private fun handleSequenceSizeQuery(request: DeadLetterSequenceSize): Long {
