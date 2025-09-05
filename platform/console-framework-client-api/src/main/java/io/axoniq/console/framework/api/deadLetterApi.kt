@@ -32,7 +32,7 @@ data class DeadLetter(
 
 data class DeadLetterResponse(
     val sequences: List<List<DeadLetter>>,
-    val totalCount: Int
+    val totalCount: Long
 )
 
 data class DeadLetterRequest(

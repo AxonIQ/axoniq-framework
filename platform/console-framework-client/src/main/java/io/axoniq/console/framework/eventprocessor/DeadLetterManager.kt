@@ -51,18 +51,17 @@ class DeadLetterManager(
         if (dlqMode == AxoniqConsoleDlqMode.NONE) {
             return DeadLetterResponse(emptyList(), 0)
         }
-        val sequences = dlqFor(processingGroup)
-            .deadLetters()
-            .drop(offset)
-            .take(size)
-            .map { sequence ->
-                sequence
-                    .asIterable()
-                    .take(maxSequenceLetters)
-                    .map { toDeadLetter(it, processingGroup) }
-            }
-        val totalCount = totalDeadLetters(processingGroup)
-        return DeadLetterResponse(sequences, totalCount)
+        val queue = dlqFor(processingGroup)
+        val sequences = queue
+                .deadLetters()
+                .drop(offset)
+                .take(size)
+                .map { sequence ->
+                    sequence.asIterable()
+                            .take(maxSequenceLetters)
+                            .map { toDeadLetter(it, processingGroup) }
+                }
+        return DeadLetterResponse(sequences, queue.amountOfSequences())
     }
 
     private fun toDeadLetter(letter: DeadLetter<out EventMessage<*>>, processingGroup: String) =
@@ -126,13 +125,6 @@ class DeadLetterManager(
             if (it is String) it else it.hashCode().toString()
         }
         ?: letter.message().identifier
-
-    fun totalDeadLetters(processingGroup: String): Int {
-        if (dlqMode == AxoniqConsoleDlqMode.NONE) {
-            return 0
-        }
-        return dlqFor(processingGroup).deadLetters().sumOf { it.asIterable().count() }
-    }
 
     fun sequenceSize(
         processingGroup: String,
