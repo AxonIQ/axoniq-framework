@@ -111,7 +111,7 @@ open class RSocketDlqResponder(
 
     private fun handleDeleteAllSequencesCommand(request: DeleteAllDeadLetterSequencesRequest): Int {
         logger.debug("Handling AxonIQ Console DELETE_ALL_DEAD_LETTER_SEQUENCES commands for processing group [{}]", request.processingGroup)
-        return deadLetterManager.deleteAll(request.processingGroup, request.maxMessages)
+        return deadLetterManager.deleteAll(request.processingGroup)
     }
 
 }

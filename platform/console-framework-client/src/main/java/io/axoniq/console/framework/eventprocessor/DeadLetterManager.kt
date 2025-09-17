@@ -193,29 +193,13 @@ class DeadLetterManager(
 
     fun deleteAll(
             processingGroup: String,
-            maxMessages: Int? = null,
             timeoutSeconds: Long = 600
     ): Int {
         return executor.submit(Callable {
             val dlq = dlqFor(processingGroup)
-            var deletedCount = 0
-
-            // Iterate through all sequences and delete their messages
-            for (sequence in dlq.deadLetters()) {
-                if (maxMessages != null && deletedCount >= maxMessages) {
-                    break
-                }
-
-                for (letter in sequence) {
-                    if (maxMessages != null && deletedCount >= maxMessages) {
-                        break
-                    }
-                    dlq.evict(letter)
-                    deletedCount++
-                }
-            }
-
-            deletedCount
+            val totalCount = dlq.size().toInt()
+            dlq.clear()
+            totalCount
         }).get(timeoutSeconds, TimeUnit.SECONDS)
     }
 

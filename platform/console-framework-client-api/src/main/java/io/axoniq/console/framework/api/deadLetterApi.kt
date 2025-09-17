@@ -64,8 +64,7 @@ data class ProcessAllDeadLetterSequencesRequest(
 )
 
 data class DeleteAllDeadLetterSequencesRequest(
-        val processingGroup: String,
-        val maxMessages: Int = 10
+        val processingGroup: String
 )
 
 data class DeadLetterProcessRequest(
