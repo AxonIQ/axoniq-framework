@@ -28,6 +28,7 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import io.axoniq.console.framework.api.DeadLetter as ApiDeadLetter
+import io.axoniq.console.framework.api.DeadLetterResponse
 
 private const val LETTER_PAYLOAD_SIZE_LIMIT = 1024
 private const val MASKED = "<MASKED>"
@@ -46,20 +47,21 @@ class DeadLetterManager(
         offset: Int = 0,
         size: Int = 25,
         maxSequenceLetters: Int = 10
-    ): List<List<ApiDeadLetter>> {
+    ): DeadLetterResponse {
         if (dlqMode == AxoniqConsoleDlqMode.NONE) {
-            return emptyList()
+            return DeadLetterResponse(emptyList(), 0)
         }
-        return dlqFor(processingGroup)
-            .deadLetters()
-            .drop(offset)
-            .take(size)
-            .map { sequence ->
-                sequence
-                    .asIterable()
-                    .take(maxSequenceLetters)
-                    .map { toDeadLetter(it, processingGroup) }
-            }
+        val queue = dlqFor(processingGroup)
+        val sequences = queue
+                .deadLetters()
+                .drop(offset)
+                .take(size)
+                .map { sequence ->
+                    sequence.asIterable()
+                            .take(maxSequenceLetters)
+                            .map { toDeadLetter(it, processingGroup) }
+                }
+        return DeadLetterResponse(sequences, queue.amountOfSequences())
     }
 
     private fun toDeadLetter(letter: DeadLetter<out EventMessage<*>>, processingGroup: String) =
@@ -167,6 +169,38 @@ class DeadLetterManager(
                 it.message().identifier.hashIfNeeded() == messageIdentifier
             }
         }).get(60, TimeUnit.SECONDS)
+    }
+
+    fun processAll(
+            processingGroup: String,
+            maxMessages: Int? = null,
+            timeoutSeconds: Long = 600
+    ): Int {
+        return executor.submit(Callable {
+            val processor = letterProcessorFor(processingGroup)
+            var processedCount = 0
+
+            // Process all messages or up to maxMessages limit
+            while ((maxMessages == null || processedCount < maxMessages)) {
+                val processed = processor.process { true }
+                if (!processed) break // No more messages to process
+                processedCount++
+            }
+
+            processedCount
+        }).get(timeoutSeconds, TimeUnit.SECONDS)
+    }
+
+    fun deleteAll(
+            processingGroup: String,
+            timeoutSeconds: Long = 600
+    ): Int {
+        return executor.submit(Callable {
+            val dlq = dlqFor(processingGroup)
+            val totalCount = dlq.size().toInt()
+            dlq.clear()
+            totalCount
+        }).get(timeoutSeconds, TimeUnit.SECONDS)
     }
 
     private fun String.hashIfNeeded(): String {

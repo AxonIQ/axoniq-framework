@@ -58,11 +58,21 @@ open class RSocketDlqResponder(
             DeadLetterProcessRequest::class.java,
             this::handleProcessCommand
         )
+        registrar.registerHandlerWithPayload(
+                Routes.ProcessingGroup.DeadLetter.PROCESS_ALL_SEQUENCES,
+                ProcessAllDeadLetterSequencesRequest::class.java,
+                this::handleProcessAllSequencesCommand
+        )
+        registrar.registerHandlerWithPayload(
+                Routes.ProcessingGroup.DeadLetter.DELETE_ALL_SEQUENCES,
+                DeleteAllDeadLetterSequencesRequest::class.java,
+                this::handleDeleteAllSequencesCommand
+        )
     }
 
     private fun handleDeadLetterQuery(request: DeadLetterRequest): DeadLetterResponse {
         logger.debug("Handling AxonIQ Console DEAD_LETTERS query for request [{}]", request)
-        return DeadLetterResponse(deadLetterManager.deadLetters(request.processingGroup, request.offset, request.size))
+        return deadLetterManager.deadLetters(request.processingGroup, request.offset, request.size)
     }
 
     private fun handleSequenceSizeQuery(request: DeadLetterSequenceSize): Long {
@@ -93,4 +103,15 @@ open class RSocketDlqResponder(
         logger.debug("Handling AxonIQ Console DEAD LETTERS query for processing group [{}]", request.processingGroup)
         return deadLetterManager.process(request.processingGroup, request.messageIdentifier)
     }
+
+    private fun handleProcessAllSequencesCommand(request: ProcessAllDeadLetterSequencesRequest): Int {
+        logger.debug("Handling AxonIQ Console PROCESS_ALL_DEAD_LETTER_SEQUENCES commands for processing group [{}]", request.processingGroup)
+        return deadLetterManager.processAll(request.processingGroup, request.maxMessages)
+    }
+
+    private fun handleDeleteAllSequencesCommand(request: DeleteAllDeadLetterSequencesRequest): Int {
+        logger.debug("Handling AxonIQ Console DELETE_ALL_DEAD_LETTER_SEQUENCES commands for processing group [{}]", request.processingGroup)
+        return deadLetterManager.deleteAll(request.processingGroup)
+    }
+
 }

@@ -31,7 +31,8 @@ data class DeadLetter(
 )
 
 data class DeadLetterResponse(
-    val sequences: List<List<DeadLetter>>
+    val sequences: List<List<DeadLetter>>,
+    val totalCount: Long = -1
 )
 
 data class DeadLetterRequest(
@@ -55,6 +56,15 @@ data class DeadLetterSingleDeleteRequest(
     val processingGroup: String,
     val sequenceIdentifier: String,
     val messageIdentifier: String,
+)
+
+data class ProcessAllDeadLetterSequencesRequest(
+    val processingGroup: String,
+    val maxMessages: Int = 10
+)
+
+data class DeleteAllDeadLetterSequencesRequest(
+        val processingGroup: String
 )
 
 data class DeadLetterProcessRequest(

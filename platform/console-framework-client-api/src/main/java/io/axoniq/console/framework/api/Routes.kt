@@ -57,8 +57,10 @@ object Routes {
             const val SEQUENCE_SIZE = "dlq-query-dead-letter-sequence-size"
 
             const val DELETE_SEQUENCE = "dlq-command-delete-sequence"
+            const val DELETE_ALL_SEQUENCES = "dlq-command-delete-all-sequences"
             const val DELETE_LETTER = "dlq-command-delete-letter"
             const val PROCESS = "dlq-command-process"
+            const val PROCESS_ALL_SEQUENCES = "dlq-command-process-all-sequences"
         }
     }
 
