@@ -171,6 +171,38 @@ class DeadLetterManager(
         }).get(60, TimeUnit.SECONDS)
     }
 
+    fun processAll(
+            processingGroup: String,
+            maxMessages: Int? = null,
+            timeoutSeconds: Long = 600
+    ): Int {
+        return executor.submit(Callable {
+            val processor = letterProcessorFor(processingGroup)
+            var processedCount = 0
+
+            // Process all messages or up to maxMessages limit
+            while ((maxMessages == null || processedCount < maxMessages)) {
+                val processed = processor.process { true }
+                if (!processed) break // No more messages to process
+                processedCount++
+            }
+
+            processedCount
+        }).get(timeoutSeconds, TimeUnit.SECONDS)
+    }
+
+    fun deleteAll(
+            processingGroup: String,
+            timeoutSeconds: Long = 600
+    ): Int {
+        return executor.submit(Callable {
+            val dlq = dlqFor(processingGroup)
+            val totalCount = dlq.size().toInt()
+            dlq.clear()
+            totalCount
+        }).get(timeoutSeconds, TimeUnit.SECONDS)
+    }
+
     private fun String.hashIfNeeded(): String {
         return if (dlqMode == AxoniqConsoleDlqMode.MASKED) {
             DigestUtils.sha256Hex(this)
