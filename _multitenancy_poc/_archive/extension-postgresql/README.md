@@ -1,8 +1,9 @@
 # AxonIQ Framework - PostgreSQL Extension
 
 This repository provides an extension to the [Axon Framework](https://github.com/AxonFramework/AxonFramework), for using
-it with PostgreSQL. It does so by providing a dedicated Event Storage solution for event-driven and event sourcing applications, through PostgreSQL.
-Furthermore, it follows the principles of the Dynamic Consistency Boundary, leading to greater flexibility for your application evolution.
+it with PostgreSQL. It does so by providing a dedicated Event Storage solution for event-driven and event sourcing
+applications, through PostgreSQL. Furthermore, it follows the principles of the Dynamic Consistency Boundary, leading to
+greater flexibility for your application evolution.
 
 For more information on anything Axon, please visit our website, [http://axoniq.io](http://axoniq.io).
 
@@ -31,3 +32,12 @@ There are a couple of things to consider when you're traversing anything Axon:
   AxonIQ's developers will help out on a best effort basis.
   Know that any support from contributors on posted question is very much appreciated on the forum.
 * Next to the forum we also monitor Stack Overflow for any questions which are tagged with `axon`.
+
+## Licensing
+
+Axon Framework consists out of a number of different modules, each with different licenses. Modules residing under
+the [Axon Framework](https://github.com/AxonFramework) GitHub organization, with group identifier `org.axonframework`,
+are Apache 2 licensed. Modules under the [AxonIQ](https://github.com/AxonIQ) GitHub organization, with group identifier
+`io.axoniq`, are licensed under AxonIQ's proprietary license.
+
+Please refer to individual module's LICENSE file for details.
