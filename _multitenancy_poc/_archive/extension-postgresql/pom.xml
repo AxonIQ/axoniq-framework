@@ -578,9 +578,9 @@
     </repositories>
 
     <scm>
-        <connection>scm:git:git://github.com/AxonFramework/AxonFramework.git</connection>
-        <developerConnection>scm:git:git@github.com:AxonFramework/AxonFramework.git</developerConnection>
-        <url>https://github.com/AxonFramework/AxonFramework</url>
+        <connection>scm:git:git://github.com/AxonIQ/extension-postgresql.git</connection>
+        <developerConnection>scm:git:git@github.com:AxonIQ/extension-postgresql.git</developerConnection>
+        <url>https://github.com/AxonIQ/extension-postgresql</url>
         <tag>HEAD</tag>
     </scm>
 
