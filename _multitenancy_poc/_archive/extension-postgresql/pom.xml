@@ -24,9 +24,9 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <name>AxonIQ Framework - PostgreSQL</name>
+    <name>AxonIQ Framework - PostgreSQL Extension</name>
     <description>
-        A module for Axon Framework providing a tailored storage solution through PostgreSQL.
+        An extension, from AxonIQ, for Axon Framework, providing a tailored storage solution through PostgreSQL.
     </description>
 
     <inceptionYear>2025</inceptionYear>
@@ -35,7 +35,7 @@
     </licenses>
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/AxonIQ/postgresql-module/issues</url>
+        <url>https://github.com/AxonIQ/extension-postgresql/issues</url>
     </issueManagement>
 
     <properties>
