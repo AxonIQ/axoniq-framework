@@ -23,7 +23,7 @@
     <groupId>io.axoniq.framework</groupId>
     <artifactId>postgresql</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
 
     <modelVersion>4.0.0</modelVersion>
 
@@ -41,6 +41,10 @@
         <url>https://github.com/AxonIQ/extension-postgresql/issues</url>
     </issueManagement>
 
+    <modules>
+        <module>postgresql-core</module>
+    </modules>
+
     <properties>
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
@@ -49,6 +53,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <axon-framework.version>5.0.0-M3</axon-framework.version>
         <postgresql.version>42.7.7</postgresql.version>
+        <hikari-cp.version>7.0.2</hikari-cp.version>
         <!-- Logging -->
         <log4j.version>2.25.1</log4j.version>
         <slf4j.version>2.0.17</slf4j.version>
@@ -59,12 +64,8 @@
         <mockito.version>5.19.0</mockito.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <assertj.version>3.27.4</assertj.version>
-        <!-- Validation -->
-        <hibernate-validator.version>9.0.1.Final</hibernate-validator.version>
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.8.0</central-publishing-maven-plugin.version>
-        <eclipse.transformer-maven-plugin.version>1.0.0</eclipse.transformer-maven-plugin.version>
-        <felix.maven-bundle-plugin.version>6.0.0</felix.maven-bundle-plugin.version>
         <jacoco-maven.version>0.8.13</jacoco-maven.version>
         <maven-assembly.version>3.7.1</maven-assembly.version>
         <maven-clean.version>3.5.0</maven-clean.version>
@@ -81,87 +82,36 @@
         <maven-resources.version>3.3.1</maven-resources.version>
     </properties>
 
-    <dependencies>
-        <!-- Testing -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <version>${assertj.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- Logging -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>jul-to-slf4j</artifactId>
-            <version>${slf4j.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>${log4j.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>jcl-over-slf4j</artifactId>
-            <version>${slf4j.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <version>${log4j.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.sun.jdmk</groupId>
-                    <artifactId>jmxtools</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.sun.jmx</groupId>
-                    <artifactId>jmxri</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>javax.mail</groupId>
-                    <artifactId>mail</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>javax.jms</groupId>
-                    <artifactId>jms</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-    </dependencies>
-
     <dependencyManagement>
         <dependencies>
-            <!-- Axon Server -->
+            <!-- Axon Framework -->
             <dependency>
                 <groupId>org.axonframework</groupId>
-                <artifactId>eventsourcing</artifactId>
-                <version>${project.version}</version>
+                <artifactId>axon-eventsourcing</artifactId>
+                <version>${axon-framework.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.axonframework</groupId>
+                <artifactId>axon-eventsourcing</artifactId>
+                <version>${axon-framework.version}</version>
+                <classifier>tests</classifier>
+            </dependency>
+            <dependency>
+                <groupId>org.axonframework</groupId>
+                <artifactId>axon-messaging</artifactId>
+                <version>${axon-framework.version}</version>
+                <classifier>tests</classifier>
             </dependency>
             <!-- Database -->
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.zaxxer</groupId>
+                <artifactId>HikariCP</artifactId>
+                <version>${hikari-cp.version}</version>
             </dependency>
             <!-- Logging -->
             <dependency>
@@ -203,6 +153,11 @@
                 <version>${mockito.version}</version>
             </dependency>
             <dependency>
+                <groupId>io.projectreactor</groupId>
+                <artifactId>reactor-test</artifactId>
+                <version>3.5.8</version>
+            </dependency>
+            <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
@@ -217,17 +172,6 @@
 
         <pluginManagement>
             <plugins>
-                <plugin>
-                    <groupId>org.eclipse.transformer</groupId>
-                    <artifactId>transformer-maven-plugin</artifactId>
-                    <version>${eclipse.transformer-maven-plugin.version}</version>
-                    <extensions>true</extensions>
-                    <configuration>
-                        <rules>
-                            <jakartaDefaults>true</jakartaDefaults>
-                        </rules>
-                    </configuration>
-                </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
@@ -596,6 +540,9 @@
             <roles>
                 <role>Lead Developer</role>
             </roles>
+        </developer>
+        <developer>
+            <name>John Hendrikx</name>
         </developer>
     </developers>
 </project>
