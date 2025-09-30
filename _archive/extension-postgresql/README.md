@@ -13,6 +13,38 @@ Prerequisites
 
 * Java 21 or higher
 * Axon Framework 5
+* PostgreSQL driver version >= 42.6.0
+
+To use this Postgres event storage engine, you can register it as an `EventStorageEngine` 
+with the `EventSourcingConfigurer` in your project. Currently, the engine can only 
+be configured with a `ConnectionExecutor` which manages execution of JDBC statements 
+and an `EventConverter` for converting payloads to a raw byte array suitable for storage:
+
+```java
+EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
+    .registerEventStorageEngine(componentRegistry ->
+        new PostgresqlEventStorageEngine(
+            new DataSourceConnectionExecutor(dataSource),
+            new DelegatingEventConverter(new JacksonConverter())
+        )
+    )
+
+/*
+ * Register some entities here with configurer.registerEntity, then
+ * start the configuration:
+ */
+
+AxonConfiguration configuration = configurer.build();
+
+EventStore store = configuration.getComponent(EventStore.class);
+CommandGateway commandGateway = configuration.getComponent(CommandGateway.class);
+QueryGateway queryGateway = configuration.getComponent(QueryGateway.class);
+
+configuration.start();
+```
+
+The constructor will create two tables with (for now) the fixed names `events` and 
+`consistency_tags`, with appropriate indices, as well as a sequence called `events_monotonic_seq`.
 
 For any other details concerning Axon, be sure to check [AxonIQ Docs](https://docs.axoniq.io/home/).
 
