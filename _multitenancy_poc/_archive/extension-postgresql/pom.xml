@@ -35,6 +35,10 @@
     <inceptionYear>2025</inceptionYear>
     <url>https://axoniq.io/</url>
     <licenses>
+        <license>
+            <name>Commercial</name>
+            <url>https://lp.axoniq.io/axoniq-software-subscription-agreement-terms</url>
+        </license>
     </licenses>
     <issueManagement>
         <system>GitHub</system>
@@ -51,7 +55,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.0.0-M3</axon-framework.version>
+        <axon-framework.version>5.0.0-preview</axon-framework.version>
         <postgresql.version>42.7.8</postgresql.version>
         <hikari-cp.version>7.0.2</hikari-cp.version>
         <!-- Logging -->
