@@ -58,16 +58,19 @@
         <axon-framework.version>5.0.0-preview</axon-framework.version>
         <postgresql.version>42.7.8</postgresql.version>
         <hikari-cp.version>7.0.2</hikari-cp.version>
+        <!-- Conversion -->
+        <jackson.version>2.20.0</jackson.version>
         <!-- Logging -->
         <log4j.version>2.25.1</log4j.version>
         <slf4j.version>2.0.17</slf4j.version>
         <!-- Testing -->
+        <assertj.version>3.27.4</assertj.version>
         <awaitility.version>4.3.0</awaitility.version>
         <hamcrest.version>3.0</hamcrest.version>
         <junit.jupiter.version>5.13.4</junit.jupiter.version>
         <mockito.version>5.20.0</mockito.version>
+        <reactor.version>3.7.11</reactor.version>
         <testcontainers.version>1.21.3</testcontainers.version>
-        <assertj.version>3.27.4</assertj.version>
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.9.0</central-publishing-maven-plugin.version>
         <jacoco-maven.version>0.8.13</jacoco-maven.version>
@@ -105,6 +108,14 @@
                 <artifactId>axon-messaging</artifactId>
                 <version>${axon-framework.version}</version>
                 <classifier>tests</classifier>
+            </dependency>
+            <!-- Conversion -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
             <!-- Database -->
             <dependency>
@@ -159,7 +170,7 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-test</artifactId>
-                <version>3.7.11</version>
+                <version>${reactor.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.testcontainers</groupId>
