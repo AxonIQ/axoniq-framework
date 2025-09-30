@@ -18,27 +18,19 @@
 
 package io.axoniq.framework.postgresql;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.axonframework.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.eventsourcing.eventstore.SimpleEventStore;
 import org.axonframework.messaging.unitofwork.ProcessingContext;
 import org.axonframework.serialization.json.JacksonConverter;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.*;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-
 import javax.sql.DataSource;
-
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 
 /**
  * Test class validating the {@link SimpleEventStore} together with the {@link PostgresqlEventStorageEngine}.
