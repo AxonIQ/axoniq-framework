@@ -22,7 +22,7 @@
 
     <groupId>io.axoniq.framework</groupId>
     <artifactId>postgresql</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modelVersion>4.0.0</modelVersion>
@@ -543,7 +543,7 @@
         <connection>scm:git:git://github.com/AxonIQ/extension-postgresql.git</connection>
         <developerConnection>scm:git:git@github.com:AxonIQ/extension-postgresql.git</developerConnection>
         <url>https://github.com/AxonIQ/extension-postgresql</url>
-        <tag>axon-postgresql-0.1.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <developers>
