@@ -85,6 +85,21 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     private record FinalizedEvent(long position, EventMessage event) {}
 
+    /**
+     * Represents a batch of events read from the event store.
+     * <p>
+     * The batch contains the events included in this read, and the highest global index
+     * observed in this batch. This value is either:
+     * <ul>
+     *     <li>the global index of the last event in the batch, if the end of the store was not reached, or</li>
+     *     <li>the highest global index scanned in the store, if the end was reached.</li>
+     * </ul>
+     *
+     * @param events the events returned as part of this batch, cannot be {@code null}, but may be empty
+     * @param highestGlobalIndex the highest global index observed in this batch
+     */
+    private record Batch(List<FinalizedEvent> events, long highestGlobalIndex) {}
+
     private record TagFilter(String sql, List<String> tagParameters) {
         boolean isEmpty() {
             return tagParameters.isEmpty();
@@ -100,7 +115,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     /**
      * Queries events in order starting from a given global index, limited by the given limit.
-     * Returns up to limit rows (including no rows at all if there were no matches).
+     * Returns up to limit rows (including no rows at all if there were no matches). Also
+     * Returns the highest known global index.
      *
      * <li>Parameter 1 {@code long}: global index to start querying from
      * <li>Parameter 2 {@code long}: maximum number of rows to query
@@ -111,7 +127,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
           FROM events
           WHERE global_index >= ?
           ORDER BY global_index
-          LIMIT ?
+          LIMIT ?;
+
+        SELECT MAX(global_index) AS last_seen
+          FROM events;
         """;
 
     /**
@@ -483,10 +502,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         StreamSpliterator<FinalizedEvent> entrySpliterator = new StreamSpliterator<>(
             last -> {
                 long position = last == null ? start : last.position;
+                Batch batch = load(context, criterions, position + 1, 50);
 
-                lastGlobalIndex.set(position);
+                lastGlobalIndex.set(batch.highestGlobalIndex);
 
-                return load(context, criterions, position + 1, 50);
+                return batch.events;
             },
             predicate
         );
@@ -499,9 +519,9 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     // TODO #9 Prefetching via max parameter here should perhaps not be a concern of the engine
-    private List<FinalizedEvent> load(ProcessingContext context, Set<EventCriterion> criterions, long position, int max) {
+    private Batch load(ProcessingContext context, Set<EventCriterion> criterions, long position, int limit) {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("load: loading from " + position + " (max " + max + ") with condition " + criterions + " and context " + context);
+            LOGGER.debug("load: loading from " + position + " (limit " + limit + ") with condition " + criterions + " and context " + context);
         }
 
         TagFilter tagFilter = buildTagFilter(criterions);
@@ -523,11 +543,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                     ps.setString(parameterIndex++, parameter);  // tag parameters
                 }
 
-                ps.setLong(parameterIndex++, max);  // limit parameter
+                ps.setLong(parameterIndex++, limit);
 
-                try (ResultSet resultSet = ps.executeQuery()) {
-                    List<FinalizedEvent> list = new ArrayList<>();
+                if (!ps.execute()) {
+                    throw new IllegalStateException("A ResultSet is expected");
+                }
 
+                List<FinalizedEvent> list = new ArrayList<>();
+
+                try (ResultSet resultSet = ps.getResultSet()) {
                     while (resultSet.next()) {
                         long globalIndex = resultSet.getLong(1);
                         Instant timestamp = resultSet.getTimestamp(2).toInstant();
@@ -541,8 +565,29 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                             new GenericEventMessage(identifier, messageType, payload, metadata, timestamp)
                         ));
                     }
+                }
 
-                    return list;
+                if (list.size() == limit) {
+
+                    /*
+                     * If limit was reached, the maximum global index query is not yet needed
+                     * as there will be more queries needed to finish the stream. Don't
+                     * bother fetching it and just return early:
+                     */
+
+                    return new Batch(list, list.getLast().position);
+                }
+
+                if (!ps.getMoreResults()) {
+                    throw new IllegalStateException("A second ResultSet is expected");
+                }
+
+                try (ResultSet resultSet = ps.getResultSet()) {
+                    resultSet.next();
+
+                    long maxGlobalIndex = resultSet.getLong(1);
+
+                    return new Batch(list, maxGlobalIndex);
                 }
             }
         });

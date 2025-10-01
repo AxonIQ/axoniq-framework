@@ -58,6 +58,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -240,6 +241,31 @@ public abstract class StorageEngineTestSuite<ESE extends EventStorageEngine> {
                 .pollDelay(Duration.ofMillis(50))
                 .atMost(Duration.ofMillis(500))
                 .untilTrue(completed);
+    }
+
+    @Test
+    void sourcingEventsShouldReturnLatestConsistencyMarker() throws Exception {
+        appendEvents(
+            AppendCondition.none(),
+            taggedEventMessage("event-0", TEST_CRITERIA_TAGS),
+            taggedEventMessage("event-1", OTHER_CRITERIA_TAGS)
+        );
+
+        ConsistencyMarker marker1 = testSubject.source(SourcingCondition.conditionFor(TEST_CRITERIA), processingContext())
+            .asFlux()
+            .collectList()
+            .map(List::getLast)
+            .map(entry -> entry.getResource(ConsistencyMarker.RESOURCE_KEY))
+            .block();
+
+        ConsistencyMarker marker2 = testSubject.source(SourcingCondition.conditionFor(OTHER_CRITERIA), processingContext())
+            .asFlux()
+            .collectList()
+            .map(List::getLast)
+            .map(entry -> entry.getResource(ConsistencyMarker.RESOURCE_KEY))
+            .block();
+
+        assertThat(marker1).isEqualTo(marker2);
     }
 
     private static void assertMarkerEntry(Entry<EventMessage> entry) {
