@@ -268,6 +268,25 @@ public abstract class StorageEngineTestSuite<ESE extends EventStorageEngine> {
         assertThat(marker1).isEqualTo(marker2);
     }
 
+    @Test
+    void sourcingEventsShouldReturnLatestConsistencyMarkerEvenWhenEmpty() throws Exception {
+        ConsistencyMarker marker1 = testSubject.source(SourcingCondition.conditionFor(TEST_CRITERIA), processingContext())
+            .asFlux()
+            .collectList()
+            .map(List::getLast)
+            .map(entry -> entry.getResource(ConsistencyMarker.RESOURCE_KEY))
+            .block();
+
+        ConsistencyMarker marker2 = testSubject.source(SourcingCondition.conditionFor(OTHER_CRITERIA), processingContext())
+            .asFlux()
+            .collectList()
+            .map(List::getLast)
+            .map(entry -> entry.getResource(ConsistencyMarker.RESOURCE_KEY))
+            .block();
+
+        assertThat(marker1).isEqualTo(marker2);
+    }
+
     private static void assertMarkerEntry(Entry<EventMessage> entry) {
         assertNotNull(entry.getResource(ConsistencyMarker.RESOURCE_KEY));
         assertEquals(TerminalEventMessage.INSTANCE, entry.message());

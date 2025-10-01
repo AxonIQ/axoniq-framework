@@ -129,7 +129,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
           ORDER BY global_index
           LIMIT ?;
 
-        SELECT MAX(global_index) AS last_seen
+        SELECT COALESCE(MAX(global_index), 0) AS last_seen
           FROM events;
         """;
 
