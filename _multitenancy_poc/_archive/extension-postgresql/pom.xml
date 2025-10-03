@@ -550,7 +550,7 @@
         <developer>
             <name>Steven van Beelen</name>
             <email>steven.vanbeelen@axoniq.io</email>
-            <organization>AxonIQ</organization>
+            <organization>Axoniq</organization>
             <organizationUrl>https://axoniq.io</organizationUrl>
             <roles>
                 <role>Lead Developer</role>
@@ -558,6 +558,9 @@
         </developer>
         <developer>
             <name>John Hendrikx</name>
+            <roles>
+                <role>Developer</role>
+            </roles>
         </developer>
     </developers>
 </project>

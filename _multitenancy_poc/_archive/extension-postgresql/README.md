@@ -1,4 +1,4 @@
-# AxonIQ Framework - PostgreSQL Extension
+# Axoniq Framework - PostgreSQL Extension
 
 This repository provides an extension to the [Axon Framework](https://github.com/AxonFramework/AxonFramework), for using
 it with PostgreSQL. It does so by providing a dedicated Event Storage solution for event-driven and event sourcing
@@ -46,7 +46,7 @@ configuration.start();
 The constructor will create two tables with (for now) the fixed names `events` and 
 `consistency_tags`, with appropriate indices, as well as a sequence called `events_monotonic_seq`.
 
-For any other details concerning Axon, be sure to check [AxonIQ Docs](https://docs.axoniq.io/home/).
+For any other details concerning Axon, be sure to check [Axoniq Docs](https://docs.axoniq.io/home/).
 
 ## Receiving help
 
@@ -61,7 +61,7 @@ There are a couple of things to consider when you're traversing anything Axon:
   a [new thread/topic on our library forums describing the problem](https://discuss.axoniq.io/c/26).
 * There is a [forum](https://discuss.axoniq.io/) to support you in the case the reference guide did not sufficiently
   answer your question.
-  AxonIQ's developers will help out on a best effort basis.
+  Axoniq's developers will help out on a best effort basis.
   Know that any support from contributors on posted question is very much appreciated on the forum.
 * Next to the forum we also monitor Stack Overflow for any questions which are tagged with `axon`.
 
@@ -69,7 +69,7 @@ There are a couple of things to consider when you're traversing anything Axon:
 
 Axon Framework consists out of a number of different modules, each with different licenses. Modules residing under
 the [Axon Framework](https://github.com/AxonFramework) GitHub organization, with group identifier `org.axonframework`,
-are Apache 2 licensed. Modules under the [AxonIQ](https://github.com/AxonIQ) GitHub organization, with group identifier
-`io.axoniq`, are licensed under AxonIQ's proprietary license.
+are Apache 2 licensed. Modules under the [Axoniq](https://github.com/AxonIQ) GitHub organization, with group identifier
+`io.axoniq`, are licensed under Axoniq's proprietary license.
 
 Please refer to individual module's LICENSE file for details.
