@@ -206,6 +206,17 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
             SET global_index = LEAST(consistency_tags.global_index, EXCLUDED.global_index)
         """;
 
+    /*
+     * Note: The final SELECT is intentionally written this way due to PostgreSQL sequence behavior
+     * and CTE evaluation order. There are two main cases:
+     *
+     * 1) No events to finalize: we fall back to the current sequence value ("last_value") to get
+     *    the latest global index.
+     *
+     * 2) Events to finalize exist: we use the "new_val" from "finalized_events" because relying on
+     *    "last_value" could return the sequence's starting value if PostgreSQL evaluates it
+     *    before the CTE completes.
+     */
     private static final String FINALIZE_STATEMENT =
         """
         WITH lock AS (
@@ -231,7 +242,9 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
           WHERE t.global_index = fe.old_val
           RETURNING fe.new_val
         )
-        SELECT last_value FROM events_monotonic_seq;
+        SELECT
+          COALESCE(MAX(finalized_events.new_val), (SELECT last_value FROM events_monotonic_seq)) AS latest_global_index
+          FROM finalized_events;
         """;
 
     private final ConnectionExecutor connectionExecutor;
