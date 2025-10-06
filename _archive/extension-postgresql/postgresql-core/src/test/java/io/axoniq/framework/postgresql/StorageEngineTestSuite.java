@@ -329,13 +329,8 @@ public abstract class StorageEngineTestSuite<ESE extends EventStorageEngine> {
         assertInstanceOf(AppendEventsTransactionRejectedException.class, actual.getCause());
     }
 
-    @Test
-    @Disabled
-        // TODO #15 Investigate flakey test in StorageEngineTestSuite (revert to using the AF StorageEgineTestSuite once resolved)
+    @RepeatedTest(5)  // repeat a few times to detect concurrency bugs earlier
     void concurrentTransactionsForNonOverlappingTagsBothCommitWithExpectedConsistencyMarkerResponse() throws Exception {
-        // given...
-        Set<ConsistencyMarker> expected =
-                Set.of(new GlobalIndexConsistencyMarker(1), new GlobalIndexConsistencyMarker(2));
         AppendCondition firstCondition = AppendCondition.withCriteria(TEST_CRITERIA)
                                                         .withMarker(ConsistencyMarker.ORIGIN);
         AppendCondition secondCondition = AppendCondition.withCriteria(OTHER_CRITERIA)
@@ -362,8 +357,14 @@ public abstract class StorageEngineTestSuite<ESE extends EventStorageEngine> {
         ConsistencyMarker secondMarker = secondCommit.get(50, TimeUnit.MILLISECONDS);
         assertNotNull(firstMarker);
         assertNotNull(secondMarker);
-        Set<ConsistencyMarker> result = Set.of(firstMarker, secondMarker);
-        assertEquals(expected, result);
+        List<ConsistencyMarker> result = List.of(firstMarker, secondMarker);
+
+        // Valid results here are: [1, 2], [2, 1], [2, 2], but not [1, 1]
+        assertThat(result).isIn(List.of(
+            List.of(new GlobalIndexConsistencyMarker(1), new GlobalIndexConsistencyMarker(2)),
+            List.of(new GlobalIndexConsistencyMarker(2), new GlobalIndexConsistencyMarker(1)),
+            List.of(new GlobalIndexConsistencyMarker(2), new GlobalIndexConsistencyMarker(2))
+        ));
     }
 
     @Test
