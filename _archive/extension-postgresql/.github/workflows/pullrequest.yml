@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - java-version: 21
-            sonar-enabled: true
+            sonar-enabled: false
 
     steps:
       - name: Checkout code
