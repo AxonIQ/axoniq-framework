@@ -1,0 +1,263 @@
+/*
+ * Copyright (c) 2022-2025. AxonIQ B.V.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.axoniq.platform.framework.client
+
+import io.axoniq.platform.framework.api.CommandBusInformation
+import io.axoniq.platform.framework.api.CommonProcessorInformation
+import io.axoniq.platform.framework.api.EventProcessorInformation
+import io.axoniq.platform.framework.api.EventStoreInformation
+import io.axoniq.platform.framework.api.InterceptorInformation
+import io.axoniq.platform.framework.api.ModuleVersion
+import io.axoniq.platform.framework.api.PooledStreamingEventProcessorInformation
+import io.axoniq.platform.framework.api.ProcessorType
+import io.axoniq.platform.framework.api.QueryBusInformation
+import io.axoniq.platform.framework.api.SerializerInformation
+import io.axoniq.platform.framework.api.SetupPayload
+import io.axoniq.platform.framework.api.StreamingEventProcessorInformation
+import io.axoniq.platform.framework.api.SubscribingProcessorInformation
+import io.axoniq.platform.framework.api.SupportedFeatures
+import io.axoniq.platform.framework.api.UnspecifiedMessageSourceInformation
+import io.axoniq.platform.framework.api.Versions
+import io.axoniq.platform.framework.findAllDecoratorsOfType
+import io.axoniq.platform.framework.getPropertyType
+import io.axoniq.platform.framework.getPropertyValue
+import io.axoniq.platform.framework.unwrapPossiblyDecoratedClass
+import org.axonframework.common.configuration.Configuration
+import org.axonframework.common.util.MavenArtifactVersionResolver
+import org.axonframework.conversion.Converter
+import org.axonframework.messaging.commandhandling.CommandBus
+import org.axonframework.messaging.core.MessageDispatchInterceptor
+import org.axonframework.messaging.core.MessageHandlerInterceptor
+import org.axonframework.messaging.eventhandling.EventSink
+import org.axonframework.messaging.eventhandling.processing.EventProcessor
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.MaxSegmentProvider
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessor
+import org.axonframework.messaging.eventstreaming.StreamableEventSource
+import org.axonframework.messaging.queryhandling.QueryBus
+import org.axonframework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector
+import org.axonframework.messaging.queryhandling.distributed.QueryBusConnector
+import org.axonframework.messaging.queryhandling.interception.InterceptingQueryBus
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAmount
+
+class SetupPayloadCreator(
+        private val configuration: Configuration,
+) {
+
+    fun createReport(): SetupPayload {
+        return SetupPayload(
+            commandBus = commandBusInformation(),
+            queryBus = queryBusInformation(),
+            eventStore = eventBusInformation(),
+            processors = configuration.getComponents(EventProcessor::class.java).mapNotNull {
+                toProcessor(it.value)
+            },
+            versions = versionInformation(),
+            upcasters = emptyList(), // TODO: Check if still exist? I don't believe so
+            features = SupportedFeatures(
+                heartbeat = true,
+                threadDump = true,
+            )
+        )
+    }
+
+    private fun toProcessor(processor: EventProcessor): EventProcessorInformation? {
+        return when (processor) {
+            is PooledStreamingEventProcessor -> toPooledStreamingProcessorInformation(processor)
+            is SubscribingEventProcessor -> toSubscribingProcessorInformation(processor)
+            else -> null
+        }
+    }
+
+    private fun toPooledStreamingProcessorInformation(processor: PooledStreamingEventProcessor): EventProcessorInformation {
+        val configuration = processor.getPropertyValue<PooledStreamingEventProcessorConfiguration>("configuration")
+        return EventProcessorInformation(
+            name = processor.name(),
+            processorType = ProcessorType.POOLED_STREAMING,
+            commonProcessorInformation = CommonProcessorInformation(
+                messageSource = UnspecifiedMessageSourceInformation(
+                    processor.getPropertyValue<Any>("eventSource")
+                        ?.unwrapPossiblyDecoratedClass(StreamableEventSource::class.java)?.javaClass?.name
+                        ?: "Unknown"
+                ),
+                errorHandler = null,
+                invocationErrorHandler = null,
+                interceptors = listOf(),
+            ),
+            streamingInformation = streamingEventProcessorInformation(processor, configuration),
+            pooledStreamingInformation = PooledStreamingEventProcessorInformation(
+                maxClaimedSegments = configuration?.getPropertyValue<MaxSegmentProvider>("maxSegmentProvider")
+                    ?.apply(processor.name()),
+                claimExtensionThreshold = configuration?.getPropertyValue("claimExtensionThreshold"),
+                coordinatorExtendsClaims = configuration?.getPropertyValue("coordinatorExtendsClaims")
+            ),
+        )
+    }
+
+    private fun toSubscribingProcessorInformation(processor: SubscribingEventProcessor): EventProcessorInformation {
+        return EventProcessorInformation(
+            name = processor.name(),
+            processorType = ProcessorType.SUBSCRIBING,
+            commonProcessorInformation = null, // This has completely changed for AF5. TODO: REDO
+            subscribingProcessorInformation = SubscribingProcessorInformation(
+                processingStrategy = "none"
+            )
+        )
+    }
+
+    private fun streamingEventProcessorInformation(processor: StreamingEventProcessor, configuration: PooledStreamingEventProcessorConfiguration?) =
+        StreamingEventProcessorInformation(
+            batchSize = configuration?.getPropertyValue("batchSize"),
+            tokenClaimInterval = configuration?.getPropertyValue("tokenClaimInterval"),
+            tokenStoreType = processor.getPropertyType("tokenStore", TokenStore::class.java),
+            supportsReset = processor.supportsReset(),
+            tokenStoreClaimTimeout = processor.getStoreTokenClaimTimeout("tokenStore"),
+        )
+
+    private val dependenciesToCheck = listOf(
+            "org.axonframework:axon-messaging",
+            "org.axonframework:axon-configuration",
+            "org.axonframework:axon-disruptor",
+            "org.axonframework:axon-eventsourcing",
+            "org.axonframework:axon-legacy",
+            "org.axonframework:axon-metrics",
+            "org.axonframework:axon-micrometer",
+            "org.axonframework:axon-modelling",
+            "org.axonframework:axon-server-connector",
+            "org.axonframework:axon-spring",
+            "org.axonframework:axon-spring-boot-autoconfigure",
+            "org.axonframework:axon-spring-boot-starter",
+            "org.axonframework:axon-tracing-opentelemetry",
+            "org.axonframework.extensions.amqp:axon-amqp",
+            "org.axonframework.extensions.jgroups:axon-jgroups",
+            "org.axonframework.extensions.kafka:axon-kafka",
+            "org.axonframework.extensions.mongo:axon-mongo",
+            "org.axonframework.extensions.reactor:axon-reactor",
+            "org.axonframework.extensions.springcloud:axon-springcloud",
+            "org.axonframework.extensions.tracing:axon-tracing",
+            "io.axoniq:axonserver-connector-java",
+            "io.axoniq.platform:axoniq-platform-messaging",
+    )
+
+    private fun versionInformation(): Versions {
+        return Versions(
+            frameworkVersion = resolveVersion("org.axonframework:axon-messaging") ?: "Unknown",
+            moduleVersions = dependenciesToCheck.map {
+                ModuleVersion(
+                    it,
+                    resolveVersion(it)
+                )
+            }
+        )
+    }
+
+    private fun resolveVersion(dep: String): String? {
+        val (groupId, artifactId) = dep.split(":")
+        return MavenArtifactVersionResolver(
+                groupId,
+                artifactId,
+                this::class.java.classLoader
+        ).get()
+    }
+
+    private fun queryBusInformation(): QueryBusInformation {
+        val busComponent = configuration.getComponent(QueryBus::class.java)
+        val bus = busComponent.unwrapPossiblyDecoratedClass(QueryBus::class.java, listOf("localSegment"))
+        val isDistributed = bus::class.java.name == "org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus"
+        val connector = bus.getPropertyValue<QueryBusConnector>("connector")?.unwrapPossiblyDecoratedClass(QueryBusConnector::class.java)
+        val axonServer = if (isDistributed) {
+            // Unwrap connector
+            val connector = bus.getPropertyValue<QueryBusConnector>("connector")!!.unwrapPossiblyDecoratedClass(QueryBusConnector::class.java)
+            connector::class.java.name == "org.axonframework.axonserver.connector.query.AxonServerQueryBusConnector"
+        } else false
+        val localSegmentType = if (axonServer) bus.getPropertyType("localSegment", QueryBus::class.java) else null
+
+        val context = connector?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+
+        val handlerInterceptors = busComponent.findAllDecoratorsOfType(InterceptingQueryBus::class.java)
+                .flatMap {
+                    it.getPropertyValue<List<MessageHandlerInterceptor<*>>>("handlerInterceptors") ?: emptyList()
+                }
+                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
+                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+        val dispatchInterceptors = busComponent.findAllDecoratorsOfType(InterceptingQueryBus::class.java)
+                .flatMap {
+                    it.getPropertyValue<List<MessageDispatchInterceptor<*>>>("dispatchInterceptors") ?: emptyList()
+                }
+                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
+                // TODO, wtf is happening with the DefaultHandlerInterceptorRegistry
+                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+
+        val payloadConvertingConnector = bus.getPropertyValue<QueryBusConnector>("connector")?.findAllDecoratorsOfType(PayloadConvertingQueryBusConnector::class.java)?.firstOrNull()
+        val converter = payloadConvertingConnector?.getPropertyValue<Converter>("converter")?.unwrapPossiblyDecoratedClass(Converter::class.java, excludedTypes = listOf(
+                "org.axonframework.conversion.ChainingContentTypeConverter"
+        ))
+
+        // TODO: serializers
+        return QueryBusInformation(
+            type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
+            axonServer = axonServer,
+            localSegmentType = localSegmentType,
+            context = context,
+            handlerInterceptors = handlerInterceptors,
+            dispatchInterceptors = dispatchInterceptors,
+            messageSerializer = null,
+            serializer = converter?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) },
+        )
+    }
+
+    private fun eventBusInformation(): EventStoreInformation {
+        val bus = configuration.getComponent(EventSink::class.java).unwrapPossiblyDecoratedClass(EventSink::class.java, listOf("eventStorageEngine"))
+        val axonServer = false
+        val context = "TODO"
+        return EventStoreInformation(
+            type = bus::class.java.name,
+            axonServer = axonServer,
+            context = context,
+            dispatchInterceptors = emptyList(),
+            eventSerializer = null,
+            snapshotSerializer = null,
+            approximateSize = null, // TODO: AF5
+        )
+    }
+
+    private fun commandBusInformation(): CommandBusInformation {
+        val bus = configuration.getComponent(CommandBus::class.java).unwrapPossiblyDecoratedClass(CommandBus::class.java)
+        val axonServer = false
+        val localSegmentType = null
+        val context = "TODO"
+        return CommandBusInformation(
+            type = bus::class.java.name,
+            axonServer = axonServer,
+            localSegmentType = localSegmentType,
+            context = context,
+            handlerInterceptors = emptyList(),
+            dispatchInterceptors = emptyList(),
+            messageSerializer = null
+        )
+    }
+
+    private fun Any.getStoreTokenClaimTimeout(fieldName: String): Long? = getPropertyValue<Any>(fieldName)
+            ?.getPropertyValue<TemporalAmount>("claimTimeout")?.let { it.get(ChronoUnit.SECONDS) * 1000 }
+
+}
+
+

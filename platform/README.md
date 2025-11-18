@@ -1,8 +1,8 @@
-# AxonIQ Console Framework Client
+# AxonIQ Platform client
 
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/io.axoniq.console/console-framework-client/badge.svg)](https://maven-badges.herokuapp.com/maven-central/io.axoniq.console/console-framework-client)
 
-AxonIQ Console superpowers your Axon Framework application with advanced monitoring and enabling easy access to actions
+Axoniq Platform superpowers your Axon Framework application with advanced monitoring and enabling easy access to actions
 within the framework.
 
 ![Screenshot of the handler performance screen](.github/img/screenshot_handler_performance.png)
@@ -10,7 +10,7 @@ within the framework.
 This repository contains the Open-Source connectors that your application will use through maven dependencies.
 For actual configuration, please consult the setup instructions that will be provided by AxonIQ Console itself.
 
-[You can visit AxonIQ Console here.](https://console.axoniq.io)
+[You can visit Axoniq Platform here.](https://platform.axoniq.io)
 
 ## Spring Boot Starter
 
@@ -18,34 +18,10 @@ For actual configuration, please consult the setup instructions that will be pro
 
 * `axoniq.console.credentials` - this need to be set, otherwise the auto configuration won't do anything. The correct
   value can be retrieved via the AxonIQ console UI.
-* `axoniq.console.dlq-mode` - change the mode to access the messages in the DLQ and be able to retry them from console,
-  default: `none`. Several options are available:
-    * `none` - nothing is accessed, it will seem as if the dead letters are not even there.
-    * `masked` - message payloads and diagnostic data won't be shown. The aggregate identifier will be hashed. The event
-      type and the optional exception will be shown as-is.
-    * `limited` - message payloads won't be shown. The aggregate identifier will be shown as-is. From the diagnostics
-      only the keys set in the `axoniq.console.dlq-diagnostics-whitelist` will be shown.
-    * `full` - all the message payloads, aggregate identifier, and the diagnostics data will be visible.
-
-
-* `axoniq.console.dlq-diagnostics-whitelist` - a comma-separated list of messages that will be shown in the DLQ
-  diagnostics.
-
-
-* `axoniq.console.domain-event-access-mode` – change the visibility and access level of Domain Events in the system,
-default: `none`. Several options are available:
-
-    * `none` – no payloads are visible, and aggregate loading is disabled.
-
-    * `preview_payload_only` – payloads of events are visible via the API or UI, but snapshot loading is disabled.
-
-    * `load_domain_state_only` – event payloads are not shown, but domain state loading is enabled for the domain entity.
-
-    * `full` – full access: event payloads are visible, and aggregate loading is supported.
 
 ## Data sent to AxonIQ
 
-AxonIQ Console is an [AxonIQ](https://axoniq.io) SaaS product. Your application will periodically, or upon request, send
+Axoniq Platform is an [AxonIQ](https://axoniq.io) SaaS product. Your application will periodically, or upon request, send
 information to the servers of AxonIQ. Please check our [Privacy Policy](https://www.axoniq.io/privacy-policy) and [Data Processing Addendum](https://lp.axoniq.io/axoniq-data-processing-addendum) for the
 measures we implemented to protect your data.
 

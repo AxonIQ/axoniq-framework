@@ -1,6 +1,6 @@
 ---
 name: 'Bug report'
-about: 'Report a bug in AxonIQ Console Framework Client'
+about: 'Report a bug in the Axoniq Platform client'
 title:
 labels: 'Type: Bug'
 ---
@@ -9,7 +9,7 @@ labels: 'Type: Bug'
 
 ### Basic information
 
-* AxonIQ Console Framework Client version:
+* Axoniq Platform client version:
 * JDK version:  
 * Axon Framework version (if applicable):
 * Complete executable reproducer if available (e.g. GitHub Repo):
