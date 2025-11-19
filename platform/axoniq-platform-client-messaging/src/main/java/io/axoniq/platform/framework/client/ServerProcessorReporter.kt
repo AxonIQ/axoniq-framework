@@ -18,7 +18,7 @@ package io.axoniq.platform.framework.client
 
 import io.axoniq.platform.framework.api.ClientSettingsV2
 import io.axoniq.platform.framework.api.Routes
-import io.axoniq.platform.framework.AxoniqPlatformProperties
+import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import io.axoniq.platform.framework.eventprocessor.ProcessorReportCreator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ScheduledFuture
@@ -28,7 +28,7 @@ class ServerProcessorReporter(
         private val client: AxoniqConsoleRSocketClient,
         private val processorReportCreator: ProcessorReportCreator,
         private val clientSettingsService: ClientSettingsService,
-        private val properties: AxoniqPlatformProperties
+        private val properties: AxoniqPlatformConfiguration
 ) : ClientSettingsObserver {
     private var reportTask: ScheduledFuture<*>? = null
     private val logger = KotlinLogging.logger { }

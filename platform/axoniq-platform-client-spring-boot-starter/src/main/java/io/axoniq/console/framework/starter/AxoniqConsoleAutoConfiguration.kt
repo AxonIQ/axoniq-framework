@@ -16,7 +16,7 @@
 
 package io.axoniq.console.framework.starter
 
-import io.axoniq.platform.framework.AxoniqPlatformProperties
+import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -36,7 +36,7 @@ class AxoniqConsoleAutoConfiguration {
     fun axoniqConsoleProperties(
             properties: AxoniqConsoleSpringProperties,
             applicationContext: ApplicationContext
-    ): Any? {
+    ): AxoniqPlatformConfiguration {
         val credentials = properties.credentials
                 ?: throw IllegalArgumentException("No credentials were provided for the connection to Axoniq Platform. Please provide them as instructed through the 'axoniq.console.credentials' property.")
         if (!credentials.contains(":")) {
@@ -50,7 +50,7 @@ class AxoniqConsoleAutoConfiguration {
                 environmentId,
                 applicationName
         )
-        return AxoniqPlatformProperties(environmentId, accessToken, applicationName)
+        return AxoniqPlatformConfiguration(environmentId, accessToken, applicationName)
                 .port(properties.port)
                 .host(properties.host)
                 .secure(properties.isSecure)

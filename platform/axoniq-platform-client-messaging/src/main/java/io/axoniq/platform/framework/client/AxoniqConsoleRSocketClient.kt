@@ -23,7 +23,7 @@ import io.axoniq.platform.framework.api.Routes
 import io.axoniq.platform.framework.api.notifications.Notification
 import io.axoniq.platform.framework.api.notifications.NotificationLevel
 import io.axoniq.platform.framework.api.notifications.NotificationList
-import io.axoniq.platform.framework.AxoniqPlatformProperties
+import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy
 import io.netty.buffer.ByteBufAllocator
 import io.netty.buffer.CompositeByteBuf
@@ -57,7 +57,7 @@ import kotlin.math.pow
  */
 @Suppress("MemberVisibilityCanBePrivate")
 class AxoniqConsoleRSocketClient(
-        private val properties: AxoniqPlatformProperties,
+        private val properties: AxoniqPlatformConfiguration,
         private val setupPayloadCreator: SetupPayloadCreator,
         private val registrar: RSocketHandlerRegistrar,
         private val encodingStrategy: RSocketPayloadEncodingStrategy,

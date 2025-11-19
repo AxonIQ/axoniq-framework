@@ -16,7 +16,7 @@
 
 package io.axoniq.platform.framework.modelling;
 
-import io.axoniq.platform.framework.AxoniqPlatformProperties;
+import io.axoniq.platform.framework.AxoniqPlatformConfiguration;
 import io.axoniq.platform.framework.UtilsKt;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -30,7 +30,7 @@ public class AxoniqPlatformModellingConfigurationEnhancer implements Configurati
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        if (!registry.hasComponent(AxoniqPlatformProperties.class)) {
+        if (!registry.hasComponent(AxoniqPlatformConfiguration.class)) {
             return;
         }
         registry

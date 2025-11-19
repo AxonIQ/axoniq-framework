@@ -57,7 +57,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        if (!registry.hasComponent(AxoniqPlatformProperties.class)) {
+        if (!registry.hasComponent(AxoniqPlatformConfiguration.class)) {
             return;
         }
         registry
@@ -101,7 +101,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                 .registerComponent(ComponentDefinition
                                            .ofType(AxoniqConsoleRSocketClient.class)
                                            .withBuilder(c -> new AxoniqConsoleRSocketClient(
-                                                   c.getComponent(AxoniqPlatformProperties.class),
+                                                   c.getComponent(AxoniqPlatformConfiguration.class),
                                                    c.getComponent(SetupPayloadCreator.class),
                                                    c.getComponent(RSocketHandlerRegistrar.class),
                                                    c.getComponent(RSocketPayloadEncodingStrategy.class),
@@ -114,7 +114,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(AxoniqConsoleRSocketClient.class),
                                                    c.getComponent(ProcessorReportCreator.class),
                                                    c.getComponent(ClientSettingsService.class),
-                                                   c.getComponent(AxoniqPlatformProperties.class)))
+                                                   c.getComponent(AxoniqPlatformConfiguration.class)))
                                            // The start handler will allow for eager creation
                                            .onStart(Integer.MAX_VALUE, c -> {
                                            }))
@@ -124,7 +124,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(AxoniqConsoleRSocketClient.class),
                                                    c.getComponent(ApplicationReportCreator.class),
                                                    c.getComponent(ClientSettingsService.class),
-                                                   c.getComponent(AxoniqPlatformProperties.class)))
+                                                   c.getComponent(AxoniqPlatformConfiguration.class)))
                                            // The start handler will allow for eager creation
                                            .onStart(Integer.MAX_VALUE, c -> {
                                            }))
@@ -133,7 +133,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                            .withBuilder(c -> new HandlerMetricsRegistry(
                                                    c.getComponent(AxoniqConsoleRSocketClient.class),
                                                    c.getComponent(ClientSettingsService.class),
-                                                   c.getComponent(AxoniqPlatformProperties.class))))
+                                                   c.getComponent(AxoniqPlatformConfiguration.class))))
                 .registerComponent(ComponentDefinition
                                            .ofType(ApplicationThreadDumpProvider.class)
                                            .withBuilder(c -> new ApplicationThreadDumpProvider()))

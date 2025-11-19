@@ -18,7 +18,7 @@ package io.axoniq.platform.framework.messaging
 
 import io.axoniq.platform.framework.api.ClientSettingsV2
 import io.axoniq.platform.framework.api.Routes
-import io.axoniq.platform.framework.AxoniqPlatformProperties
+import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import io.axoniq.platform.framework.api.metrics.DispatcherStatisticIdentifier
 import io.axoniq.platform.framework.api.metrics.DispatcherStatistics
 import io.axoniq.platform.framework.api.metrics.DispatcherStatisticsWithIdentifier
@@ -45,7 +45,7 @@ import java.util.concurrent.TimeUnit
 class HandlerMetricsRegistry(
         private val axoniqConsoleRSocketClient: AxoniqConsoleRSocketClient,
         private val clientSettingsService: ClientSettingsService,
-        private val properties: AxoniqPlatformProperties
+        private val properties: AxoniqPlatformConfiguration
 ) : ClientSettingsObserver {
     private val logger = KotlinLogging.logger { }
     private var reportTask: ScheduledFuture<*>? = null

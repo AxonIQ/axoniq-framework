@@ -26,7 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * Builder class to instantiate a {@link AxoniqPlatformConfigurerEnhancer}.
  */
-public class AxoniqPlatformProperties {
+public class AxoniqPlatformConfiguration {
 
     private final String environmentId;
     private final String accessToken;
@@ -43,8 +43,8 @@ public class AxoniqPlatformProperties {
     private Integer reportingThreadPoolSize = 2;
 
     /**
-     * Constructor to instantiate a {@link AxoniqPlatformProperties} based on the fields contained in the
-     * {@link AxoniqPlatformProperties}. Requires the {@code environmentId}, {@code accessToken} and
+     * Constructor to instantiate a {@link AxoniqPlatformConfiguration} based on the fields contained in the
+     * {@link AxoniqPlatformConfiguration}. Requires the {@code environmentId}, {@code accessToken} and
      * {@code applicationName} to be set.
      *
      * @param environmentId   The environment identifier of Axoniq Platform.
@@ -52,7 +52,7 @@ public class AxoniqPlatformProperties {
      * @param applicationName The display name of the application. Some special characters may be replaced with a
      *                        hyphen.
      */
-    public AxoniqPlatformProperties(String environmentId, String accessToken, String applicationName) {
+    public AxoniqPlatformConfiguration(String environmentId, String accessToken, String applicationName) {
         BuilderUtils.assertNonEmpty(environmentId, "Axoniq Platform environmentId may not be null or empty");
         BuilderUtils.assertNonEmpty(accessToken, "Axoniq Platform accessToken may not be null or empty");
         BuilderUtils.assertNonEmpty(applicationName, "Axoniq Platform applicationName may not be null or empty");
@@ -68,7 +68,7 @@ public class AxoniqPlatformProperties {
      * @param hostname The hostname of the application
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties hostname(String hostname) {
+    public AxoniqPlatformConfiguration hostname(String hostname) {
         BuilderUtils.assertNonEmpty(hostname, "Hostname may not be null or empty");
         this.hostname = hostname;
         return this;
@@ -81,7 +81,7 @@ public class AxoniqPlatformProperties {
      * @param nodeId The node id of the application
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties nodeId(String nodeId) {
+    public AxoniqPlatformConfiguration nodeId(String nodeId) {
         BuilderUtils.assertNonEmpty(nodeId, "Node id may not be null or empty");
         this.nodeId = nodeId;
         return this;
@@ -93,7 +93,7 @@ public class AxoniqPlatformProperties {
      * @param host The host to connect to
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties host(String host) {
+    public AxoniqPlatformConfiguration host(String host) {
         BuilderUtils.assertNonEmpty(host, "Axoniq Platform host may not be null or empty");
         this.host = host;
         return this;
@@ -105,7 +105,7 @@ public class AxoniqPlatformProperties {
      * @param port The port to connect to
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties port(Integer port) {
+    public AxoniqPlatformConfiguration port(Integer port) {
         BuilderUtils.assertNonNull(host, "Axoniq Platform port may not be null");
         this.port = port;
         return this;
@@ -117,7 +117,7 @@ public class AxoniqPlatformProperties {
      * @param initialDelay The delay in milliseconds
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties initialDelay(Long initialDelay) {
+    public AxoniqPlatformConfiguration initialDelay(Long initialDelay) {
         BuilderUtils.assertPositive(initialDelay, "Axoniq Platform initialDelay must be positive");
         this.initialDelay = initialDelay;
         return this;
@@ -130,7 +130,7 @@ public class AxoniqPlatformProperties {
      * @param reportingThreadPoolSize The thread pool size
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties reportingThreadPoolSize(Integer reportingThreadPoolSize) {
+    public AxoniqPlatformConfiguration reportingThreadPoolSize(Integer reportingThreadPoolSize) {
         BuilderUtils.assertPositive(reportingThreadPoolSize,
                                     "Axoniq Platform reportingThreadPoolSize must be positive");
         this.reportingThreadPoolSize = reportingThreadPoolSize;
@@ -144,7 +144,7 @@ public class AxoniqPlatformProperties {
      * @param executorService The executor service.
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties reportingTaskExecutor(ScheduledExecutorService executorService) {
+    public AxoniqPlatformConfiguration reportingTaskExecutor(ScheduledExecutorService executorService) {
         BuilderUtils.assertNonNull(reportingTaskExecutor, "Axoniq Platform reportingTaskExecutor must be non-null");
         this.reportingTaskExecutor = executorService;
         return this;
@@ -156,7 +156,7 @@ public class AxoniqPlatformProperties {
      * @param secure Whether to use a secure connection or not
      * @return The builder for fluent interfacing
      */
-    public AxoniqPlatformProperties secure(boolean secure) {
+    public AxoniqPlatformConfiguration secure(boolean secure) {
         this.secure = secure;
         return this;
     }
