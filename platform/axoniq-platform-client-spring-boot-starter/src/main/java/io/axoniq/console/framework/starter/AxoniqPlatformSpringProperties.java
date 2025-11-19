@@ -23,8 +23,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.ArrayList;
 import java.util.List;
 
-@ConfigurationProperties(prefix = "axoniq.console")
-public class AxoniqConsoleSpringProperties {
+@ConfigurationProperties(prefix = "axoniq.platform")
+public class AxoniqPlatformSpringProperties {
 
     /**
      * The host to connect to. Defaults to {@code framework.console.axoniq.io}.

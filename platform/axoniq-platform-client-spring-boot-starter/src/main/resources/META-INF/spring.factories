@@ -15,4 +15,4 @@
 #
 
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  io.axoniq.console.framework.starter.AxoniqConsoleAutoConfiguration
+  io.axoniq.console.framework.starter.AxoniqPlatformAutoConfiguration

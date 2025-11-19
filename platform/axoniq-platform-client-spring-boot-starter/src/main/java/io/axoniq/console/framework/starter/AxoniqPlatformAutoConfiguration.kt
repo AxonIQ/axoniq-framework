@@ -27,14 +27,14 @@ import org.springframework.context.annotation.Configuration
 
 @AutoConfiguration
 @Configuration
-@EnableConfigurationProperties(AxoniqConsoleSpringProperties::class)
-class AxoniqConsoleAutoConfiguration {
+@EnableConfigurationProperties(AxoniqPlatformSpringProperties::class)
+class AxoniqPlatformAutoConfiguration {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     @Bean
-    @ConditionalOnProperty("axoniq.console.credentials", matchIfMissing = false)
+    @ConditionalOnProperty("axoniq.platform.credentials", matchIfMissing = false)
     fun axoniqConsoleProperties(
-            properties: AxoniqConsoleSpringProperties,
+            properties: AxoniqPlatformSpringProperties,
             applicationContext: ApplicationContext
     ): AxoniqPlatformConfiguration {
         val credentials = properties.credentials
@@ -58,7 +58,7 @@ class AxoniqConsoleAutoConfiguration {
     }
 
     private fun getApplicationName(
-            properties: AxoniqConsoleSpringProperties,
+            properties: AxoniqPlatformSpringProperties,
             applicationContext: ApplicationContext
     ): String? {
         return (properties.applicationName?.trim()?.ifEmpty { null })
