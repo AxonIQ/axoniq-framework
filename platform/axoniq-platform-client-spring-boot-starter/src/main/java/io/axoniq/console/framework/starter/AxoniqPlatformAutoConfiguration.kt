@@ -18,6 +18,7 @@ package io.axoniq.console.framework.starter
 
 import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.config.BeanPostProcessor
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -64,5 +65,17 @@ class AxoniqPlatformAutoConfiguration {
         return (properties.applicationName?.trim()?.ifEmpty { null })
                 ?: (applicationContext.applicationName.trim().ifEmpty { null })
                 ?: (applicationContext.id?.removeSuffix("-1"))
+    }
+
+
+    @Bean
+    fun axoniqPlatformBeanPostProcessor(): BeanPostProcessor {
+        return AxoniqPlatformBeanPostProcessor()
+    }
+
+    class AxoniqPlatformBeanPostProcessor: BeanPostProcessor {
+        override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any? {
+            return super.postProcessBeforeInitialization(bean, beanName)
+        }
     }
 }
