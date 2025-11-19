@@ -25,14 +25,14 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>axoniq-platform-eventsourcing</artifactId>
+    <artifactId>axoniq-platform-client-eventsourcing</artifactId>
     <name>Axoniq Platform client: eventsourcing</name>
     <description>Event Sourcing functionality of the Axoniq Platform instrumentation</description>
 
     <dependencies>
         <dependency>
             <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-modelling</artifactId>
+            <artifactId>axoniq-platform-client-modelling</artifactId>
             <version>${project.version}</version>
         </dependency>
 

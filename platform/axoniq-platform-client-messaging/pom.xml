@@ -25,7 +25,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>axoniq-platform-messaging</artifactId>
+    <artifactId>axoniq-platform-client-messaging</artifactId>
     <name>Axoniq Platform client: messaging</name>
     <description>Core functionality of the Axoniq Platform instrumentation</description>
 

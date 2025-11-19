@@ -32,17 +32,17 @@
     <dependencies>
         <dependency>
             <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-messaging</artifactId>
+            <artifactId>axoniq-platform-client-messaging</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-eventsourcing</artifactId>
+            <artifactId>axoniq-platform-client-eventsourcing</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-modelling</artifactId>
+            <artifactId>axoniq-platform-client-modelling</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

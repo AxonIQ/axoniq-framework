@@ -25,14 +25,14 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>axoniq-platform-modelling</artifactId>
+    <artifactId>axoniq-platform-client-modelling</artifactId>
     <name>Axoniq Platform client: modelling</name>
     <description>Modelling functionality of the Axoniq Platform instrumentation</description>
 
     <dependencies>
         <dependency>
             <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-messaging</artifactId>
+            <artifactId>axoniq-platform-client-messaging</artifactId>
             <version>${project.version}</version>
         </dependency>
 
