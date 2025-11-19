@@ -25,10 +25,32 @@ import java.time.Duration
 import kotlin.text.iterator
 
 
+fun <T : Any> T.unwrapPossiblyDecoratedClass(
+        className: String,
+        excludedNames: List<String> = emptyList(),
+        excludedTypes: List<String> = emptyList(),
+        depth: Int = 0,
+        skipLayers: List<Class<*>> = emptyList()
+): T {
+    try {
+        val clazz = Class.forName(className) as Class<out T>
+        return this.unwrapPossiblyDecoratedClass(
+                clazz,
+                excludedNames,
+                excludedTypes,
+                depth,
+                skipLayers
+        )
+    } catch (e: ClassNotFoundException) {
+        return this
+    }
+}
+
 /**
  * Find fields matching its own type. If found, it will unwrap the deeper value.
  * Useful for when users wrap components as decorators, like Axon FireStarter does.
  */
+
 fun <T : Any> T.unwrapPossiblyDecoratedClass(
         clazz: Class<out T>,
         excludedNames: List<String> = emptyList(),

@@ -16,11 +16,13 @@
 
 package io.axoniq.platform.framework.client
 
+import io.axoniq.platform.framework.api.AxonServerEventStoreMessageSourceInformation
 import io.axoniq.platform.framework.api.CommandBusInformation
 import io.axoniq.platform.framework.api.CommonProcessorInformation
 import io.axoniq.platform.framework.api.EventProcessorInformation
 import io.axoniq.platform.framework.api.EventStoreInformation
 import io.axoniq.platform.framework.api.InterceptorInformation
+import io.axoniq.platform.framework.api.MessageSourceInformation
 import io.axoniq.platform.framework.api.ModuleVersion
 import io.axoniq.platform.framework.api.PooledStreamingEventProcessorInformation
 import io.axoniq.platform.framework.api.ProcessorType
@@ -42,6 +44,7 @@ import org.axonframework.conversion.Converter
 import org.axonframework.messaging.commandhandling.CommandBus
 import org.axonframework.messaging.core.MessageDispatchInterceptor
 import org.axonframework.messaging.core.MessageHandlerInterceptor
+import org.axonframework.messaging.core.SubscribableEventSource
 import org.axonframework.messaging.eventhandling.EventSink
 import org.axonframework.messaging.eventhandling.processing.EventProcessor
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor
@@ -51,6 +54,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessor
 import org.axonframework.messaging.eventstreaming.StreamableEventSource
+import org.axonframework.messaging.eventstreaming.TrackingTokenSource
 import org.axonframework.messaging.queryhandling.QueryBus
 import org.axonframework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector
 import org.axonframework.messaging.queryhandling.distributed.QueryBusConnector
@@ -64,18 +68,18 @@ class SetupPayloadCreator(
 
     fun createReport(): SetupPayload {
         return SetupPayload(
-            commandBus = commandBusInformation(),
-            queryBus = queryBusInformation(),
-            eventStore = eventBusInformation(),
-            processors = configuration.getComponents(EventProcessor::class.java).mapNotNull {
-                toProcessor(it.value)
-            },
-            versions = versionInformation(),
-            upcasters = emptyList(), // TODO: Check if still exist? I don't believe so
-            features = SupportedFeatures(
-                heartbeat = true,
-                threadDump = true,
-            )
+                commandBus = commandBusInformation(),
+                queryBus = queryBusInformation(),
+                eventStore = eventBusInformation(),
+                processors = configuration.getComponents(EventProcessor::class.java).mapNotNull {
+                    toProcessor(it.value)
+                },
+                versions = versionInformation(),
+                upcasters = emptyList(),
+                features = SupportedFeatures(
+                        heartbeat = true,
+                        threadDump = true,
+                )
         )
     }
 
@@ -89,48 +93,78 @@ class SetupPayloadCreator(
 
     private fun toPooledStreamingProcessorInformation(processor: PooledStreamingEventProcessor): EventProcessorInformation {
         val configuration = processor.getPropertyValue<PooledStreamingEventProcessorConfiguration>("configuration")
+        val eventSource = processor.getPropertyValue<StreamableEventSource>("eventSource")
+                ?.unwrapPossiblyDecoratedClass(StreamableEventSource::class.java)
+
         return EventProcessorInformation(
-            name = processor.name(),
-            processorType = ProcessorType.POOLED_STREAMING,
-            commonProcessorInformation = CommonProcessorInformation(
-                messageSource = UnspecifiedMessageSourceInformation(
-                    processor.getPropertyValue<Any>("eventSource")
-                        ?.unwrapPossiblyDecoratedClass(StreamableEventSource::class.java)?.javaClass?.name
-                        ?: "Unknown"
+                name = processor.name(),
+                processorType = ProcessorType.POOLED_STREAMING,
+                commonProcessorInformation = CommonProcessorInformation(
+                        messageSource = createSourceInformation(eventSource),
+                        errorHandler = null,
+                        invocationErrorHandler = null,
+                        interceptors = listOf(),
                 ),
-                errorHandler = null,
-                invocationErrorHandler = null,
-                interceptors = listOf(),
-            ),
-            streamingInformation = streamingEventProcessorInformation(processor, configuration),
-            pooledStreamingInformation = PooledStreamingEventProcessorInformation(
-                maxClaimedSegments = configuration?.getPropertyValue<MaxSegmentProvider>("maxSegmentProvider")
-                    ?.apply(processor.name()),
-                claimExtensionThreshold = configuration?.getPropertyValue("claimExtensionThreshold"),
-                coordinatorExtendsClaims = configuration?.getPropertyValue("coordinatorExtendsClaims")
-            ),
+                streamingInformation = streamingEventProcessorInformation(processor, configuration),
+                pooledStreamingInformation = PooledStreamingEventProcessorInformation(
+                        maxClaimedSegments = configuration?.getPropertyValue<MaxSegmentProvider>("maxSegmentProvider")
+                                ?.apply(processor.name()),
+                        claimExtensionThreshold = configuration?.getPropertyValue("claimExtensionThreshold"),
+                        coordinatorExtendsClaims = configuration?.getPropertyValue("coordinatorExtendsClaims")
+                ),
         )
+    }
+
+    private fun createSourceInformation(eventSource: StreamableEventSource?): MessageSourceInformation {
+        if(eventSource == null) {
+            return UnspecifiedMessageSourceInformation("unknown")
+        }
+        if(eventSource::class.simpleName == "StorageEngineBackedEventStore") {
+            val storageEngine = eventSource.getPropertyValue<Any>("eventStorageEngine")?.unwrapPossiblyDecoratedClass("org.axonframework.eventsourcing.eventstore.EventStorageEngine")
+            if(storageEngine != null && storageEngine::class.simpleName == "AxonServerEventStorageEngine") {
+                // Woohoo, Axon Server
+                val context = storageEngine.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+                if (context != null)
+                    return AxonServerEventStoreMessageSourceInformation(
+                            className = storageEngine::class.qualifiedName!!,
+                            contexts = listOf(context)
+                    )
+            }
+
+            val type = storageEngine?.javaClass?.name ?: "unknown"
+            return UnspecifiedMessageSourceInformation(type)
+        }
+        val type = eventSource.javaClass.name
+        return UnspecifiedMessageSourceInformation(type)
     }
 
     private fun toSubscribingProcessorInformation(processor: SubscribingEventProcessor): EventProcessorInformation {
         return EventProcessorInformation(
-            name = processor.name(),
-            processorType = ProcessorType.SUBSCRIBING,
-            commonProcessorInformation = null, // This has completely changed for AF5. TODO: REDO
-            subscribingProcessorInformation = SubscribingProcessorInformation(
-                processingStrategy = "none"
-            )
+                name = processor.name(),
+                processorType = ProcessorType.SUBSCRIBING,
+                commonProcessorInformation = CommonProcessorInformation(
+                        messageSource = UnspecifiedMessageSourceInformation(
+                                processor.getPropertyValue<SubscribableEventSource>("eventSource")?.unwrapPossiblyDecoratedClass(SubscribableEventSource::class.java, excludedNames = listOf("eventBus"))?.javaClass?.name
+                                        ?: "none"
+                        ),
+                        errorHandler = null,
+                        invocationErrorHandler = null,
+                        interceptors = listOf()
+                ),
+                subscribingProcessorInformation = SubscribingProcessorInformation(
+                        processingStrategy = "none"
+                )
         )
     }
 
     private fun streamingEventProcessorInformation(processor: StreamingEventProcessor, configuration: PooledStreamingEventProcessorConfiguration?) =
-        StreamingEventProcessorInformation(
-            batchSize = configuration?.getPropertyValue("batchSize"),
-            tokenClaimInterval = configuration?.getPropertyValue("tokenClaimInterval"),
-            tokenStoreType = processor.getPropertyType("tokenStore", TokenStore::class.java),
-            supportsReset = processor.supportsReset(),
-            tokenStoreClaimTimeout = processor.getStoreTokenClaimTimeout("tokenStore"),
-        )
+            StreamingEventProcessorInformation(
+                    batchSize = configuration?.getPropertyValue("batchSize"),
+                    tokenClaimInterval = configuration?.getPropertyValue("tokenClaimInterval"),
+                    tokenStoreType = processor.getPropertyType("tokenStore", TokenStore::class.java),
+                    supportsReset = processor.supportsReset(),
+                    tokenStoreClaimTimeout = processor.getStoreTokenClaimTimeout("tokenStore"),
+            )
 
     private val dependenciesToCheck = listOf(
             "org.axonframework:axon-messaging",
@@ -159,13 +193,13 @@ class SetupPayloadCreator(
 
     private fun versionInformation(): Versions {
         return Versions(
-            frameworkVersion = resolveVersion("org.axonframework:axon-messaging") ?: "Unknown",
-            moduleVersions = dependenciesToCheck.map {
-                ModuleVersion(
-                    it,
-                    resolveVersion(it)
-                )
-            }
+                frameworkVersion = resolveVersion("org.axonframework:axon-messaging") ?: "Unknown",
+                moduleVersions = dependenciesToCheck.map {
+                    ModuleVersion(
+                            it,
+                            resolveVersion(it)
+                    )
+                }
         )
     }
 
@@ -189,7 +223,6 @@ class SetupPayloadCreator(
             connector::class.java.name == "org.axonframework.axonserver.connector.query.AxonServerQueryBusConnector"
         } else false
         val localSegmentType = if (axonServer) bus.getPropertyType("localSegment", QueryBus::class.java) else null
-
         val context = connector?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
 
         val handlerInterceptors = busComponent.findAllDecoratorsOfType(InterceptingQueryBus::class.java)
@@ -213,29 +246,34 @@ class SetupPayloadCreator(
 
         // TODO: serializers
         return QueryBusInformation(
-            type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
-            axonServer = axonServer,
-            localSegmentType = localSegmentType,
-            context = context,
-            handlerInterceptors = handlerInterceptors,
-            dispatchInterceptors = dispatchInterceptors,
-            messageSerializer = null,
-            serializer = converter?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) },
+                type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
+                axonServer = axonServer,
+                localSegmentType = localSegmentType,
+                context = context,
+                handlerInterceptors = handlerInterceptors,
+                dispatchInterceptors = dispatchInterceptors,
+                messageSerializer = null,
+                serializer = converter?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) },
         )
     }
 
     private fun eventBusInformation(): EventStoreInformation {
-        val bus = configuration.getComponent(EventSink::class.java).unwrapPossiblyDecoratedClass(EventSink::class.java, listOf("eventStorageEngine"))
-        val axonServer = false
-        val context = "TODO"
+        val bus = configuration.getComponent(EventSink::class.java).unwrapPossiblyDecoratedClass(EventSink::class.java, listOf("eventBus"))
+        val storageEngine = bus.getPropertyValue<Any>("eventStorageEngine")?.unwrapPossiblyDecoratedClass("org.axonframework.eventsourcing.eventstore.EventStorageEngine")
+        val axonServer = (storageEngine?.javaClass?.simpleName ?: "") in listOf("AxonServerEventStorageEngine", "AggregateBasedAxonServerEventStorageEngine")
+        val context = if(axonServer) {
+            storageEngine?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+        } else null
         return EventStoreInformation(
-            type = bus::class.java.name,
-            axonServer = axonServer,
-            context = context,
-            dispatchInterceptors = emptyList(),
-            eventSerializer = null,
-            snapshotSerializer = null,
-            approximateSize = null, // TODO: AF5
+                type = bus::class.java.name + if(storageEngine != null) " (${storageEngine::class.java.simpleName})" else "",
+                axonServer = axonServer,
+                context = context,
+                dispatchInterceptors = emptyList(),
+                eventSerializer = null,
+                snapshotSerializer = null,
+                approximateSize = if(storageEngine is TrackingTokenSource) {
+                    storageEngine.latestToken(null).get()?.position()?.orElse(-1) ?: -1
+                } else null
         )
     }
 
@@ -245,13 +283,13 @@ class SetupPayloadCreator(
         val localSegmentType = null
         val context = "TODO"
         return CommandBusInformation(
-            type = bus::class.java.name,
-            axonServer = axonServer,
-            localSegmentType = localSegmentType,
-            context = context,
-            handlerInterceptors = emptyList(),
-            dispatchInterceptors = emptyList(),
-            messageSerializer = null
+                type = bus::class.java.name,
+                axonServer = axonServer,
+                localSegmentType = localSegmentType,
+                context = context,
+                handlerInterceptors = emptyList(),
+                dispatchInterceptors = emptyList(),
+                messageSerializer = null
         )
     }
 
