@@ -14,27 +14,19 @@
  * limitations under the License.
  */
 
-package io.axoniq.platform.framework.messaging
+package io.axoniq.platform.framework.messaging.enhancing
 
 import io.axoniq.platform.framework.api.metrics.PreconfiguredMetric
+import io.axoniq.platform.framework.messaging.HandlerMeasurement
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.axonframework.messaging.core.Message
 import org.axonframework.messaging.core.MessageStream
+import org.axonframework.messaging.core.annotation.MessageHandlingMember
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
-import org.axonframework.messaging.queryhandling.annotation.QueryHandlingMember
-import java.lang.reflect.Type
 import java.util.Optional
 
-class AxoniqPlatformQueryHandlingMember<T>(val delegate: QueryHandlingMember<T>, val declaringClassName: String) : QueryHandlingMember<T> {
+open class AxoniqPlatformMessageHandlingMember<T>(open val delegate: MessageHandlingMember<T>, val declaringClassName: String) : MessageHandlingMember<T> {
     private val logger = KotlinLogging.logger { }
-
-    override fun queryName(): String? {
-        return delegate.queryName()
-    }
-
-    override fun resultType(): Type? {
-        return delegate.resultType()
-    }
 
     override fun payloadType(): Class<*>? {
         return delegate.payloadType()
@@ -54,13 +46,13 @@ class AxoniqPlatformQueryHandlingMember<T>(val delegate: QueryHandlingMember<T>,
     }
 
     override fun handle(message: Message, context: ProcessingContext, target: T): MessageStream<*>? {
-        HandlerMeasurement.onContext(context) {
+        HandlerMeasurement.Companion.onContext(context) {
             logger.debug { "Received message [${message.type()}] for class [$declaringClassName]" }
             it.reportHandlingClass(declaringClassName)
         }
         val start = System.nanoTime()
         val stream = delegate.handle(message, context, target)
-        HandlerMeasurement.onContext(context) {
+        HandlerMeasurement.Companion.onContext(context) {
             val end = System.nanoTime()
             logger.debug { "Registering handling time for message [${message.type()}] in class [$declaringClassName]: ${end - start} ns" }
             it.registerMetricValue(
@@ -72,6 +64,9 @@ class AxoniqPlatformQueryHandlingMember<T>(val delegate: QueryHandlingMember<T>,
     }
 
     override fun <HT : Any?> unwrap(handlerType: Class<HT>): Optional<HT> {
+        if(this::class.isInstance(handlerType)) {
+            return Optional.of(this) as Optional<HT>
+        }
         return delegate.unwrap(handlerType)
     }
 
