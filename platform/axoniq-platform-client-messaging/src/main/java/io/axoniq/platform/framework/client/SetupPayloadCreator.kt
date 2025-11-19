@@ -42,6 +42,8 @@ import org.axonframework.common.configuration.Configuration
 import org.axonframework.common.util.MavenArtifactVersionResolver
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.commandhandling.CommandBus
+import org.axonframework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector
+import org.axonframework.messaging.commandhandling.interception.InterceptingCommandBus
 import org.axonframework.messaging.core.MessageDispatchInterceptor
 import org.axonframework.messaging.core.MessageHandlerInterceptor
 import org.axonframework.messaging.core.SubscribableEventSource
@@ -244,7 +246,6 @@ class SetupPayloadCreator(
                 "org.axonframework.conversion.ChainingContentTypeConverter"
         ))
 
-        // TODO: serializers
         return QueryBusInformation(
                 type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
                 axonServer = axonServer,
@@ -264,12 +265,21 @@ class SetupPayloadCreator(
         val context = if(axonServer) {
             storageEngine?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
         } else null
+        var converter = storageEngine?.getPropertyValue<Any>("converter")
+        if(converter != null && converter::class.java.name == "org.axonframework.axonserver.connector.event.TaggedEventConverter") {
+            converter = converter.getPropertyValue<Converter>("converter")
+        }
+        val realConverter = if(converter is Converter) {
+            converter.unwrapPossiblyDecoratedClass(Converter::class.java, excludedTypes = listOf(
+                    "org.axonframework.conversion.ChainingContentTypeConverter"
+            ))?.javaClass?.name
+        } else null
         return EventStoreInformation(
                 type = bus::class.java.name + if(storageEngine != null) " (${storageEngine::class.java.simpleName})" else "",
                 axonServer = axonServer,
                 context = context,
                 dispatchInterceptors = emptyList(),
-                eventSerializer = null,
+                eventSerializer = realConverter?.let { SerializerInformation(type = it, false) },
                 snapshotSerializer = null,
                 approximateSize = if(storageEngine is TrackingTokenSource) {
                     storageEngine.latestToken(null).get()?.position()?.orElse(-1) ?: -1
@@ -278,18 +288,44 @@ class SetupPayloadCreator(
     }
 
     private fun commandBusInformation(): CommandBusInformation {
-        val bus = configuration.getComponent(CommandBus::class.java).unwrapPossiblyDecoratedClass(CommandBus::class.java)
-        val axonServer = false
-        val localSegmentType = null
-        val context = "TODO"
+        val busComponent = configuration.getComponent(CommandBus::class.java)
+        val bus = busComponent.unwrapPossiblyDecoratedClass(CommandBus::class.java, listOf("localSegment"))
+        val isDistributed = bus::class.java.name == "org.axonframework.messaging.commandhandling.distributed.DistributedCommandBus"
+        val connector = bus.getPropertyValue<Any>("connector")?.unwrapPossiblyDecoratedClass("org.axonframework.messaging.commandhandling.distributed.CommandBusConnector")
+        val axonServer = if (isDistributed) {
+            // Unwrap connector
+            val connector = bus.getPropertyValue<Any>("connector")!!.unwrapPossiblyDecoratedClass("org.axonframework.messaging.commandhandling.distributed.CommandBusConnector")
+            connector::class.java.name == "org.axonframework.axonserver.connector.command.AxonServerCommandBusConnector"
+        } else false
+        val localSegmentType = if (axonServer) bus.getPropertyType("localSegment", CommandBus::class.java) else null
+        val context = connector?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+
+        val handlerInterceptors = busComponent.findAllDecoratorsOfType(InterceptingCommandBus::class.java)
+                .flatMap {
+                    it.getPropertyValue<List<MessageHandlerInterceptor<*>>>("handlerInterceptors") ?: emptyList()
+                }
+                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
+                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+        val dispatchInterceptors = busComponent.findAllDecoratorsOfType(InterceptingCommandBus::class.java)
+                .flatMap {
+                    it.getPropertyValue<List<MessageDispatchInterceptor<*>>>("dispatchInterceptors") ?: emptyList()
+                }
+                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
+                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+
+        val payloadConvertingConnector = bus.getPropertyValue<Any>("connector")?.findAllDecoratorsOfType(PayloadConvertingCommandBusConnector::class.java)?.firstOrNull()
+        val converter = payloadConvertingConnector?.getPropertyValue<Any>("converter")?.unwrapPossiblyDecoratedClass(Converter::class.java, excludedTypes = listOf(
+                "org.axonframework.conversion.ChainingContentTypeConverter"
+        ))
+
         return CommandBusInformation(
-                type = bus::class.java.name,
+                type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
                 axonServer = axonServer,
                 localSegmentType = localSegmentType,
                 context = context,
-                handlerInterceptors = emptyList(),
-                dispatchInterceptors = emptyList(),
-                messageSerializer = null
+                handlerInterceptors = handlerInterceptors,
+                dispatchInterceptors = dispatchInterceptors,
+                messageSerializer = converter?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) }
         )
     }
 
