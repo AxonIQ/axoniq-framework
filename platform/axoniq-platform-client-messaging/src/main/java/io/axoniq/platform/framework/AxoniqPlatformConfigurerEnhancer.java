@@ -43,6 +43,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.configuration.Module;
+import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
@@ -97,7 +98,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(EventProcessorManager.class),
                                                    c.getComponent(ProcessorReportCreator.class),
                                                    c.getComponent(RSocketHandlerRegistrar.class)))
-                                           .onStart(Integer.MAX_VALUE, RSocketProcessorResponder::start))
+                                           .onStart(Phase.EXTERNAL_CONNECTIONS, RSocketProcessorResponder::start))
                 .registerComponent(ComponentDefinition
                                            .ofType(AxoniqConsoleRSocketClient.class)
                                            .withBuilder(c -> new AxoniqConsoleRSocketClient(
@@ -107,7 +108,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(RSocketPayloadEncodingStrategy.class),
                                                    c.getComponent(ClientSettingsService.class)))
 
-                                           .onStart(Integer.MAX_VALUE, AxoniqConsoleRSocketClient::start))
+                                           .onStart(Phase.EXTERNAL_CONNECTIONS, AxoniqConsoleRSocketClient::start))
                 .registerComponent(ComponentDefinition
                                            .ofType(ServerProcessorReporter.class)
                                            .withBuilder(c -> new ServerProcessorReporter(
@@ -116,7 +117,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(ClientSettingsService.class),
                                                    c.getComponent(AxoniqPlatformConfiguration.class)))
                                            // The start handler will allow for eager creation
-                                           .onStart(Integer.MAX_VALUE, c -> {
+                                           .onStart(Phase.EXTERNAL_CONNECTIONS, c -> {
                                            }))
                 .registerComponent(ComponentDefinition
                                            .ofType(ApplicationMetricReporter.class)
@@ -126,7 +127,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(ClientSettingsService.class),
                                                    c.getComponent(AxoniqPlatformConfiguration.class)))
                                            // The start handler will allow for eager creation
-                                           .onStart(Integer.MAX_VALUE, c -> {
+                                           .onStart(Phase.EXTERNAL_CONNECTIONS, c -> {
                                            }))
                 .registerComponent(ComponentDefinition
                                            .ofType(HandlerMetricsRegistry.class)
@@ -159,7 +160,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(ApplicationThreadDumpProvider.class),
                                                    c.getComponent(RSocketHandlerRegistrar.class)))
                                            // The start handler will allow for eager creation
-                                           .onStart(Integer.MAX_VALUE, RSocketThreadDumpResponder::start))
+                                           .onStart(Phase.EXTERNAL_CONNECTIONS, RSocketThreadDumpResponder::start))
                 .registerDecorator(DecoratorDefinition.forType(DistributedCommandBusConfiguration.class)
                                                       .with((cc, name, delegate) -> {
                                                           return new DistributedCommandBusConfiguration(

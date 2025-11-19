@@ -46,20 +46,20 @@ class AxoniqPlatformQueryBus(
     override fun subscribe(name: QualifiedName, queryHandler: QueryHandler): QueryBus? {
         logger.debug { "Decorating query handler subscription for [$name] and handler [$queryHandler]" }
         delegate.subscribe(name) { command, context ->
-            logger.debug { "Handling command [${command.type()}] with handler [$queryHandler]" }
+            logger.debug { "Handling query [${command.type()}] with handler [$queryHandler]" }
             val measurement = HandlerMeasurement(message = command, handlerType = HandlerType.Message)
             context.putResource(HandlerMeasurement.RESOURCE_KEY, measurement)
             val ranAfterCommit = AtomicBoolean()
             val stream = queryHandler.handle(command, context)
             context.runOnAfterCommit {
                 ranAfterCommit.set(true)
-                logger.info { "Registering success for command [${command.type()}] with handler [$queryHandler]" }
+                logger.debug { "Registering success for query [${command.type()}] with handler [$queryHandler]" }
                 measurement.complete(true)
                 metricsRegistry.registerMeasurement(measurement)
             }
             context.onError { _, _, _ ->
                 if (!ranAfterCommit.get()) {
-                    logger.info { "Registering failure for command [${command.type()}] with handler [$queryHandler]" }
+                    logger.debug { "Registering failure for query [${command.type()}] with handler [$queryHandler]" }
                     measurement.complete(false)
                     metricsRegistry.registerMeasurement(measurement)
                 }

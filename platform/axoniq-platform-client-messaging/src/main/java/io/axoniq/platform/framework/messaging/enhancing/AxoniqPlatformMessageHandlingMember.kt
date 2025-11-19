@@ -46,13 +46,13 @@ open class AxoniqPlatformMessageHandlingMember<T>(open val delegate: MessageHand
     }
 
     override fun handle(message: Message, context: ProcessingContext, target: T): MessageStream<*>? {
-        HandlerMeasurement.Companion.onContext(context) {
+        HandlerMeasurement.onContext(context) {
             logger.debug { "Received message [${message.type()}] for class [$declaringClassName]" }
             it.reportHandlingClass(declaringClassName)
         }
         val start = System.nanoTime()
         val stream = delegate.handle(message, context, target)
-        HandlerMeasurement.Companion.onContext(context) {
+        HandlerMeasurement.onContext(context) {
             val end = System.nanoTime()
             logger.debug { "Registering handling time for message [${message.type()}] in class [$declaringClassName]: ${end - start} ns" }
             it.registerMetricValue(
@@ -64,7 +64,7 @@ open class AxoniqPlatformMessageHandlingMember<T>(open val delegate: MessageHand
     }
 
     override fun <HT : Any?> unwrap(handlerType: Class<HT>): Optional<HT> {
-        if(this::class.isInstance(handlerType)) {
+        if(handlerType.isInstance(this)) {
             return Optional.of(this) as Optional<HT>
         }
         return delegate.unwrap(handlerType)
