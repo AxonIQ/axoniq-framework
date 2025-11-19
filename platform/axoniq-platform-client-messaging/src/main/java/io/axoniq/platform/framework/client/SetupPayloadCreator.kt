@@ -219,32 +219,17 @@ class SetupPayloadCreator(
         val bus = busComponent.unwrapPossiblyDecoratedClass(QueryBus::class.java, listOf("localSegment"))
         val isDistributed = bus::class.java.name == "org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus"
         val connector = bus.getPropertyValue<QueryBusConnector>("connector")?.unwrapPossiblyDecoratedClass(QueryBusConnector::class.java)
-        val axonServer = if (isDistributed) {
-            // Unwrap connector
-            val connector = bus.getPropertyValue<QueryBusConnector>("connector")!!.unwrapPossiblyDecoratedClass(QueryBusConnector::class.java)
+        val axonServer = if (isDistributed && connector != null) {
             connector::class.java.name == "org.axonframework.axonserver.connector.query.AxonServerQueryBusConnector"
         } else false
         val localSegmentType = if (axonServer) bus.getPropertyType("localSegment", QueryBus::class.java) else null
-        val context = connector?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+        val context = extractContext(connector)
 
-        val handlerInterceptors = busComponent.findAllDecoratorsOfType(InterceptingQueryBus::class.java)
-                .flatMap {
-                    it.getPropertyValue<List<MessageHandlerInterceptor<*>>>("handlerInterceptors") ?: emptyList()
-                }
-                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
-                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
-        val dispatchInterceptors = busComponent.findAllDecoratorsOfType(InterceptingQueryBus::class.java)
-                .flatMap {
-                    it.getPropertyValue<List<MessageDispatchInterceptor<*>>>("dispatchInterceptors") ?: emptyList()
-                }
-                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
-                // TODO, wtf is happening with the DefaultHandlerInterceptorRegistry
-                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+        val handlerInterceptors = extractInterceptors(busComponent, InterceptingQueryBus::class.java, "handlerInterceptors")
+        val dispatchInterceptors = extractInterceptors(busComponent, InterceptingQueryBus::class.java, "dispatchInterceptors")
 
         val payloadConvertingConnector = bus.getPropertyValue<QueryBusConnector>("connector")?.findAllDecoratorsOfType(PayloadConvertingQueryBusConnector::class.java)?.firstOrNull()
-        val converter = payloadConvertingConnector?.getPropertyValue<Converter>("converter")?.unwrapPossiblyDecoratedClass(Converter::class.java, excludedTypes = listOf(
-                "org.axonframework.conversion.ChainingContentTypeConverter"
-        ))
+        val converter = payloadConvertingConnector?.getPropertyValue<Converter>("converter")
 
         return QueryBusInformation(
                 type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
@@ -254,7 +239,7 @@ class SetupPayloadCreator(
                 handlerInterceptors = handlerInterceptors,
                 dispatchInterceptors = dispatchInterceptors,
                 messageSerializer = null,
-                serializer = converter?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) },
+                serializer = unwrapConverter(converter),
         )
     }
 
@@ -292,31 +277,17 @@ class SetupPayloadCreator(
         val bus = busComponent.unwrapPossiblyDecoratedClass(CommandBus::class.java, listOf("localSegment"))
         val isDistributed = bus::class.java.name == "org.axonframework.messaging.commandhandling.distributed.DistributedCommandBus"
         val connector = bus.getPropertyValue<Any>("connector")?.unwrapPossiblyDecoratedClass("org.axonframework.messaging.commandhandling.distributed.CommandBusConnector")
-        val axonServer = if (isDistributed) {
-            // Unwrap connector
-            val connector = bus.getPropertyValue<Any>("connector")!!.unwrapPossiblyDecoratedClass("org.axonframework.messaging.commandhandling.distributed.CommandBusConnector")
+        val axonServer = if (isDistributed && connector != null) {
             connector::class.java.name == "org.axonframework.axonserver.connector.command.AxonServerCommandBusConnector"
         } else false
         val localSegmentType = if (axonServer) bus.getPropertyType("localSegment", CommandBus::class.java) else null
-        val context = connector?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+        val context = extractContext(connector)
 
-        val handlerInterceptors = busComponent.findAllDecoratorsOfType(InterceptingCommandBus::class.java)
-                .flatMap {
-                    it.getPropertyValue<List<MessageHandlerInterceptor<*>>>("handlerInterceptors") ?: emptyList()
-                }
-                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
-                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
-        val dispatchInterceptors = busComponent.findAllDecoratorsOfType(InterceptingCommandBus::class.java)
-                .flatMap {
-                    it.getPropertyValue<List<MessageDispatchInterceptor<*>>>("dispatchInterceptors") ?: emptyList()
-                }
-                .map { InterceptorInformation(type = it::class.java.name, measured = false) }
-                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+        val handlerInterceptors = extractInterceptors(busComponent, InterceptingCommandBus::class.java, "handlerInterceptors")
+        val dispatchInterceptors = extractInterceptors(busComponent, InterceptingCommandBus::class.java, "dispatchInterceptors")
 
         val payloadConvertingConnector = bus.getPropertyValue<Any>("connector")?.findAllDecoratorsOfType(PayloadConvertingCommandBusConnector::class.java)?.firstOrNull()
-        val converter = payloadConvertingConnector?.getPropertyValue<Any>("converter")?.unwrapPossiblyDecoratedClass(Converter::class.java, excludedTypes = listOf(
-                "org.axonframework.conversion.ChainingContentTypeConverter"
-        ))
+        val converter = payloadConvertingConnector?.getPropertyValue<Any>("converter")
 
         return CommandBusInformation(
                 type = bus::class.java.name + if (connector != null) " (${connector::class.java.simpleName})" else "",
@@ -325,12 +296,35 @@ class SetupPayloadCreator(
                 context = context,
                 handlerInterceptors = handlerInterceptors,
                 dispatchInterceptors = dispatchInterceptors,
-                messageSerializer = converter?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) }
+                messageSerializer = unwrapConverter(converter)
         )
     }
 
     private fun Any.getStoreTokenClaimTimeout(fieldName: String): Long? = getPropertyValue<Any>(fieldName)
             ?.getPropertyValue<TemporalAmount>("claimTimeout")?.let { it.get(ChronoUnit.SECONDS) * 1000 }
+
+    private fun <T : Any> extractInterceptors(
+            busComponent: T,
+            interceptingBusClass: Class<*>,
+            propertyName: String
+    ): List<InterceptorInformation> {
+        return busComponent.findAllDecoratorsOfType(interceptingBusClass)
+                .flatMap {
+                    it.getPropertyValue<List<*>>(propertyName) ?: emptyList()
+                }
+                .map { InterceptorInformation(type = it!!::class.java.name, measured = false) }
+                .filter { !it.type.contains("DefaultHandlerInterceptorRegistry") }
+    }
+
+    private fun extractContext(connector: Any?): String? {
+        return connector?.getPropertyValue<Any>("connection")?.getPropertyValue<String>("context")
+    }
+
+    private fun unwrapConverter(converter: Any?): SerializerInformation? {
+        return converter?.unwrapPossiblyDecoratedClass(Converter::class.java, excludedTypes = listOf(
+                "org.axonframework.conversion.ChainingContentTypeConverter"
+        ))?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) }
+    }
 
 }
 
