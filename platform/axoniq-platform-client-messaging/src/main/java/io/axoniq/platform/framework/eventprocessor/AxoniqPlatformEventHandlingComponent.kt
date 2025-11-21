@@ -81,7 +81,7 @@ class AxoniqPlatformEventHandlingComponent(
             handlerMetricsRegistry.registerMeasurement(measurement)
         }
 
-        processorMetricRegistry.doWithActiveMessageForSegment(contextWithMeasurements, processorName, segment.segmentId, event.timestamp())
+        processorMetricRegistry.registerActiveMessage(contextWithMeasurements, processorName, segment.segmentId, event.timestamp())
         return delegate.handle(event, contextWithMeasurements)
     }
 

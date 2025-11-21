@@ -38,7 +38,7 @@ class ProcessorMetricsRegistry {
         commitLatencyForProcessor(processor, segment).setValue(latencyInNanos.toDouble() / 1000000)
     }
 
-    fun doWithActiveMessageForSegment(processingContext: ProcessingContext, processor: String, segment: Int, messageTimestamp: Instant) {
+    fun registerActiveMessage(processingContext: ProcessingContext, processor: String, segment: Int, messageTimestamp: Instant) {
         val processingMessageTimestampsForSegment = getProcessingLatencySegmentMap(processor)
 
         processingContext.runOnAfterCommit {

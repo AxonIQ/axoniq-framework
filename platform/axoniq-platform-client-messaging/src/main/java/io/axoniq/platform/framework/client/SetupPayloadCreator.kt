@@ -190,7 +190,10 @@ class SetupPayloadCreator(
             "org.axonframework.extensions.springcloud:axon-springcloud",
             "org.axonframework.extensions.tracing:axon-tracing",
             "io.axoniq:axonserver-connector-java",
-            "io.axoniq.platform:axoniq-platform-messaging",
+            "io.axoniq.platform:axoniq-platform-client-messaging",
+            "io.axoniq.platform:axoniq-platform-client-modelling",
+            "io.axoniq.platform:axoniq-platform-client-eventsourcing",
+            "io.axoniq.platform:axoniq-platform-client-spring-boot-starter",
     )
 
     private fun versionInformation(): Versions {
