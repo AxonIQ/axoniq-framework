@@ -20,8 +20,8 @@ package io.axoniq.framework.postgresql;
 
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
-import org.axonframework.common.annotations.Internal;
-import org.axonframework.messaging.unitofwork.ProcessingContext;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.sql.Connection;
 import java.sql.SQLException;
