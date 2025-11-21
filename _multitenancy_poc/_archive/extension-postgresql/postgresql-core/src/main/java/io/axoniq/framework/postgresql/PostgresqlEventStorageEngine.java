@@ -27,27 +27,28 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.eventhandling.EventMessage;
-import org.axonframework.eventhandling.GenericEventMessage;
-import org.axonframework.eventhandling.TerminalEventMessage;
-import org.axonframework.eventhandling.conversion.EventConverter;
-import org.axonframework.eventhandling.processors.streaming.token.GlobalSequenceTrackingToken;
-import org.axonframework.eventhandling.processors.streaming.token.TrackingToken;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.StreamSpliterator;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
-import org.axonframework.eventstreaming.EventCriterion;
-import org.axonframework.eventstreaming.StreamingCondition;
-import org.axonframework.eventstreaming.Tag;
-import org.axonframework.messaging.Context;
-import org.axonframework.messaging.MessageStream;
-import org.axonframework.messaging.MessageType;
-import org.axonframework.messaging.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.TerminalEventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.EventCriterion;
+import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,8 +72,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-
-import static org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException.conflictingEventsDetected;
 
 /**
  * A {@link EventStorageEngine} implementation backed by PostgreSQL, providing
@@ -355,7 +354,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                             LOGGER.debug("appendEvents: failed");
                         }
 
-                        throw conflictingEventsDetected(condition.consistencyMarker());  // allow executor to rollback correctly
+                        throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker());  // allow executor to rollback correctly
                     }
                 });
 
@@ -431,10 +430,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         Set<EventCriterion> criterions = condition.criteria().flatten();
         CompletableFuture<Void> endOfStreams = new CompletableFuture<>();
         AtomicLong lastGlobalIndex = new AtomicLong();
-        long start = Math.max(0, condition.start());
+        long start = Math.max(0, GlobalIndexPosition.toIndex(condition.start()));
 
         return internalStream(context, criterions, start, lastGlobalIndex, List::isEmpty)
-            .whenComplete(() -> endOfStreams.complete(null))
+            .onComplete(() -> endOfStreams.complete(null))
             .concatWith(MessageStream.fromFuture(
                 endOfStreams.thenApply(event -> TerminalEventMessage.INSTANCE),
                 unused -> Context.with(
@@ -457,7 +456,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         }
 
         AtomicLong lastGlobalIndex = new AtomicLong();
-        long start = trackingToken == null ? 0 : Math.max(0, trackingToken.position().orElse(1) - 1);
+        long start = trackingToken == null ? 0 : Math.max(0, trackingToken.position().orElse(0));
 
         return internalStream(context, criterions, start, lastGlobalIndex, batch -> false);
     }
@@ -514,8 +513,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     ) {
         StreamSpliterator<FinalizedEvent> entrySpliterator = new StreamSpliterator<>(
             last -> {
-                long position = last == null ? start : last.position;
-                Batch batch = load(context, criterions, position + 1, 50);
+                long position = last == null ? start : last.position + 1;
+                Batch batch = load(context, criterions, position, 50);
 
                 lastGlobalIndex.set(batch.highestGlobalIndex);
 
@@ -762,7 +761,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                     LOGGER.debug("finalizePositions completed with latest global index: " + latestGlobalIndex);
                 }
 
-                return new GlobalIndexConsistencyMarker(latestGlobalIndex);
+                return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
             }
         });
     }
