@@ -20,16 +20,16 @@ package io.axoniq.framework.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.axonframework.eventhandling.conversion.DelegatingEventConverter;
-import org.axonframework.eventsourcing.eventstore.SimpleEventStore;
-import org.axonframework.messaging.unitofwork.ProcessingContext;
-import org.axonframework.serialization.json.JacksonConverter;
-import org.junit.jupiter.api.*;
+import org.axonframework.conversion.json.JacksonConverter;
+import org.axonframework.eventsourcing.eventstore.StorageEngineTestSuite;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.junit.jupiter.api.AfterAll;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
+
 import javax.sql.DataSource;
 
 /**
@@ -41,49 +41,10 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
     private static PostgreSQLContainer<?> postgresContainer;
     private static DataSource dataSource;
 
-    @SuppressWarnings("resource")
-    @BeforeAll
-    static void startContainer() {
-        postgresContainer = new PostgreSQLContainer<>("postgres:16.2")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
-
-        postgresContainer.start();
-
-        HikariConfig config = new HikariConfig();
-
-        config.setJdbcUrl(postgresContainer.getJdbcUrl());
-        config.setUsername(postgresContainer.getUsername());
-        config.setPassword(postgresContainer.getPassword());
-        config.setMaximumPoolSize(5);
-        config.setMinimumIdle(1);
-        config.setAutoCommit(false);
-
-        dataSource = new HikariDataSource(config);
-    }
-
     @AfterAll
     static void stopContainer() {
         if (postgresContainer != null) {
             postgresContainer.stop();
-        }
-    }
-
-    @AfterEach
-    void afterEach() throws SQLException {
-        try (
-            Connection connection = dataSource.getConnection();
-            Statement statement = connection.createStatement();
-        ) {
-            statement.execute(
-                """
-                TRUNCATE TABLE events, consistency_tags RESTART IDENTITY CASCADE;
-                ALTER SEQUENCE events_monotonic_seq RESTART WITH 1;
-                """
-            );
-
-            connection.commit();
         }
     }
 
@@ -104,7 +65,26 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
     };
 
     @Override
+    @SuppressWarnings("resource")
     protected PostgresqlEventStorageEngine buildStorageEngine() throws SQLException {
+        postgresContainer = new PostgreSQLContainer<>("postgres:16.2")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
+
+        postgresContainer.start();
+
+        HikariConfig config = new HikariConfig();
+
+        config.setJdbcUrl(postgresContainer.getJdbcUrl());
+        config.setUsername(postgresContainer.getUsername());
+        config.setPassword(postgresContainer.getPassword());
+        config.setMaximumPoolSize(5);
+        config.setMinimumIdle(1);
+        config.setAutoCommit(false);
+
+        dataSource = new HikariDataSource(config);
+
         return new PostgresqlEventStorageEngine(
             connectionExecutor,
             new DelegatingEventConverter(new JacksonConverter())
