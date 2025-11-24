@@ -55,7 +55,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.0.0-preview</axon-framework.version>
+        <axon-framework.version>5.0.0</axon-framework.version>
         <postgresql.version>42.7.8</postgresql.version>
         <hikari-cp.version>7.0.2</hikari-cp.version>
         <!-- Conversion -->
