@@ -26,10 +26,12 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.ContinuousMessageStream;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
@@ -39,6 +41,7 @@ import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -49,6 +52,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventstreaming.EventCriterion;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.postgresql.PGConnection;
+import org.postgresql.PGNotification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,9 +71,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -206,15 +213,21 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         """;
 
     /*
-     * Note: The final SELECT is intentionally written this way due to PostgreSQL sequence behavior
-     * and CTE evaluation order. There are two main cases:
+     * The finalization statement assigns permanent global_index values to any unfinalized events,
+     * regardless of which process inserted them, and always returns the current highest global index.
      *
-     * 1) No events to finalize: we fall back to the current sequence value ("last_value") to get
-     *    the latest global index.
+     * It is possible for this statement to run without finding any unfinalized events. This simply means
+     * that another process has already finalized them, effectively coalescing multiple finalizations
+     * into a single one. If any events were finalized, a notification is sent to listeners via pg_notify.
      *
-     * 2) Events to finalize exist: we use the "new_val" from "finalized_events" because relying on
-     *    "last_value" could return the sequence's starting value if PostgreSQL evaluates it
-     *    before the CTE completes.
+     * Note: The SELECT computing latest_global_index is written carefully due to PostgreSQL sequence
+     * behavior and CTE evaluation order:
+     *
+     * 1) If no events were finalized, we fall back to the sequence's current last_value to get the latest index.
+     * 2) If events were finalized, we use their new_val values because last_value could reflect the
+     *    sequence before the CTE updates complete.
+     *
+     * The pg_notify call signals listeners but does not guarantee they receive it; it only queues the notification.
      */
     private static final String FINALIZE_STATEMENT =
         """
@@ -240,14 +253,29 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
           FROM finalized_events fe
           WHERE t.global_index = fe.old_val
           RETURNING fe.new_val
+        ),
+        latest AS (
+          SELECT
+            COALESCE(MAX(finalized_events.new_val), (SELECT last_value FROM events_monotonic_seq)) AS latest_global_index,
+            COUNT(finalized_events.new_val) AS finalized_count
+          FROM finalized_events
         )
         SELECT
-          COALESCE(MAX(finalized_events.new_val), (SELECT last_value FROM events_monotonic_seq)) AS latest_global_index
-          FROM finalized_events;
+          latest.latest_global_index,
+          CASE WHEN latest.finalized_count > 0
+            THEN pg_notify('events_channel', latest.latest_global_index::text)
+            ELSE NULL
+          END
+          FROM latest;
         """;
 
     private final ConnectionExecutor connectionExecutor;
     private final EventConverter converter;
+
+    /**
+     * Tracks runnables for callbacks attached to streams for when new events may have become available.
+     */
+    private final Map<Object, Runnable> streamCallbacks = new ConcurrentHashMap<>();
 
     /**
      * Synchronized field. Future for the queued finalization which append transactions
@@ -259,6 +287,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
      * Synchronized field. Tracks whether any finalizer is running currently.
      */
     private boolean finalizerRunning;
+
+    /**
+     * Synchronized field. Tracks the highest known global index known by
+     * this engine instance. This is updated by the instance itself or via
+     * the Postgres LISTEN/NOTIFY mechanism.
+     */
+    private long highestKnownGlobalIndex;
 
     /**
      * Constructs a new instance.
@@ -319,6 +354,84 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                 );
             }
         });
+
+        // Setup thread and connection to detect new appends:
+        Thread.ofVirtual().start(() -> {
+            // TODO #24 - There may be SQLExceptions that are transient that should not result in the termination of the monitor thread
+            while (!Thread.currentThread().isInterrupted()) {
+                connectionExecutor.execute(null, this::monitorForNewEvents);
+            }
+        });
+    }
+
+    private void monitorForNewEvents(Connection c) throws SQLException {
+        PGConnection pgConnection = c.unwrap(PGConnection.class);
+
+        c.setAutoCommit(true);  // required to have no transaction for receiving notifications
+
+        /*
+         * First set up a listener for global index updates:
+         */
+
+        try (PreparedStatement ps = c.prepareStatement("LISTEN events_channel")) {
+            ps.execute();
+        }
+
+        /*
+         * It's possible some notifications were missed, so perform a direct query once
+         * to find the current highest global index:
+         */
+
+        try (
+            PreparedStatement ps = c.prepareStatement(EVENTS_FIND_NEXT_AVAILABLE_GLOBAL_INDEX);
+            ResultSet resultSet = ps.executeQuery();
+        ) {
+            resultSet.next();
+
+            updateHighestKnownGlobalIndex(resultSet.getLong(1) - 1);
+        }
+
+        /*
+         * Loop until interrupted processing incoming notifications:
+         */
+
+        while (!Thread.currentThread().isInterrupted()) {
+            PGNotification[] notifications = pgConnection.getNotifications(60000);
+
+            long globalIndex = 0;
+
+            for (PGNotification notification : notifications) {
+                if (notification.getName().equals("events_channel")) {
+                    globalIndex = Math.max(Long.parseLong(notification.getParameter()), globalIndex);
+                }
+            }
+
+            updateHighestKnownGlobalIndex(globalIndex);
+        }
+    }
+
+    private void updateHighestKnownGlobalIndex(long globalIndex) {
+        synchronized (streamCallbacks) {
+            if (globalIndex <= highestKnownGlobalIndex) {  // checks if notification can be skipped
+                return;
+            }
+
+            highestKnownGlobalIndex = globalIndex;
+        }
+
+        /*
+         * ContinuousMessageStream already guarantees that the callbacks do not
+         * throw exceptions, and per MessageStream documentation they must not
+         * block or do any significant amount of work in the callback. This may
+         * block or stop the monitor thread otherwise.
+         *
+         * The callbacks should still preferably be run outside the
+         * synchronization block.
+         */
+
+        for (Runnable callback : streamCallbacks.values()) {
+            callback.run();
+        }
     }
 
     @Override
@@ -458,7 +571,33 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         AtomicLong lastGlobalIndex = new AtomicLong();
         long start = trackingToken == null ? 0 : Math.max(0, trackingToken.position().orElse(0));
 
-        return internalStream(context, criterions, start, lastGlobalIndex, batch -> false);
+        Function<FinalizedEvent, List<FinalizedEvent>> fetcher = last -> {
+            long position = last == null ? start : last.position + 1;
+            Batch batch = load(context, criterions, position, 50);
+
+            lastGlobalIndex.set(batch.highestGlobalIndex);
+
+            return batch.events;
+        };
+
+        return new ContinuousMessageStream<>(
+            fetcher,
+            this::toMessageStreamEntry,
+            this::registerCallback
+        );
+    }
+
+    private SimpleEntry<EventMessage> toMessageStreamEntry(FinalizedEvent finalizedEvent) {
+        return new SimpleEntry<>(
+            finalizedEvent.event,
+            TrackingToken.addToContext(Context.empty(), new GlobalSequenceTrackingToken(finalizedEvent.position + 1))
+        );
+    }
+
+    private Registration registerCallback(MessageStream<?> ms, Runnable callback) {
+        streamCallbacks.put(ms, callback);
+
+        return () -> streamCallbacks.remove(ms) != null;
     }
 
     @Override
@@ -704,7 +843,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     private ConsistencyMarker applyFinalization() {
-        return connectionExecutor.execute(null, connection -> {
+        long latestGlobalIndex = connectionExecutor.execute(null, connection -> {
 
             /*
              * Finalization is completely independent of any other transactions, and
@@ -755,15 +894,25 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
             ) {
                 resultSet.next();  // query always returns a single row
 
-                long latestGlobalIndex = resultSet.getLong(1);
+                long globalIndex = resultSet.getLong(1);
 
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("finalizePositions completed with latest global index: " + latestGlobalIndex);
+                    LOGGER.debug("finalizePositions completed with latest global index: " + globalIndex);
                 }
 
-                return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
+                return globalIndex;
             }
         });
+
+        /*
+         * Because no processing context was provided, the finalization was done in a
+         * top level transaction that is now committed. Any stream callbacks can now
+         * be notified of new events.
+         */
+
+        updateHighestKnownGlobalIndex(latestGlobalIndex);  // will notify callbacks if needed
+
+        return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
     }
 
     private static Map<String, String> toMetadata(String json) {
