@@ -29,7 +29,9 @@ import java.util.Objects;
 
 /**
  * Executes JDBC operations with automatic transaction management and optional
- * integration with a {@link ProcessingContext}.
+ * integration with a {@link ProcessingContext}. When no processing context is
+ * provided, a top level transaction should be used which must be committed
+ * before returning to the caller.
  * <p>
  * The primary purpose of this interface is to allow callers to execute JDBC logic
  * without needing to manage commits, rollbacks or closing of the connection manually.
@@ -38,6 +40,9 @@ import java.util.Objects;
  * <p>
  * The user of this interface must never explicitely call {@link Connection#close()},
  * {@link Connection#commit()} or {@link Connection#rollback()} on the provided connection!
+ * <p>
+ * When no processing context is provided, the user of this interface is allowed to change
+ * the auto commit and transaction isolation level.
  * <p>
  * Implementations can integrate with different connection sources or transaction
  * managers, such as:
