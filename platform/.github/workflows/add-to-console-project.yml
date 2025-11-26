@@ -1,4 +1,4 @@
-name: Add PR to AxonIQ Console project
+name: Add PR to Axoniq Platform project
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/add-to-project@main
         with:
-          project-url: https://github.com/orgs/AxonIQ/projects/9
+          project-url: https://github.com/orgs/AxonIQ/projects/24
           github-token: ${{ secrets.ADD_TO_CONSOLE_PROJECT_TOKEN }}
           labeled: 'Type: Dependency Upgrade'
           label-operator: AND

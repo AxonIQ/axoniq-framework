@@ -1,6 +1,6 @@
 ---
 name: 'Feature request'
-about: 'Suggest a feature for AxonIQ Console Framework Client'
+about: 'Suggest a feature for the Axoniq Platform Client'
 title:
 labels: 'Type: Feature'
 ---
@@ -16,11 +16,11 @@ labels: 'Type: Feature'
 
 ### Current Behaviour
 
-<!-- Please share the current behaviour of AxonIQ Console Framework Client around this topic, if applicable. -->
+<!-- Please share the current behaviour of Axoniq Platform client around this topic, if applicable. -->
 
 ### Wanted Behaviour
 
-<!-- Please describe the desired outcome through AxonIQ Console Framework Client around the suggested feature. -->
+<!-- Please describe the desired outcome through Axoniq Platform client around the suggested feature. -->
 
 ### Possible Workarounds
 
