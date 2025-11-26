@@ -20,30 +20,19 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>io.axoniq.platform</groupId>
-        <artifactId>axoniq-platform-parent</artifactId>
+        <artifactId>framework-client-parent</artifactId>
         <version>2.0.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>axoniq-platform-client-all</artifactId>
-    <name>AxonIQ Platform client: all</name>
-    <description>Axoniq Platform instrumentation including all submodules</description>
+    <artifactId>framework-client-api</artifactId>
+    <name>Axoniq Platform client: API</name>
+    <description>Axoniq Platform client API</description>
 
     <dependencies>
         <dependency>
-            <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-client-messaging</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-client-eventsourcing</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-client-modelling</artifactId>
-            <version>${project.version}</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
     </dependencies>
 </project>

@@ -198,10 +198,10 @@ class SetupPayloadCreator(
             "io.axoniq.framework:postgresql",
             "io.axoniq.framework:postgresql-cor",
             "io.axoniq:axonserver-connector-java",
-            "io.axoniq.platform:axoniq-platform-client-messaging",
-            "io.axoniq.platform:axoniq-platform-client-modelling",
-            "io.axoniq.platform:axoniq-platform-client-eventsourcing",
-            "io.axoniq.platform:axoniq-platform-client-spring-boot-starter",
+            "io.axoniq.platform:framework-client-messaging",
+            "io.axoniq.platform:framework-client-modelling",
+            "io.axoniq.platform:framework-client-eventsourcing",
+            "io.axoniq.platform:framework-client-spring-boot-starter",
     )
 
     private fun versionInformation(): Versions {

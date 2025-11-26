@@ -21,27 +21,27 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.axoniq.platform</groupId>
-    <artifactId>axoniq-platform-parent</artifactId>
+    <artifactId>framework-client-parent</artifactId>
     <version>2.0.0</version>
 
     <modules>
-        <module>axoniq-platform-client-api</module>
-        <module>axoniq-platform-client-messaging</module>
-        <module>axoniq-platform-client-modelling</module>
-        <module>axoniq-platform-client-eventsourcing</module>
-        <module>axoniq-platform-client-spring-boot-starter</module>
-        <module>axoniq-platform-client-all</module>
+        <module>framework-client-api</module>
+        <module>framework-client-messaging</module>
+        <module>framework-client-modelling</module>
+        <module>framework-client-eventsourcing</module>
+        <module>framework-client-spring-boot-starter</module>
+        <module>framework-client-all</module>
     </modules>
     <packaging>pom</packaging>
 
-    <name>Axoniq Platform parent</name>
-    <description>Axoniq Platform instrumentation and client. https://platform.axoniq.io</description>
+    <name>Axoniq Platform Framework client parent</name>
+    <description>Axoniq Platform instrumentation and client for Axon Framework 5. https://platform.axoniq.io</description>
 
     <inceptionYear>2023</inceptionYear>
     <url>https://axoniq.io/</url>
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/AxonIQ/console-framework-client/issues</url>
+        <url>https://github.com/AxonIQ/platform-framework-client/issues</url>
     </issueManagement>
     <licenses>
         <license>
@@ -232,9 +232,9 @@
     </build>
 
     <scm>
-        <connection>scm:git:git://github.com/AxonIQ/console-framework-client.git</connection>
-        <developerConnection>scm:git:git@github.com:AxonIQ/console-framework-client.git</developerConnection>
-        <url>https://github.com/AxonIQ/console-framework-client</url>
+        <connection>scm:git:git://github.com/AxonIQ/platform-framework-client.git</connection>
+        <developerConnection>scm:git:git@github.com:AxonIQ/platform-framework-client.git</developerConnection>
+        <url>https://github.com/AxonIQ/platform-framework-client</url>
         <tag>HEAD</tag>
     </scm>
 

@@ -1,4 +1,4 @@
-# AxonIQ Platform client
+# Axoniq Platform Framework client
 
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/io.axoniq.console/console-framework-client/badge.svg)](https://maven-badges.herokuapp.com/maven-central/io.axoniq.console/console-framework-client)
 

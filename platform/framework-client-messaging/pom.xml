@@ -20,20 +20,28 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>io.axoniq.platform</groupId>
-        <artifactId>axoniq-platform-parent</artifactId>
+        <artifactId>framework-client-parent</artifactId>
         <version>2.0.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>axoniq-platform-client-spring-boot-starter</artifactId>
-    <name>AxonIQ Platform client: Spring Boot Starter</name>
-    <description>Spring Boot Starter to auto-connect Axon Framework 5+ applications with Axoniq Platform</description>
+    <artifactId>framework-client-messaging</artifactId>
+    <name>Axoniq Platform client: messaging</name>
+    <description>Core functionality of the Axoniq Platform instrumentation</description>
 
     <dependencies>
         <dependency>
             <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-client-api</artifactId>
+            <artifactId>framework-client-api</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-cbor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-kotlin</artifactId>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
@@ -41,28 +49,39 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.axonframework</groupId>
-            <artifactId>axon-common</artifactId>
-            <scope>provided</scope>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.rsocket</groupId>
+            <artifactId>rsocket-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.axoniq.platform</groupId>
-            <artifactId>axoniq-platform-client-all</artifactId>
-            <version>${project.version}</version>
+            <groupId>io.rsocket</groupId>
+            <artifactId>rsocket-transport-netty</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
+        </dependency>
+
+        <!--test dependencies-->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.axonframework.extensions.spring</groupId>
-            <artifactId>axon-spring</artifactId>
-            <scope>provided</scope>
+            <groupId>io.github.oshai</groupId>
+            <artifactId>kotlin-logging-jvm</artifactId>
+            <version>6.0.9</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 </project>
