@@ -31,8 +31,14 @@ jobs:
           server-id: central
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
-          gpg-private-key: ${{ secrets.SONATYPE_GPG_KEY }} # Value of the GPG private key to import
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE # Env var name for GPG passphrase
+
+      - name: Import GPG key
+        if: matrix.deploy-enabled
+        run: |
+          echo "${{ secrets.SONATYPE_GPG_KEY }}" | base64 --decode | gpg --batch --import
+          gpg --list-secret-keys --keyid-format LONG
+        env:
+          GPG_TTY: $(tty)
 
       - name: Test and Build
         if: ${{ !matrix.sonar-enabled }}
