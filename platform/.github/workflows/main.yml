@@ -32,7 +32,7 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
           gpg-private-key: ${{ secrets.SONATYPE_GPG_KEY }} # Value of the GPG private key to import
-          gpg-passphrase: ${{ secrets.SONATYPE_GPG_PASSWORD }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE # Env var name for GPG passphrase
 
       - name: Test and Build
         if: ${{ !matrix.sonar-enabled }}
@@ -54,7 +54,7 @@ jobs:
       - name: Deploy to Sonatype
         if: matrix.deploy-enabled
         run: |
-          ./mvnw -B -U -Dstyle.color=always -Prelease deploy -DskipTests=true
+          ./mvnw -B -U -Dstyle.color=always -Prelease -Psign deploy -DskipTests=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
