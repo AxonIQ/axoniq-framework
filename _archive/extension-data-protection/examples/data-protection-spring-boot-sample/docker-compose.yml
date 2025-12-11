@@ -1,0 +1,46 @@
+services:
+  axon-server:
+    image: axoniq/axonserver:latest-jdk-17
+    ports:
+      - "8024:8024"
+      - "8124:8124"
+      - '8224:8224'
+    hostname: axonserver-1
+    environment:
+#      - axoniq_console_authentication={{ENVIRONMENT_ID}}-asc:{{SERVER_ACCESS_TOKEN}}
+      - axoniq.axonserver.autocluster.dcb=true
+    volumes:
+      - data:/axonserver/data
+      - events:/axonserver/events
+    networks:
+      - axon-server
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: dataprotection-postgres
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axon-server
+
+networks:
+  axon-server:
+
+volumes:
+  data:
+    driver: local
+  events:
+    driver: local
+  postgres_data:
+    driver: local

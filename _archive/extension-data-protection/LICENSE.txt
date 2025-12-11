@@ -1,0 +1,705 @@
+
+                   AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS
+                           Last Updated September 2025
+                             https://www.axoniq.io/
+
+      AxonIQ B.V., a Dutch corporation with statutory seat in Amsterdam
+      and having its offices at Lange Viestraat 2b, 3511 BK Utrecht, The
+      Netherlands, or its Affiliate, as may be the case ("AxonIQ" or "We"),
+      is willing to grant you ("You" or "LICENSEE") this license to access
+      and use its software (the "Software") if You agree to the terms in
+      this Software Subscription Agreement ("Terms"). If You wish to
+      access the Software on behalf or for the benefit of your employer
+      by accepting these Terms, You do so on Your own behalf, and that
+      of Your employer, and You warrant and represent that You have the
+      authority to do so. You acknowledge that You have read these Terms,
+       understand them, and agree to be bound by them. If You do not
+       agree to any of the terms below, AxonIQ is unwilling to license
+       the Software to You, You are not authorized to access or use it
+       for any purpose, and You should not check the box indicating that
+       You have read through and agree to the terms of the Software.
+
+      DEFINITIONS.
+
+      "Agreement": this Software Subscription Agreement with AxonIQ,
+      consisting of these Terms and any related Order and Exhibits, if
+      applicable.
+
+      "Affiliate" means any entity that controls, is controlled by or is
+      under common control with a party, where control means direct or
+      indirect ownership of more than 50% of the entity's voting interests.
+
+      "Beta Release Feature" means any release feature of the Software that
+      is identified by AxonIQ to be beta, experimental, restricted release
+      or unsupported.
+
+      "Capacity" means the features and restrictions relating to a specific
+      Plan as described on our websites and portals.
+
+      "Platform" means the "one-stop shop" platform for all initialization,
+      configuration, insights, and monitoring of AxonIQ products.
+
+      "Documentation" means the user guides and manuals for using the
+      Software, in so far as applicable, provided in electronic form,
+      currently located at https://docs.axoniq.io/reference-guide.
+
+      "Effective Date" means the date of the commencement of the Agreement
+      as appears on the Order, or, in the absence of an Order, the date of
+      first payment of the Software subscription fee, or for Free Licenses,
+      the date of first download or use of the Software.
+
+      "Free Licenses" means licenses that are offered on a free-of-charge
+      basis under these Terms, such as Free Plans, Non-Production Free
+      Licenses, Trial Licenses, and Beta Releases. Free Licenses do not
+      include Open Source Software licenses which are governed by separate
+      Open Source license terms. For the avoidance of doubt, The core of
+      Axon Framework is licensed under Apache 2.
+
+      "License" means the license to use the Software within the limits set
+      out in the Agreement.
+
+      "Non-Production Free License" means a Free License permitting use of
+      certain designated  Software solely for Non-Production Purposes as
+      defined herein. Non-Production Free License applies to the so-called
+      ‘Axon Framework Extensions’.
+
+      "Non-Production Purposes" means use (a) in development environments
+      (local development machines) and automated build/tests and (b) for
+      internal evaluation, development or automated testing. Non-Production
+      Purposes explicitly exclude: (i) any use in a live, customer-facing
+      environment; (ii) any use that directly supports business operations
+      or generates revenue; (iii) any use in testing or quality assurance
+      environments that validate software intended for production
+      deployment, including acceptance testing environments; and (iv) any
+      use where the Software processes, stores, or transmits data that
+      affects business decisions or customer experiences.
+
+      "Order" means an ordering document for the Software and Support
+      Services agreed upon between You and AxonIQ, or as the case may be,
+      between You and an authorized reseller of AxonIQ, and/or the Software
+      selected and activated by You via our websites or portals, including
+      the applicable Support Services.
+
+      "Plan" means the different types of licenses to the Software and
+      level of Support offered by AxonIQ through the Platform under a
+      specific plan.
+
+      "Software" means any of the software AxonIQ offers under these Terms,
+      including software made available under Non-Production Free Licenses.
+
+      "Support Services" means the applicable services provided under
+      AxonIQ's standard Support Services policy in effect on the date such
+      services are provided.
+
+      "Trial License" means a free license for a limited duration, allowing
+      You to evaluate the Software.
+
+      "Update" means (i) supplemental programs, if and when developed and
+      distributed by AxonIQ, that may contain bug fixes or improved program
+      functions for the Software; and (ii) a subsequent release of the
+      Software, if and when developed by AxonIQ, which AxonIQ generally
+      makes available for licensees that have an annual software support
+      agreement. An Update does not include any release, new version,
+      option, or future product, which AxonIQ licenses separately.
+
+1.    Subscription. Subject to the terms and conditions of the Agreement
+      and the complete payment of any and all applicable subscription fees,
+      AxonIQ grants You during the applicable term and for the restricted
+      scope of the Agreement a limited, personal, revocable,
+      non-transferable, non-exclusive license to use the Software for the
+      term of the Agreement and for the Capacity specified therein and to
+      receive the Support Services, if applicable. The Software may only be
+      used for purposes of LICENSEE's ordinary business. LICENSEE shall
+      pay the fee based on the ordered Capacity as indicated in the Order.
+
+      Non-Production Free License Grant. For Software designated as
+      available under Non-Production Free License, AxonIQ grants You a
+      limited, non-exclusive, non-transferable license to use and modify
+      such Software modules solely for Non-Production Purposes. You may
+      create derivative works for internal use only, subject to all
+      restrictions in this Agreement.
+
+      Production Use Upgrade. You must verify your continued compliance
+      with Non-Production use limitations on an ongoing basis. If you wish
+      to use the Software for production purposes, you must go to AxonIQ’s
+      platform and sign up for the appropriate paid license subscription.
+      This license terminates automatically if you breach these terms. Upon
+      termination, all rights to use the Software across your organization
+      immediately cease, and you must delete all copies of the Software
+      from all systems and locations within your organization.
+
+2.    Registration. To register, You must first log in by selecting one of
+      the supported identity providers, if applicable, and by providing Us
+      online with all additional information We request. As part of the
+      registration, You must accept the terms of the Agreement.
+
+      You agree to keep Your credentials that provide access to the
+      Software and any application tokens confidential and not to share
+      them with third parties. You are responsible for using your account,
+      and You will immediately notify Us of any unauthorized use at
+      support@axoniq.io.
+
+3.    Restrictions. The grant of this license is further limited as
+      follows:
+
+      (a) The license is granted solely to You and not to any parent,
+      subsidiary, or other third party, unless stated otherwise in the
+      Order. However, paid licenses include use by Your Affiliates and/or
+      third party service providers to provide outsourced services to You,
+      provided that You shall remain responsible for each such Affiliate's
+      and/or third party service provider's compliance with the terms of
+      this Agreement, and all such use must be, in the aggregate, within
+      the limitations stated in the Order or on the Platform.
+
+      (b) You may not use or copy the Software, or any copy thereof, in
+      whole or in part except as expressly provided in these Terms. You may
+      not provide the Software as a hosted service to third parties. You
+      acknowledge that the Software and its structure, sequence,
+      organization, and source code contain valuable trade secrets and
+      confidential information of AxonIQ and, as applicable, its licensors.
+      You shall not, nor shall You permit, assist, or encourage any third
+      party to (a) modify, adapt, alter, translate, or create derivative
+      works from the Software, unless expressly permitted, (b) sublicense,
+      lease, rent, or loan the Software, or otherwise transfer the Software
+      or make it available to any third party, (c) if the source code is
+      not made available by AxonIQ - reverse engineer, decompile,
+      disassemble, or otherwise attempt to derive the source code for the
+      Software, except and only to the extent that such activity is
+      expressly permitted by applicable law, (d) remove, obscure, or alter
+      AxonIQ's copyright or patent notices, trademarks, and other
+      proprietary rights notices affixed to or contained within the AxonIQ
+      Software, (e) disseminate or publish any information about the
+      performance of the Software to a third party without the prior
+      written consent of AxonIQ, or (f) otherwise exercise rights to the
+      Software except as expressly allowed under this Section 3.
+
+      (c) Additional Restrictions for Axon Framework Extensions and
+      Non-Production Free Licenses. For Axon Framework Extensions the
+      following applies: (i) The Software is source-available - you may
+      modify it for internal use but cannot distribute original or modified
+      versions; (ii) You may not distribute source code or derivative works
+      to third parties; For Axon Framework Extensions that are licensed
+      under Non-Production Free License, the following additional
+      restrictions apply:(ii) The Software may only be used for
+      Non-Production Purposes as defined herein.
+
+      (d) You shall not use the Software to violate the security or
+      integrity of any network, computer or communications system, software
+      application, or network or computing device. You shall not make
+      network connections to any users, hosts, or networks unless You have
+      permission to communicate with them. You may not use manual or
+      electronic means to avoid any use limitations placed on the Software,
+      such as access and storage restrictions. We may, but have no
+      obligation to investigate any violation of this provision or misuse
+      of the Software.
+
+      (e) You shall not violate any applicable Fair Use Policy that has
+      been made available by AxonIQ.
+
+      (f) High-Risk Use. LICENSEE has no right to use (and must not use)
+      the Software in any application or situation where the failure of the
+      Software could lead to death or serious bodily injury of any person,
+      or to severe physical or environmental damage ("High-Risk Use").
+      High-Risk Use does not include utilization of the Software for
+      administrative purposes, to store configuration data, engineering
+      and/or configuration tools, or other applications, the failure of
+      which would not result in death, personal injury, or severe physical
+      or environmental damage. LICENSEE agrees to indemnify and hold
+      harmless AxonIQ from any third-party claim arising out of LICENSEE's
+      use of the Software in connection with any High-Risk Use.
+
+4.    Free Licenses, including Non-Production Free Licenses, Trial Licenses
+      and Beta Releases. If You are using the part of the Software that is
+      offered as Free Licenses, then the following applies. Free Licenses
+      are provided "AS IS" with no warranty of any kind, to the extent
+      permitted by law, and AxonIQ is under no obligation to provide any
+      Support Services or maintenance. You assume all risks and all costs
+      associated with using such Free Licenses. Your sole remedy with
+      respect to Free Licenses is termination of the use of the Free
+      Licenses. Any obligations of AxonIQ to indemnify, defend, or hold
+      harmless under these Terms do not apply to Free Licenses.
+
+5.    Modifications. AxonIQ reserves the right to modify the Software and
+      Support Services during the course of the Agreement in an effort to
+      improve its performance and functionality. These modifications may
+      include changes that break compatibility of APIs. These Terms may be
+      modified from time to time, which modified versions will be notified
+      on our portals and /or by e-mail and Your access to the Software is
+      subject to Your continuing agreement to these Terms, as they may be
+      amended from time to time.
+
+6.    Support. For paid Software licenses only (excluding Free Licenses):
+      As part of the provision of the Software, and depending on the Plan
+      purchased by You, AxonIQ shall make available technical support to
+      You in accordance with AxonIQ's applicable Support Services policy
+      for a supported version subject to Section 6 below. AxonIQ reserves
+      the right to alter its standard Support Services policy from time to
+      time using reasonable discretion, but in no event shall such
+      alterations result in a material diminishment of the level of
+      support. AxonIQ will provide support by using its commercially
+      reasonable efforts in (i) diagnosing Incidents and (ii) resolving
+      Incidents. AxonIQ will have no obligation to provide Support to
+      LICENSEE in the event that (i) the purchased Software has been
+      changed, modified or damaged by LICENSEE or anyone other than AxonIQ,
+      (ii) the problem is caused by LICENSEE's negligence, misconduct, or
+      misuse of the Software, or other causes beyond the reasonable control
+      of AxonIQ, (iii) the problem is due to third party software not
+      included in the Software's distribution. Support provided by AxonIQ
+      does not cover the support of any third party software not part of
+      the Software's distribution or hardware which integrates with
+      AxonIQ's Software. In addition, support does not include the
+      following: (a) LICENSEE's failure to comply with operating
+      instructions contained in the documentation; and (b) installation,
+      configuration, management and operation of LICENSEE's infrastructure.
+      LICENSEE is subject to additional fees charged by AxonIQ for the time
+      and manpower allocated to the resolutions of these Incidents in
+      accordance with AxonIQ's usual fees.
+
+      Mandatory Upgrade Requirement: LICENSEE acknowledges and agrees that
+      AxonIQ may require LICENSEE to upgrade to a newer Software version,
+      such as the LTS version (for Axon Server) or a version designated as
+      a major release (for Axon Framework or other products) , in order to
+      continue access to  Support Services. Such requirement will be in
+      accordance with the applicable Long Term Support (LTS) policy or any
+      other applicable release notes. AxonIQ will endeavour to provide
+      ninety (90) days advance notice of mandatory upgrades via email,
+      in-app notification, or website posting, except for critical security
+      updates which may require shorter notice. Failure to upgrade within 6
+      months or any other specified timeframe may result in loss of Support
+      Services, unless parties agree to paid extended support, and LICENSEE
+      assumes all risks of using unsupported versions. AxonIQ reserves the
+      right to implement automatic updates for security, compliance, or
+      operational reasons, and AxonIQ shall not be liable for any costs or
+      damages resulting from mandatory upgrade requirements or LICENSEE’s
+      failure to comply therewith.
+
+      No support. If no support is provided under a Plan, then You may use
+      AxonIQ's generally available communication channels where you can
+      seek assistance or answers to questions you may have.
+
+7.    Third-party materials. The Software may incorporate, embed, or be
+      bundled with software or components that are owned by third parties
+      and/or with open-source software, as identified in the Documentation.
+      Notwithstanding anything to the contrary herein, use of the
+      third-party components and/or open-source software shall be subject
+      to the license terms and conditions applicable to such third-party
+      software and/or open-source software. AxonIQ makes no warranties,
+      express or implied, and will not be obligated under Sections 13
+      and/or 15 with respect to any third-party software and/or open-source
+      software. To the extent the terms of open source licenses applicable
+      to such open source software prohibit any of the restrictions in
+      these Terms, such restrictions will not apply to such open source
+      software.
+
+8.    Term and termination.
+
+      (a) The Agreement commences on the Effective Date and will remain in
+      effect during the applicable subscription term as stated in the
+      Order, if applicable, or for the specific term for such Software as
+      indicated on the portal, and/or unless terminated earlier as provided
+      below. We may terminate Trial Licenses and Beta Releases at our
+      discretion upon prior notification.
+
+      (a-1) Non-Production Free License Termination. Non-Production Free
+      Licenses terminate automatically upon any breach of the
+      Non-Production Purposes limitation or other license terms. Upon such
+      termination, all rights to use the Software across your organization
+      immediately cease, and you must delete all copies of the Software
+      from all systems and locations within your organization.
+
+      (b) You may terminate Your use of the Software at any time for any
+      reason by following the procedure to terminate Your Agreement on the
+      Platform to this effect. The cancellation takes effect on the renewal
+      date of the Agreement.
+
+      (c) In case of non-payment of any fees due, the Agreement will be
+      suspended or terminated.
+
+      (d) Either party may terminate the Agreement upon written notice if
+      the other party (i) materially breaches this Agreement and such
+      breach is not cured within thirty days after written notification of
+      such breach, (ii) becomes subject to any bankruptcy or insolvency
+      proceedings, has a receiver appointed for a substantial part of its
+      assets or ceases to operate in the ordinary course of its business.
+
+      (e) The provisions of the Agreement that by their nature extend
+      beyond the termination of the Agreement shall survive termination.
+
+      (f) Upon expiration or termination of the Agreement, you shall cease
+      to use the Software under these Terms.
+
+      (g) You acknowledge that You are responsible for timely exporting
+      your data in order to ensure continued access after termination and /
+      or expiration of the account and/or Agreement.
+
+      (h) In case of Free Licenses your data may be deleted at Our
+      discretion upon Our prior notification.
+
+9.    Orders, Fee, and Payment.
+
+      (a) Orders. All Orders are subject to these Terms and are not binding
+      until accepted by AxonIQ. Orders You create through the AxonIQ
+      websites or the Platform are deemed accepted when AxonIQ provides
+      access to the Software. All Orders are non-refundable except as
+      expressly provided otherwise in these Terms.
+
+      (b) Direct Orders. Sections c to f only apply to Orders placed
+      directly with AxonIQ. If you purchase the Software through an AxonIQ
+      authorized reseller, You will pay the reseller for such purchase, and
+      different terms may apply.
+
+      (c) Fees and Payment. You agree to pay AxonIQ all fees incurred for
+      using the Software and any additional fees specified in an Order. All
+      amounts payable under this Agreement will be due within thirty (30)
+      days from the invoice date.
+
+      (d) Taxes. Unless stated otherwise in an Order, You shall, in
+      addition to the other amounts payable under this Agreement, pay all
+      applicable customs, duties, sales, use, value-added, withholding, or
+      other taxes, federal, state, or otherwise, however designated, which
+      are levied or imposed because of the transactions contemplated by
+      this Agreement, excluding only taxes based on AxonIQ's net income. If
+      You are compelled to make a deduction or set-off for any such taxes,
+      You will pay AxonIQ such additional amounts as are necessary to
+      ensure receipt by AxonIQ of the total amount AxonIQ would have
+      received but for the deduction.
+
+      (e) Credit Card Payments. Unless otherwise agreed in an Order,
+      payment must be made by credit card. AxonIQ uses a third-party credit
+      card processing service to process payments. You consent to the use
+      of such service and to the transfer of Your credit card details to
+      such third-party processor. You agree to be bound by any terms
+      applicable to the processing service.
+
+      (f) Late Payment. Late payments may bear interest at the rate of 1.5%
+      per month ( or the highest rate permitted by law, if less) from the
+      payment due date until paid in full. Upon notice AxonIQ may suspend
+      your access to the Software or Support Services for failure to pay
+      any amounts when due. If payment has not been received by AxonIQ
+      within 15 days after notification to that effect then AxonIQ may
+      terminate the Agreement.
+
+      (g) Modification of Fees. AxonIQ shall be entitled to modify its fees
+      and/or its fee structure at any time upon 30 days prior notice by
+      notification on its websites and/or the the Platform. In such case
+      You accept such modifications by Your continued use of the Software.
+
+10.   Verification/Audit. At AxonIQ's written request, not more frequently
+      than annually, LICENSEE will furnish AxonIQ with a signed
+      certification verifying that the Software is being used in accordance
+      with the provisions of this Agreement. AxonIQ may not, more
+      frequently than annually, audit LICENSEE's use of the Software unless
+      AxonIQ reasonably believes that a violation of this Agreement has occurred.
+
+      Any such audit will be conducted during regular business hours at
+      LICENSEE's facilities and will not unreasonably interfere with
+      LICENSEE's business activities. If an audit reveals that LICENSEE is
+      using Software contrary to the terms and conditions of this
+      Agreement, then LICENSEE will be invoiced for additional license fees
+      consistent with LICENSEE's actual use of the Software in accordance
+      with AxonIQ's then current price list for the Software, which amount
+      will be immediately due and payable. This assessment of additional
+      fees will be without prejudice to any other remedies AxonIQ may have
+      for breach of this Agreement, including without limitation,
+      termination under Section 8 (Term and Termination).
+
+10a . Enhanced Verification for Non-Production Free Licenses. For
+      Non-Production Free Licenses, the following additional verification
+      requirements apply:
+
+      (a) Self-Certification. At AxonIQ's written request, you shall
+      within 15 days provide a written certification signed by an
+      authorized representative stating: (i) your current compliance status
+      with all license terms; (ii) a description of all systems and
+      environments where the Software is deployed; (iii) the nature and
+      scope of your use of the Software; and (iv) confirmation that no
+      production use has occurred or, if production use has occurred, full
+      details of such use including duration, scale, and business purpose.
+
+      (b) Audit Rights. AxonIQ reserves the right, upon reasonable written
+      notice and during normal business hours, to audit your compliance
+      with this license if AxonIQ has reason to believe that you have
+      breached any license terms, with such determination to be made in
+      AxonIQ's sole discretion. Such audits may include: (i) inspection of
+      your or your organisation's systems, networks, and computing
+      environments where the Software is or has been installed; (ii) review
+      of documentation, records, logs, and other materials relating to your
+      deployment and use of the Software; (iii) interviews with technical
+      and administrative personnel within your organisation; and (iv)
+      engagement of qualified auditors to conduct such inspection on
+      AxonIQ's behalf. You shall provide reasonable cooperation and access
+      necessary for such audits.
+
+      (c) Non-Production Use Enforcement. Unauthorized production use of
+      Software licensed under Non-Production Free License may result in:
+      (i) immediate liability for all applicable commercial license fees
+      for the type of license AxonIQ deems appropriate at its discretion,
+      from first unauthorized use; (ii) liquidated damages equal to 3x such
+      license fees; (iii) interest at 1.5% per month; and (iv) reasonable
+      attorneys' fees and costs of enforcement.
+
+11.   Confidential Information.
+      (a) Each party shall retain in confidence the non-public information
+      and know-how disclosed or made available by the other party pursuant
+      to this Agreement, which is either designated in writing as
+      proprietary and/or confidential, if disclosed in writing, or if
+      disclosed orally, is designated in writing (which may be via email)
+      as confidential within thirty (30) days of the oral disclosure or
+      should reasonably be understood to be confidential by the recipient
+      ("Confidential Information"). Notwithstanding any failure to so
+      designate it, the Software, including the Documentation, the terms
+      and pricing under this Agreement and all intellectual property and
+      trade secrets of AxonIQ are considered AxonIQ's Confidential
+      Information. Each party shall (a) maintain the confidentiality of the
+      other party's Confidential Information using at least a reasonable
+      degree of care; (b) refrain from using the other party's Confidential
+      Information except for the purpose of performing its obligations
+      under this Agreement; and (c) not disclose Confidential Information
+      to any third party except to employees, subcontractors and agents as
+      is reasonably required in connection with this Agreement and who are
+      subject to confidentiality obligations at least as protective as
+      those outlined in this section. Results of any benchmark tests on the
+      Software run by You may not be disclosed outside of Your organization
+      without the prior written consent of AxonIQ. Each party shall
+      immediately notify the other party of any unauthorized disclosure or
+      use of any Confidential Information and assist the other party in
+      remedying such unauthorized use or disclosure by taking steps
+      reasonably requested by such other party. The foregoing obligations
+      will not apply to Confidential Information of the other party which
+      (i) is or becomes publicly known without breach of this Agreement;
+      (ii) is discovered or created by the receiving party without the use
+      of, or reference to, the Confidential Information of the disclosing
+      party, as shown in records of the receiving party; or (iii) is
+      otherwise known to the receiving party without confidentiality
+      restrictions and through no wrongful conduct of the receiving party.
+      The receiving party may disclose Confidential Information to the
+      extent required by law or court order if the receiving party provides
+      prompt notice and reasonable assistance to the disclosing party to
+      enable the disclosing party to seek a protective order or otherwise
+      prevent or restrict such disclosure ("Permitted Disclosures").
+
+      (b) You acknowledge that any breach or threatened breach of this
+      Section may cause irreparable injury to AxonIQ and that, in addition
+      to any other remedies that may be available, in law, in equity, or
+      otherwise, AxonIQ shall be entitled to seek injunctive relief against
+      the threatened breach of this Agreement or the continuation of any
+      such breach by You, without the necessity of proving actual damages
+      or posting any bond, in addition to any other rights or remedies
+      provided by law.
+
+12.   Processing of Data. Usage Data. AxonIQ may, from time to time, use
+      and process data about Your use of the Software for the purpose of
+      creating statistics and analytics data. We may use such data for Our
+      own internal business purposes, including maintaining and improving
+      Our products and services and monitoring and analysing Our activities
+      in connection with the performance of the Software.
+
+13.   Warranties and Disclaimers.
+      (a) Limited Warranty. Not applicable to Free Licenses: Limited
+      Warranty. AxonIQ warrants for a period of thirty (30) days from the
+      Effective Date that the Software will perform substantially in
+      accordance with the Documentation. During the warranty period and
+      without charge to LICENSEE, AxonIQ will as a sole remedy to LICENSEE
+      use commercially reasonable efforts to provide modifications or fixes
+      with respect to any material defect in the Software in a reasonably
+      timely manner. If AxonIQ is unable to make the Software operate as
+      warranted, then AxonIQ will on request by LICENSEE terminate the
+      license for such defective Software and refund the license fees paid
+      to AxonIQ for the defective Software, provided the request is made
+      within the warranty period. Any other remedies are excluded.
+
+      (b) The warranty does not apply if the Software has been altered
+      except by AxonIQ, has not been installed, used, operated, or
+      maintained in accordance with this Agreement, is used on equipment,
+      products, or systems not meeting specifications identified by AxonIQ
+      in the Documentation, or the error or defect is not attributable to
+      AxonIQ.
+
+      (c) Only for Paid Plans including SLA Support Services: AxonIQ
+      warrants that (i) it shall perform the Support Services in a
+      professional manner and (ii) the Support Service will perform
+      substantially in accordance with the documentation. AxonIQ's entire
+      obligation and Your sole remedy for a breach of the foregoing
+      warranty will be for AxonIQ to re-perform the Support Services or
+      make commercially reasonable efforts to correct any non-conformity in
+      the Support Service.
+
+      The warranty does not apply if a non-conformity results from your
+      negligence, error, or misuse of the Software.
+
+      Disclaimer of All Other Warranties. THE WARRANTIES IN SECTION 13.
+      ABOVE ARE EXCLUSIVE AND ARE IN LIEU OF ALL OTHER WARRANTIES, WHETHER
+      EXPRESS OR IMPLIED, INCLUDING THE IMPLIED WARRANTIES OF
+      MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+      NON-INFRINGEMENT. ALL OTHER WARRANTIES ARE HEREBY DISCLAIMED. NO ORAL
+      OR WRITTEN INFORMATION OR ADVICE GIVEN BY AXONIQ, ITS DEALERS,
+      DISTRIBUTORS OR AGENTS OR EMPLOYEES WILL CREATE A WARRANTY OR IN ANY
+      WAY INCREASE THE SCOPE OF THE WARRANTIES GIVEN IN THIS SECTION, AND
+      LICENSEE MAY NOT RELY ON ANY SUCH INFORMATION OR ADVICE. AXONIQ DOES
+      NOT WARRANT THAT THE SOFTWARE WILL MEET LICENSEE'S REQUIREMENTS, WILL
+      BE FIT FOR A PARTICULAR PURPOSE, THAT THE SOFTWARE WILL OPERATE IN
+      COMBINATIONS OTHER THAN AS SPECIFIED IN THE DOCUMENTATION, THAT THE
+      OPERATION OF THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE, THAT
+      THE SOFTWARE WILL NOT INFRINGE THE RIGHTS OF OTHERS, OR THAT THE
+      SOFTWARE WILL PROTECT AGAINST ALL POSSIBLE SECURITY THREATS, INTERNET
+      THREATS OR OTHER THREATS OR INTERRUPTIONS. IF APPLICABLE LAWS DO NOT
+      ALLOW THE EXCLUSION OF IMPLIED WARRANTIES, GUARANTEES OR CONDITIONS,
+      THEN ANY IMPLIED WARRANTIES, GUARANTEES OR CONDITIONS LAST ONLY
+      DURING THE TERM OF THE LIMITED WARRANTY AND ARE LIMITED TO THE
+      GREATEST EXTENT ALLOWED BY THE APPLICABLE LAWS, AND IN ANY CASE YOU
+      MAY ONLY RECOVER THE REMEDIES THIS AGREEMENT ALLOWS.
+
+14.   LIABILITY.
+      (a) NOTWITHSTANDING ANY PROVISION OF THIS AGREEMENT TO THE CONTRARY,
+      IN NO EVENT WILL AXONIQ, NOR ANYONE ELSE WHO HAS BEEN INVOLVED IN THE
+      CREATION, PRODUCTION OR DELIVERY OF THE SOFTWARE, INCLUDING AXONIQ
+      LICENSORS, BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, PUNITIVE
+      OR CONSEQUENTIAL DAMAGES, OR DAMAGES FOR LOSS OF PROFITS, BUSINESS,
+      GOODWILL, REVENUE, DATA OR USE, INCURRED BY LICENSEE OR ANY THIRD
+      PARTY, WHETHER IN AN ACTION IN CONTRACT OR TORT, EVEN IF AXONIQ HAS
+      BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+      (b) NOTWITHSTANDING ANYTHING TO THE CONTRARY IN THIS AGREEMENT,
+      AXONIQ'S TOTAL LIABILITY IN THE AGGREGATE FOR DAMAGES AND EXPENSES
+      HEREUNDER OR RELATING HERETO (WHETHER IN AN ACTION IN CONTRACT, TORT
+      OR OTHERWISE OR WHETHER RELATED TO PARTICULAR SOFTWARE, SERVICES OR
+      SERVICE SUPPORT SERVICES) WILL IN NO EVENT EXCEED THE AMOUNT OF FEES
+      PAID TO AXONIQ UNDER THIS AGREEMENT, IF ANY, IN THE THREE (3) MONTH
+      PERIOD IMMEDIATELY PRECEDING A CLAIM, PROVIDED HOWEVER THAT THIS
+      LIMITATION WILL NOT APPLY IF YOU USE FREE SERVICES, IN WHICH CASE OUR
+      AGGREGATE LIABILITY WILL BE LIMITED TO ONE HUNDRED EURO. YOU
+      ACKNOWLEDGE THAT AXONIQ'S PRICING REFLECTS THE ALLOCATION OF RISKS,
+      OWNERSHIP OF INTELLECTUAL PROPERTY RIGHTS AND THE LIMITATION OF
+      LIABILITY HEREUNDER.
+
+      (c) THE LIMITATIONS SET OUT IN THIS SECTION DO NOT APPLY IN CASE THE
+      DAMAGE IS CAUSED BY THE WILLFUL INTENT OR GROSS NEGLIGENCE OF AXONIQ.
+
+15.   Indemnification.
+      (a) By LICENSEE. LICENSEE will defend, indemnify, and hold harmless
+      AxonIQ and its officers, directors, managers, and employees (the
+      "AxonIQ Indemnitees") from any and all liabilities, costs, and
+      expenses (including reasonable attorneys' fees) incurred by such
+      AxonIQ Indemnitees in connection with any third-party claim, action,
+      or proceeding arising from (i) LICENSEE's use of the Software
+      (including any use under LICENSEE's account or use by LICENSEE's
+      personnel or contractors); (ii) any software, hardware or data
+      (including personal information) used in or in connection with the
+      Software that AxonIQ does not provide; (iii) LICENSEE's breach of the
+      Agreement; or (iv) LICENSEE's violation of any applicable laws
+      involving or related to its use of the Software.
+
+      (b) By AxonIQ. For paid licenses only. The following does not apply
+      to Free Licenses. AxonIQ will defend You against a third party claim
+      (an "Indemnified Claim") that the Software infringes any copyright,
+      provided that: (i) You notify AxonIQ in writing within thirty (30)
+      days of the claim; (ii) AxonIQ has sole control of the defense and
+      all related settlement negotiations; and (iii) You provide AxonIQ
+      with the assistance, information and authority necessary for AxonIQ
+      to perform its obligations under this Section.
+
+      (c) AxonIQ will have no obligation to You for any Indemnified Claims
+      relating to allegations of copyright infringement that arise outside
+      the geographical boundaries of the United States or the European
+      Union ("Included Jurisdictions").
+
+      (d) If the Software is held by a court of competent jurisdiction or
+      is believed by AxonIQ to infringe, then AxonIQ will have the option,
+      at its expense, to (i) modify the Software to be non-infringing or
+      (ii) obtain for You a license to continue using the Software. If, in
+      AxonIQ's sole discretion, it is not economically or commercially
+      reasonable to perform either of the above options, then AxonIQ may
+      terminate the Agreement and refund to You a portion of the Software
+      fee paid to AxonIQ, prorated for any portion of the term that remains
+      from and after the effective date of such termination.
+
+      (e) The foregoing AxonIQ obligations do not apply when the claim of
+      infringement results from or is related to: (i) Your data; (ii)
+      software stored, used or maintained other than in accordance with
+      AxonIQ's instructions or recommendations or other than for Your
+      internal business purposes; (iii) claims of infringement resulting
+      from combining the Software provided hereunder with any other items
+      not furnished by AxonIQ; (iv) modifications to the Software without
+      the prior written consent of AxonIQ; (v) software or products
+      supplied or designed by You or third parties including open source
+      software; or (vi) Your failure to use Updates , corrections or
+      enhancements made available by AxonIQ.
+
+      (f) This Section 15 states AxonIQ's entire liability and Your sole
+      and exclusive remedy for any infringement claim.
+
+16.   Export Restrictions and Sanctions. You agree to comply fully with all
+      applicable international and national export laws and regulations,
+      including the U.S Export Administration Regulations and the Office of
+      Foreign Asset Control Regulations, as well as sanctions and end-use
+      and destination restrictions issued by the U.S and foreign
+      governments. Neither the Software nor any product incorporating the
+      Software may be sold or exported, directly or indirectly, to an
+      individual or an entity in an embargoed country in violation of
+      applicable export laws or sanction lists. You represent and warrant
+      that you are not located in, under the control of, or a national or
+      resident of, any country to which the United States has embargoed
+      goods.
+
+17.   Force Majeure. Neither party will be responsible to the other for any
+      failure or delay in its performance due to force majeure, such as,
+      but not limited to Acts of God, natural disasters, fire, casualty,
+      flood, earthquake, war, strike, lockout, epidemic or pandemic,
+      destruction of production facilities, riot, insurrection, material
+      unavailability, or any other cause beyond the reasonable control of
+      the party claiming force majeure, provided that such party gives
+      prompt written notice thereof to the other party and uses its
+      diligent efforts to resume performance.
+
+18.   Notices. All notices required to be sent hereunder will be in writing
+      and addressed to the address shown on the relevant Order (if to You)
+      or to the AxonIQ address shown at the top of this Agreement (if to
+      AxonIQ). AxonIQ may give notices applicable to the Software or the
+      Support Services by means of a general notice on the AxonIQ portal
+      for its products and services and notices specific to You by
+      electronic mail to the e-mail address specified in the Order.
+
+19.   Assignment. You may not transfer or assign this Agreement, in whole
+      or in part, without AxonIQ's prior written consent. Any attempt to
+      assign this Agreement without such consent will be null and void.
+      AxonIQ may transfer this Agreement at any time without giving notice
+      to LICENSEE.
+
+20.   Use of Logo’s. By using our Software, you grant us a non-exclusive,
+      royalty-free license to display your company name, logo, and
+      trademarks on our website and marketing materials to identify you as
+      our customer. You may request removal at any time by providing
+      written notice, and we will review the request within thirty (30)
+      days.
+
+21.   Governing Law and Dispute Resolution. For all customers domiciled
+      outside the United States of America and Canada: This Agreement will
+      be governed by and construed in accordance with the laws of the
+      Netherlands, excluding the U.N. Convention on Contracts for the
+      International Sale of Goods. All disputes, claims or controversies
+      arising out of or relating to this Agreement that are not resolved by
+      the parties' good faith attempt to negotiate a resolution will be
+      submitted to the exclusive jurisdiction of the courts in Amsterdam,
+      the Netherlands. For customers domiciled in the United States of
+      America or Canada: This Agreement will be governed by and construed
+      in accordance with the laws of the state of New York, USA, regardless
+      of conflict of laws principles. All disputes, claims or controversies
+      arising out of or relating to this Agreement that are not resolved by
+      the parties' good faith attempt to negotiate a resolution will be
+      submitted as follows: if U.S. federal jurisdiction exists, the
+      parties consent to exclusive jurisdiction and venue in the federal
+      courts located in New York County, New York; and if U.S. federal
+      jurisdiction does not exist, then the parties consent to exclusive
+      jurisdiction and venue in the New York State Courts located in the
+      Borough of Manhattan that have subject matter and personal
+      jurisdiction of the matter. The U.N. Convention on Contracts for the
+      International Sale of Goods is explicitly excluded.
+
+22.   Severability: Waiver. If a court of competent jurisdiction finds any
+      provision of this License invalid or unenforceable, that provision of
+      the Agreement will be amended to achieve as nearly as possible the
+      intent of the parties, and the remainder of this Agreement will
+      remain in full force and effect. The waiver by either party of a
+      breach of any provision of this Agreement in one instance shall not
+      operate or be construed as a waiver of any subsequent breach of the
+      same provision or any other provision of this Agreement.

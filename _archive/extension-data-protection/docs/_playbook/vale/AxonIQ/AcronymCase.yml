@@ -1,0 +1,30 @@
+extends: substitution
+message: "'%[2]s' is an acronym and should be written as '%[1]s'"
+level: error
+ignorecase: true
+# swap maps tokens in form of bad: good
+swap:
+  amqp: AMQP
+  aot: AOT
+  "[^-]api": API    # Allow api as a suffix in module names like core-api
+  apis: APIs
+  cdi: CDI
+  bom: BOM
+  boms: BOMs
+  dsl: DSL
+  dsls: DSLs
+  grpc: gRPC
+  "https[^:]": HTTPS
+  "http[^:s] ": HTTP
+  jpa: JPA
+  json: JSON
+  jvm: JVM
+  jvms: JVMs
+  osgi: OSGi
+  ssh: SSH
+  ssl: SSL
+  tcp: TCP
+  uri: URI
+  url: URL
+  "[^.]yaml": YAML
+  "[^.]yml": YML
