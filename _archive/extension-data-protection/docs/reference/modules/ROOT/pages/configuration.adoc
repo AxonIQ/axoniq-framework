@@ -104,13 +104,10 @@ Specifically, the `FieldEncrypter` does the following when processing a `replace
 
 == Application properties
 
-Configure the license file location in `application.properties`:
+Configure the database settings in `application.properties`:
 
 [source,properties]
 ----
-# License file location
-axoniq.dataprotection.license=/path/to/axoniq-data-protection.license
-
 # Database settings (if using JPA/JDBC crypto engine)
 spring.datasource.url=jdbc:postgresql://localhost:5432/myapp
 spring.datasource.username=myuser
