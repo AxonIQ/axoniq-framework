@@ -27,6 +27,9 @@ import java.util.Map;
  * Utility class for working with Java records.
  * Records are immutable and cannot be mutated using reflection, so we need to create
  * new instances with modified field values.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public abstract class RecordUtils {
 

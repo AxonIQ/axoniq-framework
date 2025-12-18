@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
  * Wrapper class for a collection of gift card summaries.
  *
  * @param giftCards the list of gift card summaries (never null, may be empty)
+ * @author Stefan Mirkovic
  */
 case class GiftCardSummaryList(@BeanProperty giftCards: java.util.List[GiftCardSummary]) {
   def this(scalaList: List[GiftCardSummary]) = this(scalaList.asJava)

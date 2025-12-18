@@ -28,6 +28,13 @@ import java.util.List;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 
+/**
+ * Implementation of {@link Encrypter} for Collection data. Processes each element of the collection
+ * through the routing encrypter, handling both mutable and immutable collections.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 class CollectionIPDEncrypter implements Encrypter<Collection> {
 
     private RoutingIPDEncrypter routingIPDEncrypter;

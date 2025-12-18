@@ -19,6 +19,9 @@ package io.axoniq.framework.dataprotection.cryptoengine;
 
 /**
  * Enum used to describe key type/length. Currently, the module supports AES at all available key lengths.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public enum KeyType {
 

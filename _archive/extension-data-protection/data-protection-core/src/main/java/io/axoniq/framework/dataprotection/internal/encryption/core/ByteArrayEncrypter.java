@@ -40,6 +40,13 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 
+/**
+ * Implementation of {@link Encrypter} for byte array data. Handles encryption, decryption,
+ * and replacement operations using AES encryption with CBC mode.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 public class ByteArrayEncrypter implements Encrypter<byte[]> {
 
     private static final ThreadLocal<SecureRandom> secureRandom = new ThreadLocal<SecureRandom>() {

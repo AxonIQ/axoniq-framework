@@ -25,6 +25,9 @@ import jakarta.persistence.Table;
 /**
  * Default implementation of {@link KeyEntity}. This is a JPA {@link Entity} with a {@link Table} annotation
  * mapping it to a table named <code>axoniq_gdpr_keys</code>
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 @Entity
 @Table(name = "axoniq_gdpr_keys")

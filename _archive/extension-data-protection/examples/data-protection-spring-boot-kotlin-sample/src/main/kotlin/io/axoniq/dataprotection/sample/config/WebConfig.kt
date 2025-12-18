@@ -64,6 +64,8 @@ import org.springframework.web.reactive.function.server.router
  * - Non-blocking I/O through WebFlux reactive streams
  * - Efficient resource handling via Spring's ClassPathResource
  * - Minimal memory footprint for static file serving
+ *
+ * @author Stefan Mirkovic
  */
 @Configuration
 class WebConfig {

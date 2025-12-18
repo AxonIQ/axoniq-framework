@@ -19,6 +19,13 @@ package io.axoniq.framework.dataprotection.internal.encryption.dpd;
 
 import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
 
+/**
+ * Implementation of {@link DPDProcessor} for Scala Option data. Processes the contained value
+ * if present through the routing processor.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 class ScalaOptionDPDProcessor implements DPDProcessor<scala.Option> {
 
     private final RoutingDPDProcessor routingDPDProcessor;

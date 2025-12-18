@@ -48,6 +48,13 @@ import javax.crypto.SecretKey;
 
 import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.isScalaPresent;
 
+/**
+ * Implementation of {@link DPDProcessor} for regular objects. Processes all personal data fields
+ * of an object, including IPD, SPD, MPD, and nested DPD fields.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 class ObjectDPDProcessor implements DPDProcessor<Object> {
 
     private final ModelRegistry modelRegistry;

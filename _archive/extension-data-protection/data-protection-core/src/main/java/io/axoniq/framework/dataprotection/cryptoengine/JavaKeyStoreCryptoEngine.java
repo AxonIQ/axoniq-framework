@@ -42,6 +42,9 @@ import javax.crypto.SecretKey;
  * {@link KeyStore#store(OutputStream, char[])} after a call to {@link #getOrCreateKey(String)}. It assumes that
  * a {@link KeyStore} type is used that will save keys immediately, which is true of PKCS#11 key stores, but not
  * of a standard file-based key store.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public class JavaKeyStoreCryptoEngine implements CryptoEngine {
 

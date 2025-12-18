@@ -24,6 +24,13 @@ import io.axoniq.framework.dataprotection.internal.model.PDField;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 
+/**
+ * Implementation of {@link Encrypter} for Scala Option data. Processes the contained value
+ * if present through the routing encrypter.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 class ScalaOptionIPDEncrypter implements Encrypter<scala.Option> {
 
     private RoutingIPDEncrypter routingIPDEncrypter;

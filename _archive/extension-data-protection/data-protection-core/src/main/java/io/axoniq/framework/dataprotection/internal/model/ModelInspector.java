@@ -51,6 +51,13 @@ import java.util.stream.Collectors;
 import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.isScalaPresent;
 import static java.util.stream.StreamSupport.stream;
 
+/**
+ * Inspector class that analyzes classes for personal data annotations and builds
+ * field encryption models.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 public class ModelInspector {
 
     public FieldEncryptionModel inspect(Class<?> clazz) {

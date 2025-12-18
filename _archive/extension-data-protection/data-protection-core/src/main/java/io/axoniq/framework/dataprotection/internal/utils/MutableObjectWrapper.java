@@ -25,6 +25,9 @@ import java.util.Map;
  * Wrapper around an object that handles both mutable and immutable (record) objects.
  * For mutable objects, it directly modifies fields. For immutable objects (records),
  * it collects modifications and creates a new instance when needed.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public class MutableObjectWrapper {
 

@@ -20,6 +20,11 @@ package io.axoniq.dataprotection.sample.giftcard.event
 import io.axoniq.framework.dataprotection.api.DeepPersonalData
 import io.axoniq.framework.dataprotection.api.PersonalData
 
+/**
+ * Person data class containing personal data and deep personal data fields.
+ *
+ * @author Stefan Mirkovic
+ */
 data class Person(
     @PersonalData(group = GiftPersonalDataGroup.GROUP_NAME, replacement = "removed")
     val name: String,

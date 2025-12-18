@@ -56,6 +56,7 @@
  * }
  * }</pre>
  *
- * @since 5.0.0
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 package io.axoniq.framework.dataprotection.api;

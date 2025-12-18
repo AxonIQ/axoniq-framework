@@ -44,6 +44,8 @@ import java.util.concurrent.CompletableFuture;
  *   <li>Automatically trigger projection rebuilds after key deletion</li>
  *   <li>Ensure projections reflect replacement values (e.g., "&lt;removed&gt;") for forgotten data</li>
  * </ul>
+ *
+ * @author Stefan Mirkovic
  */
 @RestController
 @RequestMapping("/api/data-protection")

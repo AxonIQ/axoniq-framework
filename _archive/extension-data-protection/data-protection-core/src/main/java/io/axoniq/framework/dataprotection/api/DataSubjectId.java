@@ -35,6 +35,9 @@ import java.lang.annotation.Target;
  * in the package object of the api package.
  * This alias has the <code>scala.annotation.meta.field</code> meta-annotation which allows it to be directly
  * used on Scala class parameters, including case classes.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.ANNOTATION_TYPE, ElementType.FIELD})

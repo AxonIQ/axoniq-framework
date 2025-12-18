@@ -31,6 +31,13 @@ import javax.crypto.SecretKey;
 
 import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.isScalaPresent;
 
+/**
+ * Routes encryption operations to the appropriate type-specific encrypter based on the input data type.
+ * Supports String, byte[], Collection, Array, and Scala types.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 public class RoutingIPDEncrypter implements Encrypter<Object> {
 
     private ByteArrayEncrypter byteArrayEncrypter;
