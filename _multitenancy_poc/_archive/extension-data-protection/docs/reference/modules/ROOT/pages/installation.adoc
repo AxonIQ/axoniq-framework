@@ -27,36 +27,9 @@ Add the following dependency to your `pom.xml`:
 </dependency>
 ----
 
-== License file
-
-Axon Data Protection requires a valid license file. You can obtain a license from AxonIQ.
-
-=== License file location
-
-The license file can be placed in one of two locations:
-
-1. **As a file** at `/path/to/axoniq-data-protection.license`
-2. **On the classpath** in your resources directory
-
-=== Configuring license path
-
-Specify the license file location using the system property:
-
-[source,bash]
-----
--Daxoniq.dataprotection.license=/path/to/axoniq-data-protection.license
-----
-
-Or in Spring Boot `application.properties`:
-
-[source,properties]
-----
-axoniq.dataprotection.license=/path/to/axoniq-data-protection.license
-----
-
 == Next steps
 
-After adding the dependency and license file, you need to:
+After adding the dependency, you need to:
 
 1. Choose and configure a xref:crypto-engines.adoc[crypto engine] (JPA, JDBC, Vault, or others)
 2. Set up xref:configuration.adoc[Spring and Axon configuration]
