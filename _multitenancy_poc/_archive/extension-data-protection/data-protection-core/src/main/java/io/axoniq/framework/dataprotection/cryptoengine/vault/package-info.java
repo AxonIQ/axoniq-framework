@@ -20,5 +20,8 @@
  * Contains a HashiCorp Vault backed implementation of
  * {@link io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine} and associated
  * classes.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 package io.axoniq.framework.dataprotection.cryptoengine.vault;

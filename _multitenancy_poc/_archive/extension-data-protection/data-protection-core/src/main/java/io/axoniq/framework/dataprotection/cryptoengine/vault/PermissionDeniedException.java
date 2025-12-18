@@ -25,6 +25,9 @@ import java.io.IOException;
  * Exception that is thrown internally in the VaultCryptoEngine when
  * a 403 response is returned from Vault. This class is made public for
  * testing purposes, but shouldn't be used directly by the application.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public class PermissionDeniedException extends IOException {
 

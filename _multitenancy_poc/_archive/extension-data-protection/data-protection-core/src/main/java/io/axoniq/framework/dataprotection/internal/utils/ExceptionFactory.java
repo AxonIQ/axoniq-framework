@@ -14,6 +14,7 @@
  *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
  *
  *
+ *
  */
 package io.axoniq.framework.dataprotection.internal.utils;
 
@@ -38,6 +39,13 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 
+/**
+ * Factory class for creating standardized exceptions with error codes used throughout
+ * the Data Protection Module.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 public abstract class ExceptionFactory {
 
     private ExceptionFactory() {

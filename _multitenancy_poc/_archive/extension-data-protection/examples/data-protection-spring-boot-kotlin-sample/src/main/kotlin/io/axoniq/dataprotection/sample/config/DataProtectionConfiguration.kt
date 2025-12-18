@@ -51,6 +51,8 @@ import org.springframework.core.annotation.Order
  *
  * Additionally, this configuration ensures that TrackingEventProcessor is used instead of
  * PooledStreamingEventProcessor, as the pooled version doesn't support token reset in AF5.
+ *
+ * @author Stefan Mirkovic
  */
 @AutoConfiguration
 @AutoConfigureBefore(name = ["org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration"])

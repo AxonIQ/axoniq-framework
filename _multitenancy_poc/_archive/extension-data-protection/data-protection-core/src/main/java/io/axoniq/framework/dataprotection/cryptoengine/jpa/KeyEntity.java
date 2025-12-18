@@ -25,6 +25,9 @@ package io.axoniq.framework.dataprotection.cryptoengine.jpa;
  * Implementations are required to have a zero-arg constructor (which is generally required for JPA entities).
  * The {@link JpaCryptoEngine} will create new instances by invoking this constructor and then invoking
  * the setters.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public interface KeyEntity {
 

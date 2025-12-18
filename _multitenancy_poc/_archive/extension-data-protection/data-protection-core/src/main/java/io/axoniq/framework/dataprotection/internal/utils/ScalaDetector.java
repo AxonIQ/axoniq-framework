@@ -22,6 +22,12 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 
+/**
+ * Utility class for detecting if Scala is present on the classpath.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 public class ScalaDetector {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());

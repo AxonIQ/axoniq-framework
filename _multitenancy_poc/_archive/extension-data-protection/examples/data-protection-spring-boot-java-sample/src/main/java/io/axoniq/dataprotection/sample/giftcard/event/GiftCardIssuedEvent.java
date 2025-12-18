@@ -43,6 +43,7 @@ import java.time.LocalDate;
  *
  * @param giftCardId the unique identifier of the newly issued gift card
  * @param amount     the initial monetary amount loaded onto the gift card (always positive)
+ * @author Stefan Mirkovic
  */
 public record GiftCardIssuedEvent(@EventTag
                                   @DataSubjectId(

@@ -19,6 +19,14 @@ package io.axoniq.framework.dataprotection.internal.encryption.dpd;
 
 import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
 
+/**
+ * Interface for Deep Personal Data processors. Handles encryption operations on objects
+ * that contain fields marked with {@link io.axoniq.framework.dataprotection.api.DeepPersonalData}.
+ *
+ * @param <T> the type of data to process
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 public interface DPDProcessor<T> {
 
     /**

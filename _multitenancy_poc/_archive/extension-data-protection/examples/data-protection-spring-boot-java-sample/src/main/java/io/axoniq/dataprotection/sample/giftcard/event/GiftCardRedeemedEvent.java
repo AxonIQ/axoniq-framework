@@ -46,6 +46,7 @@ import java.math.BigDecimal;
  *
  * @param giftCardId the unique identifier of the gift card from which the amount was redeemed
  * @param amount the monetary amount that was redeemed (always positive, never exceeds available balance)
+ * @author Stefan Mirkovic
  */
 public record GiftCardRedeemedEvent(@EventTag String giftCardId, BigDecimal amount) {
 }

@@ -30,6 +30,9 @@ import java.util.Arrays;
 /**
  * Implementation of {@link CryptoEngine} that uses a PKCS#11 backend, such as a Hardware Security Module (HSM). This
  * implementation uses the SunPKCS11 provider. (from Java 7 to 15)
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public class PKCS11CryptoEngine extends JavaKeyStoreCryptoEngine {
 

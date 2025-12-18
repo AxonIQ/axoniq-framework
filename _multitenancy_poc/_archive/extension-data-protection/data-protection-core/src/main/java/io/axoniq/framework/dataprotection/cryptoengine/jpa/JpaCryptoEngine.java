@@ -39,6 +39,10 @@ import javax.crypto.spec.SecretKeySpec;
  * <p>
  * This class by itself doesn't do any key caching. If this is required, applications may configure a
  * second-level cache on the {@link EntityManagerFactory}.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ *
  */
 public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {
 

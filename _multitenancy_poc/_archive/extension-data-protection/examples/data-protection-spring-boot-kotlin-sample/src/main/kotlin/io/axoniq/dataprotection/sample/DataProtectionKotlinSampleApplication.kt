@@ -34,6 +34,8 @@ import org.springframework.context.annotation.ComponentScan
  * - Field-level encryption with Kotlin data classes
  * - Cryptographic erasure (right to be forgotten)
  * - Integration of Kotlin with Spring Boot and Axon Framework
+ *
+ * @author Stefan Mirkovic
  */
 @SpringBootApplication
 @EntityScan(

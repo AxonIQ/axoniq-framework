@@ -19,6 +19,13 @@ package io.axoniq.framework.dataprotection.internal.encryption.dpd;
 
 import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
 
+/**
+ * Implementation of {@link DPDProcessor} for array data. Processes each element of the array
+ * through the routing processor.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 class ArrayDPDProcessor implements DPDProcessor<Object[]> {
 
     private final RoutingDPDProcessor routingDPDProcessor;

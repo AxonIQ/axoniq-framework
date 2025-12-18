@@ -22,6 +22,11 @@ import io.axoniq.framework.dataprotection.api.PersonalData
 
 import scala.annotation.meta.field
 
+/**
+ * Address case class containing personal data fields.
+ *
+ * @author Stefan Mirkovic
+ */
 case class Address(
   @(PersonalData @field)(group = GiftPersonalDataGroup.GROUP_NAME, replacement = "removed")
   line1: String,

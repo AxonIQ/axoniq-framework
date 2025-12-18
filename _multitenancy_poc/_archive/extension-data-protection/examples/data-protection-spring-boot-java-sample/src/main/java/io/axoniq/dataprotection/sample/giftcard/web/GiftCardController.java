@@ -85,7 +85,7 @@ import java.util.concurrent.CompletableFuture;
  *   <li>Error scenarios return appropriate 4xx/5xx status codes</li>
  * </ul>
  *
- * @author AxonIQ Quickstart
+ * @author Stefan Mirkovic
  * @version 1.0
  * @see CommandGateway
  * @see QueryGateway

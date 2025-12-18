@@ -30,6 +30,13 @@ import java.util.Base64;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 
+/**
+ * Implementation of {@link Encrypter} for String data. Converts strings to byte arrays for encryption
+ * and uses Base64 encoding for the encrypted representation.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
+ */
 class StringIPDEncrypter implements Encrypter<String> {
 
     private final ByteArrayEncrypter byteArrayEncrypter;

@@ -39,6 +39,9 @@ import javax.crypto.spec.SecretKeySpec;
  * being handled in this class are always of the subclass {@link SecretKeySpec} which means that it is
  * possible to access their byte encoding. Type key type is currently always AES en the length is always
  * 256 bits, but this may change in future versions and implementations may already take this into account.
+ *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 public abstract class DatabaseBackedCryptoEngine implements CryptoEngine {
 

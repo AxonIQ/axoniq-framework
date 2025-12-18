@@ -23,5 +23,6 @@ import scala.beans.BeanProperty
  * Query for retrieving a specific gift card by its unique identifier.
  *
  * @param giftCardId the unique identifier of the gift card to retrieve
+ * @author Stefan Mirkovic
  */
 case class FindGiftCardQuery(@BeanProperty giftCardId: String)

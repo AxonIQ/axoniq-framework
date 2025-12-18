@@ -62,6 +62,7 @@ import java.util.concurrent.CompletableFuture;
  *   <li>Restart the event processor</li>
  * </ol>
  *
+ * @author Stefan Mirkovic
  * @see StreamingEventProcessor
  * @since 1.0
  */

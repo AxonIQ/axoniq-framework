@@ -41,6 +41,8 @@ import javax.crypto.SecretKey;
  * key length. All standard implementations in the Axon Data Protection Module use AES in CBC mode with PKCS#5 padding
  * and a 256-bit key length.
  *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  * @see InMemoryCryptoEngine
  * @see JavaKeyStoreCryptoEngine
  */

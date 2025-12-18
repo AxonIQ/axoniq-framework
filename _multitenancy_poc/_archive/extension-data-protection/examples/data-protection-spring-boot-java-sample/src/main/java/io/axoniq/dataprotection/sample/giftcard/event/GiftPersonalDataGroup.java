@@ -17,6 +17,11 @@
  */
 package io.axoniq.dataprotection.sample.giftcard.event;
 
+/**
+ * Constants for personal data group naming in gift card domain.
+ *
+ * @author Stefan Mirkovic
+ */
 public final class GiftPersonalDataGroup {
     public static final String GROUP_NAME = "gift";
     public static final String GROUP_PREFIX = GROUP_NAME + "-";

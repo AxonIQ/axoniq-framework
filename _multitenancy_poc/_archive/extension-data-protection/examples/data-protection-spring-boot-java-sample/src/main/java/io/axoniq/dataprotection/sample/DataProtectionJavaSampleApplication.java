@@ -35,6 +35,8 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
  *     <li>Field-level encryption with Java Records</li>
  *     <li>Cryptographic erasure (right to be forgotten)</li>
  * </ul>
+ *
+ * @author Stefan Mirkovic
  */
 @SpringBootApplication
 @EntityScan(basePackages = {
