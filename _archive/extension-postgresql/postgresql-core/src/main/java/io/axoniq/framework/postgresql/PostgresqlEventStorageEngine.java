@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025. AxonIQ B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
  * Version September 2025 (the "License");
@@ -25,9 +25,9 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.tx.TransactionalExecutor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -38,11 +38,13 @@ import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.StreamSpliterator;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.eventstore.jdbc.JdbcTransactionalExecutorProvider;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.TerminalEventMessage;
@@ -80,6 +82,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import javax.sql.DataSource;
+
 /**
  * A {@link EventStorageEngine} implementation backed by PostgreSQL, providing
  * reliable event persistence and streaming with support for tagging.
@@ -114,7 +118,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresqlEventStorageEngine.class);
     private static final TagFilter EMPTY = new TagFilter("", List.of());
-    private static final ExecutorService FINALIZER_EXECUTOR = Executors.newSingleThreadExecutor();  // must be a single thread
+    private static final ExecutorService FINALIZER_EXECUTOR = Executors.newSingleThreadExecutor(Thread.ofPlatform().name("PG-Finalizer").factory());  // must be a single thread
     private static final TypeReference<Map<String, String>> STRING_TO_STRING_MAP_TYPE_REFERENCE = new TypeReference<>() {};
     private static final GlobalSequenceTrackingToken GLOBAL_INDEX_START = new GlobalSequenceTrackingToken(1);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().configure(SerializationFeature.INDENT_OUTPUT, false);
@@ -269,13 +273,42 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
           FROM latest;
         """;
 
-    private final ConnectionExecutor connectionExecutor;
+    private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
+    private final DataSource dataSource;
     private final EventConverter converter;
+
+    /**
+     * A static {@link AppendTransaction} implementation. As this engine doesn't manage its own
+     * transactions, but leaves this up to hooks installed in the processing lifecycle, this
+     * class only needs to trigger finalization on succesful commits.
+     */
+    private final AppendTransaction<Object> appendTransaction = new AppendTransaction<>() {
+        @Override
+        public CompletableFuture<Object> commit() {
+            return CompletableFuture.completedFuture(null);  // Do nothing during the COMMIT phase
+        }
+
+        @Override
+        public void rollback() {
+            // Do nothing, transactions are not managed by this class
+        }
+
+        @Override
+        public CompletableFuture<ConsistencyMarker> afterCommit(Object commitResult) {
+            return scheduleFinalization();
+        }
+    };
 
     /**
      * Tracks runnables for callbacks attached to streams for when new events may have become available.
      */
     private final Map<Object, Runnable> streamCallbacks = new ConcurrentHashMap<>();
+
+    /**
+     * The thread used to monitor for the arrival of new events inserted
+     * by another instance of this class running in a different process.
+     */
+    private final Thread eventMonitoringThread;
 
     /**
      * Synchronized field. Future for the queued finalization which append transactions
@@ -298,70 +331,101 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     /**
      * Constructs a new instance.
      *
-     * @param connectionExecutor a connection executor for running statements, cannot be {@code null}
+     * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter an event converter for converting the payload to bytes, cannot be {@code null}
      */
-    public PostgresqlEventStorageEngine(
-        @Nonnull ConnectionExecutor connectionExecutor,
-        @Nonnull EventConverter converter
-    ) {
-        this.connectionExecutor = Objects.requireNonNull(connectionExecutor, "connectionExecutor");
+    public PostgresqlEventStorageEngine(@Nonnull DataSource dataSource, @Nonnull EventConverter converter) {
+        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
+        this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
 
         // TODO #7 Allow to configure tables, sequences and indices
-        connectionExecutor.execute(null, connection -> {
-            try (Statement statement = connection.createStatement()) {
-                statement.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS events (
-                       global_index INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (INCREMENT BY -1),
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+        ) {
+            statement.execute(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                   global_index INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (INCREMENT BY -1),
 
-                       timestamp TIMESTAMPTZ NOT NULL,
-                       payload BYTEA,
-                       metadata JSON NOT NULL,
-                       identifier VARCHAR NOT NULL,
-                       type VARCHAR NOT NULL,
-                       tags JSONB NOT NULL,
+                   timestamp TIMESTAMPTZ NOT NULL,
+                   payload BYTEA,
+                   metadata JSON NOT NULL,
+                   identifier VARCHAR NOT NULL,
+                   type VARCHAR NOT NULL,
+                   tags JSONB NOT NULL,
 
-                       -- keys
-                       PRIMARY KEY (global_index),
-                       UNIQUE (identifier)
-                    );
-
-                    CREATE TABLE IF NOT EXISTS consistency_tags (
-                       key VARCHAR NOT NULL,
-                       value VARCHAR NOT NULL,
-                       global_index INT8 NOT NULL REFERENCES events(global_index),
-
-                       -- keys
-                       PRIMARY KEY (key, value)
-                    );
-
-                    -- Create a sequence used for monotonic final global index values. Starts at 1.
-                    CREATE SEQUENCE IF NOT EXISTS events_monotonic_seq
-                      INCREMENT BY 1
-                      CACHE 1
-                      OWNED BY events.global_index;
-
-                    -- BRIN index on global_index
-                    CREATE INDEX IF NOT EXISTS events_global_index_brin
-                      ON events USING BRIN (global_index);
-
-                    -- GIN index on tags (JSONB)
-                    CREATE INDEX IF NOT EXISTS events_tags_gin
-                      ON events USING GIN (tags);
-                    """
+                   -- keys
+                   PRIMARY KEY (global_index)
                 );
-            }
-        });
+
+                CREATE TABLE IF NOT EXISTS consistency_tags (
+                   key VARCHAR NOT NULL,
+                   value VARCHAR NOT NULL,
+                   global_index INT8 NOT NULL REFERENCES events(global_index),
+
+                   -- keys
+                   PRIMARY KEY (key, value)
+                );
+
+                -- Create a sequence used for monotonic final global index values. Starts at 1.
+                CREATE SEQUENCE IF NOT EXISTS events_monotonic_seq
+                  INCREMENT BY 1
+                  CACHE 1
+                  OWNED BY events.global_index;
+
+                -- BRIN index on global_index
+                CREATE INDEX IF NOT EXISTS events_global_index_brin
+                  ON events USING BRIN (global_index);
+
+                -- GIN index on tags (JSONB)
+                CREATE INDEX IF NOT EXISTS events_tags_gin
+                  ON events USING GIN (tags);
+                """
+            );
+
+            connection.commit();
+        }
+        catch (SQLException e) {
+            throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
+        }
 
         // Setup thread and connection to detect new appends:
-        Thread.ofVirtual().start(() -> {
-            // TODO #24 - There may be SQLExceptions that are transient that should not result in the termination of the monitor thread
+        this.eventMonitoringThread = Thread.ofVirtual().start(() -> {
             while (!Thread.currentThread().isInterrupted()) {
-                connectionExecutor.execute(null, this::monitorForNewEvents);
+                try (Connection connection = dataSource.getConnection()) {
+                    monitorForNewEvents(connection);
+                }
+                catch (SQLException e) {
+
+                    /*
+                     * The Postgres driver will wrap InterruptedExceptions in an SQLException.
+                     * To check whether the exception here was meant to terminate the monitoring
+                     * thread, the interrupted flag is checked:
+                     */
+
+                    if (Thread.currentThread().isInterrupted()) {
+                        break;
+                    }
+
+                    LOGGER.warn("Exception while accessing DataSource (retry in 5 seconds): " + dataSource, e);
+
+                    try {
+                        Thread.sleep(5000);
+                    }
+                    catch (InterruptedException ie) {
+                        break;  // exit thread when asked to terminate during retry delay
+                    }
+                }
             }
+
+            LOGGER.info("Event Monitoring Thread terminated");
         });
+    }
+
+    void close() {  // for testing purposes, to avoid junk exceptions
+        eventMonitoringThread.interrupt();
     }
 
     private void monitorForNewEvents(Connection c) throws SQLException {
@@ -392,21 +456,28 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         }
 
         /*
-         * Loop until interrupted processing incoming notifications:
+         * Loop and process incoming notifications, until interrupted. Note that
+         * there is no InterruptedException that can occur here, as the Postgres
+         * driver hides this fact and wraps it in a normal SQLException.
          */
 
         while (!Thread.currentThread().isInterrupted()) {
             PGNotification[] notifications = pgConnection.getNotifications(60000);
-
             long globalIndex = 0;
 
             for (PGNotification notification : notifications) {
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Received notification from PID " + notification.getPID() + " on " + notification.getName() + " with " + notification.getParameter());
+                }
+
                 if (notification.getName().equals("events_channel")) {
                     globalIndex = Math.max(Long.parseLong(notification.getParameter()), globalIndex);
                 }
             }
 
-            updateHighestKnownGlobalIndex(globalIndex);
+            if (globalIndex > 0) {
+                updateHighestKnownGlobalIndex(globalIndex);
+            }
         }
     }
 
@@ -436,57 +507,31 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-        descriptor.describeProperty("connectionExecutor", connectionExecutor);
+        descriptor.describeProperty("dataSource", dataSource);
         descriptor.describeProperty("converter", converter);
     }
 
     @Override
-    public CompletableFuture<AppendTransaction<?>> appendEvents(AppendCondition condition, @Nullable ProcessingContext context, List<TaggedEventMessage<?>> events) {
+    public CompletableFuture<AppendTransaction<?>> appendEvents(
+        @Nonnull AppendCondition condition,
+        @Nonnull ProcessingContext context,
+        List<TaggedEventMessage<?>> events
+    ) {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("appendEvents: called with condition=" + condition + ", events=" + events + ", context=" + context + "");
+            LOGGER.debug("appendEvents: called with condition=" + condition + ", events=" + events + ", context=" + context);
         }
 
-        return CompletableFuture.completedFuture(new PgAppendTransaction(condition, events));
-    }
+        return connectionExecutor(context).apply(connection -> {
+            if (!internalAppendEvents(connection, condition, events)) {
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("appendEvents: failed");
+                }
 
-    private class PgAppendTransaction implements AppendTransaction<Object> {
-        final AppendCondition condition;
-        final List<TaggedEventMessage<?>> events;
-
-        PgAppendTransaction(AppendCondition condition, List<TaggedEventMessage<?>> events) {
-            this.condition = condition;
-            this.events = events;
-        }
-
-        @Override
-        public CompletableFuture<Object> commit(ProcessingContext context) {
-            try {
-                connectionExecutor.execute(context, connection -> {
-                    if (!internalAppendEvents(connection, condition, events)) {
-                        if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug("appendEvents: failed");
-                        }
-
-                        throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker());  // allow executor to rollback correctly
-                    }
-                });
-
-                return CompletableFuture.completedFuture(null);
+                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker());  // allow executor to rollback correctly
             }
-            catch (AppendEventsTransactionRejectedException e) {
-                return CompletableFuture.failedFuture(e);
-            }
-        }
 
-        @Override
-        public void rollback(ProcessingContext context) {
-            throw new UnsupportedOperationException();  // TODO #11 Implement rollback in AppendTransaction
-        }
-
-        @Override
-        public CompletableFuture<ConsistencyMarker> afterCommit(Object commitResult, ProcessingContext context) {
-            return scheduleFinalization();
-        }
+            return appendTransaction;
+        });
     }
 
     // TODO #8 performance improvement possible here by avoiding a lot of back-and-forth with the server
@@ -539,13 +584,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
-    public MessageStream<EventMessage> source(@Nonnull SourcingCondition condition, @Nullable ProcessingContext context) {
+    public MessageStream<EventMessage> source(@Nonnull SourcingCondition condition) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
         CompletableFuture<Void> endOfStreams = new CompletableFuture<>();
         AtomicLong lastGlobalIndex = new AtomicLong();
         long start = Math.max(0, GlobalIndexPosition.toIndex(condition.start()));
 
-        return internalStream(context, criterions, start, lastGlobalIndex, List::isEmpty)
+        return internalStream(criterions, start, lastGlobalIndex, List::isEmpty)
             .onComplete(() -> endOfStreams.complete(null))
             .concatWith(MessageStream.fromFuture(
                 endOfStreams.thenApply(event -> TerminalEventMessage.INSTANCE),
@@ -557,7 +602,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
-    public MessageStream<EventMessage> stream(@Nonnull StreamingCondition condition, @Nullable ProcessingContext context) {
+    public MessageStream<EventMessage> stream(@Nonnull StreamingCondition condition) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
         TrackingToken trackingToken = condition.position();
 
@@ -573,7 +618,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
         Function<FinalizedEvent, List<FinalizedEvent>> fetcher = last -> {
             long position = last == null ? start : last.position + 1;
-            Batch batch = load(context, criterions, position, 50);
+            Batch batch = load(criterions, position, 50).join();
+
+            /*
+             * The above code joins on the future, but ContinuousMessageStream should probably
+             * accept a future here for the fetcher; it should then probably also only do the
+             * has next available callback when the events have been fetched since #peek and #next
+             * on MessageStream don't return completable futures. In other words, ContinuousMessageStream
+             * needs a bit of an adjustment to keep this fully async.
+             */
 
             lastGlobalIndex.set(batch.highestGlobalIndex);
 
@@ -601,13 +654,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
-    public CompletableFuture<TrackingToken> firstToken(@Nullable ProcessingContext context) {
+    public CompletableFuture<TrackingToken> firstToken() {
         return CompletableFuture.completedFuture(GLOBAL_INDEX_START);
     }
 
     @Override
-    public CompletableFuture<TrackingToken> latestToken(@Nullable ProcessingContext context) {
-        return connectionExecutor.execute(context, connection -> {
+    public CompletableFuture<TrackingToken> latestToken() {
+        return connectionExecutor(null).apply(connection -> {
             try (
                 PreparedStatement ps = connection.prepareStatement(EVENTS_FIND_NEXT_AVAILABLE_GLOBAL_INDEX);
                 ResultSet resultSet = ps.executeQuery();
@@ -616,14 +669,14 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
                 long globalIndex = resultSet.getLong(1);
 
-                return CompletableFuture.completedFuture(new GlobalSequenceTrackingToken(globalIndex));
+                return new GlobalSequenceTrackingToken(globalIndex);
             }
         });
     }
 
     @Override
-    public CompletableFuture<TrackingToken> tokenAt(Instant at, @Nullable ProcessingContext context) {
-        return CompletableFuture.supplyAsync(() -> connectionExecutor.execute(context, connection -> {
+    public CompletableFuture<TrackingToken> tokenAt(Instant at) {
+        return connectionExecutor(null).apply(connection -> {
             try (PreparedStatement statement = connection.prepareStatement(EVENTS_FIND_TIMESTAMP)) {
 
                 /*
@@ -640,11 +693,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                     return new GlobalSequenceTrackingToken(resultSet.getLong(1));
                 }
             }
-        }));
+        });
     }
 
     private MessageStream<EventMessage> internalStream(
-        ProcessingContext context,
         Set<EventCriterion> criterions,
         long start,
         AtomicLong lastGlobalIndex,
@@ -653,7 +705,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         StreamSpliterator<FinalizedEvent> entrySpliterator = new StreamSpliterator<>(
             last -> {
                 long position = last == null ? start : last.position + 1;
-                Batch batch = load(context, criterions, position, 50);
+                Batch batch = load(criterions, position, 50).join();
 
                 lastGlobalIndex.set(batch.highestGlobalIndex);
 
@@ -670,9 +722,9 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     // TODO #9 Prefetching via max parameter here should perhaps not be a concern of the engine
-    private Batch load(ProcessingContext context, Set<EventCriterion> criterions, long position, int limit) {
+    private CompletableFuture<Batch> load(Set<EventCriterion> criterions, long position, int limit) {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("load: loading from " + position + " (limit " + limit + ") with condition " + criterions + " and context " + context);
+            LOGGER.debug("load: loading from " + position + " (limit " + limit + ") with condition " + criterions);
         }
 
         TagFilter tagFilter = buildTagFilter(criterions);
@@ -684,7 +736,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
             LOGGER.debug("load: using query: " + query + " from filter: " + tagFilter);
         }
 
-        return connectionExecutor.execute(context, connection -> {
+        return connectionExecutor(null).apply(connection -> {
             try (PreparedStatement ps = connection.prepareStatement(query)) {
                 int parameterIndex = 1;
 
@@ -828,7 +880,23 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     private ConsistencyMarker runFinalizationTask() {
         try {
-            return applyFinalization();
+            long latestGlobalIndex = finalizeAndReturnLatestIndex();
+
+            updateHighestKnownGlobalIndex(latestGlobalIndex);  // will notify callbacks if needed
+
+            return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
+        }
+        catch (SQLException e) {
+
+            /*
+             * Throwing an exception here means that the AppendCondition#afterCommit
+             * method will return a failed future, and no consistency marker. The
+             * framework should deal with this. Note that the events are still
+             * already committed and permanent, we're just unable to determine the
+             * correct marker.
+             */
+
+            throw new IllegalStateException("Finalization failed", e);
         }
         finally {
             synchronized (this) {
@@ -842,13 +910,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         }
     }
 
-    private ConsistencyMarker applyFinalization() {
-        long latestGlobalIndex = connectionExecutor.execute(null, connection -> {
+    private long finalizeAndReturnLatestIndex() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
 
             /*
              * Finalization is completely independent of any other transactions, and
-             * the received connection therefore can be modified to suit finalization
-             * needs.
+             * the connection therefore can be modified to suit finalization needs.
              *
              * As finalization is modifying the consistency tags table, an isolation
              * level higher than TRANSACTION_READ_COMMITTED would result in many
@@ -896,23 +963,19 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
                 long globalIndex = resultSet.getLong(1);
 
+                connection.commit();
+
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("finalizePositions completed with latest global index: " + globalIndex);
                 }
 
                 return globalIndex;
             }
-        });
+        }
+    }
 
-        /*
-         * Because no processing context was provided, the finalization was done in a
-         * top level transaction that is now committed. Any stream callbacks can now
-         * be notified of new events.
-         */
-
-        updateHighestKnownGlobalIndex(latestGlobalIndex);  // will notify callbacks if needed
-
-        return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
+    private TransactionalExecutor<Connection> connectionExecutor(ProcessingContext processingContext) {
+        return transactionalExecutorProvider.getTransactionalExecutor(processingContext);
     }
 
     private static Map<String, String> toMetadata(String json) {
