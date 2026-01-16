@@ -26,12 +26,16 @@ class RunnerTest {
     void shouldRunWorkflow() throws ExecutionException, InterruptedException {
         var startTime = Instant.now();
         Workflow myWorkFlow = () -> new SimpleWorkflow("Workflow 1",
-                                                       new ParallelSteps("parallel1", Set.of(
-                                                               new WaitStep("wait 1", Duration.ofSeconds(1), new RunStep("step1.1", () -> System.out.println("Wait 1 completed.... ms since start: " + Duration.between(startTime, Instant.now()).toMillis()), new Completed())),
-                                                               new WaitStep("wait 2", Duration.ofSeconds(2), new Completed())
-                                                       ),
-                                                                         new RunStep("step2", () -> System.out.println("Hello world! ms since start: " + Duration.between(startTime, Instant.now()).toMillis()),
-                                                                                     new Completed())));
+                                                       new OnTimeoutStep(
+                                                               new ParallelSteps("parallel1", Set.of(
+                                                                       new WaitStep("wait 1", Duration.ofSeconds(1), new RunStep("step1.1", () -> System.out.println("Wait 1 completed.... ms since start: " + Duration.between(startTime, Instant.now()).toMillis()), new Completed())),
+                                                                       new WaitStep("wait 2", Duration.ofSeconds(2), new Completed())
+                                                               ),
+                                                                                 new RunStep("step2", () -> System.out.println("Hello world! ms since start: " + Duration.between(startTime, Instant.now()).toMillis()),
+                                                                                             new Completed())),
+                                                               Duration.ofMillis(1500),
+                                                               new RunStep("onTimeout", () -> System.out.println("Timeout happened.. .... ms since start: " + Duration.between(startTime, Instant.now()).toMillis()),
+                                                                           new Completed())));
 
         WorkflowState workflowInstance = myWorkFlow.initialState();
         Queue<EventMessage> events = new ConcurrentLinkedQueue<>();
