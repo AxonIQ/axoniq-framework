@@ -20,6 +20,7 @@ import java.util.Set;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.payload.Payload.empty;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -95,6 +96,7 @@ class UserSignupPayloadTest {
           e -> e.userId.equals(correlationUserId)
         );
         if (confirmed.email.equals(activatedEmail)) {
+          context.waitFor("block-500ms", Duration.ofMillis(500));
           context.execute("sendWelcomeEmail", () -> {
             logger.info("Sending welcome mail to user.");
           });
@@ -134,11 +136,13 @@ class UserSignupPayloadTest {
     // Execute the workflow
     engine.execute(workflowId, new UserSignupWorkflow(), payload);
 
-    assertEquals(Set.of("createUser", "activateUser", "confirmedEmail", "sendWelcomeEmail"), engine.context.steps.keySet());
+    assertThat(engine.context.steps.keySet()).containsExactlyInAnyOrderElementsOf(
+      Set.of("createUser", "activateUser", "confirmedEmail", "block-500ms", "sendWelcomeEmail")
+    );
 
     // Verify events published
     var events = stateManager.getEventPayloads(workflowId);
-    assertEquals(8, events.size()); // 4 starts + 4 completes
+    assertThat(events).hasSize(10); // 5 starts + 5 completes
     assertInstanceOf(StepStarted.class, events.get(0));
     assertInstanceOf(StepCompleted.class, events.get(1));
     assertInstanceOf(StepStarted.class, events.get(2));
@@ -147,7 +151,7 @@ class UserSignupPayloadTest {
     assertInstanceOf(StepCompleted.class, events.get(5));
     assertInstanceOf(StepStarted.class, events.get(6));
     assertInstanceOf(StepCompleted.class, events.get(7));
+    assertInstanceOf(StepStarted.class, events.get(8));
+    assertInstanceOf(StepCompleted.class, events.get(9));
   }
-
-
 }

@@ -12,14 +12,14 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 
 public class WorkflowContextImpl implements WorkflowContext {
 
   private final String workflowId;
-  public final Map<String, StepExecution> steps = new HashMap<>();
+  public final Map<String, StepExecution> steps = new LinkedHashMap<>();
   private final StateManager stateManager;
   private Payload global;
 
@@ -45,8 +45,8 @@ public class WorkflowContextImpl implements WorkflowContext {
   }
 
   @Override
-  public <T> T waitFor(String stepName, Class<T> eventType, Duration timeout, Predicate<T> predicate) {
-    return waitForPrimitive.waitFor(stepName, eventType, timeout, predicate);
+  public <T> T waitFor(String stepName, Class<T> eventType, Duration timeout, Predicate<T> predicate, TimeoutMode timoutMode) {
+    return waitForPrimitive.waitFor(stepName, eventType, timeout, predicate, timoutMode);
   }
 
 
