@@ -1,8 +1,9 @@
 package io.axoniq.workflow.runtime.definition;
 
+import io.axoniq.workflow.runtime.context.WorkflowContext;
+
+import java.util.Map;
+
 public interface WorkflowDefinition {
-
-    Workflow create();
-
-    // TODO - Add method to recreate state based on ExecutionContext
+    void execute(WorkflowContext context, Map<String, Object> args);
 }

@@ -9,7 +9,6 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -47,7 +46,7 @@ public class RunStep implements StepState {
         }
         return eventPublisher.apply(List.of(new GenericEventMessage(MessageType.fromString("io.axoniq.workflow.StepStarted#0.1"), new StepStarted(stepId))))
                              .thenRunAsync(action)
-                             .thenCombineAsync(eventPublisher.apply(List.of(new GenericEventMessage(MessageType.fromString("io.axoniq.workflow.StepCompleted#0.1"), new StepCompleted(stepId, Map.of())))), (unused, unused2) -> null)
+                             .thenCombineAsync(eventPublisher.apply(List.of(new GenericEventMessage(MessageType.fromString("io.axoniq.workflow.StepCompleted#0.1"), new StepCompleted(stepId, null)))), (unused, unused2) -> null)
                              .thenApply(r -> Result.completed())
                              .exceptionally(Result::error);
     }

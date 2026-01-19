@@ -11,40 +11,58 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class StateManager {
 
-  private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
 
-  private final Map<String, List<EventMessage>> events = new ConcurrentHashMap<>();
+    private final Map<String, List<EventMessage>> events = new ConcurrentHashMap<>();
 
-  public List<EventMessage> getHistory(String workflowId) {
-    return events.getOrDefault(workflowId, new ArrayList<>());
-  }
+    public List<EventMessage> getHistory(String workflowId) {
+        return events.getOrDefault(workflowId, new ArrayList<>());
+    }
 
-  public void append(String workflowId, EventMessage event) {
-    events.putIfAbsent(workflowId, new ArrayList<>());
-    events.get(workflowId).add(event);
-  }
+    public void append(String workflowId, EventMessage event) {
+        events.putIfAbsent(workflowId, new ArrayList<>());
+        events.get(workflowId).add(event);
+    }
 
-  public void appendAll(String workflowId, List<EventMessage> eventMessages) {
-    events.putIfAbsent(workflowId, new ArrayList<>());
-    events.get(workflowId).addAll(eventMessages);
-  }
+    public void appendAll(String workflowId, List<EventMessage> eventMessages) {
+        events.putIfAbsent(workflowId, new ArrayList<>());
+        events.get(workflowId).addAll(eventMessages);
+    }
 
-  public void clear(String workflowId) {
-    events.remove(workflowId);
-  }
+    public void clear(String workflowId) {
+        events.remove(workflowId);
+    }
 
-  public void clearAll() {
-    events.clear();
-  }
+    public void clearAll() {
+        events.clear();
+    }
 
-  public void print() {
-    events.keySet().forEach(workflowId -> {
-      logger.info("Dumping events for workflow '{}'", workflowId);
-      logger.info("------------------");
-      events.get(workflowId).forEach(eventMessage -> {
-        logger.info("{}", eventMessage);
-      });
-      logger.info("------------------");
-    });
-  }
+    public List<Object> getEventPayloads(String workflowId) {
+        return getHistory(workflowId).stream()
+                .map(event -> event.payloadAs(Object.class))
+                .toList();
+    }
+
+    public void printMessages() {
+        events.keySet().forEach(workflowId -> {
+            logger.info("Dumping messages for workflow '{}'", workflowId);
+            logger.info("------------------");
+            events.get(workflowId).forEach(eventMessage -> {
+                logger.info("{}", eventMessage);
+            });
+            logger.info("------------------");
+        });
+    }
+
+    public void printPayloads() {
+        events.keySet().forEach(workflowId -> {
+            logger.info("Dumping events for workflow '{}'", workflowId);
+            logger.info("------------------");
+            getEventPayloads(workflowId).forEach(payloads -> {
+                logger.info("{}", payloads);
+            });
+            logger.info("------------------");
+        });
+    }
+
 }
