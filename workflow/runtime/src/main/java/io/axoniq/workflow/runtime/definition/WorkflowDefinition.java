@@ -1,9 +1,7 @@
 package io.axoniq.workflow.runtime.definition;
 
-import io.axoniq.workflow.runtime.context.WorkflowContext;
-
-import java.util.Map;
+import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
 
 public interface WorkflowDefinition {
-    void execute(WorkflowContext context, Map<String, Object> args);
+  void execute(WorkflowContextImpl context);
 }

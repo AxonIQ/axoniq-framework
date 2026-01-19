@@ -14,9 +14,18 @@ public class StateManager {
     private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
 
     private final Map<String, List<EventMessage>> events = new ConcurrentHashMap<>();
+    public final List<EventMessage> businessEvents = new ArrayList<>();
 
     public List<EventMessage> getHistory(String workflowId) {
         return events.getOrDefault(workflowId, new ArrayList<>());
+    }
+
+    public List<EventMessage> getEventByCriteria(Class<?> clazz) {
+        return businessEvents.stream().filter(e -> e.payloadType().equals(clazz)).toList();
+    }
+
+    public void append(EventMessage eventMessage) {
+        businessEvents.add(eventMessage);
     }
 
     public void append(String workflowId, EventMessage event) {
