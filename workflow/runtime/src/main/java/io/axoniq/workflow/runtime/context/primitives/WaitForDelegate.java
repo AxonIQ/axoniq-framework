@@ -29,7 +29,7 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
     var workflowId = context.getWorkflowId();
     Function<T, T> applyEvent = result -> {
       context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID), new StepCompleted(stepName, result)));
-      context.steps.put(stepName, StepExecution.completed(stepName, result));
+      context.addStep(stepName, StepExecution.completed(stepName, result));
       return result;
     };
 
@@ -37,17 +37,17 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
       context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID),
         new StepFailed(stepName, "Timed out at:" + started.plus(timeout), ex))
       );
-      context.steps.put(stepName, StepExecution.failed(stepName, ex));
+      context.addStep(stepName, StepExecution.failed(stepName, ex));
     };
 
     BiConsumer<Instant, Throwable> timeoutCompletedHandler = (started, ex) -> {
       context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID),
         new StepCompleted(stepName, null))
       );
-      context.steps.put(stepName, StepExecution.completed(stepName, null));
+      context.addStep(stepName, StepExecution.completed(stepName, null));
     };
 
-    StepExecution existing = context.steps.get(stepName);
+    StepExecution existing = context.getStep(stepName);
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
@@ -68,7 +68,7 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
             }
           } else {
             // wait for event
-            return createRetrievalFuture(eventType, remainingTimeout, eventCondition, applyEvent)
+            return retriever(eventType, remainingTimeout, eventCondition, applyEvent)
               .join();
           }
         }
@@ -77,9 +77,9 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
 
     var started = Instant.now();
     context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepStarted.ID), new StepStarted(stepName)));
-    context.steps.put(stepName, StepExecution.started(stepName, started));
+    context.addStep(stepName, StepExecution.started(stepName, started));
 
-    return createRetrievalFuture(eventType, timeout, eventCondition, applyEvent)
+    return retriever(eventType, timeout, eventCondition, applyEvent)
       .exceptionally(ex -> {
         switch (timeoutMode) {
           case FAILED -> timeoutFailedHandler.accept(started, ex);
@@ -90,11 +90,11 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
       .join();
   }
 
-  private <T> CompletableFuture<T> createRetrievalFuture(
+  private <T> CompletableFuture<T> retriever(
     Class<T> eventType,
     Duration remainingTimeout,
     Predicate<T> eventCondition,
-    Function<T, T> applyEvent
+    Function<T, T> applyEventHandler
   ) {
     return CompletableFuture
       .supplyAsync(() -> {
@@ -117,6 +117,6 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
         }
       })
       .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
-      .thenApply(applyEvent);
+      .thenApply(applyEventHandler);
   }
 }

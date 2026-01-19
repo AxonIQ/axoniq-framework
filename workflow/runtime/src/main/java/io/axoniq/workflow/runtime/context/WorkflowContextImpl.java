@@ -14,12 +14,13 @@ import jakarta.annotation.Nullable;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 public class WorkflowContextImpl implements WorkflowContext {
 
   private final String workflowId;
-  public final Map<String, StepExecution> steps = new LinkedHashMap<>();
+  private final Map<String, StepExecution> steps = new LinkedHashMap<>();
   private final StateManager stateManager;
   private Payload global;
 
@@ -70,8 +71,22 @@ public class WorkflowContextImpl implements WorkflowContext {
     this.global = payloadModification.apply(global);
   }
 
+  @Override
+  public void addStep(String stepName, StepExecution execution) {
+    steps.put(stepName, execution);
+  }
+
+  @Override
+  public StepExecution getStep(String stepName) {
+    return steps.get(stepName);
+  }
+
+  @Override
+  public Set<String> getStepHistory() {
+    return steps.keySet();
+  }
+
   public void restoreStep(StepExecution step) {
     steps.put(step.stepName(), step);
   }
-
 }

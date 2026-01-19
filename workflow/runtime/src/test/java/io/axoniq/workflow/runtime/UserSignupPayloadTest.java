@@ -136,7 +136,7 @@ class UserSignupPayloadTest {
     // Execute the workflow
     engine.execute(workflowId, new UserSignupWorkflow(), payload);
 
-    assertThat(engine.context.steps.keySet()).containsExactlyInAnyOrderElementsOf(
+    assertThat(engine.context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
       Set.of("createUser", "activateUser", "confirmedEmail", "block-500ms", "sendWelcomeEmail")
     );
 

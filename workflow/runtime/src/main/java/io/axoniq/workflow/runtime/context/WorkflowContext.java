@@ -6,6 +6,8 @@ import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.payload.Payload;
 import io.axoniq.workflow.runtime.payload.PayloadFunction;
 
+import java.util.Set;
+
 public interface WorkflowContext extends
   ExecutePrimitive,
   WaitForPrimitive {
@@ -17,4 +19,10 @@ public interface WorkflowContext extends
   StateManager getStateManager();
 
   void modifyPayload(PayloadFunction payloadModification);
+
+  void addStep(String stepName, StepExecution execution);
+
+  StepExecution getStep(String stepName);
+
+  Set<String> getStepHistory();
 }

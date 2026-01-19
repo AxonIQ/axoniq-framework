@@ -69,7 +69,7 @@ class UserSignupTest {
     String workflowId = "signup002";
 
     engine.execute(workflowId, new UserSignupWorkflow(), new Payload().withValue("user", user));
-    assertEquals(Set.of("createUser", "activateUser", "sendWelcomeEmail"), engine.context.steps.keySet());
+    assertEquals(Set.of("createUser", "activateUser", "sendWelcomeEmail"), engine.context.getStepHistory());
 
     // Verify events published
     var events = stateManager.getEventPayloads(workflowId);

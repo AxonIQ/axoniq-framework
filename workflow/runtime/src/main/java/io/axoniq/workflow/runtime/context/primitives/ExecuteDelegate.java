@@ -30,7 +30,7 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping)
   {
-    StepExecution existing = context.steps.get(stepName);
+    StepExecution existing = context.getStep(stepName);
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
@@ -47,7 +47,7 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
 
     var workflowId = context.getWorkflowId();
     context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepStarted.ID), new StepStarted(stepName)));
-    context.steps.put(stepName, StepExecution.started(stepName, Instant.now()));
+    context.addStep(stepName, StepExecution.started(stepName, Instant.now()));
 
     try {
       var parameters = parameterMapping.apply(context.getPayload(), local); // local copy of the payload
@@ -55,13 +55,13 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
       // step execution
       Payload result = action.apply(parameters);
       context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID), new StepCompleted(stepName, result)));
-      context.steps.put(stepName, StepExecution.completed(stepName, result));
+      context.addStep(stepName, StepExecution.completed(stepName, result));
 
       context.modifyPayload(p -> resultMapping.apply(p, result)); // write back payload
       return result;
     } catch (Throwable e) {
       context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepFailed.ID), new StepFailed(stepName, e.getMessage(), e)));
-      context.steps.put(stepName, StepExecution.failed(stepName, e));
+      context.addStep(stepName, StepExecution.failed(stepName, e));
       throw e;
     }
   }
