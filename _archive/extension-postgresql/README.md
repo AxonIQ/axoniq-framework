@@ -12,7 +12,7 @@ For more information on anything Axon, please visit our website, [http://axoniq.
 Prerequisites
 
 * Java 21 or higher
-* Axon Framework 5
+* Axon Framework 5.0.2
 * PostgreSQL driver version >= 42.6.0
 
 To use this Postgres event storage engine, you can register it as an `EventStorageEngine` 
@@ -24,7 +24,7 @@ and an `EventConverter` for converting payloads to a raw byte array suitable for
 EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
     .registerEventStorageEngine(componentRegistry ->
         new PostgresqlEventStorageEngine(
-            new DataSourceConnectionExecutor(dataSource),
+            dataSource,
             new DelegatingEventConverter(new JacksonConverter())
         )
     )
