@@ -43,7 +43,7 @@ public class WorkflowEngine {
     for (EventMessage event : history) {
       Object eventPayload = event.payloadAs(Object.class);
       if (eventPayload instanceof StepStarted s) {
-        context.restoreStep(StepExecution.inProgress(s.stepId(), event.timestamp()));
+        context.restoreStep(StepExecution.started(s.stepId(), event.timestamp()));
       } else if (eventPayload instanceof StepCompleted s) {
         context.restoreStep(StepExecution.completed(s.stepId(), s.result()));
       } else if (eventPayload instanceof StepFailed s) {
@@ -53,7 +53,7 @@ public class WorkflowEngine {
 
     // 4. Execute workflow
     try {
-      definition.execute(context);
+      definition.accept(context);
     } catch (RuntimeException e) {
       var failed = new GenericEventMessage(MessageType.fromString(WF_FAILED), new StepFailed(workflowId, e.getMessage(), e));
       stateManager.append(workflowId, failed);

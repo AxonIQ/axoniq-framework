@@ -39,7 +39,7 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
           return result;
         }
         case FAILED -> throw new StepFailedException(existing.error());
-        case IN_PROGRESS -> {
+        case STARTED -> {
           // Fall through to re-run the step
         }
       }
@@ -47,7 +47,7 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
 
     var workflowId = context.getWorkflowId();
     context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepStarted.ID), new StepStarted(stepName)));
-    context.steps.put(stepName, StepExecution.inProgress(stepName, Instant.now()));
+    context.steps.put(stepName, StepExecution.started(stepName, Instant.now()));
 
     try {
       var parameters = parameterMapping.apply(context.getPayload(), local); // local copy of the payload

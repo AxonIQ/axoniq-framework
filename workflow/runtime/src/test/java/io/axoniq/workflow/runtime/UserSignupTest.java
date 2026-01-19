@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime;
 
+import io.axoniq.workflow.runtime.context.WorkflowContext;
 import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
 import io.axoniq.workflow.runtime.definition.WorkflowDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
@@ -43,7 +44,7 @@ class UserSignupTest {
   static class UserSignupWorkflow implements WorkflowDefinition {
 
     @Override
-    public void execute(WorkflowContextImpl context) {
+    public void execute(WorkflowContext context) {
       var success = context.execute("createUser", Boolean.class, () -> {
         logger.info("Creating user.");
         return true;

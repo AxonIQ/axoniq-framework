@@ -6,8 +6,8 @@ public record StepExecution(
   Object result,
   Throwable error
 ) {
-  public static StepExecution inProgress(String name, Object started) {
-    return new StepExecution(name, StepStatus.IN_PROGRESS, started, null);
+  public static StepExecution started(String name, Object started) {
+    return new StepExecution(name, StepStatus.STARTED, started, null);
   }
 
   public static StepExecution completed(String name, Object result) {

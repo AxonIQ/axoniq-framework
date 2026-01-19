@@ -1,7 +1,7 @@
 package io.axoniq.workflow.runtime.context;
 
 public enum StepStatus {
-    IN_PROGRESS,
+    STARTED,
     COMPLETED,
     FAILED
 }

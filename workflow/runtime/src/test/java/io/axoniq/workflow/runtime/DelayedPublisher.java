@@ -5,6 +5,8 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -45,6 +47,13 @@ public class DelayedPublisher {
     Duration duration,
     Object event
   ) {
+    static Schedule of(Duration duration, Object event) {
+      return new Schedule(duration, event);
+    }
+
+    static Schedule ofMillis(long millis, Object event) {
+      return new Schedule(Duration.ofMillis(millis), event);
+    }
   }
 
 }

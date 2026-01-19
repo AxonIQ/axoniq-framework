@@ -1,7 +1,14 @@
 package io.axoniq.workflow.runtime.definition;
 
-import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
+import io.axoniq.workflow.runtime.context.WorkflowContext;
 
-public interface WorkflowDefinition {
-  void execute(WorkflowContextImpl context);
+import java.util.function.Consumer;
+
+public interface WorkflowDefinition extends Consumer<WorkflowContext> {
+
+  void execute(WorkflowContext context);
+
+  default void accept(WorkflowContext context) {
+    execute(context);
+  }
 }

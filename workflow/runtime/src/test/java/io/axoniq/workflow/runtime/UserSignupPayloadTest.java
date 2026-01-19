@@ -1,14 +1,12 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.runtime.DelayedPublisher.Schedule;
-import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
+import io.axoniq.workflow.runtime.context.WorkflowContext;
 import io.axoniq.workflow.runtime.definition.WorkflowDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
 import io.axoniq.workflow.runtime.event.StepCompleted;
 import io.axoniq.workflow.runtime.event.StepStarted;
 import io.axoniq.workflow.runtime.payload.Payload;
-import io.axoniq.workflow.runtime.payload.TypedValue;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +18,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
+import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.payload.Payload.empty;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -33,9 +32,7 @@ class UserSignupPayloadTest {
   private DelayedPublisher delayedPublisher;
 
   record EmailConfirmed(String userId, String email) {
-
   }
-
 
   @BeforeEach
   void setUp() {
@@ -55,7 +52,7 @@ class UserSignupPayloadTest {
   static class UserSignupWorkflow implements WorkflowDefinition {
 
     @Override
-    public void execute(WorkflowContextImpl context) {
+    public void execute(WorkflowContext context) {
 
       var startParams = context.getPayload();
       logger.info("Starting user signup workflow with payload {}", startParams);
@@ -121,12 +118,12 @@ class UserSignupPayloadTest {
 
     // Schedule the EmailConfirmed event to be published after a short delay
     delayedPublisher.addSchedules(List.of(
-      new Schedule(
-        Duration.ofMillis(500),
-        new EmailConfirmed("user-456", "kermit@muppets.biz")
+      ofMillis(
+        500,
+        new EmailConfirmed("user-456", "kermit@muppets.biz") // wrong event, filtered by the predicate
       ),
-      new Schedule(
-        Duration.ofMillis(500),
+      ofMillis(
+        500,
         new EmailConfirmed(user.id(), user.email())
       )
     ));

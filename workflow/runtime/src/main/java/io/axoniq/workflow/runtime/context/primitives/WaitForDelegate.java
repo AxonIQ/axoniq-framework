@@ -38,7 +38,7 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
           return (T) existing.result();
         }
         case FAILED -> throw new StepFailedException(existing.error());
-        case IN_PROGRESS -> {
+        case STARTED -> {
           Instant started = (Instant) existing.result();
           Duration remainingTimeout = Duration.between(Instant.now(), started.plus(timeout));
           if (remainingTimeout.isNegative()) {
@@ -55,7 +55,7 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
     }
 
     context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepStarted.ID), new StepStarted(stepName)));
-    context.steps.put(stepName, StepExecution.inProgress(stepName, Instant.now()));
+    context.steps.put(stepName, StepExecution.started(stepName, Instant.now()));
 
     return createRetrievalFuture(eventType, timeout, eventCondition)
       .thenApply(applyEvent)
