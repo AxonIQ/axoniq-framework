@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.definition;
 
 import java.util.Optional;
 

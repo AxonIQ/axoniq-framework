@@ -1,5 +1,6 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.step;
 
+import io.axoniq.workflow.runtime.definition.Result;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 
@@ -28,6 +29,10 @@ public class WaitStep implements StepState {
         this.next = next;
     }
 
+    public WaitStep(String stepId, Duration duration) {
+        this(stepId, duration, Instant.now(), new Completed());
+    }
+
     public WaitStep(String stepId, Duration duration, StepState next) {
         this.stepId = stepId;
         this.duration = duration;
@@ -38,16 +43,16 @@ public class WaitStep implements StepState {
     @Override
     public CompletableFuture<Result> execute(Function<List<EventMessage>, CompletableFuture<Void>> eventPublisher) {
         if (startTime == null) {
-            logger.info("Unknown waiting time, there hasn't been a start trigger yet. Should generally not happen");
+            logger.info("[{}]: Unknown waiting time, there hasn't been a start trigger yet. Should generally not happen", stepId);
             return CompletableFuture.completedFuture(Result.suspend(duration.toMillis()));
         }
         Instant now = Instant.now();
         if (now.isAfter(startTime.plus(duration))) {
-            logger.info("Waiting time expired, moving on to next step");
+            logger.info("[{}]: Waiting time expired, moving on to next step", stepId);
             return next.execute(eventPublisher);
         } else {
             long millis = Duration.between(now, startTime.plus(duration)).toMillis();
-            logger.info("Wait not finished. Need {}ms more", millis);
+            logger.info("[{}]: Wait not finished. Need {}ms more", stepId, millis);
             return CompletableFuture.completedFuture(Result.suspend(millis));
         }
     }

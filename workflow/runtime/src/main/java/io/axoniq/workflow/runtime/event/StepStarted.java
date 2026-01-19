@@ -1,7 +1,8 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.event;
 
 import org.axonframework.messaging.eventhandling.annotation.Event;
 
 @Event(namespace = "io.axoniq.workflow")
 public record StepStarted(String stepId) {
+  public static String ID = "io.axoniq.workflow.StepStarted#0.1";
 }

@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.event;
 
 import org.axonframework.messaging.eventhandling.annotation.Event;
 
@@ -6,5 +6,5 @@ import java.util.Map;
 
 @Event(namespace = "io.axoniq.workflow")
 public record StepCompleted(String stepId, Map<String, Object> results) {
-
+  public static String ID = "io.axoniq.workflow.StepCompleted#0.1";
 }

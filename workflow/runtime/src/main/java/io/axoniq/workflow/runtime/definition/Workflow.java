@@ -1,10 +1,16 @@
 package io.axoniq.workflow.runtime.definition;
 
-import io.axoniq.workflow.runtime.WorkflowState;
+import org.axonframework.messaging.eventhandling.EventMessage;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 public interface Workflow {
 
-    WorkflowState initialState();
+    String getWorkflowId();
 
-    // TODO - Add method to recreate state based on ExecutionContext
+    CompletableFuture<Result> execute(Function<List<EventMessage>, CompletableFuture<Void>> eventPublisher);
+
+    Workflow apply(EventMessage eventMessage);
 }

@@ -1,12 +1,13 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.definition;
 
+import io.axoniq.workflow.runtime.step.StepState;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
-public class SimpleWorkflow implements WorkflowState {
+public class SimpleWorkflow implements Workflow {
 
     private final String workflowId;
     private final StepState currentState;
@@ -22,7 +23,12 @@ public class SimpleWorkflow implements WorkflowState {
     }
 
     @Override
-    public WorkflowState apply(EventMessage eventMessage) {
+    public Workflow apply(EventMessage eventMessage) {
         return new SimpleWorkflow(workflowId, currentState.apply(eventMessage));
+    }
+
+    @Override
+    public String getWorkflowId() {
+        return workflowId;
     }
 }

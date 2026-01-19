@@ -1,5 +1,8 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.step;
 
+import io.axoniq.workflow.runtime.definition.Result;
+import io.axoniq.workflow.runtime.event.StepCompleted;
+import io.axoniq.workflow.runtime.event.StepStarted;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -23,6 +26,10 @@ public class RunStep implements StepState {
         this.action = action;
         this.next = next;
         this.startTime = startTime;
+    }
+
+    public RunStep(String stepId, Runnable action) {
+        this(stepId, action, new Completed());
     }
 
     public RunStep(String stepId, Runnable action, StepState next) {

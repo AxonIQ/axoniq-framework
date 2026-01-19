@@ -1,5 +1,6 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.step;
 
+import io.axoniq.workflow.runtime.definition.Result;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
 

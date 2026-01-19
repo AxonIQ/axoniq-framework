@@ -1,66 +1,75 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.runtime.definition.Workflow;
+import io.axoniq.workflow.runtime.definition.SimpleWorkflow;
+import io.axoniq.workflow.runtime.definition.WorkflowDefinition;
+import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.WorkflowEngine;
+import io.axoniq.workflow.runtime.event.StepCompleted;
+import io.axoniq.workflow.runtime.event.StepStarted;
+import io.axoniq.workflow.runtime.step.*;
 import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Queue;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import static io.axoniq.workflow.runtime.engine.WorkflowEngine.WF_STARTED;
 
 class RunnerTest {
 
-    private static final Logger logger = LoggerFactory.getLogger(RunnerTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(RunnerTest.class);
 
-    @Test
-    void shouldRunWorkflow() throws ExecutionException, InterruptedException {
-        var startTime = Instant.now();
-        Workflow myWorkFlow = () -> new SimpleWorkflow("Workflow 1",
-                                                       new OnTimeoutStep(
-                                                               new ParallelSteps("parallel1", Set.of(
-                                                                       new WaitStep("wait 1", Duration.ofSeconds(1), new RunStep("step1.1", () -> System.out.println("Wait 1 completed.... ms since start: " + Duration.between(startTime, Instant.now()).toMillis()), new Completed())),
-                                                                       new WaitStep("wait 2", Duration.ofSeconds(2), new Completed())
-                                                               ),
-                                                                                 new RunStep("step2", () -> System.out.println("Hello world! ms since start: " + Duration.between(startTime, Instant.now()).toMillis()),
-                                                                                             new Completed())),
-                                                               Duration.ofMillis(1500),
-                                                               new RunStep("onTimeout", () -> System.out.println("Timeout happened.. .... ms since start: " + Duration.between(startTime, Instant.now()).toMillis()),
-                                                                           new Completed())));
+  private static final String WF_ID_1 = "Workflow 1";
+  private final StateManager stateManager = new StateManager();
+  private final WorkflowEngine engine = new WorkflowEngine(stateManager);
 
-        WorkflowState workflowInstance = myWorkFlow.initialState();
-        Queue<EventMessage> events = new ConcurrentLinkedQueue<>();
+  Instant startTime = Instant.now();
+  WorkflowDefinition myWorkFlow = () -> new SimpleWorkflow(WF_ID_1,
+    new OnTimeoutStep(
+      new ParallelSteps("parallel1",
+        Set.of(
+          new WaitStep("wait 1", Duration.ofMillis(1000),
+            new RunStep("step1.1", () -> logger.info("Wait 1 completed. {} ms since start.", Duration.between(startTime, Instant.now()).toMillis()))
+          ),
+          new WaitStep("wait 2", Duration.ofMillis(2000))
+        ),
+        new RunStep("step2",
+          () -> logger.info("Hello world from step2! {} ms since start.", Duration.between(startTime, Instant.now()).toMillis()))
+      ),
+      Duration.ofMillis(2500),
+      new RunStep("onTimeout",
+        () -> logger.info("Timeout happened.. {} ms since start: ", Duration.between(startTime, Instant.now()).toMillis())))
+  );
 
-        events.add(new GenericEventMessage(MessageType.fromString("io.axoniq.workflow.WorkflowStarted#0.1"), new StepStarted("Workflow 1")));
+  @BeforeEach
+  void setUp() {
+    stateManager.clearAll();
+  }
 
-        CompletableFuture<Result> executionResult;
-        do {
-            while (!events.isEmpty()) {
-                EventMessage event = events.poll();
-                workflowInstance = workflowInstance.apply(event);
-            }
+  @Test
+  void shouldRunFromStart() throws ExecutionException, InterruptedException {
 
-            executionResult = workflowInstance.execute(eventMessages -> {
-                events.addAll(eventMessages);
-                return CompletableFuture.completedFuture(null);
-            });
-            long timeout = executionResult.get().timeout();
-            if (events.isEmpty() && timeout > 0) {
-                logger.info("Waiting for events or expiry of timeout: {}ms", timeout);
-                Thread.sleep(timeout);
-            }
-        } while (!executionResult.get().isCompleted());
+    engine.execute(myWorkFlow);
+    stateManager.print();
+  }
 
-        executionResult.get().error().ifPresent(e -> fail(e.getMessage()));
-    }
+
+  @Test
+  void shouldRunFromFinishedParallel() throws ExecutionException, InterruptedException {
+    stateManager.appendAll(WF_ID_1, List.of(
+      new GenericEventMessage(MessageType.fromString(WF_STARTED), new StepStarted(WF_ID_1)),
+      new GenericEventMessage(MessageType.fromString(StepStarted.ID), new StepStarted("step1.1")),
+      new GenericEventMessage(MessageType.fromString(StepCompleted.ID), new StepCompleted("step1.1", Map.of()))
+    ));
+    engine.execute(myWorkFlow);
+  }
 
 }
