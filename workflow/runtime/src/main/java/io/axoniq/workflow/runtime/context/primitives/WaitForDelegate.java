@@ -73,7 +73,15 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
             // wait for event
             return eventRetriever(context.getStateManager(), eventType, eventCondition)
               .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
-              .thenApply(completionHandler);
+              .thenApply(completionHandler)
+              .exceptionally(ex -> {
+                if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
+                  var timeoutTimestamp = Instant.now(context.getClock());
+                  timeoutOccurredHandler.accept(timeoutTimestamp);
+                  throw new CompletionException(ex);
+                }
+                throw new StepFailedException(ex);
+              });
           }
         }
       }

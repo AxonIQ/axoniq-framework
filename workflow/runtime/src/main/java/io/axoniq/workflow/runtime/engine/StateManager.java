@@ -7,71 +7,65 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class StateManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
+  public static final String KEY_WF_ID = "workflowId";
+  private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
 
-    private final Map<String, List<EventMessage>> events = new ConcurrentHashMap<>();
-    public final List<EventMessage> businessEvents = new ArrayList<>();
+  private final List<EventMessage> events = new ArrayList<>();
 
-    public List<EventMessage> getHistory(String workflowId) {
-        return events.getOrDefault(workflowId, new ArrayList<>());
-    }
+  public List<EventMessage> getHistory(String workflowId) {
+    return events.stream()
+      .filter(e -> e.metadata().containsKey(KEY_WF_ID) && Objects.requireNonNull(e.metadata().get(KEY_WF_ID)).equals(workflowId))
+      .toList();
+  }
 
-    public List<EventMessage> getEventByCriteria(Class<?> clazz) {
-        return businessEvents.stream().filter(e -> e.payloadType().equals(clazz)).toList();
-    }
+  public List<EventMessage> getEventByCriteria(Class<?> clazz) {
+    return events.stream().filter(e -> e.payloadType().equals(clazz)).toList();
+  }
 
-    public void append(EventMessage eventMessage) {
-        businessEvents.add(eventMessage);
-    }
+  public void append(EventMessage eventMessage) {
+    events.add(eventMessage);
+  }
 
-    public void append(String workflowId, EventMessage event) {
-        events.putIfAbsent(workflowId, new ArrayList<>());
-        events.get(workflowId).add(event);
-    }
+  public void append(String workflowId, EventMessage event) {
+    var workflowEvent = event.andMetadata(Map.of(KEY_WF_ID, workflowId));
+    events.add(workflowEvent);
+  }
 
-    public void appendAll(String workflowId, List<EventMessage> eventMessages) {
-        events.putIfAbsent(workflowId, new ArrayList<>());
-        events.get(workflowId).addAll(eventMessages);
-    }
+  public void appendAll(String workflowId, List<EventMessage> eventMessages) {
+    eventMessages.forEach(event -> {
+      var workflowEvent = event.andMetadata(Map.of(KEY_WF_ID, workflowId));
+      events.add(workflowEvent);
+    });
+  }
 
-    public void clear(String workflowId) {
-        events.remove(workflowId);
-    }
+  public List<Object> getEventPayloads(String workflowId) {
+    return getHistory(workflowId).stream()
+      .map(event -> event.payloadAs(Object.class))
+      .toList();
+  }
 
-    public void clearAll() {
-        events.clear();
-    }
+  public void printPayloads() {
+    // Group events by workflowId
+    Map<String, List<EventMessage>> eventsByWorkflowId = events.stream()
+      .filter(e -> e.metadata().containsKey(KEY_WF_ID))
+      .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(KEY_WF_ID, "none")));
 
-    public List<Object> getEventPayloads(String workflowId) {
-        return getHistory(workflowId).stream()
-                .map(event -> event.payloadAs(Object.class))
-                .toList();
-    }
-
-    public void printMessages() {
-        events.keySet().forEach(workflowId -> {
-            logger.info("Dumping messages for workflow '{}'", workflowId);
-            logger.info("------------------");
-            events.get(workflowId).forEach(eventMessage -> {
-                logger.info("{}", eventMessage);
-            });
-            logger.info("------------------");
+    // Print payloads for each workflowId
+    eventsByWorkflowId.forEach((workflowId, workflowEvents) -> {
+      if (!workflowId.equals("none")) {
+        logger.info("Dumping events for workflow '{}'", workflowId);
+        logger.info("------------------");
+        getEventPayloads(workflowId).forEach(payload -> {
+          logger.info("{}", payload);
         });
-    }
-
-    public void printPayloads() {
-        events.keySet().forEach(workflowId -> {
-            logger.info("Dumping events for workflow '{}'", workflowId);
-            logger.info("------------------");
-            getEventPayloads(workflowId).forEach(payloads -> {
-                logger.info("{}", payloads);
-            });
-            logger.info("------------------");
-        });
-    }
+        logger.info("------------------");
+      }
+    });
+  }
 
 }

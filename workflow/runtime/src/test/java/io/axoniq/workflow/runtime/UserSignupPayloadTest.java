@@ -97,8 +97,11 @@ class UserSignupPayloadTest {
         );
         if (confirmed.email.equals(activatedEmail)) {
           context.wait("block-500ms", Duration.ofMillis(500));
-          context.execute("sendWelcomeEmail", () -> {
+          context.execute("sendWelcomeEmail",                                 // sendWelcomeEmailStarted(email=asasa@dfdfd.de), , metadata{type=StepStarted, workflowId=4711}
+            Payload.empty().withValue("email", activatedEmail),
+            (p) -> {
             logger.info("Sending welcome mail to user.");
+            return Payload.empty().withValue("sent", true);                // sendWelcomeEmailCompleted(sent=true), metadata{type=StepCompleted, workflowId=4711}
           });
         } else {
           logger.info("Welcome mail not sent. {} != {}", confirmed.email, activatedEmail);
@@ -134,6 +137,9 @@ class UserSignupPayloadTest {
     delayedPublisher.start();
 
     // Execute the workflow
+    // FIXME -> receive starting event, convert it to payload, trigger execute
+    // workflowId -> external id generator vs. function on payload
+
     engine.execute(workflowId, new UserSignupWorkflow(), payload);
 
     assertThat(engine.context.getStepHistory()).containsExactlyInAnyOrderElementsOf(

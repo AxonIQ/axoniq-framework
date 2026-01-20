@@ -52,9 +52,10 @@ class UserSignupTest {
       if (!success) {
         return;
       }
-      context.execute("activateUser", () -> {
+      context.execute("activateUser", 
+        () -> { //ActivationOfUserStarted -> //ActivateUserStarted -> //StepStartedEvent
         logger.info("Activating user.");
-      });
+      });//CctivateUserCompleted  -> metadata stepType//StepCompletedEvent
 
       context.execute("sendWelcomeEmail", () -> {
         logger.info("Sending welcome mail to user.");
