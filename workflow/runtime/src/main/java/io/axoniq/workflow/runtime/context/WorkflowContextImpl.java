@@ -11,10 +11,12 @@ import io.axoniq.workflow.runtime.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 public class WorkflowContextImpl implements WorkflowContext {
@@ -35,19 +37,25 @@ public class WorkflowContextImpl implements WorkflowContext {
   }
 
   @Override
-  public Payload execute(
+  public CompletableFuture<Payload> execute(
     @Nonnull String stepName,
     @Nullable Payload local,
     @Nonnull PayloadFunction action,
     @Nonnull PayloadReducer parameterMapping,
-    @Nonnull PayloadReducer resultMapping
-  ) {
-    return executePrimitive.execute(stepName, local, action, parameterMapping, resultMapping);
+    @Nonnull PayloadReducer resultMapping,
+    @Nonnull Duration timeout
+    ) {
+    return executePrimitive.execute(stepName, local, action, parameterMapping, resultMapping, timeout);
   }
 
   @Override
-  public <T> T waitFor(String stepName, Class<T> eventType, Duration timeout, Predicate<T> predicate, TimeoutMode timoutMode) {
-    return waitForPrimitive.waitFor(stepName, eventType, timeout, predicate, timoutMode);
+  public <T> CompletableFuture<T> waitFor(
+    @Nonnull String stepName,
+    @Nonnull Class<T> eventType,
+    @Nonnull Predicate<T> predicate,
+    @Nonnull Duration timeout
+  ) {
+    return waitForPrimitive.waitFor(stepName, eventType, predicate, timeout);
   }
 
 
@@ -84,6 +92,11 @@ public class WorkflowContextImpl implements WorkflowContext {
   @Override
   public Set<String> getStepHistory() {
     return steps.keySet();
+  }
+
+  @Override
+  public Clock getClock() {
+    return Clock.systemDefaultZone();
   }
 
   public void restoreStep(StepExecution step) {

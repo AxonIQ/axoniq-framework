@@ -3,18 +3,21 @@ package io.axoniq.workflow.runtime.context.primitives;
 import io.axoniq.workflow.runtime.context.StepExecution;
 import io.axoniq.workflow.runtime.context.StepFailedException;
 import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
+import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.event.StepCompleted;
-import io.axoniq.workflow.runtime.event.StepFailed;
 import io.axoniq.workflow.runtime.event.StepStarted;
+import io.axoniq.workflow.runtime.event.StepTimedOut;
+import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -25,26 +28,26 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
   }
 
   @Override
-  public <T> T waitFor(String stepName, Class<T> eventType, Duration timeout, Predicate<T> eventCondition, TimeoutMode timeoutMode) {
+  public <T> CompletableFuture<T> waitFor(
+    @Nonnull String stepName,
+    @Nonnull Class<T> eventType,
+    @Nonnull Predicate<T> eventCondition,
+    @Nonnull Duration timeout) {
+
     var workflowId = context.getWorkflowId();
-    Function<T, T> applyEvent = result -> {
+
+    Function<T, T> completionHandler = result -> {
+      // TODO: For DCB add a tag, for non-DCB add a technical event (Question 1).
       context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID), new StepCompleted(stepName, result)));
       context.addStep(stepName, StepExecution.completed(stepName, result));
       return result;
     };
 
-    BiConsumer<Instant, Throwable> timeoutFailedHandler = (started, ex) -> {
-      context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID),
-        new StepFailed(stepName, "Timed out at:" + started.plus(timeout), ex))
+    Consumer<Instant> timeoutOccurredHandler = (timeoutTimestamp) -> {
+      context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepTimedOut.ID),
+        new StepTimedOut(stepName, timeoutTimestamp))
       );
-      context.addStep(stepName, StepExecution.failed(stepName, ex));
-    };
-
-    BiConsumer<Instant, Throwable> timeoutCompletedHandler = (started, ex) -> {
-      context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepCompleted.ID),
-        new StepCompleted(stepName, null))
-      );
-      context.addStep(stepName, StepExecution.completed(stepName, null));
+      context.addStep(stepName, StepExecution.timedOut(stepName, timeoutTimestamp));
     };
 
     StepExecution existing = context.getStep(stepName);
@@ -52,54 +55,59 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
       switch (existing.status()) {
         case COMPLETED -> {
           //noinspection unchecked
-          return (T) existing.result();
+          return CompletableFuture.completedFuture((T) existing.result());
         }
-        case FAILED -> throw new StepFailedException(existing.error());
+        case FAILED -> {
+          return CompletableFuture.failedFuture(new StepFailedException(existing.error()));
+        }
+        case TIMED_OUT -> {
+          return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
+        }
         case STARTED -> {
           Instant started = (Instant) existing.result();
-          Duration remainingTimeout = Duration.between(Instant.now(), started.plus(timeout));
+          Duration remainingTimeout = Duration.between(Instant.now(context.getClock()), started.plus(timeout));
           if (remainingTimeout.isNegative()) {
-            // started but timed out
-            var ex = new StepFailedException("Timed out at:" + started.plus(timeout), new TimeoutException());
-            switch (timeoutMode) {
-              case FAILED -> timeoutFailedHandler.accept(started, ex);
-              case COMPLETED -> timeoutCompletedHandler.accept(started, ex);
-              case EXCEPTION -> throw ex;
-            }
+            timeoutOccurredHandler.accept(Instant.now(context.getClock()));
+            return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
           } else {
             // wait for event
-            return retriever(eventType, remainingTimeout, eventCondition, applyEvent)
-              .join();
+            return eventRetriever(context.getStateManager(), eventType, eventCondition)
+              .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
+              .thenApply(completionHandler);
           }
         }
       }
     }
 
-    var started = Instant.now();
+    var started = Instant.now(context.getClock());
     context.getStateManager().append(workflowId, new GenericEventMessage(MessageType.fromString(StepStarted.ID), new StepStarted(stepName)));
-    context.addStep(stepName, StepExecution.started(stepName, started));
+    context.addStep(stepName, StepExecution.started(stepName, started)); // FIXME -> timestamp should be additional step attribute instead of misusing payload
 
-    return retriever(eventType, timeout, eventCondition, applyEvent)
+    return eventRetriever(context.getStateManager(), eventType, eventCondition)
+      .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
+      .thenApply(completionHandler)
       .exceptionally(ex -> {
-        switch (timeoutMode) {
-          case FAILED -> timeoutFailedHandler.accept(started, ex);
-          case COMPLETED -> timeoutCompletedHandler.accept(started, ex);
+        if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
+          var timeoutTimestamp = Instant.now(context.getClock());
+          timeoutOccurredHandler.accept(timeoutTimestamp);
+          throw new CompletionException(ex);
         }
-        return null;
-      })
-      .join();
+        throw new StepFailedException(ex);
+      });
   }
 
-  private <T> CompletableFuture<T> retriever(
+  private static <T> CompletableFuture<T> eventRetriever(
+    StateManager stateManager,
     Class<T> eventType,
-    Duration remainingTimeout,
-    Predicate<T> eventCondition,
-    Function<T, T> applyEventHandler
+    Predicate<T> eventCondition
   ) {
     return CompletableFuture
       .supplyAsync(() -> {
+        /*
+         * FIXME: This is an implementation detail of current PoC running in a unit test single-threaded.
+         */
         while (true) {
-          var events = context.getStateManager().getEventByCriteria(eventType)
+          var events = stateManager.getEventByCriteria(eventType)
             .stream()
             .map(e -> e.payloadAs(eventType))
             .filter(eventCondition)
@@ -109,14 +117,12 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
           }
           try {
             //noinspection BusyWait
-            Thread.sleep(100); // FIXME
+            Thread.sleep(100); // TODO polling constant
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for events", e);
           }
         }
-      })
-      .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
-      .thenApply(applyEventHandler);
+      });
   }
 }

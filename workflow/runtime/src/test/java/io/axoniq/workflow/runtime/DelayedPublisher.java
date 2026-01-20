@@ -5,8 +5,6 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -25,7 +23,7 @@ public class DelayedPublisher {
     this.schedules.addAll(schedules);
   }
 
-  CompletableFuture<Void> arm() {
+  CompletableFuture<Void> start() {
     CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
 
     for (Schedule schedule : schedules) {

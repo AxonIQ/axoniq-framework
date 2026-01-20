@@ -6,6 +6,7 @@ import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
 import io.axoniq.workflow.runtime.event.StepCompleted;
 import io.axoniq.workflow.runtime.event.StepStarted;
+import io.axoniq.workflow.runtime.event.StepTimedOut;
 import io.axoniq.workflow.runtime.payload.Payload;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +20,6 @@ import java.util.List;
 import java.util.Set;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
-import static io.axoniq.workflow.runtime.payload.Payload.empty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -59,11 +59,11 @@ class UserSignupPayloadTest {
       logger.info("Starting user signup workflow with payload {}", startParams);
 
       var createdUser = context.execute("createUser",
-        empty(),
+        startParams,
         payload -> {
           logger.info("Crating user.");
           return new Payload()
-            .withValue("created", Instant.class, Instant.now())
+            .withValue("created", Instant.class, Instant.now(context.getClock()))
             .withValue("success", Boolean.class, true)
             ;
         });
@@ -75,7 +75,7 @@ class UserSignupPayloadTest {
       }
 
       var activated = context.execute("activateUser",
-        createdUser,
+        startParams,
         payload -> {
           User user = payload.get("user").getAsTyped();
           logger.info("Activating user {}.", user.id);
@@ -90,13 +90,13 @@ class UserSignupPayloadTest {
 
       try {
 
-        var confirmed = context.waitFor("confirmedEmail",
+        var confirmed = context.waitForEvent("confirmedEmail",
           EmailConfirmed.class,
-          Duration.ofSeconds(2),
-          e -> e.userId.equals(correlationUserId)
+          e -> e.userId.equals(correlationUserId),
+          Duration.ofSeconds(2)
         );
         if (confirmed.email.equals(activatedEmail)) {
-          context.waitFor("block-500ms", Duration.ofMillis(500));
+          context.wait("block-500ms", Duration.ofMillis(500));
           context.execute("sendWelcomeEmail", () -> {
             logger.info("Sending welcome mail to user.");
           });
@@ -131,7 +131,7 @@ class UserSignupPayloadTest {
     ));
 
     // Arm the publisher to start the delayed execution
-    delayedPublisher.arm();
+    delayedPublisher.start();
 
     // Execute the workflow
     engine.execute(workflowId, new UserSignupWorkflow(), payload);
@@ -150,7 +150,7 @@ class UserSignupPayloadTest {
     assertInstanceOf(StepStarted.class, events.get(4));
     assertInstanceOf(StepCompleted.class, events.get(5));
     assertInstanceOf(StepStarted.class, events.get(6));
-    assertInstanceOf(StepCompleted.class, events.get(7));
+    assertInstanceOf(StepTimedOut.class, events.get(7));
     assertInstanceOf(StepStarted.class, events.get(8));
     assertInstanceOf(StepCompleted.class, events.get(9));
   }

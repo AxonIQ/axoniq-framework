@@ -7,6 +7,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * TODO: do we need typed values or is Map<String, Object> sufficient? 
+ */
 public class Payload implements Map<String, TypedValue<?>> {
 
   private static final Payload EMPTY_PAYLOAD = new Payload();

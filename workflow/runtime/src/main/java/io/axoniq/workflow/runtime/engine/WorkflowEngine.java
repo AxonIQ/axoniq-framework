@@ -15,6 +15,7 @@ import java.util.List;
 
 public class WorkflowEngine {
 
+  // TODO: recover the WF final states
   public static final String WF_STARTED = "io.axoniq.workflow.WorkflowStarted#0.1";
   public static final String WF_FAILED = "io.axoniq.workflow.WorkflowFailed#0.1";
   public static final String WF_COMPLETED = "io.axoniq.workflow.WorkflowCompleted#0.1";

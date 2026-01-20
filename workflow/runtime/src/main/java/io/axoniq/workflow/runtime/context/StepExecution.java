@@ -17,4 +17,8 @@ public record StepExecution(
   public static StepExecution failed(String name, Throwable error) {
     return new StepExecution(name, StepStatus.FAILED, null, error);
   }
+
+  public static StepExecution timedOut(String name, Object timestamp) {
+    return new StepExecution(name, StepStatus.TIMED_OUT, timestamp, null);
+  }
 }

@@ -6,6 +6,8 @@ import io.axoniq.workflow.runtime.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -17,7 +19,7 @@ public interface ExecutePrimitive {
       stepName,
       payload,
       action,
-      PayloadReducer.all(),
+      PayloadReducer.local(),
       PayloadReducer.all()
     );
   }
@@ -36,8 +38,8 @@ public interface ExecutePrimitive {
             return empty();
           }
         },
-        PayloadReducer.none(), // no global -> local, just pass nothing
-        PayloadReducer.global()  // no local -> global, take global
+        PayloadReducer.local(),
+        PayloadReducer.all()
       ).get(stepSpecificName).getAsTyped();
   }
 
@@ -52,21 +54,33 @@ public interface ExecutePrimitive {
     });
   }
 
+  default Payload execute(
+    String stepName,
+    Payload local,
+    PayloadFunction action,
+    PayloadReducer parameterMapping,
+    PayloadReducer resultMapping) {
+    return execute(stepName, local, action, parameterMapping, resultMapping, Duration.ofSeconds(5)).join();
+  }
+
+
   /**
    * Call run primitive.
-   * @param stepName name of the step.
-   * @param local local variables.
-   * @param action action to execute.
+   *
+   * @param stepName         name of the step.
+   * @param local            local variables.
+   * @param action           action to execute.
    * @param parameterMapping mapping reducer for parameters.
-   * @param resultMapping mapping reducer for result.
+   * @param resultMapping    mapping reducer for result.
    * @return payload.
    */
-  Payload execute(
+  CompletableFuture<Payload> execute(
     @Nonnull String stepName,
     @Nullable Payload local,
     @Nonnull PayloadFunction action,
     @Nonnull PayloadReducer parameterMapping,
-    @Nonnull PayloadReducer resultMapping
+    @Nonnull PayloadReducer resultMapping,
+    @Nonnull Duration timeout
   );
 
 }
