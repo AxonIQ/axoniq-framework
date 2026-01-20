@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.context;
+package io.axoniq.workflow.runtime.engine;
 
 public class StepFailedException extends RuntimeException {
 

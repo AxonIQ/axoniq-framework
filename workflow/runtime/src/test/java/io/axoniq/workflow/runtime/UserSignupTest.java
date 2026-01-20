@@ -1,23 +1,21 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.runtime.context.WorkflowContext;
-import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
-import io.axoniq.workflow.runtime.definition.WorkflowDefinition;
+import io.axoniq.workflow.dsl.simple.SimpleContext;
+import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
-import io.axoniq.workflow.runtime.event.StepCompleted;
-import io.axoniq.workflow.runtime.event.StepStarted;
-import io.axoniq.workflow.runtime.payload.Payload;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Set;
+import java.util.Map;
 
+import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class UserSignupTest {
 
@@ -25,7 +23,6 @@ class UserSignupTest {
 
   private StateManager stateManager;
   private WorkflowEngine engine;
-
 
   @BeforeEach
   void setUp() {
@@ -41,10 +38,10 @@ class UserSignupTest {
   record User(String id, String email) {
   }
 
-  static class UserSignupWorkflow implements WorkflowDefinition {
+  static class UserSignupWorkflow extends SimpleDefinition.Type {
 
     @Override
-    public void execute(WorkflowContext context) {
+    public void execute(SimpleContext context) {
       var success = context.execute("createUser", Boolean.class, () -> {
         logger.info("Creating user.");
         return true;
@@ -52,10 +49,10 @@ class UserSignupTest {
       if (!success) {
         return;
       }
-      context.execute("activateUser", 
+      context.execute("activateUser",
         () -> { //ActivationOfUserStarted -> //ActivateUserStarted -> //StepStartedEvent
-        logger.info("Activating user.");
-      });//CctivateUserCompleted  -> metadata stepType//StepCompletedEvent
+          logger.info("Activating user.");
+        });//ActivateUserCompleted  -> metadata stepType//StepCompletedEvent
 
       context.execute("sendWelcomeEmail", () -> {
         logger.info("Sending welcome mail to user.");
@@ -69,18 +66,18 @@ class UserSignupTest {
     User user = new User("user-123", "test@example.com");
     String workflowId = "signup002";
 
-    engine.execute(workflowId, new UserSignupWorkflow(), new Payload().withValue("user", user));
-    assertEquals(Set.of("createUser", "activateUser", "sendWelcomeEmail"), engine.context.getStepHistory());
+    var context = engine.execute(workflowId, new UserSignupWorkflow(), Map.of("user", user));
+    assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail");
 
     // Verify events published
-    var events = stateManager.getEventPayloads(workflowId);
-    assertEquals(6, events.size()); // 3 starts + 3 completes
-    assertInstanceOf(StepStarted.class, events.get(0));
-    assertInstanceOf(StepCompleted.class, events.get(1));
-    assertInstanceOf(StepStarted.class, events.get(2));
-    assertInstanceOf(StepCompleted.class, events.get(3));
-    assertInstanceOf(StepStarted.class, events.get(4));
-    assertInstanceOf(StepCompleted.class, events.get(5));
+    var events = stateManager.getHistory(workflowId);
+    assertThat(events).hasSize(6); // 3 starts + 3 completes
+    assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.COMPLETED);
   }
 
 
@@ -88,26 +85,29 @@ class UserSignupTest {
   void shouldReturnCachedResultForCompletedSteps() {
     String workflowId = "signup001";
 
-    WorkflowDefinition workflow = (context) -> {
-      String value = context.execute("getValue", String.class, () -> "cached-value");
-    };
+    class MyWorkflowDefinition extends SimpleDefinition.Type {
+      @Override
+      public void execute(SimpleContext context) {
+        String value = context.execute("getValue", String.class, () -> "cached-value");
+      }
+    }
+
+    var definition = new MyWorkflowDefinition();
 
     // First execution
-    engine.execute(workflowId, workflow);
+    engine.execute(workflowId, definition);
 
     // Verify events after first run
     var eventsAfterFirst = stateManager.getEventPayloads(workflowId);
-    assertEquals(2, eventsAfterFirst.size());
-    assertInstanceOf(StepStarted.class, eventsAfterFirst.get(0));
-    assertInstanceOf(StepCompleted.class, eventsAfterFirst.get(1));
-    assertEquals("cached-value", ((Payload) ((StepCompleted) eventsAfterFirst.get(1)).result()).get("__getValue").getAsTyped());
+    assertThat(eventsAfterFirst).hasSize(2);
+    assertEquals("cached-value", ((Map<String, Object>) eventsAfterFirst.get(1)).get("__getValue"));
 
     // Second execution - should return cached value
-    engine.execute(workflowId, workflow);
+    engine.execute(workflowId, definition);
 
     // Verify no new events on replay
     var eventsAfterSecond = stateManager.getEventPayloads(workflowId);
-    assertEquals(2, eventsAfterSecond.size(), "No new events should be published on replay");
+    assertThat(eventsAfterSecond).describedAs("No new events should be published on replay").hasSize(2);
   }
 
 }

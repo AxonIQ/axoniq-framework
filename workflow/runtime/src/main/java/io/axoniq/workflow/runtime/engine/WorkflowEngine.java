@@ -1,17 +1,16 @@
 package io.axoniq.workflow.runtime.engine;
 
-import io.axoniq.workflow.runtime.context.StepExecution;
-import io.axoniq.workflow.runtime.context.WorkflowContextImpl;
-import io.axoniq.workflow.runtime.definition.WorkflowDefinition;
-import io.axoniq.workflow.runtime.event.StepCompleted;
-import io.axoniq.workflow.runtime.event.StepFailed;
-import io.axoniq.workflow.runtime.event.StepStarted;
-import io.axoniq.workflow.runtime.payload.Payload;
-import org.axonframework.messaging.core.MessageType;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
+import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
+import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 
 public class WorkflowEngine {
 
@@ -21,7 +20,6 @@ public class WorkflowEngine {
   public static final String WF_COMPLETED = "io.axoniq.workflow.WorkflowCompleted#0.1";
 
   private final StateManager stateManager;
-  public WorkflowContextImpl context = null;
 
   public WorkflowEngine() {
     this(new StateManager());
@@ -31,34 +29,47 @@ public class WorkflowEngine {
     this.stateManager = stateManager;
   }
 
-  public void execute(String workflowId, WorkflowDefinition definition) {
-    execute(workflowId, definition, Payload.empty());
+  public <T extends WorkflowContext> T execute(String id, WorkflowDefinition<T> definition) {
+    return execute(id, definition, Map.of());
   }
 
-  public void execute(String workflowId, WorkflowDefinition definition, Payload workflowPayload) {
+  public <T extends WorkflowContext> T execute(String id, WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
     // 2. Create context
-    context = new WorkflowContextImpl(workflowId, this.stateManager, workflowPayload);
+    T context = definition.createContext(id, this.stateManager, workflowPayload);
 
     // 3. Apply history events to context
-    List<EventMessage> history = stateManager.getHistory(workflowId);
+    List<EventMessage> history = stateManager.getHistory(context.getWorkflowId());
     for (EventMessage event : history) {
       Object eventPayload = event.payloadAs(Object.class);
-      if (eventPayload instanceof StepStarted s) {
-        context.restoreStep(StepExecution.started(s.stepId(), event.timestamp()));
-      } else if (eventPayload instanceof StepCompleted s) {
-        context.restoreStep(StepExecution.completed(s.stepId(), s.result()));
-      } else if (eventPayload instanceof StepFailed s) {
-        context.restoreStep(StepExecution.failed(s.stepId(), s.cause()));
-      }
+      var metadata = event.metadata();
+      getStepStatus(metadata).ifPresent(stepStatus -> {
+        var stepName = getStepName(metadata);
+        switch (stepStatus) {
+          case STARTED:
+            context.restoreStep(StepExecution.started(stepName, eventPayload));
+            break;
+          case FAILED:
+            context.restoreStep(StepExecution.failed(stepName, (Throwable) eventPayload));
+            break;
+          case TIMED_OUT:
+            context.restoreStep(StepExecution.timedOut(stepName, eventPayload));
+            break;
+          case COMPLETED:
+            context.restoreStep(StepExecution.completed(stepName, eventPayload));
+            break;
+          default:
+            break;
+        }
+      });
     }
 
     // 4. Execute workflow
     try {
-      definition.accept(context);
+      definition.execute(context);
     } catch (RuntimeException e) {
-      var failed = new GenericEventMessage(MessageType.fromString(WF_FAILED), new StepFailed(workflowId, e.getMessage(), e));
-      stateManager.append(workflowId, failed);
+      stateManager.append(failedWorkflow(context, e));
     }
 
+    return context;
   }
 }

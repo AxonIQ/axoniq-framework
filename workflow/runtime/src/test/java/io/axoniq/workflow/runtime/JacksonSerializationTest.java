@@ -1,17 +1,16 @@
 package io.axoniq.workflow.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
+import java.util.LinkedHashMap;
 
-public class SerializationTest {
+public class JacksonSerializationTest {
 
   private final ObjectMapper objectMapper = new ObjectMapper();
-  private static final Logger LOGGER = LoggerFactory.getLogger(SerializationTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(JacksonSerializationTest.class);
 
   @Test
   public void canDeserializePojo() throws Exception {
@@ -21,31 +20,35 @@ public class SerializationTest {
     p.setNumber(4711L);
 
     var string = objectMapper.writeValueAsString(p);
-    LOGGER.info("deserialized pojo: '{}'", string);
+    logger.info("deserialized pojo: '{}'", string);
   }
 
   @Test
   public void canDeserializeRecord() throws Exception {
     var r = new Record1("name", 4711L, true);
     var string = objectMapper.writeValueAsString(r);
-    LOGGER.info("deserialized record: '{}'", string);
+    logger.info("deserialized record: '{}'", string);
   }
 
   @Test
   public void canDeserializeMap() throws Exception {
-    var map = Map.of("name", "name", "number", 4711L, "flag", true);
+    var map = new LinkedHashMap<String, Object>();
+    map.put("name", "name");
+    map.put("number", 4711L);
+    map.put("flag", true);
     var string = objectMapper.writeValueAsString(map);
-    LOGGER.info("deserialized map: '{}'", string);
+    logger.info("deserialized map: '{}'", string);
   }
 
   record Record1(
     String name,
     Long number,
     Boolean flag
-  ) {}
+  ) {
+  }
 
 
-    static class Pojo {
+  static class Pojo {
     String name;
     Long number;
     Boolean flag;

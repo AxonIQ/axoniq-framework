@@ -1,13 +1,10 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.runtime.context.WorkflowContext;
-import io.axoniq.workflow.runtime.definition.WorkflowDefinition;
+import io.axoniq.workflow.dsl.simple.SimpleContext;
+import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
-import io.axoniq.workflow.runtime.event.StepCompleted;
-import io.axoniq.workflow.runtime.event.StepStarted;
-import io.axoniq.workflow.runtime.event.StepTimedOut;
-import io.axoniq.workflow.runtime.payload.Payload;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,12 +14,12 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class UserSignupPayloadTest {
 
@@ -50,10 +47,10 @@ class UserSignupPayloadTest {
   record User(String id, String email) {
   }
 
-  static class UserSignupWorkflow implements WorkflowDefinition {
+  static class UserSignupWorkflow extends SimpleDefinition.Type {
 
     @Override
-    public void execute(WorkflowContext context) {
+    public void execute(SimpleContext context) {
 
       var startParams = context.getPayload();
       logger.info("Starting user signup workflow with payload {}", startParams);
@@ -62,13 +59,13 @@ class UserSignupPayloadTest {
         startParams,
         payload -> {
           logger.info("Crating user.");
-          return new Payload()
-            .withValue("created", Instant.class, Instant.now(context.getClock()))
-            .withValue("success", Boolean.class, true)
-            ;
+          return Map.of(
+            "created", Instant.now(context.getClock()),
+            "success", true
+          );
         });
 
-      Boolean success = createdUser.get("success").getAsTyped();
+      Boolean success = (Boolean) createdUser.get("success");
 
       if (!success) {
         return;
@@ -77,16 +74,16 @@ class UserSignupPayloadTest {
       var activated = context.execute("activateUser",
         startParams,
         payload -> {
-          User user = payload.get("user").getAsTyped();
+          User user = (User) payload.get("user");
           logger.info("Activating user {}.", user.id);
-          return new Payload()
-            .withValue("email", user.email)
-            .withValue("userid", user.id)
-            ;
+          return Map.of(
+            "email", user.email,
+            "userid", user.id
+          );
         });
 
-      String activatedEmail = activated.get("email").getAsTyped();
-      String correlationUserId = activated.get("userid").getAsTyped();
+      String activatedEmail = (String) activated.get("email");
+      String correlationUserId = (String) activated.get("userid");
 
       try {
 
@@ -98,11 +95,11 @@ class UserSignupPayloadTest {
         if (confirmed.email.equals(activatedEmail)) {
           context.wait("block-500ms", Duration.ofMillis(500));
           context.execute("sendWelcomeEmail",                                 // sendWelcomeEmailStarted(email=asasa@dfdfd.de), , metadata{type=StepStarted, workflowId=4711}
-            Payload.empty().withValue("email", activatedEmail),
+            Map.of("email", activatedEmail),
             (p) -> {
-            logger.info("Sending welcome mail to user.");
-            return Payload.empty().withValue("sent", true);                // sendWelcomeEmailCompleted(sent=true), metadata{type=StepCompleted, workflowId=4711}
-          });
+              logger.info("Sending welcome mail to user.");
+              return Map.of("sent", true);                // sendWelcomeEmailCompleted(sent=true), metadata{type=StepCompleted, workflowId=4711}
+            });
         } else {
           logger.info("Welcome mail not sent. {} != {}", confirmed.email, activatedEmail);
         }
@@ -119,13 +116,13 @@ class UserSignupPayloadTest {
   void shouldExecuteAllStepsOnFirstRun() {
     User user = new User("user-123", "test@example.com");
     String workflowId = "signup-" + user.id();
-    Payload payload = new Payload().withValue("user", user);
+    var payload = Map.<String, Object>of("user", user);
 
-    // Schedule the EmailConfirmed event to be published after a short delay
+    // Schedule the EmailConfirmed util to be published after a short delay
     delayedPublisher.addSchedules(List.of(
       ofMillis(
         500,
-        new EmailConfirmed("user-456", "kermit@muppets.biz") // wrong event, filtered by the predicate
+        new EmailConfirmed("user-456", "kermit@muppets.biz") // wrong util, filtered by the predicate
       ),
       ofMillis(
         500,
@@ -137,27 +134,27 @@ class UserSignupPayloadTest {
     delayedPublisher.start();
 
     // Execute the workflow
-    // FIXME -> receive starting event, convert it to payload, trigger execute
+    // FIXME -> receive starting util, convert it to payload, trigger execute
     // workflowId -> external id generator vs. function on payload
 
-    engine.execute(workflowId, new UserSignupWorkflow(), payload);
+    var context = engine.execute(workflowId, new UserSignupWorkflow(), payload);
 
-    assertThat(engine.context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
+    assertThat(context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
       Set.of("createUser", "activateUser", "confirmedEmail", "block-500ms", "sendWelcomeEmail")
     );
 
     // Verify events published
-    var events = stateManager.getEventPayloads(workflowId);
+    var events = stateManager.getHistory(workflowId);
     assertThat(events).hasSize(10); // 5 starts + 5 completes
-    assertInstanceOf(StepStarted.class, events.get(0));
-    assertInstanceOf(StepCompleted.class, events.get(1));
-    assertInstanceOf(StepStarted.class, events.get(2));
-    assertInstanceOf(StepCompleted.class, events.get(3));
-    assertInstanceOf(StepStarted.class, events.get(4));
-    assertInstanceOf(StepCompleted.class, events.get(5));
-    assertInstanceOf(StepStarted.class, events.get(6));
-    assertInstanceOf(StepTimedOut.class, events.get(7));
-    assertInstanceOf(StepStarted.class, events.get(8));
-    assertInstanceOf(StepCompleted.class, events.get(9));
+    assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(6).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(7).metadata())).contains(StepStatus.TIMED_OUT);
+    assertThat(getStepStatus(events.get(8).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(9).metadata())).contains(StepStatus.COMPLETED);
   }
 }
