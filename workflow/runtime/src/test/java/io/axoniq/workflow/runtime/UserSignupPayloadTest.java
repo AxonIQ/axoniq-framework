@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
@@ -47,7 +48,15 @@ class UserSignupPayloadTest {
   record User(String id, String email) {
   }
 
-  static class UserSignupWorkflow extends SimpleDefinition.Type {
+  public static class UserSignupWorkflow extends SimpleDefinition.Type {
+
+    @Override
+    public String workflowId(Map<String, Object> trigger) {
+      if (trigger != null && trigger.containsKey("id")) {
+        return "signup-" + trigger.get("id").toString();
+      }
+      return "signup-" + UUID.randomUUID();
+    }
 
     @Override
     public void execute(SimpleContext context) {
@@ -110,15 +119,14 @@ class UserSignupPayloadTest {
       var payload = context.getPayload();
       logger.info("Finished workflow: {}", payload);
     }
+
   }
 
   @Test
-  void shouldExecuteAllStepsOnFirstRun() {
+  void shouldExecuteAllStepsOnManualRun() {
     User user = new User("user-123", "test@example.com");
-    String workflowId = "signup-" + user.id();
     var payload = Map.<String, Object>of("user", user);
 
-    // Schedule the EmailConfirmed util to be published after a short delay
     delayedPublisher.addSchedules(List.of(
       ofMillis(
         500,
@@ -133,18 +141,14 @@ class UserSignupPayloadTest {
     // Arm the publisher to start the delayed execution
     delayedPublisher.start();
 
-    // Execute the workflow
-    // FIXME -> receive starting util, convert it to payload, trigger execute
-    // workflowId -> external id generator vs. function on payload
-
-    var context = engine.execute(workflowId, new UserSignupWorkflow(), payload);
+    var context = engine.execute(new UserSignupWorkflow(), payload);
 
     assertThat(context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
       Set.of("createUser", "activateUser", "confirmedEmail", "block-500ms", "sendWelcomeEmail")
     );
 
     // Verify events published
-    var events = stateManager.getHistory(workflowId);
+    var events = stateManager.getHistory(context.getWorkflowId());
     assertThat(events).hasSize(10); // 5 starts + 5 completes
     assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
     assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);

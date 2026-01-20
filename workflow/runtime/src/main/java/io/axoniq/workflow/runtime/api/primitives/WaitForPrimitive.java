@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.api.primitives;
 
 import java.time.Duration;
 import java.util.Map;
@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public interface WaitForPrimitive {
+public interface WaitForPrimitive extends ConverterAware{
 
   /**
    * Wait for util.
@@ -19,12 +19,5 @@ public interface WaitForPrimitive {
    * @return completable future.
    */
   <T> CompletableFuture<T> waitFor(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout, Function<T, Map<String, Object>> payloadProjector);
-
-  /**
-   * Retrieves default util to payload projector.
-   *
-   * @return default projector.
-   */
-  Function<Object, Map<String, Object>> getDefaultPayloadProjector();
 
 }

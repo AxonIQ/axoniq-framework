@@ -1,5 +1,7 @@
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.api.workflow;
 
+import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 
@@ -15,6 +17,9 @@ public interface WorkflowContext extends
 
   Map<String, Object> getPayload();
 
+
+  // TODO segregate to a different interface
+
   StateManager getStateManager();
 
   void modifyPayload(PayloadFunction payloadModification);
@@ -28,4 +33,5 @@ public interface WorkflowContext extends
   Clock getClock();
 
   void restoreStep(StepExecution stepExecution);
+
 }

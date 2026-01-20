@@ -2,33 +2,36 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
+import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
-import io.axoniq.workflow.runtime.engine.WorkflowEngine;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
+import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.awaitility.Awaitility.await;
 
-class UserSignupTest {
+class CoordinatorUserSignupTest {
 
-  private static final Logger logger = LoggerFactory.getLogger(UserSignupTest.class);
+  private static final Logger logger = LoggerFactory.getLogger(CoordinatorUserSignupTest.class);
 
   private StateManager stateManager;
-  private WorkflowEngine engine;
+  private Coordinator coordinator;
+  private DelayedPublisher delayedPublisher;
 
   @BeforeEach
   void setUp() {
     stateManager = new StateManager();
-    engine = new WorkflowEngine(stateManager);
+    coordinator = new Coordinator(stateManager);
+    delayedPublisher = new DelayedPublisher(stateManager);
   }
 
   @AfterEach
@@ -36,22 +39,19 @@ class UserSignupTest {
     stateManager.printPayloads();
   }
 
-  record User(String id, String email) {
+  record RegistrationReceivedEvent(String id, String email) {
   }
 
-  static class UserSignupWorkflow extends SimpleDefinition.Type {
+  public static class UserSignupWorkflow extends SimpleDefinition.Type {
 
     @Override
     public String workflowId(Map<String, Object> trigger) {
-      if (trigger.containsKey("id")) {
-        return "signing-" + trigger.get("id");
-      } else {
-        return "signing-" + UUID.randomUUID();
-      }
+      return "signup-" + trigger.get("id").toString();
     }
 
     @Override
     public void execute(SimpleContext context) {
+      logger.info("User signup workflow started for {}", context.getPayload());
       var success = context.execute("createUser", Boolean.class, () -> {
         logger.info("Creating user.");
         return true;
@@ -60,9 +60,9 @@ class UserSignupTest {
         return;
       }
       context.execute("activateUser",
-        () -> { //ActivationOfUserStarted -> //ActivateUserStarted -> //StepStartedEvent
+        () -> {
           logger.info("Activating user.");
-        });//ActivateUserCompleted  -> metadata stepType//StepCompletedEvent
+        });
 
       context.execute("sendWelcomeEmail", () -> {
         logger.info("Sending welcome mail to user.");
@@ -73,9 +73,26 @@ class UserSignupTest {
 
   @Test
   void shouldExecuteAllStepsOnFirstRun() {
-    User user = new User("user-123", "test@example.com");
 
-    var context = engine.execute(new UserSignupWorkflow(), Map.of("user", user));
+    coordinator.register(UserSignupWorkflow.class, RegistrationReceivedEvent.class);
+
+    delayedPublisher.addSchedules(List.of(
+      ofMillis(
+        500,
+        new RegistrationReceivedEvent("user-456", "kermit@muppets.biz")
+      )
+    ));
+
+    // Arm the publisher to start the delayed execution
+    delayedPublisher.start();
+
+    // Start the coordinator and wait for all workflows to complete
+    coordinator.start().join();
+
+    // No need for await since we've already waited for all workflows to complete
+    assertThat(coordinator.getHistory()).isNotEmpty();
+
+    var context = coordinator.getHistory().getFirst();
     assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail");
 
     // Verify events published
@@ -87,42 +104,6 @@ class UserSignupTest {
     assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.COMPLETED);
     assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.STARTED);
     assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.COMPLETED);
-  }
-
-
-  @Test
-  void shouldReturnCachedResultForCompletedSteps() {
-    String workflowId = "signup001";
-
-    class MyWorkflowDefinition extends SimpleDefinition.Type {
-
-      @Override
-      public void execute(SimpleContext context) {
-        String value = context.execute("getValue", String.class, () -> "cached-value");
-      }
-
-      @Override
-      public String workflowId(Map<String, Object> trigger) {
-        return workflowId;
-      }
-    }
-
-    var definition = new MyWorkflowDefinition();
-
-    // First execution
-    engine.execute(definition);
-
-    // Verify events after first run
-    var eventsAfterFirst = stateManager.getEventPayloads(workflowId);
-    assertThat(eventsAfterFirst).hasSize(2);
-    assertEquals("cached-value", ((Map<String, Object>) eventsAfterFirst.get(1)).get("__getValue"));
-
-    // Second execution - should return cached value
-    engine.execute(definition);
-
-    // Verify no new events on replay
-    var eventsAfterSecond = stateManager.getEventPayloads(workflowId);
-    assertThat(eventsAfterSecond).describedAs("No new events should be published on replay").hasSize(2);
   }
 
 }

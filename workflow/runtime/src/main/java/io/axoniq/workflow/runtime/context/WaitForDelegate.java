@@ -1,10 +1,9 @@
 package io.axoniq.workflow.runtime.context;
 
-import io.axoniq.workflow.runtime.api.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.StepFailedException;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import jakarta.annotation.Nonnull;
 
@@ -19,8 +18,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.completedStep;
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.timeoutStep;
+import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
 
 public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitForPrimitive {
 
@@ -29,8 +27,13 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
   }
 
   @Override
-  public Function<Object, Map<String, Object>> getDefaultPayloadProjector() {
-    return context.getDefaultPayloadProjector();
+  public Function<Object, Map<String, Object>> typeToPayloadConverter() {
+    return context.typeToPayloadConverter();
+  }
+
+  @Override
+  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(Class<T> payloadType) {
+    return context.payloadToTypeConverter(payloadType);
   }
 
   @Override
@@ -99,35 +102,5 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
     context.addStep(stepName, StepExecution.started(stepName, started)); // FIXME -> timestamp should be additional step attribute instead of misusing payload
 
     return eventRetriever.apply(timeout);
-  }
-
-  private static <T> CompletableFuture<T> eventRetriever(
-    StateManager stateManager,
-    Class<T> eventType,
-    Predicate<T> eventCondition
-  ) {
-    return CompletableFuture
-      .supplyAsync(() -> {
-        /*
-         * FIXME: This is an implementation detail of current PoC running in a unit test single-threaded.
-         */
-        while (true) {
-          var events = stateManager.getEventByPayloadType(eventType)
-            .stream()
-            .map(e -> e.payloadAs(eventType))
-            .filter(eventCondition)
-            .toList();
-          if (!events.isEmpty()) {
-            return events.getFirst();
-          }
-          try {
-            //noinspection BusyWait
-            Thread.sleep(100); // TODO polling constant
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while waiting for events", e);
-          }
-        }
-      });
   }
 }

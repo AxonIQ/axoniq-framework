@@ -1,5 +1,6 @@
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.api.primitives;
 
+import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 

@@ -1,12 +1,11 @@
 package io.axoniq.workflow.runtime.context;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StateManager;
-import io.axoniq.workflow.runtime.api.PayloadFunction;
-import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
+import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -20,19 +19,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public class WorkflowContextImpl implements WorkflowContext {
+public class WorkflowExecutionImpl implements WorkflowContext {
 
   private final String workflowId;
   private final Map<String, StepExecution> steps = new LinkedHashMap<>();
   private final StateManager stateManager;
   private Map<String, Object> global;
-  private final ObjectMapper objectMapper = new ObjectMapper();
 
   // primitive implementations
   private final ExecutePrimitive executePrimitive = new ExecuteDelegate(this);
   private final WaitForPrimitive waitForPrimitive = new WaitForDelegate(this);
+  private final ConversionDelegate conversionDelegate = new ConversionDelegate();
 
-  public WorkflowContextImpl(String workflowId, StateManager stateManager, Map<String, Object> payload) {
+  public WorkflowExecutionImpl(String workflowId, StateManager stateManager, Map<String, Object> payload) {
     this.workflowId = workflowId;
     this.stateManager = stateManager;
     this.global = payload;
@@ -62,10 +61,14 @@ public class WorkflowContextImpl implements WorkflowContext {
   }
 
   @Override
-  public Function<Object, Map<String, Object>> getDefaultPayloadProjector() {
-    return (t) -> objectMapper.convertValue(t, objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
+  public Function<Object, Map<String, Object>> typeToPayloadConverter() {
+    return conversionDelegate.typeToPayloadConverter();
   }
 
+  @Override
+  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(Class<T> type) {
+    return conversionDelegate.payloadToTypeConverter(type);
+  }
 
   @Override
   public String getWorkflowId() {

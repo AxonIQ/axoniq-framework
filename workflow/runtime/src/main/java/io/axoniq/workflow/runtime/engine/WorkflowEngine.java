@@ -1,12 +1,11 @@
 package io.axoniq.workflow.runtime.engine;
 
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowDefinition;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
@@ -29,13 +28,13 @@ public class WorkflowEngine {
     this.stateManager = stateManager;
   }
 
-  public <T extends WorkflowContext> T execute(String id, WorkflowDefinition<T> definition) {
-    return execute(id, definition, Map.of());
+  public <T extends WorkflowContext> T execute(WorkflowDefinition<T> definition) {
+    return execute(definition, Map.of());
   }
 
-  public <T extends WorkflowContext> T execute(String id, WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
+  public <T extends WorkflowContext> T execute(WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
     // 2. Create context
-    T context = definition.createContext(id, this.stateManager, workflowPayload);
+    T context = definition.createContext(this.stateManager, workflowPayload);
 
     // 3. Apply history events to context
     List<EventMessage> history = stateManager.getHistory(context.getWorkflowId());

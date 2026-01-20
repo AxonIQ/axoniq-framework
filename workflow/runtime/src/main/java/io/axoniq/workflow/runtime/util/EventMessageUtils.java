@@ -1,13 +1,15 @@
 package io.axoniq.workflow.runtime.util;
 
+import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 public class EventMessageUtils {
@@ -50,6 +52,37 @@ public class EventMessageUtils {
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.TIMED_OUT)
     );
   }
+
+  public static <T> CompletableFuture<T> eventRetriever(
+    StateManager stateManager,
+    Class<T> eventType,
+    Predicate<T> eventCondition
+  ) {
+    return CompletableFuture
+      .supplyAsync(() -> {
+        /*
+         * FIXME: This is an implementation detail of current PoC running in a unit test single-threaded.
+         */
+        while (true) {
+          var events = stateManager.getEventByPayloadType(eventType)
+            .stream()
+            .map(e -> e.payloadAs(eventType))
+            .filter(eventCondition)
+            .toList();
+          if (!events.isEmpty()) {
+            return events.getFirst();
+          }
+          try {
+            //noinspection BusyWait
+            Thread.sleep(100); // TODO polling constant
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for events", e);
+          }
+        }
+      });
+  }
+
 
   private EventMessageUtils() {
     // avoid

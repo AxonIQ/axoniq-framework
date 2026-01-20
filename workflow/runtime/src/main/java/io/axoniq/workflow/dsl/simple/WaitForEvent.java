@@ -1,6 +1,6 @@
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 
 import java.time.Duration;
 import java.util.Map;
@@ -9,11 +9,11 @@ import java.util.function.Predicate;
 public interface WaitForEvent extends WaitForPrimitive {
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
-    return this.waitFor(stepName, eventType, predicate, timeout,t -> getDefaultPayloadProjector().apply(t)).join();
+    return this.waitFor(stepName, eventType, predicate, timeout,t -> typeToPayloadConverter().apply(t)).join();
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout) {
-    return this.waitFor(stepName, eventType, (e) -> true, timeout, t -> getDefaultPayloadProjector().apply(t)).join();
+    return this.waitFor(stepName, eventType, (e) -> true, timeout, t -> typeToPayloadConverter().apply(t)).join();
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType) {

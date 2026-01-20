@@ -1,11 +1,11 @@
 package io.axoniq.workflow.runtime.context;
 
-import io.axoniq.workflow.runtime.api.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.StepFailedException;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.PayloadFunction;
-import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
+import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 

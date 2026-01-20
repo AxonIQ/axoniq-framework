@@ -1,8 +1,8 @@
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.PayloadFunction;
-import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
+import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 
 import java.time.Duration;
 import java.util.Map;
