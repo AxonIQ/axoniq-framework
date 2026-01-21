@@ -75,22 +75,29 @@ class TravelBookingParallelTest {
 
       // 3. FAILING STEP with try-catch
       try {
+
+        //Lets process payment
         context.execute("processPayment", () -> {
+          randomDelay(1000, 2000);
           throw new RuntimeException("Payment gateway unavailable");
         });
-        // Success path (won't execute)
+
+        // Success path
+        // send confirmation to user
         context.execute("sendConfirmation", () -> logger.info("Booking confirmed!"));
+
+
       } catch (CompletionException e) {
-        // CompletionException wraps StepFailedException when using synchronous execute
-        if (e.getCause() instanceof StepFailedException stepFailed) {
-          // 4. ALTERNATIVE PATH on error
-          logger.warn("Payment failed: {}", stepFailed.getMessage());
+          //CANT PROCESS PAYMENT ROLLBACK
+          //ON ERROR PATH
+          logger.warn("Payment failed: {}", e.getMessage());
+
+          //Compensate! Rollback
           context.execute("cancelReservations", () -> {
             logger.info("Canceling flight {} and hotel {}", flightCode, hotelCode);
           });
-        } else {
-          throw e;
-        }
+
+
       }
     }
   }

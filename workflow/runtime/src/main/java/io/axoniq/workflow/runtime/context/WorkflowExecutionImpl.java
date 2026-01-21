@@ -12,17 +12,17 @@ import jakarta.annotation.Nullable;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
 public class WorkflowExecutionImpl implements WorkflowContext {
 
   private final String workflowId;
-  private final Map<String, StepExecution> steps = new LinkedHashMap<>();
+  private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private final StateManager stateManager;
   private Map<String, Object> global;
 
