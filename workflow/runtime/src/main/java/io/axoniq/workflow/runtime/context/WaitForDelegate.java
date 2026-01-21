@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime.context;
 
+import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StepExecution;
@@ -42,17 +43,19 @@ public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate imple
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> eventCondition,
     @Nonnull Duration timeout,
-    @Nonnull Function<T, Map<String, Object>> converter) {
+    @Nonnull Function<T, Map<String, Object>> converter,
+    @Nonnull EventNameCustomizer eventNameCustomizer
+  ) {
 
     Function<T, T> completionHandler = result -> {
       var resultPayload = converter.apply(result);
-      context.getStateManager().append(completedStep(context, stepName, resultPayload)); // TODO: For DCB add a tag, for non-DCB add a technical util (Question 1).
+      context.getStateManager().append(completedStep(context, stepName, resultPayload, eventNameCustomizer)); // TODO: For DCB add a tag, for non-DCB add a technical util (Question 1).
       context.addStep(StepExecution.completed(stepName, result));
       return result;
     };
 
     Consumer<Instant> timeoutOccurredHandler = (timeoutTimestamp) -> {
-      context.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp));
+      context.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp, eventNameCustomizer));
       context.addStep(StepExecution.timedOut(stepName, timeoutTimestamp));
     };
 
@@ -97,7 +100,8 @@ public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate imple
     }
 
     var started = Instant.now(context.getClock());
-    context.getStateManager().append(EventMessageUtils.startedStep(context, stepName, Map.of())); // TODO: really?
+    var payload = Map.<String, Object>of("started", started, "duration", timeout.toString());
+    context.getStateManager().append(EventMessageUtils.startedStep(context, stepName, payload, eventNameCustomizer));
     context.addStep(StepExecution.started(stepName, started)); // FIXME -> timestamp should be additional step attribute instead of misusing payload
 
     return eventRetriever.apply(timeout);

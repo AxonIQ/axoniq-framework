@@ -19,6 +19,7 @@ public interface ExecutePrimitive {
    * @param parameterMapping reducer for parameters (to reduce local and workflow contexts -> effective parameters).
    * @param resultMapping    reducer for result (to reduce result and global context -> global context after action).
    * @param timeout          timeout of the action.
+   * @param eventNameCustomizer event name customizer.
    * @return payload.
    */
   CompletableFuture<Map<String, Object>> execute(
@@ -27,7 +28,8 @@ public interface ExecutePrimitive {
     @Nonnull PayloadFunction action,
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping,
-    @Nonnull Duration timeout
+    @Nonnull Duration timeout,
+    @Nonnull EventNameCustomizer eventNameCustomizer
   );
 
 }

@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
+import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.baseName;
+import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -99,7 +101,8 @@ class UserSignupTest {
 
       @Override
       public void execute(SimpleContext context) {
-        String value = context.execute("getValue", String.class, () -> "cached-value");
+        String value = context.execute("getValue", String.class, () -> "cached-value",
+          namespace("other.namespace").baseName("getValueStep"));
       }
 
       @Override

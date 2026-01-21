@@ -1,5 +1,7 @@
 package io.axoniq.workflow.runtime.api.primitives;
 
+import jakarta.annotation.Nonnull;
+
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -17,8 +19,16 @@ public interface WaitForPrimitive extends ConverterAware {
    * @param predicate instance predicate for the event of given type.
    * @param <T>       type of event.
    * @param converter converter from event to payload.
+   * @param eventNameCustomizer event name customizer.
    * @return completable future.
    */
-  <T> CompletableFuture<T> waitFor(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout, Function<T, Map<String, Object>> converter);
+  <T> CompletableFuture<T> waitFor(
+    @Nonnull String stepName,
+    @Nonnull Class<T> eventType,
+    @Nonnull Predicate<T> predicate,
+    @Nonnull Duration timeout,
+    @Nonnull Function<T, Map<String, Object>> converter,
+    @Nonnull EventNameCustomizer eventNameCustomizer
+  );
 
 }

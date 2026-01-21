@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime.context;
 
+import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
@@ -44,9 +45,10 @@ public class WorkflowExecutionImpl implements WorkflowContext {
     @Nonnull PayloadFunction action,
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping,
-    @Nonnull Duration timeout
+    @Nonnull Duration timeout,
+    @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-    return executePrimitive.execute(stepName, local, action, parameterMapping, resultMapping, timeout);
+    return executePrimitive.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
   }
 
   @Override
@@ -55,9 +57,10 @@ public class WorkflowExecutionImpl implements WorkflowContext {
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> predicate,
     @Nonnull Duration timeout,
-    @Nonnull Function<T, Map<String, Object>> converter
+    @Nonnull Function<T, Map<String, Object>> converter,
+    @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
-    return waitForPrimitive.waitFor(stepName, eventType, predicate, timeout, converter);
+    return waitForPrimitive.waitFor(stepName, eventType, predicate, timeout, converter, eventNameCustomizer);
   }
 
   @Override

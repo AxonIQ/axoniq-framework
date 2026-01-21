@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime.util;
 
+import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
@@ -27,29 +28,29 @@ public class EventMessageUtils {
     );
   }
 
-  public static EventMessage startedStep(WorkflowContext context, String stepName, Map<String, Object> local) {
-    var name = stepName + "Started" + "#0.1";
+  public static EventMessage startedStep(WorkflowContext context, String stepName, Map<String, Object> local, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
     return new GenericEventMessage(MessageType.fromString(name), local,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.STARTED)
     );
   }
 
-  public static EventMessage completedStep(WorkflowContext context, String stepName, Map<String, Object> result) {
-    var name = stepName + "Completed" + "#0.1";
+  public static EventMessage completedStep(WorkflowContext context, String stepName, Map<String, Object> result, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), result,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.COMPLETED)
     );
   }
 
-  public static EventMessage failStep(WorkflowContext context, String stepName, Throwable exception) {
-    var name = stepName + "Failed" + "#0.1";
+  public static EventMessage failStep(WorkflowContext context, String stepName, Throwable exception, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(stepName, Map.of(), StepStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), exception,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.FAILED)
     );
   }
 
-  public static EventMessage timeoutStep(WorkflowContext context, String stepName, Instant time) {
-    var name = stepName + "TimedOut" + "#0.1";
+  public static EventMessage timeoutStep(WorkflowContext context, String stepName, Instant time, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(stepName, Map.of(), StepStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), time,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.TIMED_OUT)
     );

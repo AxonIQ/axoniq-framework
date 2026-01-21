@@ -20,7 +20,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
 
+import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -52,7 +54,7 @@ class LoanApplicationTimeoutTest {
   static class ApplicationService {
     static void createPendingApplication(String applicationId, String applicantId, BigDecimal amount) {
       logger.info("[ApplicationService] Creating pending application {} for {} - ${}",
-          applicationId, applicantId, amount);
+        applicationId, applicantId, amount);
       sleep(100);
       logger.info("[ApplicationService] Application {} created", applicationId);
     }
@@ -80,13 +82,15 @@ class LoanApplicationTimeoutTest {
   // ============== DOMAIN RECORDS ==============
 
   record LoanApplicationEvent(
-      String applicationId,
-      String applicantId,
-      BigDecimal requestedAmount,
-      long creditCheckDelayMs // for testing: how long credit bureau takes
-  ) {}
+    String applicationId,
+    String applicantId,
+    BigDecimal requestedAmount,
+    long creditCheckDelayMs // for testing: how long credit bureau takes
+  ) {
+  }
 
-  record CreditScore(String applicantId, int score, String rating) {}
+  record CreditScore(String applicantId, int score, String rating) {
+  }
 
   // ============== WORKFLOW DEFINITION ==============
 
@@ -111,16 +115,16 @@ class LoanApplicationTimeoutTest {
 
       // Step 1: Create pending application
       context.execute("createApplication",
-          Map.of("applicationId", applicationId, "applicantId", applicantId, "amount", amount),
-          Void.class,
-          p -> {
-            ApplicationService.createPendingApplication(
-                (String) p.get("applicationId"),
-                (String) p.get("applicantId"),
-                (BigDecimal) p.get("amount")
-            );
-            return null;
-          });
+        Map.of("applicationId", applicationId, "applicantId", applicantId, "amount", amount),
+        Void.class,
+        p -> {
+          ApplicationService.createPendingApplication(
+            (String) p.get("applicationId"),
+            (String) p.get("applicantId"),
+            (BigDecimal) p.get("amount")
+          );
+          return null;
+        });
 
       // Step 2: Call external credit bureau with timeout
       CreditScore creditScore;
@@ -132,28 +136,28 @@ class LoanApplicationTimeoutTest {
 
           // COMPENSATION: Cancel application due to timeout
           context.execute("cancelApplication",
-              Map.of("applicationId", applicationId),
-              Void.class,
-              p -> {
-                ApplicationService.cancelApplication(
-                    (String) p.get("applicationId"),
-                    "Credit bureau timeout"
-                );
-                return null;
-              });
+            Map.of("applicationId", applicationId),
+            Void.class,
+            p -> {
+              ApplicationService.cancelApplication(
+                (String) p.get("applicationId"),
+                "Credit bureau timeout"
+              );
+              return null;
+            });
 
           // COMPENSATION: Notify applicant
           context.execute("notifyTimeout",
-              Map.of("applicantId", applicantId, "applicationId", applicationId),
-              Void.class,
-              p -> {
-                NotificationService.notifyApplicant(
-                    (String) p.get("applicantId"),
-                    "Your loan application " + p.get("applicationId") + " could not be processed. " +
-                    "Please try again later."
-                );
-                return null;
-              });
+            Map.of("applicantId", applicantId, "applicationId", applicationId),
+            Void.class,
+            p -> {
+              NotificationService.notifyApplicant(
+                (String) p.get("applicantId"),
+                "Your loan application " + p.get("applicationId") + " could not be processed. " +
+                  "Please try again later."
+              );
+              return null;
+            });
 
           logger.info("--- Compensation complete ---");
           return;
@@ -164,45 +168,45 @@ class LoanApplicationTimeoutTest {
       // Step 3: Process based on credit score
       if (creditScore.score() >= 650) {
         context.execute("approveApplication",
-            Map.of("applicationId", applicationId, "applicantId", applicantId),
-            Void.class,
-            p -> {
-              ApplicationService.approveApplication((String) p.get("applicationId"));
-              return null;
-            });
+          Map.of("applicationId", applicationId, "applicantId", applicantId),
+          Void.class,
+          p -> {
+            ApplicationService.approveApplication((String) p.get("applicationId"));
+            return null;
+          });
 
         context.execute("notifyApproval",
-            Map.of("applicantId", applicantId, "applicationId", applicationId),
-            Void.class,
-            p -> {
-              NotificationService.notifyApplicant(
-                  (String) p.get("applicantId"),
-                  "Congratulations! Your loan application " + p.get("applicationId") + " has been approved."
-              );
-              return null;
-            });
+          Map.of("applicantId", applicantId, "applicationId", applicationId),
+          Void.class,
+          p -> {
+            NotificationService.notifyApplicant(
+              (String) p.get("applicantId"),
+              "Congratulations! Your loan application " + p.get("applicationId") + " has been approved."
+            );
+            return null;
+          });
       } else {
         context.execute("rejectApplication",
-            Map.of("applicationId", applicationId, "creditScore", creditScore.score()),
-            Void.class,
-            p -> {
-              ApplicationService.cancelApplication(
-                  (String) p.get("applicationId"),
-                  "Credit score too low: " + p.get("creditScore")
-              );
-              return null;
-            });
+          Map.of("applicationId", applicationId, "creditScore", creditScore.score()),
+          Void.class,
+          p -> {
+            ApplicationService.cancelApplication(
+              (String) p.get("applicationId"),
+              "Credit score too low: " + p.get("creditScore")
+            );
+            return null;
+          });
 
         context.execute("notifyRejection",
-            Map.of("applicantId", applicantId, "applicationId", applicationId),
-            Void.class,
-            p -> {
-              NotificationService.notifyApplicant(
-                  (String) p.get("applicantId"),
-                  "Your loan application " + p.get("applicationId") + " was not approved due to credit requirements."
-              );
-              return null;
-            });
+          Map.of("applicantId", applicantId, "applicationId", applicationId),
+          Void.class,
+          p -> {
+            NotificationService.notifyApplicant(
+              (String) p.get("applicantId"),
+              "Your loan application " + p.get("applicationId") + " was not approved due to credit requirements."
+            );
+            return null;
+          });
       }
 
       logger.info("========== Loan Application Complete: {} ==========", applicationId);
@@ -211,19 +215,24 @@ class LoanApplicationTimeoutTest {
     private CreditScore callCreditBureauWithTimeout(SimpleContext context, String applicantId, long delayMs) {
       String stepSpecificKey = "__creditScore";
 
-      Map<String, Object> result = context.execute(
-          "checkCredit",
-          Map.of("applicantId", applicantId, "delayMs", delayMs),
-          p -> {
-            CreditScore score = CreditBureauService.checkCredit(
-                (String) p.get("applicantId"),
-                ((Number) p.get("delayMs")).longValue()
-            );
-            return Map.of(stepSpecificKey, score);
-          },
-          PayloadReducer.local(),
-          PayloadReducer.all(),
-          CREDIT_CHECK_TIMEOUT
+      var result = context.execute(
+        "checkCredit",
+        payload()
+          .with("applicantId", applicantId)
+          .with("delayMs", delayMs)
+          .getValues(),
+        p -> {
+          var payload = payload(p);
+          CreditScore score = CreditBureauService.checkCredit(
+            payload.get("applicantId"),
+            payload.get("delayMs")
+          );
+          return payload(stepSpecificKey, score).getValues();
+        },
+        PayloadReducer.local(),
+        PayloadReducer.all(),
+        CREDIT_CHECK_TIMEOUT,
+        defaults()
       ).join();
 
       return (CreditScore) result.get(stepSpecificKey);
@@ -261,12 +270,12 @@ class LoanApplicationTimeoutTest {
     coordinator.register(LoanApplicationWorkflow.class, LoanApplicationEvent.class);
 
     delayedPublisher.addSchedules(List.of(
-        ofMillis(100, new LoanApplicationEvent(
-            "LOAN-001",
-            "APPLICANT-123",
-            BigDecimal.valueOf(25000),
-            2000  // Credit check takes 2000ms, but timeout is 500ms
-        ))
+      ofMillis(100, new LoanApplicationEvent(
+        "LOAN-001",
+        "APPLICANT-123",
+        BigDecimal.valueOf(25000),
+        2000  // Credit check takes 2000ms, but timeout is 500ms
+      ))
     ));
 
     // When
@@ -289,11 +298,11 @@ class LoanApplicationTimeoutTest {
 
     // Verify compensation ran
     assertThat(context.getStepHistory())
-        .contains("cancelApplication", "notifyTimeout");
+      .contains("cancelApplication", "notifyTimeout");
 
     // Verify approval steps did NOT run
     assertThat(context.getStepHistory())
-        .doesNotContain("approveApplication", "notifyApproval");
+      .doesNotContain("approveApplication", "notifyApproval");
 
     printStepHistory(context);
   }
@@ -304,12 +313,12 @@ class LoanApplicationTimeoutTest {
     coordinator.register(LoanApplicationWorkflow.class, LoanApplicationEvent.class);
 
     delayedPublisher.addSchedules(List.of(
-        ofMillis(100, new LoanApplicationEvent(
-            "LOAN-002",
-            "APPLICANT-456",
-            BigDecimal.valueOf(15000),
-            100  // Credit check takes 100ms, well within 500ms timeout
-        ))
+      ofMillis(100, new LoanApplicationEvent(
+        "LOAN-002",
+        "APPLICANT-456",
+        BigDecimal.valueOf(15000),
+        100  // Credit check takes 100ms, well within 500ms timeout
+      ))
     ));
 
     // When
@@ -326,11 +335,11 @@ class LoanApplicationTimeoutTest {
 
     // Verify happy path executed
     assertThat(context.getStepHistory())
-        .contains("createApplication", "checkCredit", "approveApplication", "notifyApproval");
+      .contains("createApplication", "checkCredit", "approveApplication", "notifyApproval");
 
     // Verify compensation did NOT run
     assertThat(context.getStepHistory())
-        .doesNotContain("notifyTimeout");
+      .doesNotContain("notifyTimeout");
 
     printStepHistory(context);
   }

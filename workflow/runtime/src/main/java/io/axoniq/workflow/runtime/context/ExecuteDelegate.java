@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime.context;
 
+import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StepExecution;
@@ -32,7 +33,8 @@ public class ExecuteDelegate extends AbstractContextAwarePrimitiveDelegate imple
     @Nonnull PayloadFunction action,
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping,
-    @Nonnull Duration timeout
+    @Nonnull Duration timeout,
+    @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
     StepExecution existing = context.getStep(stepName);
     if (existing != null) {
@@ -56,20 +58,20 @@ public class ExecuteDelegate extends AbstractContextAwarePrimitiveDelegate imple
         () -> {
           try {
 
-            context.getStateManager().append(startedStep(context, stepName, local));
+            context.getStateManager().append(startedStep(context, stepName, local, eventNameCustomizer));
             context.addStep(StepExecution.started(stepName, Instant.now(context.getClock())));
 
             // step execution
             var parameters = parameterMapping.apply(context.getPayload(), local); // local copy of the payload
             Map<String, Object> result = action.apply(parameters);
 
-            context.getStateManager().append(completedStep(context, stepName, result));
+            context.getStateManager().append(completedStep(context, stepName, result, eventNameCustomizer));
             context.addStep(StepExecution.completed(stepName, result));
 
             context.modifyPayload(p -> resultMapping.apply(p, result)); // write back payload
             return result;
           } catch (RuntimeException ex) {
-            context.getStateManager().append(failStep(context, stepName, ex));
+            context.getStateManager().append(failStep(context, stepName, ex, eventNameCustomizer));
             context.addStep(StepExecution.failed(stepName, ex));
             throw ex;
           }
@@ -78,7 +80,7 @@ public class ExecuteDelegate extends AbstractContextAwarePrimitiveDelegate imple
       .exceptionally(ex -> {
         if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
           var timeoutTimestamp = Instant.now(context.getClock());
-          context.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp));
+          context.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp, eventNameCustomizer));
           context.addStep(StepExecution.timedOut(stepName, timeoutTimestamp));
           throw new CompletionException(ex);
         }

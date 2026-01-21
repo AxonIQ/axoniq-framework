@@ -54,8 +54,7 @@ public class StateManager {
         workflowEvents.forEach(event -> {
           var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
           var name = event.type().qualifiedName().toString();
-          var capitalizedName = name.substring(0, 1).toUpperCase() + name.substring(1);
-          logger.info("{} ({}): {}", capitalizedName, status, event.payloadAs(Object.class));
+          logger.info("{} ({}): {}", name, status, event.payloadAs(Object.class));
         });
         logger.info("------------------");
       }
