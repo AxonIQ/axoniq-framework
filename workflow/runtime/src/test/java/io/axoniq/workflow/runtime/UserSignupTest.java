@@ -75,7 +75,7 @@ class UserSignupTest {
   void shouldExecuteAllStepsOnFirstRun() {
     User user = new User("user-123", "test@example.com");
 
-    var context = engine.execute(new UserSignupWorkflow(), Map.of("user", user));
+    var context = engine.execute(new UserSignupWorkflow(), Map.of("user", user)).join();
     assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail");
 
     // Verify events published
@@ -109,18 +109,15 @@ class UserSignupTest {
 
     var definition = new MyWorkflowDefinition();
 
-    // First execution
-    engine.execute(definition);
+    engine.execute(definition).join();
 
-    // Verify events after first run
     var eventsAfterFirst = stateManager.getEventPayloads(workflowId);
     assertThat(eventsAfterFirst).hasSize(2);
+    //noinspection unchecked
     assertEquals("cached-value", ((Map<String, Object>) eventsAfterFirst.get(1)).get("__getValue"));
 
-    // Second execution - should return cached value
-    engine.execute(definition);
+    engine.execute(definition).join();
 
-    // Verify no new events on replay
     var eventsAfterSecond = stateManager.getEventPayloads(workflowId);
     assertThat(eventsAfterSecond).describedAs("No new events should be published on replay").hasSize(2);
   }

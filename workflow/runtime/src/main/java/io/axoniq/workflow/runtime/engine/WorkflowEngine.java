@@ -6,6 +6,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
@@ -28,11 +29,11 @@ public class WorkflowEngine {
     this.stateManager = stateManager;
   }
 
-  public <T extends WorkflowContext> T execute(WorkflowDefinition<T> definition) {
+  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowDefinition<T> definition) {
     return execute(definition, Map.of());
   }
 
-  public <T extends WorkflowContext> T execute(WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
+  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
     // 2. Create context
     T context = definition.createContext(this.stateManager, workflowPayload);
 
@@ -62,13 +63,14 @@ public class WorkflowEngine {
       });
     }
 
-    // 4. Execute workflow
-    try {
-      definition.execute(context);
-    } catch (RuntimeException e) {
-      stateManager.append(failedWorkflow(context, e));
-    }
-
-    return context;
+    return CompletableFuture.supplyAsync(() -> {
+      try {
+        definition.execute(context);
+        return context;
+      } catch (RuntimeException e) {
+        stateManager.append(failedWorkflow(context, e)); // TODO
+        throw e;
+      }
+    });
   }
 }

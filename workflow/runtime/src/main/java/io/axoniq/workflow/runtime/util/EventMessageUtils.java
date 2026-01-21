@@ -58,6 +58,18 @@ public class EventMessageUtils {
     Class<T> eventType,
     Predicate<T> eventCondition
   ) {
+    return eventMessageRetriever(
+      stateManager,
+      eventType,
+      (m) -> eventCondition.test(m.payloadAs(eventType))
+    ).thenApply(e -> e.payloadAs(eventType));
+  }
+
+  public static <T> CompletableFuture<EventMessage> eventMessageRetriever(
+    StateManager stateManager,
+    Class<T> eventType,
+    Predicate<EventMessage> eventCondition
+  ) {
     return CompletableFuture
       .supplyAsync(() -> {
         /*
@@ -66,7 +78,6 @@ public class EventMessageUtils {
         while (true) {
           var events = stateManager.getEventByPayloadType(eventType)
             .stream()
-            .map(e -> e.payloadAs(eventType))
             .filter(eventCondition)
             .toList();
           if (!events.isEmpty()) {

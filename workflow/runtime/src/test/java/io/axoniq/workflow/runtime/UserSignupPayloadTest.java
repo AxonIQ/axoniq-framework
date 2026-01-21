@@ -141,7 +141,7 @@ class UserSignupPayloadTest {
     // Arm the publisher to start the delayed execution
     delayedPublisher.start();
 
-    var context = engine.execute(new UserSignupWorkflow(), payload);
+    var context = engine.execute(new UserSignupWorkflow(), payload).join();
 
     assertThat(context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
       Set.of("createUser", "activateUser", "confirmedEmail", "block-500ms", "sendWelcomeEmail")
