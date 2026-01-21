@@ -12,7 +12,7 @@ Options:
 they are stored and correlated with workflow (in order to rehydrate the workflow state afterwards). => This will require DCB and not pollute the store with technical events. (✓) 
 - If we have explicit events for all lifecycle transitions, we only need to source in events the workflow created => This will not require DCB at costs of technical events.
 - We mix both approaches and generate event names out of the step definitions and pass their content into it. By doing so we provide unique event experience.
-
+- Offer a QOS param on execute function, if QOS is configured, just skip publish of StepStartedEvent and proceed as usual. Only StepCompleted will be published, but if crash occurs function will be called twice.
 
 ## Question 2: How do we implement waiting for event?
 
