@@ -55,15 +55,7 @@ public class Coordinator {
 
   public void stop() {
     isRunning = false;
-    executorService.shutdownNow();
-    try {
-      if (!executorService.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
-        logger.warn("Executor did not terminate within timeout");
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      logger.warn("Interrupted while waiting for executor termination");
-    }
+    executorService.shutdown();
   }
 
   @SuppressWarnings("unchecked")
@@ -77,9 +69,7 @@ public class Coordinator {
           stateManager,
           eventType,
           m -> !consumedMessages.contains(m.identifier())
-        ).orTimeout(500, java.util.concurrent.TimeUnit.MILLISECONDS).join();
-
-        if (!isRunning) break;  // Check again after blocking call
+        ).join();
 
         consumedMessages.add(message.identifier());
 
@@ -108,15 +98,11 @@ public class Coordinator {
           logger.info("Skipping event {}, since it would start workflow with id {}, which is already running.", event, workflowId);
         }
       } catch (Exception e) {
-        if (!isRunning) break;  // Exit if shutting down
-        // If there's an error (including timeout), log it and sleep a bit to avoid tight loops
-        if (!(e.getCause() instanceof java.util.concurrent.TimeoutException)) {
-          logger.error("Error processing event type {}: {}", eventType.getName(), e.getMessage(), e);
-        }
+        // If there's an error, log it and sleep a bit to avoid tight loops
+        logger.error("Error processing event type {}: {}", eventType.getName(), e.getMessage(), e);
         sleep(101);
       }
     }
-    logger.info("Polling stopped for event type {}", eventType.getName());
   }
 
   public List<WorkflowContext> getHistory() {
