@@ -74,7 +74,7 @@ class UserSignupPayloadTest {
             .with("success", true);
         });
 
-      Boolean success = (Boolean) createdUser.get("success");
+      Boolean success = createdUser.get("success");
 
       if (!success) {
         return;
@@ -83,7 +83,7 @@ class UserSignupPayloadTest {
       var activated = context.execute("activateUser",
         startParams,
         payload -> {
-          User user = (User) payload.get("user");
+          User user = payload.get("user");
           logger.info("Activating user {}.", user.id);
           return payload()
             .with("email", user.email)
