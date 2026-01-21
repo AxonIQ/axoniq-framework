@@ -5,6 +5,7 @@ import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -20,6 +21,10 @@ public interface ExecuteInLocalContext extends ExecutePrimitive {
 
   default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadFunction action) {
     return execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5)).join();
+  }
+
+  default <T> T execute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
+    return execute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
   }
 
   default <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action) {
@@ -46,12 +51,18 @@ public interface ExecuteInLocalContext extends ExecutePrimitive {
     return execute(stepName, Map.of(), returnType, (p) -> action.get());
   }
 
+  default void execute(String stepName, Payload payload, Consumer<Payload> action) {
+    execute(stepName, payload, (p) -> {
+      action.accept(p);
+      return payload();
+    });
+  }
+
   default void execute(String stepName, Runnable action) {
     execute(stepName, Void.class, () -> {
       action.run();
       return null;
     });
   }
-
 
 }

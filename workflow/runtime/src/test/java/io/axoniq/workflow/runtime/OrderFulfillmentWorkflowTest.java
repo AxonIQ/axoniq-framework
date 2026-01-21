@@ -19,6 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -40,7 +41,7 @@ class OrderFulfillmentWorkflowTest {
       int available = 100; // mock: always have 100 in stock
       boolean inStock = available >= quantity;
       logger.info("[InventoryService] Product {} - Available: {}, Requested: {}, InStock: {}",
-          productId, available, quantity, inStock);
+        productId, available, quantity, inStock);
       return new InventoryResult(productId, available, inStock);
     }
 
@@ -115,16 +116,31 @@ class OrderFulfillmentWorkflowTest {
 
   // ============== DOMAIN RECORDS ==============
 
-  record Order(String orderId, String customerId, String productId, int quantity, BigDecimal totalAmount) {}
-  record InventoryResult(String productId, int available, boolean inStock) {}
-  record PaymentValidation(String customerId, boolean valid, String status) {}
-  record PaymentResult(String transactionId, BigDecimal amount, String status) {}
-  record FraudCheckResult(int riskScore, boolean passed) {}
-  record ShipmentResult(String trackingNumber, String status) {}
+  record Order(String orderId, String customerId, String productId, int quantity, BigDecimal totalAmount) {
+  }
+
+  record InventoryResult(String productId, int available, boolean inStock) {
+  }
+
+  record PaymentValidation(String customerId, boolean valid, String status) {
+  }
+
+  record PaymentResult(String transactionId, BigDecimal amount, String status) {
+  }
+
+  record FraudCheckResult(int riskScore, boolean passed) {
+  }
+
+  record ShipmentResult(String trackingNumber, String status) {
+  }
 
   // Trigger events
-  record OrderReceivedEvent(String orderId, String customerId, String productId, int quantity, BigDecimal totalAmount, boolean simulatePaymentFailure) {}
-  record ManagerApprovalEvent(String orderId, String managerId, boolean approved, String comment) {}
+  record OrderReceivedEvent(String orderId, String customerId, String productId, int quantity, BigDecimal totalAmount,
+                            boolean simulatePaymentFailure) {
+  }
+
+  record ManagerApprovalEvent(String orderId, String managerId, boolean approved, String comment) {
+  }
 
   // ============== WORKFLOW DEFINITION ==============
 
@@ -138,13 +154,13 @@ class OrderFulfillmentWorkflowTest {
     @Override
     public void execute(SimpleContext context) {
       // Extract order data from trigger event payload
-      Map<String, Object> triggerData = context.getPayload();
+      var triggerData = payload(context);
       Order order = new Order(
-        (String) triggerData.get("orderId"),
-        (String) triggerData.get("customerId"),
-        (String) triggerData.get("productId"),
-        (Integer) triggerData.get("quantity"),
-        (BigDecimal) triggerData.get("totalAmount")
+        triggerData.get("orderId"),
+        triggerData.get("customerId"),
+        triggerData.get("productId"),
+        triggerData.get("quantity"),
+        triggerData.get("totalAmount")
       );
       boolean simulatePaymentFailure = Boolean.TRUE.equals(triggerData.get("simulatePaymentFailure"));
 
@@ -158,32 +174,36 @@ class OrderFulfillmentWorkflowTest {
 
       CompletableFuture<InventoryResult> inventoryFuture = CompletableFuture.supplyAsync(() ->
         context.execute("checkInventory",
-          Map.of("productId", order.productId(), "quantity", order.quantity()),
+          payload()
+            .with("productId", order.productId())
+            .with("quantity", order.quantity()),
           InventoryResult.class,
           payload -> InventoryService.checkInventory(
-            (String) payload.get("productId"),
-            (Integer) payload.get("quantity")
+            payload.get("productId"),
+            payload.get("quantity")
           ))
       );
 
       CompletableFuture<PaymentValidation> paymentValidationFuture = CompletableFuture.supplyAsync(() ->
         context.execute("validatePayment",
-          Map.of("customerId", order.customerId(), "amount", order.totalAmount()),
+          payload()
+            .with("customerId", order.customerId())
+            .with("amount", order.totalAmount()),
           PaymentValidation.class,
           payload -> PaymentService.validatePayment(
-            (String) payload.get("customerId"),
-            (BigDecimal) payload.get("amount")
+            payload.get("customerId"),
+            payload.get("amount")
           ))
       );
 
       CompletableFuture<FraudCheckResult> fraudFuture = CompletableFuture.supplyAsync(() ->
         context.execute("checkFraud",
-          Map.of("customerId", order.customerId(), "productId", order.productId(), "amount", order.totalAmount()),
+          payload(context),                   // <-- Just pass the entire order instead of selecting the fields
           FraudCheckResult.class,
           payload -> FraudService.checkFraud(
-            (String) payload.get("customerId"),
-            (String) payload.get("productId"),
-            (BigDecimal) payload.get("amount")
+            payload.get("customerId"),
+            payload.get("productId"),
+            payload.get("amount")
           ))
       );
 
@@ -198,29 +218,28 @@ class OrderFulfillmentWorkflowTest {
       // Check if all validations passed
       if (!inventory.inStock()) {
         context.execute("notifyOutOfStock",
-          Map.of("customerId", order.customerId(), "productId", order.productId()),
-          Void.class,
+          payload()
+            .with("customerId", order.customerId())
+            .with("productId", order.productId()),
           payload -> {
             NotificationService.notifyCustomer(
-              (String) payload.get("customerId"),
+              payload.get("customerId"),
               "Sorry, product " + payload.get("productId") + " is out of stock"
             );
-            return null;
           });
         return;
       }
 
       if (!paymentValidation.valid() || !fraudCheck.passed()) {
         context.execute("notifyOrderRejected",
-          Map.of("customerId", order.customerId(), "reason",
-            !paymentValidation.valid() ? "Payment validation failed" : "Fraud check failed"),
-          Void.class,
+          payload()
+            .with("customerId", order.customerId())
+            .with("reason", !paymentValidation.valid() ? "Payment validation failed" : "Fraud check failed"),
           payload -> {
             NotificationService.notifyCustomer(
-              (String) payload.get("customerId"),
+              payload.get("customerId"),
               "Order rejected: " + payload.get("reason")
             );
-            return null;
           });
         return;
       }
@@ -233,27 +252,29 @@ class OrderFulfillmentWorkflowTest {
 
       // Step 1: Reserve Stock
       context.execute("reserveStock",
-        Map.of("productId", order.productId(), "quantity", order.quantity()),
-        Void.class,
+        payload()
+          .with("productId", order.productId())
+          .with("quantity", order.quantity()),
         payload -> {
           InventoryService.reserveStock(
-            (String) payload.get("productId"),
-            (Integer) payload.get("quantity")
+            payload.get("productId"),
+            payload.get("quantity")
           );
-          return null;
         });
 
       // Step 2: Charge Payment (with error handling)
       PaymentResult paymentResult;
       try {
         paymentResult = context.execute("chargePayment",
-          Map.of("customerId", order.customerId(), "amount", order.totalAmount(),
-                 "simulateFailure", simulatePaymentFailure),
+          payload()
+            .with("customerId", order.customerId())
+            .with("amount", order.totalAmount())
+            .with("simulateFailure", simulatePaymentFailure),
           PaymentResult.class,
           payload -> PaymentService.chargePayment(
-            (String) payload.get("customerId"),
-            (BigDecimal) payload.get("amount"),
-            (Boolean) payload.get("simulateFailure")
+            payload.get("customerId"),
+            payload.get("amount"),
+            payload.get("simulateFailure")
           ));
       } catch (CompletionException e) {
         // ==========================================
@@ -262,25 +283,25 @@ class OrderFulfillmentWorkflowTest {
         logger.error("--- Payment Failed! Starting Compensation ---");
 
         context.execute("releaseStock",
-          Map.of("productId", order.productId(), "quantity", order.quantity()),
-          Void.class,
+          payload()
+            .with("productId", order.productId())
+            .with("quantity", order.quantity()),
           payload -> {
             InventoryService.releaseStock(
-              (String) payload.get("productId"),
-              (Integer) payload.get("quantity")
+              payload.get("productId"),
+              payload.get("quantity")
             );
-            return null;
           });
 
         context.execute("notifyPaymentFailed",
-          Map.of("customerId", order.customerId(), "orderId", order.orderId()),
-          Void.class,
+          payload()
+            .with("customerId", order.customerId())
+            .with("orderId", order.orderId()),
           payload -> {
             NotificationService.notifyCustomer(
-              (String) payload.get("customerId"),
+              payload.get("customerId"),
               "Payment failed for order " + payload.get("orderId") + ". Please try again."
             );
-            return null;
           });
 
         logger.info("--- Compensation Complete ---");
@@ -289,26 +310,31 @@ class OrderFulfillmentWorkflowTest {
 
       // Step 3: Create Shipment
       ShipmentResult shipment = context.execute("createShipment",
-        Map.of("orderId", order.orderId(), "productId", order.productId(), "quantity", order.quantity()),
+        payload()
+          .with("orderId", order.orderId())
+          .with("productId", order.productId())
+          .with("quantity", order.quantity()),
         ShipmentResult.class,
         payload -> ShippingService.createShipment(
-          (String) payload.get("orderId"),
-          (String) payload.get("productId"),
-          (Integer) payload.get("quantity")
+          payload.get("orderId"),
+          payload.get("productId"),
+          payload.get("quantity")
         ));
 
       // Step 4: Send Confirmation
       context.execute("sendConfirmation",
-        Map.of("customerId", order.customerId(), "orderId", order.orderId(),
-               "trackingNumber", shipment.trackingNumber(), "transactionId", paymentResult.transactionId()),
-        Void.class,
+        payload()
+          .with("customerId", order.customerId())
+          .with("orderId", order.orderId())
+          .with("trackingNumber", shipment.trackingNumber())
+          .with("transactionId", paymentResult.transactionId()),
         payload -> {
           NotificationService.notifyCustomer(
-            (String) payload.get("customerId"),
+            payload.get("customerId"),
             String.format("Order %s confirmed! Transaction: %s, Tracking: %s",
-              payload.get("orderId"), payload.get("transactionId"), payload.get("trackingNumber"))
+              payload.get("orderId"), payload.get("transactionId"), payload.get("trackingNumber")
+            )
           );
-          return null;
         });
 
       logger.info("========== Order Fulfillment Complete: {} ==========", order.orderId());
@@ -329,13 +355,13 @@ class OrderFulfillmentWorkflowTest {
     @Override
     public void execute(SimpleContext context) {
       // Extract order details from the trigger event payload
-      Map<String, Object> triggerData = context.getPayload();
+      var triggerData = payload(context);
       Order order = new Order(
-        (String) triggerData.get("orderId"),
-        (String) triggerData.get("customerId"),
-        (String) triggerData.get("productId"),
-        (Integer) triggerData.get("quantity"),
-        (BigDecimal) triggerData.get("totalAmount")
+        triggerData.get("orderId"),
+        triggerData.get("customerId"),
+        triggerData.get("productId"),
+        triggerData.get("quantity"),
+        triggerData.get("totalAmount")
       );
       logger.info("========== Starting Order With Approval: {} ==========", order.orderId());
 
@@ -346,22 +372,27 @@ class OrderFulfillmentWorkflowTest {
 
       CompletableFuture<InventoryResult> inventoryFuture = CompletableFuture.supplyAsync(() ->
         context.execute("checkInventory",
-          Map.of("productId", order.productId(), "quantity", order.quantity()),
+          payload()
+            .with("productId", order.productId())
+            .with("quantity", order.quantity()),
           InventoryResult.class,
           payload -> InventoryService.checkInventory(
-            (String) payload.get("productId"),
-            (Integer) payload.get("quantity")
+            payload.get("productId"),
+            payload.get("quantity")
           ))
       );
 
       CompletableFuture<FraudCheckResult> fraudFuture = CompletableFuture.supplyAsync(() ->
         context.execute("checkFraud",
-          Map.of("customerId", order.customerId(), "productId", order.productId(), "amount", order.totalAmount()),
+          payload()
+            .with("customerId", order.customerId())
+            .with("productId", order.productId())
+            .with("amount", order.totalAmount()),
           FraudCheckResult.class,
           payload -> FraudService.checkFraud(
-            (String) payload.get("customerId"),
-            (String) payload.get("productId"),
-            (BigDecimal) payload.get("amount")
+            payload.get("customerId"),
+            payload.get("productId"),
+            payload.get("amount")
           ))
       );
 
@@ -381,13 +412,14 @@ class OrderFulfillmentWorkflowTest {
 
         // Notify manager that approval is needed
         context.execute("requestManagerApproval",
-          Map.of("orderId", order.orderId(), "amount", order.totalAmount(), "customerId", order.customerId()),
-          Void.class,
+          payload()
+            .with("orderId", order.orderId())
+            .with("amount", order.totalAmount())
+            .with("customerId", order.customerId()),
           payload -> {
             logger.info("[NotificationService] Sending approval request to manager for order {} (${}) ",
               payload.get("orderId"), payload.get("amount"));
             randomDelay(200, 400);
-            return null;
           });
 
         // *** WAIT FOR HUMAN INPUT ***
@@ -404,14 +436,15 @@ class OrderFulfillmentWorkflowTest {
 
         if (!approval.approved()) {
           context.execute("notifyApprovalRejected",
-            Map.of("customerId", order.customerId(), "orderId", order.orderId(), "comment", approval.comment()),
-            Void.class,
+            payload()
+              .with("customerId", order.customerId())
+              .with("orderId", order.orderId())
+              .with("comment", approval.comment()),
             payload -> {
               NotificationService.notifyCustomer(
-                (String) payload.get("customerId"),
+                payload.get("customerId"),
                 "Order " + payload.get("orderId") + " rejected by manager: " + payload.get("comment")
               );
-              return null;
             });
           return;
         }
@@ -423,41 +456,44 @@ class OrderFulfillmentWorkflowTest {
       logger.info("--- Phase 3: Processing Order ---");
 
       context.execute("reserveStock",
-        Map.of("productId", order.productId(), "quantity", order.quantity()),
-        Void.class,
+        payload("productId", order.productId(), "quantity", order.quantity()),
         payload -> {
-          InventoryService.reserveStock((String) payload.get("productId"), (Integer) payload.get("quantity"));
-          return null;
+          InventoryService.reserveStock(
+            payload.get("productId"),
+            payload.get("quantity"));
         });
 
       PaymentResult payment = context.execute("chargePayment",
-        Map.of("customerId", order.customerId(), "amount", order.totalAmount(), "simulateFailure", false),
+        payload()
+          .with("customerId", order.customerId())
+          .with("amount", order.totalAmount())
+          .with("simulateFailure", false),
         PaymentResult.class,
         payload -> PaymentService.chargePayment(
-          (String) payload.get("customerId"),
-          (BigDecimal) payload.get("amount"),
-          (Boolean) payload.get("simulateFailure")
+          payload.get("customerId"),
+          payload.get("amount"),
+          payload.get("simulateFailure")
         ));
 
       ShipmentResult shipment = context.execute("createShipment",
-        Map.of("orderId", order.orderId(), "productId", order.productId(), "quantity", order.quantity()),
+        payload().with("orderId", order.orderId()).with("productId", order.productId()).with("quantity", order.quantity()),
         ShipmentResult.class,
         payload -> ShippingService.createShipment(
-          (String) payload.get("orderId"),
-          (String) payload.get("productId"),
-          (Integer) payload.get("quantity")
+          payload.get("orderId"),
+          payload.get("productId"),
+          payload.get("quantity")
         ));
 
       context.execute("sendConfirmation",
-        Map.of("customerId", order.customerId(), "trackingNumber", shipment.trackingNumber(),
-               "transactionId", payment.transactionId()),
-        Void.class,
+        payload()
+          .with("customerId", order.customerId())
+          .with("trackingNumber", shipment.trackingNumber())
+          .with("transactionId", payment.transactionId()),
         payload -> {
           NotificationService.notifyCustomer(
-            (String) payload.get("customerId"),
+            payload.get("customerId"),
             "Order confirmed! Tracking: " + payload.get("trackingNumber")
           );
-          return null;
         });
 
       logger.info("========== Order With Approval Complete: {} ==========", order.orderId());
