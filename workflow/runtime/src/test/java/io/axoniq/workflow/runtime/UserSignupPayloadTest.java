@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,17 +62,16 @@ class UserSignupPayloadTest {
     @Override
     public void execute(SimpleContext context) {
 
-      var startParams = context.getPayload();
+      var startParams = payload(context);
       logger.info("Starting user signup workflow with payload {}", startParams);
 
       var createdUser = context.execute("createUser",
         startParams,
         payload -> {
           logger.info("Crating user.");
-          return Map.of(
-            "created", Instant.now(context.getClock()),
-            "success", true
-          );
+          return payload()
+            .with("created", Instant.now(context.getClock()))
+            .with("success", true);
         });
 
       Boolean success = (Boolean) createdUser.get("success");
@@ -85,14 +85,14 @@ class UserSignupPayloadTest {
         payload -> {
           User user = (User) payload.get("user");
           logger.info("Activating user {}.", user.id);
-          return Map.of(
-            "email", user.email,
-            "userid", user.id
-          );
+          return payload()
+            .with("email", user.email)
+            .with("userid", user.id)
+          ;
         });
 
-      String activatedEmail = (String) activated.get("email");
-      String correlationUserId = (String) activated.get("userid");
+      String activatedEmail = activated.get("email");
+      String correlationUserId = activated.get("userid");
 
       try {
 
@@ -103,11 +103,11 @@ class UserSignupPayloadTest {
         );
         if (confirmed.email.equals(activatedEmail)) {
           context.wait("blocked500ms", Duration.ofMillis(500));
-          context.execute("sendWelcomeEmail",                                 // sendWelcomeEmailStarted(email=asasa@dfdfd.de), , metadata{type=StepStarted, workflowId=4711}
-            Map.of("email", activatedEmail),
+          context.execute("sendWelcomeEmail",
+            payload("email", activatedEmail),
             (p) -> {
               logger.info("Sending welcome mail to user.");
-              return Map.of("sent", true);                // sendWelcomeEmailCompleted(sent=true), metadata{type=StepCompleted, workflowId=4711}
+              return payload("sent", true);
             });
         } else {
           logger.info("Welcome mail not sent. {} != {}", confirmed.email, activatedEmail);
@@ -125,12 +125,12 @@ class UserSignupPayloadTest {
   @Test
   void shouldExecuteAllStepsOnManualRun() {
     User user = new User("user-123", "test@example.com");
-    var payload = Map.<String, Object>of("user", user);
+    var payload = payload().with("user", user);
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(
         500,
-        new EmailConfirmed("user-456", "kermit@muppets.biz") // wrong util, filtered by the predicate
+        new EmailConfirmed("user-456", "kermit@muppets.biz") // wrong event, filtered by the predicate
       ),
       ofMillis(
         500,
@@ -141,7 +141,7 @@ class UserSignupPayloadTest {
     // Arm the publisher to start the delayed execution
     delayedPublisher.start();
 
-    var context = engine.execute(new UserSignupWorkflow(), payload).join();
+    var context = engine.execute(new UserSignupWorkflow(), payload.getValues()).join();
 
     assertThat(context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
       Set.of("createUser", "activateUser", "emailConfirmed", "blocked500ms", "sendWelcomeEmail")

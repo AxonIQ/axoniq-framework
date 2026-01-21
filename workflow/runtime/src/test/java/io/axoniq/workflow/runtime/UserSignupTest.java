@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.UUID;
 
+import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,9 +61,9 @@ class UserSignupTest {
         return;
       }
       context.execute("activateUser",
-        () -> { //ActivationOfUserStarted -> //ActivateUserStarted -> //StepStartedEvent
+        () -> {
           logger.info("Activating user.");
-        });//ActivateUserCompleted  -> metadata stepType//StepCompletedEvent
+        });
 
       context.execute("sendWelcomeEmail", () -> {
         logger.info("Sending welcome mail to user.");
@@ -75,7 +76,7 @@ class UserSignupTest {
   void shouldExecuteAllStepsOnFirstRun() {
     User user = new User("user-123", "test@example.com");
 
-    var context = engine.execute(new UserSignupWorkflow(), Map.of("user", user)).join();
+    var context = engine.execute(new UserSignupWorkflow(), payload("user", user).getValues()).join();
     assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail");
 
     // Verify events published

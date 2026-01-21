@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TravelBookingParallelTest {
@@ -94,7 +95,7 @@ class TravelBookingParallelTest {
 
           //Compensate! Rollback
           context.execute("cancelReservations",
-            Map.of("flightCode", flightCode, "hotelCode", hotelCode),
+            payload("flightCode", flightCode).with("hotelCode", hotelCode).getValues(),
             Boolean.class,
             payload -> {
               logger.info("Canceling flight {} and hotel {}", payload.get("flightCode"), payload.get("hotelCode"));

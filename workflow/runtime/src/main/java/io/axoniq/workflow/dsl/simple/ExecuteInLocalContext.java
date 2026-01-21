@@ -2,28 +2,30 @@ package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
-import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static io.axoniq.workflow.dsl.simple.Payload.payload;
+import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.all;
+import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.local;
+
 public interface ExecuteInLocalContext extends ExecutePrimitive {
+
+  default Payload execute(String stepName, Payload payload, Function<Payload, Payload> action) {
+    return payload(execute(stepName, payload.getValues(), p -> action.apply(payload(p)).getValues()));
+  }
+
   default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadFunction action) {
-    return execute(
-      stepName,
-      payload,
-      action,
-      PayloadReducer.local(),
-      PayloadReducer.all()
-    );
+    return execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5)).join();
   }
 
   default <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action) {
     var stepSpecificName = "__" + stepName;
     //noinspection unchecked
-    return (T)execute(
+    return (T) execute(
       stepName,
       payload,
       p -> {
@@ -34,9 +36,10 @@ public interface ExecuteInLocalContext extends ExecutePrimitive {
           return Map.of();
         }
       },
-      PayloadReducer.local(),
-      PayloadReducer.all()
-    ).get(stepSpecificName);
+      local(),
+      all(),
+      Duration.ofSeconds(5)
+    ).join().get(stepSpecificName);
   }
 
   default <T> T execute(String stepName, Class<T> returnType, Supplier<T> action) {
@@ -50,13 +53,5 @@ public interface ExecuteInLocalContext extends ExecutePrimitive {
     });
   }
 
-  default Map<String, Object> execute(
-    String stepName,
-    Map<String, Object> local,
-    PayloadFunction action,
-    PayloadReducer parameterMapping,
-    PayloadReducer resultMapping) {
-    return execute(stepName, local, action, parameterMapping, resultMapping, Duration.ofSeconds(5)).join();
-  }
 
 }
