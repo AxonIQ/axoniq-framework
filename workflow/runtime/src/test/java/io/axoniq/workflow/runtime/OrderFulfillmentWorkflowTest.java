@@ -5,7 +5,6 @@ import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
-import io.axoniq.workflow.runtime.engine.WorkflowEngine;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,8 @@ class OrderFulfillmentWorkflowTest {
   private static final Logger logger = LoggerFactory.getLogger(OrderFulfillmentWorkflowTest.class);
 
   private StateManager stateManager;
-  private WorkflowEngine engine;
+  private Coordinator coordinator;
+  private DelayedPublisher delayedPublisher;
 
   // ============== MOCK SERVICES ==============
 
@@ -122,19 +122,13 @@ class OrderFulfillmentWorkflowTest {
   record FraudCheckResult(int riskScore, boolean passed) {}
   record ShipmentResult(String trackingNumber, String status) {}
 
-  // Events for human interaction
-  record OrderSubmittedEvent(String orderId, String customerId, String productId, int quantity, BigDecimal totalAmount) {}
+  // Trigger events
+  record OrderReceivedEvent(String orderId, String customerId, String productId, int quantity, BigDecimal totalAmount, boolean simulatePaymentFailure) {}
   record ManagerApprovalEvent(String orderId, String managerId, boolean approved, String comment) {}
 
   // ============== WORKFLOW DEFINITION ==============
 
   static class OrderFulfillmentWorkflow extends SimpleDefinition.Type {
-
-    private final boolean simulatePaymentFailure;
-
-    OrderFulfillmentWorkflow(boolean simulatePaymentFailure) {
-      this.simulatePaymentFailure = simulatePaymentFailure;
-    }
 
     @Override
     public String workflowId(Map<String, Object> trigger) {
@@ -143,8 +137,17 @@ class OrderFulfillmentWorkflowTest {
 
     @Override
     public void execute(SimpleContext context) {
-      // Extract order from trigger payload
-      Order order = (Order) context.getPayload().get("order");
+      // Extract order data from trigger event payload
+      Map<String, Object> triggerData = context.getPayload();
+      Order order = new Order(
+        (String) triggerData.get("orderId"),
+        (String) triggerData.get("customerId"),
+        (String) triggerData.get("productId"),
+        (Integer) triggerData.get("quantity"),
+        (BigDecimal) triggerData.get("totalAmount")
+      );
+      boolean simulatePaymentFailure = Boolean.TRUE.equals(triggerData.get("simulatePaymentFailure"));
+
       logger.info("========== Starting Order Fulfillment: {} ==========", order.orderId());
 
       // ==========================================
@@ -476,7 +479,8 @@ class OrderFulfillmentWorkflowTest {
   @BeforeEach
   void setUp() {
     stateManager = new StateManager();
-    engine = new WorkflowEngine(stateManager);
+    coordinator = new Coordinator(stateManager);
+    delayedPublisher = new DelayedPublisher(stateManager);
   }
 
   @AfterEach
@@ -486,22 +490,34 @@ class OrderFulfillmentWorkflowTest {
 
   @Test
   void shouldCompleteOrderSuccessfully() {
-    // Given
-    Order order = new Order(
-      "ORD-001",
-      "CUST-123",
-      "LAPTOP-PRO-15",
-      2,
-      BigDecimal.valueOf(2499.98)
-    );
+    // Given - register workflow to start on OrderReceivedEvent
+    coordinator.register(OrderFulfillmentWorkflow.class, OrderReceivedEvent.class);
 
-    // When
-    var context = engine.execute(
-      new OrderFulfillmentWorkflow(false),
-      Map.of("orderId", order.orderId(), "order", order)
-    ).join();
+    // Schedule the trigger event
+    delayedPublisher.addSchedules(List.of(
+      ofMillis(100, new OrderReceivedEvent(
+        "ORD-001",
+        "CUST-123",
+        "LAPTOP-PRO-15",
+        2,
+        BigDecimal.valueOf(2499.98),
+        false  // don't simulate payment failure
+      ))
+    ));
 
-    // Then - verify all steps executed in correct order
+    // When - start coordinator and publish events
+    coordinator.start();
+    delayedPublisher.start();
+
+    // Then - wait for workflow to complete
+    await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+      assertThat(coordinator.getHistory()).hasSize(1);
+      assertThat(coordinator.getRunning()).isEmpty();
+    });
+
+    WorkflowContext context = coordinator.getHistory().iterator().next();
+
+    // Verify all steps executed in correct order
     assertThat(context.getStepHistory())
       .contains("checkInventory", "validatePayment", "checkFraud")  // parallel validation
       .contains("reserveStock", "chargePayment", "createShipment", "sendConfirmation");  // sequential
@@ -511,26 +527,39 @@ class OrderFulfillmentWorkflowTest {
       .doesNotContain("releaseStock", "notifyPaymentFailed", "notifyOutOfStock", "notifyOrderRejected");
 
     printStepHistory(context);
+    coordinator.stop();
   }
 
   @Test
   void shouldCompensateWhenPaymentFails() {
-    // Given
-    Order order = new Order(
-      "ORD-002",
-      "CUST-456",
-      "PHONE-ULTRA",
-      1,
-      BigDecimal.valueOf(1299.99)
-    );
+    // Given - register workflow to start on OrderReceivedEvent
+    coordinator.register(OrderFulfillmentWorkflow.class, OrderReceivedEvent.class);
 
-    // When - simulate payment failure
-    var context = engine.execute(
-      new OrderFulfillmentWorkflow(true),  // simulatePaymentFailure = true
-      Map.of("orderId", order.orderId(), "order", order)
-    ).join();
+    // Schedule the trigger event with payment failure simulation
+    delayedPublisher.addSchedules(List.of(
+      ofMillis(100, new OrderReceivedEvent(
+        "ORD-002",
+        "CUST-456",
+        "PHONE-ULTRA",
+        1,
+        BigDecimal.valueOf(1299.99),
+        true  // simulate payment failure
+      ))
+    ));
 
-    // Then - verify parallel validation ran
+    // When - start coordinator and publish events
+    coordinator.start();
+    delayedPublisher.start();
+
+    // Then - wait for workflow to complete
+    await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+      assertThat(coordinator.getHistory()).hasSize(1);
+      assertThat(coordinator.getRunning()).isEmpty();
+    });
+
+    WorkflowContext context = coordinator.getHistory().iterator().next();
+
+    // Verify parallel validation ran
     assertThat(context.getStepHistory())
       .contains("checkInventory", "validatePayment", "checkFraud");
 
@@ -543,6 +572,7 @@ class OrderFulfillmentWorkflowTest {
       .doesNotContain("createShipment", "sendConfirmation");
 
     printStepHistory(context);
+    coordinator.stop();
   }
 
   @Test
@@ -556,19 +586,15 @@ class OrderFulfillmentWorkflowTest {
       BigDecimal.valueOf(4999.99)  // Over $1000 threshold - requires approval
     );
 
-    // Setup coordinator for event-driven workflow
-    Coordinator coordinator = new Coordinator(stateManager);
-    DelayedPublisher delayedPublisher = new DelayedPublisher(stateManager);
-
-    // Register workflow to start on OrderSubmittedEvent
-    coordinator.register(OrderWithApprovalWorkflow.class, OrderSubmittedEvent.class);
+    // Register workflow to start on OrderReceivedEvent
+    coordinator.register(OrderWithApprovalWorkflow.class, OrderReceivedEvent.class);
 
     // Schedule events:
     // 1. Order submitted immediately
     // 2. Manager approval arrives after 5 seconds (simulating human input)
     delayedPublisher.addSchedules(List.of(
-      ofMillis(100, new OrderSubmittedEvent(
-        order.orderId(), order.customerId(), order.productId(), order.quantity(), order.totalAmount()
+      ofMillis(100, new OrderReceivedEvent(
+        order.orderId(), order.customerId(), order.productId(), order.quantity(), order.totalAmount(), false
       )),
       ofMillis(5000, new ManagerApprovalEvent(
         order.orderId(),
@@ -624,14 +650,12 @@ class OrderFulfillmentWorkflowTest {
       BigDecimal.valueOf(8500.00)  // Suspicious order
     );
 
-    Coordinator coordinator = new Coordinator(stateManager);
-    DelayedPublisher delayedPublisher = new DelayedPublisher(stateManager);
-
-    coordinator.register(OrderWithApprovalWorkflow.class, OrderSubmittedEvent.class);
+    // Register workflow to start on OrderReceivedEvent
+    coordinator.register(OrderWithApprovalWorkflow.class, OrderReceivedEvent.class);
 
     delayedPublisher.addSchedules(List.of(
-      ofMillis(100, new OrderSubmittedEvent(
-        order.orderId(), order.customerId(), order.productId(), order.quantity(), order.totalAmount()
+      ofMillis(100, new OrderReceivedEvent(
+        order.orderId(), order.customerId(), order.productId(), order.quantity(), order.totalAmount(), false
       )),
       ofMillis(5000, new ManagerApprovalEvent(
         order.orderId(),
@@ -674,7 +698,7 @@ class OrderFulfillmentWorkflowTest {
     coordinator.stop();
   }
 
-  private void printStepHistory(SimpleContext context) {
+  private void printStepHistory(WorkflowContext context) {
     logger.info("=== Step History ===");
     int i = 1;
     for (String step : context.getStepHistory()) {
