@@ -24,7 +24,7 @@ public interface WorkflowContext extends
 
   void modifyPayload(PayloadFunction payloadModification);
 
-  void addStep(String stepName, StepExecution execution);
+  void addStep(StepExecution execution);
 
   StepExecution getStep(String stepName);
 

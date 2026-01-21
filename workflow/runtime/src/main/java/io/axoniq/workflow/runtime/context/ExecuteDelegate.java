@@ -19,7 +19,7 @@ import java.util.concurrent.TimeoutException;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
 
-public class ExecuteDelegate extends AbstractPrimitiveDelegate implements ExecutePrimitive {
+public class ExecuteDelegate extends AbstractContextAwarePrimitiveDelegate implements ExecutePrimitive {
 
   public ExecuteDelegate(WorkflowContext context) {
     super(context);
@@ -57,20 +57,20 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
           try {
 
             context.getStateManager().append(startedStep(context, stepName, local));
-            context.addStep(stepName, StepExecution.started(stepName, Instant.now(context.getClock())));
+            context.addStep(StepExecution.started(stepName, Instant.now(context.getClock())));
 
             // step execution
             var parameters = parameterMapping.apply(context.getPayload(), local); // local copy of the payload
             Map<String, Object> result = action.apply(parameters);
 
             context.getStateManager().append(completedStep(context, stepName, result));
-            context.addStep(stepName, StepExecution.completed(stepName, result));
+            context.addStep(StepExecution.completed(stepName, result));
 
             context.modifyPayload(p -> resultMapping.apply(p, result)); // write back payload
             return result;
           } catch (RuntimeException ex) {
             context.getStateManager().append(failStep(context, stepName, ex));
-            context.addStep(stepName, StepExecution.failed(stepName, ex));
+            context.addStep(StepExecution.failed(stepName, ex));
             throw ex;
           }
         }
@@ -79,7 +79,7 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
         if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
           var timeoutTimestamp = Instant.now(context.getClock());
           context.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp));
-          context.addStep(stepName, StepExecution.timedOut(stepName, timeoutTimestamp));
+          context.addStep(StepExecution.timedOut(stepName, timeoutTimestamp));
           throw new CompletionException(ex);
         }
         throw new StepFailedException(ex);

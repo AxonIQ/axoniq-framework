@@ -91,8 +91,8 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   }
 
   @Override
-  public void addStep(String stepName, StepExecution execution) {
-    steps.put(stepName, execution);
+  public void addStep(StepExecution execution) {
+    steps.put(execution.stepName(), execution);
   }
 
   @Override

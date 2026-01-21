@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-public interface Execute extends ExecutePrimitive {
+public interface ExecuteInLocalContext extends ExecutePrimitive {
   default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadFunction action) {
     return execute(
       stepName,

@@ -11,13 +11,14 @@ import java.util.concurrent.CompletableFuture;
 
 public interface ExecutePrimitive {
   /**
-   * Call run primitive.
+   * Execute primitive.
    *
    * @param stepName         name of the step.
-   * @param local            local variables.
+   * @param local            local context passed to the call.
    * @param action           action to execute.
-   * @param parameterMapping mapping reducer for parameters.
-   * @param resultMapping    mapping reducer for result.
+   * @param parameterMapping reducer for parameters (to reduce local and workflow contexts -> effective parameters).
+   * @param resultMapping    reducer for result (to reduce result and global context -> global context after action).
+   * @param timeout          timeout of the action.
    * @return payload.
    */
   CompletableFuture<Map<String, Object>> execute(

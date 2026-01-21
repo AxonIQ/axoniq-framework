@@ -20,7 +20,7 @@ import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
 
-public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitForPrimitive {
+public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate implements WaitForPrimitive {
 
   public WaitForDelegate(WorkflowContext context) {
     super(context);
@@ -42,19 +42,18 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> eventCondition,
     @Nonnull Duration timeout,
-    @Nonnull Function<T, Map<String, Object>> payloadProjector) {
+    @Nonnull Function<T, Map<String, Object>> converter) {
 
     Function<T, T> completionHandler = result -> {
-      // TODO: For DCB add a tag, for non-DCB add a technical util (Question 1).
-      var resultPayload = payloadProjector.apply(result);
-      context.getStateManager().append(completedStep(context, stepName, resultPayload));
-      context.addStep(stepName, StepExecution.completed(stepName, result));
+      var resultPayload = converter.apply(result);
+      context.getStateManager().append(completedStep(context, stepName, resultPayload)); // TODO: For DCB add a tag, for non-DCB add a technical util (Question 1).
+      context.addStep(StepExecution.completed(stepName, result));
       return result;
     };
 
     Consumer<Instant> timeoutOccurredHandler = (timeoutTimestamp) -> {
       context.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp));
-      context.addStep(stepName, StepExecution.timedOut(stepName, timeoutTimestamp));
+      context.addStep(StepExecution.timedOut(stepName, timeoutTimestamp));
     };
 
     Function<Duration, CompletableFuture<T>> eventRetriever = (remainingTimeout) ->
@@ -98,8 +97,8 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
     }
 
     var started = Instant.now(context.getClock());
-    context.getStateManager().append(EventMessageUtils.startedStep(context, stepName, Map.of())); // FIXME: really?
-    context.addStep(stepName, StepExecution.started(stepName, started)); // FIXME -> timestamp should be additional step attribute instead of misusing payload
+    context.getStateManager().append(EventMessageUtils.startedStep(context, stepName, Map.of())); // TODO: really?
+    context.addStep(StepExecution.started(stepName, started)); // FIXME -> timestamp should be additional step attribute instead of misusing payload
 
     return eventRetriever.apply(timeout);
   }

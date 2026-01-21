@@ -11,6 +11,7 @@ Options:
 - If only domain events are taken, we need a way to mark those domain events as relevant for the current workflow, after 
 they are stored and correlated with workflow (in order to rehydrate the workflow state afterwards). => This will require DCB and not pollute the store with technical events. (✓) 
 - If we have explicit events for all lifecycle transitions, we only need to source in events the workflow created => This will not require DCB at costs of technical events.
+- We mix both approaches and generate event names out of the step definitions and pass their content into it. By doing so we provide unique event experience.
 
 
 ## Question 2: How do we implement waiting for event?
@@ -26,7 +27,7 @@ Options:
 Options:
 - Use host language data flow only. For example in Java the variable definition scope is bound to a scope (class, method, block) and leaks to a sub-scope (non pure functional). 
   The problem might arise if the variables are filled with values retrieved by side effects, since those are not re-playable. 
-  This kind of bugs are hard to chase (works in first attempt, doesn't work in re-hydration)
+  This kind of bugs is hard to chase (works in first attempt, doesn't work in re-hydration)
 - Provide mechanisms for data access and scopes (workflow, step) and primitives for combination of those. (✓) 
   Default will be take step parameters from local context, merge result into global context (but return the local result).
 
@@ -46,9 +47,8 @@ Options:
 
 
 # TODO's
-- Workflow starts on event (not explicit workflow.execute() from JUnit)
-- Use domain events instead of technical -> answers the question 1 differently!!
+- Provide a way to modify event naming on a step
 - Retries in execute? -> No it is part of the wrapper/decorator around the primitive
-- Starting workflow by publishing event
+- Composition of workflows
     - Nested workflows
     - When parent workflow times out all child workflow timeout
