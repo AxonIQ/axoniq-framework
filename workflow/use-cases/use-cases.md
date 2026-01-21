@@ -1,13 +1,7 @@
-# Simple
+# Primitives and States
+![Primitives and States](./cases-in-bpmn/primitives-and-states.png)
 
-## Step Execution
-![Step Execution](./cases-in-bpmn/step-execution.png)
-
-## Step Execution (Timeout)
-![Step Execution Timeout](./cases-in-bpmn/step-execution-timeout.png)
-
-## Step Execution (Interruption)
-![Step Execution Interruption](./cases-in-bpmn/step-execution-interruption.png)
+# Decorator
 
 ## Step Execution (Retrying)
 ![Step Execution Retrying](./cases-in-bpmn/step-execution-with-retries.png)
