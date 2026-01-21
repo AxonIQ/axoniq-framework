@@ -3,6 +3,7 @@ package io.axoniq.workflow.runtime.engine;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import io.axoniq.workflow.runtime.context.ConversionDelegate;
+import org.axonframework.common.ReflectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,6 +13,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.eventMessageRetriever;
+import static io.axoniq.workflow.runtime.util.Utils.createInstance;
+import static io.axoniq.workflow.runtime.util.Utils.sleep;
 
 public class Coordinator {
 
@@ -57,62 +60,47 @@ public class Coordinator {
 
   @SuppressWarnings("unchecked")
   private <T> void pollForEvents(Class<T> eventType, Class<? extends WorkflowDefinition<?>> workflowDefinitionType) {
-    if (!isRunning) {
-      return;
-    }
 
-    try {
-      eventMessageRetriever(
-        stateManager,
-        eventType,
-        message -> !consumedMessages.contains(message.identifier())
-      )
-        .thenAccept(message -> {
-          consumedMessages.add(message.identifier());
+    var definition = createInstance(workflowDefinitionType);
 
-          var definition = createInstance(workflowDefinitionType);
+    while (isRunning) {
+      try {
+        var message = eventMessageRetriever(
+          stateManager,
+          eventType,
+          m -> !consumedMessages.contains(m.identifier())
+        ).join();
 
-          var event = message.payloadAs(eventType);
-          var payload = conversionDelegate.typeToPayloadConverter().apply(event);
-          var workflowId = definition.workflowId(payload);
+        consumedMessages.add(message.identifier());
 
-          boolean workflowIdExists = running.stream().anyMatch(id -> id.equals(workflowId));
+        var event = message.payloadAs(eventType);
+        var payload = conversionDelegate.typeToPayloadConverter().apply(event);
+        var workflowId = definition.workflowId(payload);
 
-          if (!workflowIdExists) {
-            logger.info("Starting workflow {}:{} with payload {}", workflowDefinitionType.getSimpleName(), workflowId, payload);
+        boolean workflowIdExists = running.stream().anyMatch(id -> id.equals(workflowId));
 
-            ((CompletableFuture<WorkflowContext>) workflowEngine.execute(definition, payload))
-              .whenComplete((completedContext, ex) -> {
-                if (ex != null) {
-                  logger.error("Workflow {} finished with error.", workflowId, ex);
-                } else {
-                  logger.info("Workflow {} finished with payload {}.", workflowId, completedContext.getPayload());
-                }
-                history.add(completedContext);
-                running.remove(workflowId);
-              });
-            running.add(workflowId);
+        if (!workflowIdExists) {
+          logger.info("Starting workflow {}:{} with payload {}.", workflowDefinitionType.getSimpleName(), workflowId, payload);
 
-          } else {
-            logger.info("Skipping event {}, since it would start workflow with id {}, which is already running ", event, workflowId);
-          }
+          ((CompletableFuture<WorkflowContext>) workflowEngine.execute(definition, payload))
+            .whenComplete((completedContext, ex) -> {
+              if (ex != null) {
+                logger.error("Workflow {} finished with error.", workflowId, ex);
+              } else {
+                logger.info("Workflow {} finished with payload {}.", workflowId, completedContext.getPayload());
+              }
+              history.add(completedContext);
+              running.remove(workflowId);
+            });
+          running.add(workflowId);
 
-          // Continue polling for more events
-          pollForEvents(eventType, workflowDefinitionType);
-        })
-        .exceptionally(ex -> {
-
-          sleep(100);
-          if (isRunning) {
-            pollForEvents(eventType, workflowDefinitionType);
-          }
-
-          return null;
-        });
-    } catch (Exception e) {
-      sleep(100);
-      if (isRunning) {
-        pollForEvents(eventType, workflowDefinitionType);
+        } else {
+          logger.info("Skipping event {}, since it would start workflow with id {}, which is already running.", event, workflowId);
+        }
+      } catch (Exception e) {
+        // If there's an error, log it and sleep a bit to avoid tight loops
+        logger.error("Error processing event type {}: {}", eventType.getName(), e.getMessage(), e);
+        sleep(101);
       }
     }
   }
@@ -123,24 +111,5 @@ public class Coordinator {
 
   public List<String> getRunning() {
     return Collections.unmodifiableList(running);
-  }
-
-  static <T> T createInstance(Class<T> clazz) {
-    try {
-      var constructor = clazz.getDeclaredConstructor();
-      constructor.setAccessible(true);
-      return constructor.newInstance();
-    } catch (Exception e) {
-      logger.error("Error instantiating workflow definition {}: {}", clazz.getName(), e.getMessage(), e);
-      throw new RuntimeException("Unable to instantiate workflow definition: " + clazz.getName(), e);
-    }
-  }
-
-  static void sleep(long millis) {
-    try {
-      Thread.sleep(millis);
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
-    }
   }
 }

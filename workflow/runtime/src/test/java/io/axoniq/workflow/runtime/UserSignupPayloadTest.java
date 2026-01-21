@@ -96,13 +96,13 @@ class UserSignupPayloadTest {
 
       try {
 
-        var confirmed = context.waitForEvent("confirmedEmail",
+        var confirmed = context.waitForEvent("emailConfirmed",
           EmailConfirmed.class,
           e -> e.userId.equals(correlationUserId),
           Duration.ofSeconds(2)
         );
         if (confirmed.email.equals(activatedEmail)) {
-          context.wait("block-500ms", Duration.ofMillis(500));
+          context.wait("blocked500ms", Duration.ofMillis(500));
           context.execute("sendWelcomeEmail",                                 // sendWelcomeEmailStarted(email=asasa@dfdfd.de), , metadata{type=StepStarted, workflowId=4711}
             Map.of("email", activatedEmail),
             (p) -> {
@@ -144,7 +144,7 @@ class UserSignupPayloadTest {
     var context = engine.execute(new UserSignupWorkflow(), payload).join();
 
     assertThat(context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
-      Set.of("createUser", "activateUser", "confirmedEmail", "block-500ms", "sendWelcomeEmail")
+      Set.of("createUser", "activateUser", "emailConfirmed", "blocked500ms", "sendWelcomeEmail")
     );
 
     // Verify events published

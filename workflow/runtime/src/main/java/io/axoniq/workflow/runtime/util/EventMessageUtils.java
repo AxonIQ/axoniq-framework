@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.util.Utils.sleep;
+
 public class EventMessageUtils {
 
   public static Predicate<EventMessage> workflowIdFilter(String workflowId) {
@@ -83,13 +85,7 @@ public class EventMessageUtils {
           if (!events.isEmpty()) {
             return events.getFirst();
           }
-          try {
-            //noinspection BusyWait
-            Thread.sleep(100); // TODO polling constant
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while waiting for events", e);
-          }
+          sleep(100);
         }
       });
   }
