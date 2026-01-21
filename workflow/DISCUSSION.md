@@ -47,7 +47,6 @@ Options:
 
 
 # TODO's
-- Provide a way to modify event naming on a step
 - Retries in execute? -> No it is part of the wrapper/decorator around the primitive
 - Composition of workflows
     - Nested workflows
