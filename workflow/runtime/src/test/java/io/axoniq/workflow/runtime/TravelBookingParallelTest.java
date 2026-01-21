@@ -93,9 +93,13 @@ class TravelBookingParallelTest {
           logger.warn("Payment failed: {}", e.getMessage());
 
           //Compensate! Rollback
-          context.execute("cancelReservations", () -> {
-            logger.info("Canceling flight {} and hotel {}", flightCode, hotelCode);
-          });
+          context.execute("cancelReservations",
+            Map.of("flightCode", flightCode, "hotelCode", hotelCode),
+            Boolean.class,
+            payload -> {
+              logger.info("Canceling flight {} and hotel {}", payload.get("flightCode"), payload.get("hotelCode"));
+              return true;
+            });
 
 
       }
