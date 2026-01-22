@@ -9,6 +9,9 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
@@ -18,6 +21,7 @@ public class StateManager {
   private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
 
   private final List<EventMessage> events = new ArrayList<>();
+  private final List<SubscriptionEntry> subscriptions = new CopyOnWriteArrayList<>();
 
   public List<EventMessage> getHistory(String workflowId) {
     return events.stream()
@@ -38,6 +42,65 @@ public class StateManager {
 
   public void append(EventMessage eventMessage) {
     events.add(eventMessage);
+    notifyListeners(eventMessage);
+  }
+
+  /**
+   * Subscribe to events of a specific type that match the given filter.
+   *
+   * @param eventType the class of the event payload to listen for
+   * @param filter predicate to filter events (applied to EventMessage)
+   * @param listener callback invoked when a matching event is appended
+   * @param <T> the event payload type
+   * @return a Subscription handle to cancel the subscription
+   */
+  public <T> Subscription subscribe(Class<T> eventType, Predicate<EventMessage> filter, EventListener listener) {
+    var entry = new SubscriptionEntry(eventType, filter, listener);
+    subscriptions.add(entry);
+    return entry;
+  }
+
+  private void notifyListeners(EventMessage eventMessage) {
+    subscriptions.removeIf(sub -> {
+      if (sub.matches(eventMessage)) {
+        return sub.listener.onEvent(eventMessage);
+      }
+      return false;
+    });
+  }
+
+  /**
+   * Internal subscription entry that implements Subscription for cancellation.
+   */
+  private class SubscriptionEntry implements Subscription {
+    private final Class<?> eventType;
+    private final Predicate<EventMessage> filter;
+    private final EventListener listener;
+    private final AtomicBoolean active = new AtomicBoolean(true);
+
+    SubscriptionEntry(Class<?> eventType, Predicate<EventMessage> filter, EventListener listener) {
+      this.eventType = eventType;
+      this.filter = filter;
+      this.listener = listener;
+    }
+
+    boolean matches(EventMessage event) {
+      return active.get()
+          && event.payloadType().equals(eventType)
+          && filter.test(event);
+    }
+
+    @Override
+    public void cancel() {
+      if (active.compareAndSet(true, false)) {
+        subscriptions.remove(this);
+      }
+    }
+
+    @Override
+    public boolean isActive() {
+      return active.get();
+    }
   }
 
   public void printPayloads() {

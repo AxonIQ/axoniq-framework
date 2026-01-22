@@ -13,8 +13,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.Utils.sleep;
-
 public class EventMessageUtils {
 
   public static Predicate<EventMessage> workflowIdFilter(String workflowId) {
@@ -73,22 +71,32 @@ public class EventMessageUtils {
     Class<T> eventType,
     Predicate<EventMessage> eventCondition
   ) {
-    return CompletableFuture
-      .supplyAsync(() -> {
-        /*
-         * FIXME: This is an implementation detail of current PoC running in a unit test single-threaded.
-         */
-        while (true) {
-          var events = stateManager.getEventByPayloadType(eventType)
-            .stream()
-            .filter(eventCondition)
-            .toList();
-          if (!events.isEmpty()) {
-            return events.getFirst();
-          }
-          sleep(100);
-        }
-      });
+    CompletableFuture<EventMessage> future = new CompletableFuture<>();
+
+    // Check if event already exists
+    var existing = stateManager.getEventByPayloadType(eventType)
+        .stream()
+        .filter(eventCondition)
+        .findFirst();
+
+    if (existing.isPresent()) {
+      return CompletableFuture.completedFuture(existing.get());
+    }
+
+    // Subscribe for future events
+    var subscription = stateManager.subscribe(eventType, eventCondition, event -> {
+      future.complete(event);
+      return true; // Remove subscription after completion
+    });
+
+    // Cancel subscription if the future is cancelled externally
+    future.whenComplete((result, ex) -> {
+      if (ex != null || future.isCancelled()) {
+        subscription.cancel();
+      }
+    });
+
+    return future;
   }
 
 

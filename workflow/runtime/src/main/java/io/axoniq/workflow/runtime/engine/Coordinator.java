@@ -3,18 +3,13 @@ package io.axoniq.workflow.runtime.engine;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import io.axoniq.workflow.runtime.context.ConversionDelegate;
-import org.axonframework.common.ReflectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.eventMessageRetriever;
 import static io.axoniq.workflow.runtime.util.Utils.createInstance;
-import static io.axoniq.workflow.runtime.util.Utils.sleep;
 
 public class Coordinator {
 
@@ -28,8 +23,7 @@ public class Coordinator {
   private final List<WorkflowContext> history = Collections.synchronizedList(new ArrayList<>());
   private final List<String> running = Collections.synchronizedList(new ArrayList<>());
   private final List<String> consumedMessages = Collections.synchronizedList(new ArrayList<>());
-
-  private final ExecutorService executorService = Executors.newCachedThreadPool();
+  private final List<Subscription> activeSubscriptions = Collections.synchronizedList(new ArrayList<>());
 
   private volatile boolean isRunning = false;
 
@@ -48,61 +42,64 @@ public class Coordinator {
       return;
     }
     isRunning = true;
-    definitions.forEach((eventType, workflowDefinitionType)
-      -> CompletableFuture.runAsync(() -> pollForEvents(eventType, workflowDefinitionType), executorService)
+    definitions.forEach(this::subscribeForTriggerEvents
     );
   }
 
   public void stop() {
     isRunning = false;
-    executorService.shutdown();
+    // Cancel all active subscriptions
+    activeSubscriptions.forEach(Subscription::cancel);
+    activeSubscriptions.clear();
   }
 
   @SuppressWarnings("unchecked")
-  private <T> void pollForEvents(Class<T> eventType, Class<? extends WorkflowDefinition<?>> workflowDefinitionType) {
-
+  private <T> void subscribeForTriggerEvents(Class<T> eventType,
+                                              Class<? extends WorkflowDefinition<?>> workflowDefinitionType) {
     var definition = createInstance(workflowDefinitionType);
 
-    while (isRunning) {
-      try {
-        var message = eventMessageRetriever(
-          stateManager,
-          eventType,
-          m -> !consumedMessages.contains(m.identifier())
-        ).join();
+    var subscription = stateManager.subscribe(
+        eventType,
+        m -> !consumedMessages.contains(m.identifier()),
+        event -> {
+          if (!isRunning) {
+            return true; // Unsubscribe when coordinator is stopped
+          }
 
-        consumedMessages.add(message.identifier());
+          try {
+            consumedMessages.add(event.identifier());
 
-        var event = message.payloadAs(eventType);
-        var payload = conversionDelegate.typeToPayloadConverter().apply(event);
-        var workflowId = definition.workflowId(payload);
+            var payload = conversionDelegate.typeToPayloadConverter().apply(event.payloadAs(eventType));
+            var workflowId = definition.workflowId(payload);
 
-        boolean workflowIdExists = running.stream().anyMatch(id -> id.equals(workflowId));
+            boolean workflowIdExists = running.contains(workflowId);
 
-        if (!workflowIdExists) {
-          logger.info("Starting workflow {}:{} with payload {}.", workflowDefinitionType.getSimpleName(), workflowId, payload);
+            if (!workflowIdExists) {
+              logger.info("Starting workflow {}:{} with payload {}.", workflowDefinitionType.getSimpleName(), workflowId, payload);
 
-          ((CompletableFuture<WorkflowContext>) workflowEngine.execute(definition, payload))
-            .whenComplete((completedContext, ex) -> {
-              if (ex != null) {
-                logger.error("Workflow {} finished with error.", workflowId, ex);
-              } else {
-                logger.info("Workflow {} finished with payload {}.", workflowId, completedContext.getPayload());
-              }
-              history.add(completedContext);
-              running.remove(workflowId);
-            });
-          running.add(workflowId);
+              running.add(workflowId);
+              ((CompletableFuture<WorkflowContext>) workflowEngine.execute(definition, payload))
+                  .whenComplete((completedContext, ex) -> {
+                    if (ex != null) {
+                      logger.error("Workflow {} finished with error.", workflowId, ex);
+                    } else {
+                      logger.info("Workflow {} finished with payload {}.", workflowId, completedContext.getPayload());
+                    }
+                    history.add(completedContext);
+                    running.remove(workflowId);
+                  });
+            } else {
+              logger.info("Skipping event {}, since it would start workflow with id {}, which is already running.",
+                  event.payloadAs(eventType), workflowId);
+            }
+          } catch (Exception e) {
+            logger.error("Error processing event type {}: {}", eventType.getName(), e.getMessage(), e);
+          }
 
-        } else {
-          logger.info("Skipping event {}, since it would start workflow with id {}, which is already running.", event, workflowId);
-        }
-      } catch (Exception e) {
-        // If there's an error, log it and sleep a bit to avoid tight loops
-        logger.error("Error processing event type {}: {}", eventType.getName(), e.getMessage(), e);
-        sleep(101);
-      }
-    }
+          return false; // Keep subscription active
+        });
+
+    activeSubscriptions.add(subscription);
   }
 
   public List<WorkflowContext> getHistory() {

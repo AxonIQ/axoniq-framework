@@ -7,6 +7,8 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
@@ -20,6 +22,7 @@ public class WorkflowEngine {
   public static final String WF_COMPLETED = "io.axoniq.workflow.WorkflowCompleted#0.1";
 
   private final StateManager stateManager;
+  private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
   public WorkflowEngine() {
     this(new StateManager());
@@ -71,6 +74,6 @@ public class WorkflowEngine {
         stateManager.append(failedWorkflow(context, e)); // TODO
         throw e;
       }
-    });
+    }, virtualThreadExecutor);
   }
 }
