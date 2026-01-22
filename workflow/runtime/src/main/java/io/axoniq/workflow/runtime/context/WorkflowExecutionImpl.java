@@ -8,6 +8,7 @@ import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.engine.StepExecution;
+import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
@@ -26,6 +27,7 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private final StateManager stateManager;
   private Map<String, Object> global;
+  private WorkflowStatus status = WorkflowStatus.STARTED;
 
   // primitive implementations
   private final ExecutePrimitive executePrimitive = new ExecuteDelegate(this);
@@ -118,5 +120,13 @@ public class WorkflowExecutionImpl implements WorkflowContext {
 
   public void restoreStep(StepExecution step) {
     steps.put(step.stepName(), step);
+  }
+
+  public void restoreCompleted() {
+    this.status = WorkflowStatus.COMPLETED;
+  }
+
+  public void restoreFailed() {
+    this.status = WorkflowStatus.FAILED;
   }
 }

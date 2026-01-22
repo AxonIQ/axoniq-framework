@@ -2,14 +2,17 @@ package io.axoniq.workflow.runtime.engine;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
+import io.axoniq.workflow.runtime.context.WorkflowExecutionImpl;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static io.axoniq.workflow.runtime.util.EventMessageUtils.completedWorkflow;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
@@ -30,6 +33,18 @@ public class WorkflowEngine {
 
   public WorkflowEngine(StateManager stateManager) {
     this.stateManager = stateManager;
+  }
+
+  private static boolean isRecoverableException(Throwable e) {
+    // Check for InterruptedException (including wrapped)
+    Throwable cause = e;
+    while (cause != null) {
+      if (cause instanceof InterruptedException) {
+        return true;
+      }
+      cause = cause.getCause();
+    }
+    return e instanceof CancellationException;
   }
 
   public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowDefinition<T> definition) {
@@ -66,12 +81,34 @@ public class WorkflowEngine {
       });
     }
 
+    // Restore workflow-level status from history
+    for (EventMessage event : history) {
+      String eventTypeName = event.type().qualifiedName().toString();
+      if (eventTypeName.endsWith("Completed#0.1")) {
+        ((WorkflowExecutionImpl) context).restoreCompleted();
+      } else if (eventTypeName.endsWith("Failed#0.1")) {
+        ((WorkflowExecutionImpl) context).restoreFailed();
+      }
+    }
+
     return CompletableFuture.supplyAsync(() -> {
       try {
+       //if failed  or completed or cancelled or timedout do nothing. (all terminal)
         definition.execute(context);
+        //separate event sourced from our state
+        //context.setStatus(COMPLETED)
+        stateManager.append(completedWorkflow(context));
         return context;
       } catch (RuntimeException e) {
-        stateManager.append(failedWorkflow(context, e)); // TODO
+        if (isRecoverableException(e)) { //on runtime we stay active -> on WorkflowFailedExecption FAIL.
+          // Keep ACTIVE - can recover later
+          //fail((e)- throw new WorkflowFailedException(e))
+          throw e;
+        }
+        stateManager.append(failedWorkflow(context, e));
+        throw e;
+      } catch (Error e) {
+        // JVM errors - rethrow without marking FAILED
         throw e;
       }
     }, virtualThreadExecutor);

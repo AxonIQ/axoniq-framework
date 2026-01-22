@@ -139,6 +139,9 @@ class WorkflowCrashRecoveryTest {
       return "order-" + trigger.getOrDefault("orderId", UUID.randomUUID().toString());
     }
 
+    //onFailed() ->
+    //onSucess() ->
+
     @Override
     public void execute(SimpleContext context) {
       // Capture thread reference for aggressive kill
@@ -152,6 +155,14 @@ class WorkflowCrashRecoveryTest {
         (Integer) triggerData.get("quantity"),
         (BigDecimal) triggerData.get("totalAmount")
       );
+
+    //  if()  context.fail("failed because...");
+    //  else  context.sucess(Optional payload);
+    // context.timeout() and context.cancel() <--internal
+
+
+      //nested-> you cant block on workflow
+
 
       logger.info("========== Starting Sequential Order Workflow: {} (thread: {}) ==========",
         order.orderId(), Thread.currentThread().getName());

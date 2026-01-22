@@ -26,6 +26,13 @@ public class EventMessageUtils {
     );
   }
 
+  public static EventMessage completedWorkflow(WorkflowContext context) {
+    var name = context.getWorkflowId() + "Completed" + "#0.1";
+    return new GenericEventMessage(MessageType.fromString(name), Map.of(),
+      MetadataUtils.create(context.getWorkflowId())
+    );
+  }
+
   public static EventMessage startedStep(WorkflowContext context, String stepName, Map<String, Object> local, EventNameCustomizer customizer) {
     var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
     return new GenericEventMessage(MessageType.fromString(name), local,
