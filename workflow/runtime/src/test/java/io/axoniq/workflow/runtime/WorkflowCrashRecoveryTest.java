@@ -31,6 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
+ * TODO - enable once Coordinator can rehydrate without trigger event, find ACTIVE workflows and execute them
+ *
  * Test that verifies workflow crash recovery via event sourcing.
  *
  * When a workflow crashes mid-execution
