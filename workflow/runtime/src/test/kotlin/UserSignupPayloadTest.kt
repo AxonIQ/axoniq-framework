@@ -127,8 +127,7 @@ internal class UserSignupPayloadTest {
     delayedPublisher.start()
 
     val workflow = UserSignupWorkflow()
-    var context = engine.restore(workflow, payload.values)
-    context = engine.execute<Kontext>(workflow, context).join()
+    var context = engine.restoreAndExecute<Kontext>(workflow, payload.values).join()
 
     assertThat(context.stepHistory).containsExactlyInAnyOrder(
       "createUser", "activateUser", "emailConfirmed", "blocked500ms", "sendWelcomeEmail"

@@ -10,8 +10,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 public class Coordinator {
 
@@ -58,7 +56,6 @@ public class Coordinator {
     activeSubscriptions.clear();
   }
 
-  @SuppressWarnings("unchecked")
   private <T> void subscribeForTriggerEvents(QualifiedName qualifiedName, WorkflowConfiguration<?> workflowConfiguration) {
     var subscription = stateManager.subscribe(
       qualifiedName,
@@ -83,7 +80,7 @@ public class Coordinator {
               .getClass().getSimpleName(), workflowId, payload);
 
             running.add(workflowId);
-            applyAndExecute(workflowConfiguration, payload)
+            workflowEngine.restoreAndExecute(workflowConfiguration, payload)
               .whenComplete((completedContext, ex) -> {
                 if (ex != null) {
                   logger.error("Workflow {} finished with error.", workflowId, ex);
@@ -115,14 +112,4 @@ public class Coordinator {
     return Collections.unmodifiableList(running);
   }
 
-  /**
-   * Event Sourcing: Hydrate context state from history, then execute workflow.
-   */
-  private <T extends WorkflowContext> CompletableFuture<T> applyAndExecute(
-    WorkflowConfiguration<T> configuration, Map<String, Object> payload) {
-    //Event Source context
-    T context = workflowEngine.restore(configuration, payload);
-    //Execute on context
-    return workflowEngine.execute(configuration, context);
-  }
 }

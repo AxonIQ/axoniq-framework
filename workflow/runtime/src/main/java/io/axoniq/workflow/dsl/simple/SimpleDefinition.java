@@ -1,30 +1,38 @@
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.workflow.AssociationProvider;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
+import io.axoniq.workflow.runtime.api.workflow.*;
 import io.axoniq.workflow.runtime.engine.StateManager;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Clock;
 import java.util.Map;
 import java.util.Optional;
 
 public interface SimpleDefinition extends
   WorkflowDefinition<SimpleContext>,
   WorkflowContextFactory<SimpleContext>,
+  WorkflowStateFactory,
   AssociationProvider,
   WorkflowConfiguration<SimpleContext> {
 
   @Nonnull
   @Override
-  default SimpleContext createContext(@Nonnull Map<String, Object> payload, @Nonnull StateManager stateManager) {
+  default SimpleContext createContext(@Nonnull Map<String, Object> payload, @NotNull StateManager stateManager) {
     return new SimpleContext(
       associationKey(payload).orElseThrow(() -> new IllegalStateException("Could not extract correlation key from payload : " + payload)),
       payload,
-      stateManager
+      stateManager,
+      Clock.systemDefaultZone()
     );
+  }
+
+  @Override
+  default WorkflowState create(@NotNull WorkflowContext context) {
+    if (!(context instanceof WorkflowState)) {
+      throw new IllegalStateException("Unsupported context type " + context.getClass().getName());
+    }
+    return (WorkflowState) context;
   }
 
   @NotNull
@@ -52,4 +60,11 @@ public interface SimpleDefinition extends
   default AssociationProvider associationProvider() {
     return this;
   }
+
+  @NotNull
+  @Override
+  default WorkflowStateFactory workflowLifecycleFactory() {
+    return this;
+  }
+
 }

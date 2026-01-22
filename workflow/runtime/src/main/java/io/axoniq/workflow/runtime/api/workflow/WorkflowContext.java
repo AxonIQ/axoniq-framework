@@ -20,21 +20,6 @@ public interface WorkflowContext extends
 
   WorkflowStatus getStatus();
 
-  // TODO segregate to a different interface
-
-  StateManager getStateManager();
-
-  void modifyPayload(PayloadProcessor payloadModification);
-
-  void addStep(StepExecution execution);
-
-  StepExecution getStep(String stepName);
-
   Set<String> getStepHistory();
 
-  Clock getClock();
-
-  void restoreStep(StepExecution stepExecution);
-
-  void setStatus(WorkflowStatus status);
 }

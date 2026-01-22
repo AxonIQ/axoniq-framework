@@ -16,5 +16,8 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
   WorkflowContextFactory<T> workflowContextFactory();
 
   @Nonnull
+  WorkflowStateFactory workflowLifecycleFactory();
+
+  @Nonnull
   AssociationProvider associationProvider();
 }

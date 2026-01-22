@@ -80,8 +80,7 @@ class UserSignupTest {
     User user = new User("user-123", "test@example.com");
 
     var workflow = new UserSignupWorkflow();
-    var context = engine.restore(workflow, payload("user", user).getValues());
-    context = engine.execute(workflow, context).join();
+    var context = engine.restoreAndExecute(workflow, payload("user", user).getValues()).join();
     assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail");
 
     // Verify events published
@@ -119,14 +118,16 @@ class UserSignupTest {
 
     var definition = new MyWorkflowDefinition();
 
-    engine.execute(definition).join();
+    var context = engine.initialize(definition);
+    var lifecycle = engine.restore(definition, context);
+    engine.execute(definition, context, lifecycle).join();
 
     var eventsAfterFirst = stateManager.getEventPayloads(workflowId);
     assertThat(eventsAfterFirst).hasSize(3); // 1 start + 1 complete + 1 workflow completed
     //noinspection unchecked
     assertEquals("cached-value", ((Map<String, Object>) eventsAfterFirst.get(1)).get("__getValue"));
 
-    engine.execute(definition).join();
+    engine.execute(definition, context, lifecycle).join();
 
     var eventsAfterSecond = stateManager.getEventPayloads(workflowId);
     assertThat(eventsAfterSecond).describedAs("No new events should be published on replay").hasSize(3);

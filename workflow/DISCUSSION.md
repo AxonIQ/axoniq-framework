@@ -9,6 +9,12 @@
   - Completed
   - Failed
   - Timed Out
+- Workflow States
+  - STARTED
+  - COMPLETED
+  - FAILED
+  - TIMED_OUT
+
 - Restart/Recovery: repeating execution of workflow code, skipping already executed steps (based on event-sourced execution)
 - DSL uses host language for control flow and data flow
 - DSL based on primitives (2)
@@ -71,12 +77,7 @@ Options:
 
 
 # TODO's
-- WorkflowDefinition -> Functional Interface
-- Workflow States
-  - STARTED
-  - COMPLETED
-  - FAILED
-  - TIMED_OUT
+- Workflow name and Workflow name customizer
 - EventNameCustomizer -> Functional Interface (Expose Customization)
 - Options on workflow level
   - workflow event name customizer

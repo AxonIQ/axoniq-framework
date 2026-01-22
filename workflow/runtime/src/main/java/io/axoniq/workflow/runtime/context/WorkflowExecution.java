@@ -6,6 +6,7 @@ import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.WorkflowStatus;
@@ -21,28 +22,33 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
-public class WorkflowExecutionImpl implements WorkflowContext {
+public class WorkflowExecution implements WorkflowContext, WorkflowState {
 
   private final String workflowId;
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private Map<String, Object> payload;
   private WorkflowStatus status = WorkflowStatus.STARTED;
 
+  private final transient Clock clock;
   private final transient StateManager stateManager;
 
   // primitive implementations
-  private final ExecutePrimitive executePrimitive = new ExecuteDelegate(this);
-  private final WaitForPrimitive waitForPrimitive = new WaitForDelegate(this);
-  private final ConversionDelegate conversionDelegate = new ConversionDelegate();
+  private final transient ExecutePrimitive executePrimitive = new ExecuteDelegate(this, this);
+  private final transient WaitForPrimitive waitForPrimitive = new WaitForDelegate(this, this);
+  private final transient ConversionDelegate conversionDelegate = new ConversionDelegate();
 
-  public WorkflowExecutionImpl(
+  public WorkflowExecution(
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
-    @Nonnull StateManager stateManager) {
+    @Nonnull StateManager stateManager,
+    @Nonnull Clock clock
+  ) {
     this.workflowId = workflowId;
     this.payload = payload;
     this.stateManager = stateManager;
+    this.clock = clock;
   }
 
   @Override
@@ -106,9 +112,6 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   }
 
   @Override
-  public void restoreStep(StepExecution step) { steps.put(step.stepName(), step);}
-
-  @Override
   public StepExecution getStep(String stepName) {
     return steps.get(stepName);
   }
@@ -120,7 +123,7 @@ public class WorkflowExecutionImpl implements WorkflowContext {
 
   @Override
   public Clock getClock() {
-    return Clock.systemDefaultZone();
+    return clock;
   }
 
 
