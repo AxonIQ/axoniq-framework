@@ -15,10 +15,14 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class ExecuteDelegate extends AbstractPrimitiveDelegate implements ExecutePrimitive {
+
+  private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   public ExecuteDelegate(WorkflowContext context, WorkflowState workflowState) {
     super(context, workflowState);
@@ -70,7 +74,7 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
             failed(stepName, ex, eventNameCustomizer);
             throw ex;
           }
-        }
+        }, executor //todo reuse execute from workflow engine
       ).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
       .exceptionally(ex -> {
         if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
