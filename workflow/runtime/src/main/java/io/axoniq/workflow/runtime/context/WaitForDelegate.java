@@ -33,7 +33,7 @@ public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate imple
   }
 
   @Override
-  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(Class<T> payloadType) {
+  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(@Nonnull Class<T> payloadType) {
     return context.payloadToTypeConverter(payloadType);
   }
 

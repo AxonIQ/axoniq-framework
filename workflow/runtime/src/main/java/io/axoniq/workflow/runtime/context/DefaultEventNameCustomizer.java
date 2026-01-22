@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime.context;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StepStatus;
+import org.axonframework.common.StringUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +17,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
   private String baseVersion = "#0.1";
   private boolean appendToBaseName = true;
   private boolean appendVersion = true;
+  private boolean capitalizeSimpleName = true;
   private Function<PayloadCustomization, String> payloadCustomization = (pc) -> pc.template;
 
   public record PayloadCustomization(
@@ -28,48 +29,51 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   public static class Builder {
 
-    public static DefaultEventNameCustomizer defaults() {
+    public static DefaultEventNameCustomizer eventName() {
       return new DefaultEventNameCustomizer();
     }
 
     public static DefaultEventNameCustomizer baseName(String baseName) {
-      return defaults().baseName(baseName);
+      return eventName().baseName(baseName);
     }
 
     public static DefaultEventNameCustomizer baseVersion(String baseVersion) {
-      return defaults().baseVersion(baseVersion);
+      return eventName().baseVersion(baseVersion);
     }
 
     public static DefaultEventNameCustomizer namespace(String namespace) {
-      return defaults().namespace(namespace);
+      return eventName().namespace(namespace);
     }
 
     public static DefaultEventNameCustomizer completed(String completed) {
-      return defaults().completed(completed);
+      return eventName().completed(completed);
     }
 
     public static DefaultEventNameCustomizer started(String started) {
-      return defaults().started(started);
+      return eventName().started(started);
     }
 
     public static DefaultEventNameCustomizer failed(String failed) {
-      return defaults().failed(failed);
+      return eventName().failed(failed);
     }
 
     public static DefaultEventNameCustomizer timedOut(String timedOut) {
-      return defaults().timedOut(timedOut);
+      return eventName().timedOut(timedOut);
     }
 
     public static DefaultEventNameCustomizer appendToBaseName(boolean appendToBaseName) {
-      return defaults().appendToBaseName(appendToBaseName);
+      return eventName().appendToBaseName(appendToBaseName);
+    }
+    public static DefaultEventNameCustomizer capitalizeSimpleName(boolean capitalizeSimpleName) {
+      return eventName().capitalizeSimpleName(capitalizeSimpleName);
     }
 
     public static DefaultEventNameCustomizer appendVersion(boolean appendVersion) {
-      return defaults().appendVersion(appendVersion);
+      return eventName().appendVersion(appendVersion);
     }
 
     public static DefaultEventNameCustomizer payloadCustomization(Function<PayloadCustomization, String> payloadCustomization) {
-      return defaults().payloadCustomization(payloadCustomization);
+      return eventName().payloadCustomization(payloadCustomization);
     }
   }
 
@@ -105,6 +109,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     return this;
   }
 
+  public DefaultEventNameCustomizer capitalizeSimpleName(boolean capitalizeSimpleName) {
+    this.capitalizeSimpleName = capitalizeSimpleName;
+    return this;
+  }
+
   public DefaultEventNameCustomizer completed(String completed) {
     this.stepStatusToName.put(StepStatus.COMPLETED, completed);
     return this;
@@ -131,12 +140,12 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
   }
 
   @Override
-  public String getEventName(String stepName, Map<String, Object> payload, StepStatus stepStatus) {
+  public String getEventName(String stepName, Map<String, Object> parameters, StepStatus stepStatus) {
     final StringBuilder eventNameTemplate = new StringBuilder();
     if (appendToBaseName) {
       eventNameTemplate
         .append(namespace != null ? (namespace.endsWith(".") ? namespace : namespace + ".") : "")
-        .append(baseName != null ? baseName : stepName)
+        .append(capitalize(baseName != null ? baseName : stepName))
         .append(Objects.requireNonNull(stepStatusToName.get(stepStatus)));
     } else {
       eventNameTemplate
@@ -146,6 +155,14 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
       eventNameTemplate.append(baseVersion);
     }
 
-    return payloadCustomization.apply(new PayloadCustomization(payload, stepStatus, eventNameTemplate.toString()));
+    return payloadCustomization.apply(new PayloadCustomization(parameters, stepStatus, eventNameTemplate.toString()));
+  }
+
+  private String capitalize(String string) {
+    if (capitalizeSimpleName) {
+      return StringUtils.capitalize(string);
+    } else {
+      return string;
+    }
   }
 }

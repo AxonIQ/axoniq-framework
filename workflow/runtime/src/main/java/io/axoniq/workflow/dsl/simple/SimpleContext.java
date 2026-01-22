@@ -8,7 +8,7 @@ import java.util.Map;
 
 public class SimpleContext extends WorkflowExecutionImpl implements WorkflowContext, ExecuteInLocalContext, WaitForEvent {
 
-  public SimpleContext(String workflowId, StateManager stateManager, Map<String, Object> payload) {
-    super(workflowId, stateManager, payload);
+  public SimpleContext(String workflowId, Map<String, Object> payload, StateManager stateManager) {
+    super(workflowId, payload, stateManager);
   }
 }

@@ -6,6 +6,7 @@ import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
+import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
-import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -80,7 +81,7 @@ class ParallelWorkflowSubscriptionTest {
      * 3. Calls an external API with timeout (tests timeout mechanism)
      * 4. Sends notification
      */
-    static class OrderProcessingWorkflow extends SimpleDefinition.Type {
+    static class OrderProcessingWorkflow implements SimpleDefinition {
 
         private static final Duration EXTERNAL_API_TIMEOUT = Duration.ofMillis(500);
 
@@ -180,7 +181,7 @@ class ParallelWorkflowSubscriptionTest {
                 PayloadReducer.local(),
                 PayloadReducer.all(),
                 EXTERNAL_API_TIMEOUT,
-                defaults()
+                eventName()
             ).join();
 
             return (ExternalValidationResult) result.get(resultKey);
@@ -216,7 +217,7 @@ class ParallelWorkflowSubscriptionTest {
     @Test
     void shouldRunTwoWorkflowsInParallelWithWaitForEventAndTimeout() {
         // Given - two orders that will be processed in parallel
-        coordinator.register(OrderProcessingWorkflow.class, OrderCreatedEvent.class);
+        coordinator.declarative().register(new QualifiedName(OrderCreatedEvent.class), new OrderProcessingWorkflow());
 
         // Schedule events:
         // - Two OrderCreatedEvent at nearly the same time (parallel workflows)
@@ -275,7 +276,7 @@ class ParallelWorkflowSubscriptionTest {
     @Test
     void shouldHandleTimeoutInOneWorkflowWhileOtherCompletes() {
         // Given - two orders: one will timeout, one will succeed
-        coordinator.register(OrderProcessingWorkflow.class, OrderCreatedEvent.class);
+        coordinator.declarative().register(new QualifiedName(OrderCreatedEvent.class), new OrderProcessingWorkflow());
 
         delayedPublisher.addSchedules(List.of(
             // Start both workflows
@@ -325,7 +326,7 @@ class ParallelWorkflowSubscriptionTest {
     @Test
     void shouldCorrectlyRouteEventsToMatchingWorkflows() {
         // Given - three workflows waiting for events, events arrive in scrambled order
-        coordinator.register(OrderProcessingWorkflow.class, OrderCreatedEvent.class);
+        coordinator.declarative().register(new QualifiedName(OrderCreatedEvent.class), new OrderProcessingWorkflow());
 
         delayedPublisher.addSchedules(List.of(
             // Start three workflows

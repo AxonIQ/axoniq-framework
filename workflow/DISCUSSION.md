@@ -71,6 +71,16 @@ Options:
 
 
 # TODO's
+- WorkflowDefinition -> Functional Interface
+- Workflow States
+  - STARTED
+  - COMPLETED
+  - FAILED
+  - TIMED_OUT
+- EventNameCustomizer -> Functional Interface (Expose Customization)
+- Options on workflow level
+  - workflow event name customizer
+  - QOS
 - Retries in execute? -> No it is part of the wrapper/decorator around the primitive
 - Composition of workflows
     - Nested workflows

@@ -4,7 +4,7 @@ import io.axoniq.workflow.dsl.simple.Payload
 import io.axoniq.workflow.dsl.simple.Payload.payload
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext
-import io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.defaults
+import io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName
 import io.axoniq.workflow.runtime.context.WorkflowExecutionImpl
 import io.axoniq.workflow.runtime.engine.StateManager
 import java.time.Duration
@@ -14,7 +14,7 @@ class Kontext(
   workflowId: String,
   stateManager: StateManager,
   payload: Map<String, Any>
-) : WorkflowExecutionImpl(workflowId, stateManager, payload), WorkflowContext
+) : WorkflowExecutionImpl(workflowId, payload, stateManager), WorkflowContext
 
 fun Kontext.execute(stepName: String, payload: Payload, action: (Payload) -> Payload): Payload =
   execute(
@@ -24,7 +24,7 @@ fun Kontext.execute(stepName: String, payload: Payload, action: (Payload) -> Pay
     PayloadReducer.local(),
     PayloadReducer.all(),
     Duration.ofSeconds(5),
-    defaults()
+    eventName()
   ).thenApply { payload(it) }.join()
 
 inline fun <reified T : Any> Kontext.waitForEvent(
@@ -38,7 +38,7 @@ inline fun <reified T : Any> Kontext.waitForEvent(
     predicate,
     duration,
     { t -> typeToPayloadConverter().apply(t) },
-    defaults()
+    eventName()
   ).join()
 }
 
@@ -53,7 +53,7 @@ fun Kontext.wait(
       { false },
       duration,
       { t -> typeToPayloadConverter().apply(t) },
-      defaults()
+      eventName()
     ).join()
   } catch (_: CompletionException) {
     // no error on timeout

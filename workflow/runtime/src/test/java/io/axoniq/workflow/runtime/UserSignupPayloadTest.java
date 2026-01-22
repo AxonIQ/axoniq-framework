@@ -50,7 +50,7 @@ class UserSignupPayloadTest {
   record User(String id, String email) {
   }
 
-  public static class UserSignupWorkflow extends SimpleDefinition.Type {
+  public static class UserSignupWorkflow implements SimpleDefinition {
 
     @Override
     public String workflowId(@Nonnull Map<String, Object> trigger) {

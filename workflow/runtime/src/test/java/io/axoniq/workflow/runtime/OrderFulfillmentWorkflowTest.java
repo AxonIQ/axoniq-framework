@@ -6,6 +6,7 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -145,7 +146,7 @@ class OrderFulfillmentWorkflowTest {
 
   // ============== WORKFLOW DEFINITION ==============
 
-  static class OrderFulfillmentWorkflow extends SimpleDefinition.Type {
+  static class OrderFulfillmentWorkflow implements SimpleDefinition {
 
     @Override
     public String workflowId(Map<String, Object> trigger) {
@@ -344,7 +345,7 @@ class OrderFulfillmentWorkflowTest {
 
   // ============== WORKFLOW WITH HUMAN APPROVAL ==============
 
-  static class OrderWithApprovalWorkflow extends SimpleDefinition.Type {
+  static class OrderWithApprovalWorkflow implements SimpleDefinition {
 
     private static final BigDecimal APPROVAL_THRESHOLD = BigDecimal.valueOf(1000);
 
@@ -528,7 +529,7 @@ class OrderFulfillmentWorkflowTest {
   @Test
   void shouldCompleteOrderSuccessfully() {
     // Given - register workflow to start on OrderReceivedEvent
-    coordinator.register(OrderFulfillmentWorkflow.class, OrderReceivedEvent.class);
+    coordinator.declarative().register(new QualifiedName(OrderReceivedEvent.class), new OrderFulfillmentWorkflow());
 
     // Schedule the trigger event
     delayedPublisher.addSchedules(List.of(
@@ -570,7 +571,7 @@ class OrderFulfillmentWorkflowTest {
   @Test
   void shouldCompensateWhenPaymentFails() {
     // Given - register workflow to start on OrderReceivedEvent
-    coordinator.register(OrderFulfillmentWorkflow.class, OrderReceivedEvent.class);
+    coordinator.declarative().register(new QualifiedName(OrderReceivedEvent.class), new OrderFulfillmentWorkflow());
 
     // Schedule the trigger event with payment failure simulation
     delayedPublisher.addSchedules(List.of(
@@ -624,7 +625,7 @@ class OrderFulfillmentWorkflowTest {
     );
 
     // Register workflow to start on OrderReceivedEvent
-    coordinator.register(OrderWithApprovalWorkflow.class, OrderReceivedEvent.class);
+    coordinator.declarative().register(new QualifiedName(OrderReceivedEvent.class), new OrderWithApprovalWorkflow());
 
     // Schedule events:
     // 1. Order submitted immediately
@@ -688,7 +689,7 @@ class OrderFulfillmentWorkflowTest {
     );
 
     // Register workflow to start on OrderReceivedEvent
-    coordinator.register(OrderWithApprovalWorkflow.class, OrderReceivedEvent.class);
+    coordinator.declarative().register(new QualifiedName(OrderReceivedEvent.class), new OrderWithApprovalWorkflow());
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(100, new OrderReceivedEvent(

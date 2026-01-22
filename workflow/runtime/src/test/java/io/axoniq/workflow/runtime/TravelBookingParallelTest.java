@@ -36,7 +36,7 @@ class TravelBookingParallelTest {
     stateManager.printPayloads();
   }
 
-  static class TravelBookingWorkflow extends SimpleDefinition.Type {
+  static class TravelBookingWorkflow implements SimpleDefinition {
 
     private static void randomDelay(int minMs, int maxMs) {
       try {

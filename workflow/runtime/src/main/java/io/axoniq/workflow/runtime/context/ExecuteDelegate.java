@@ -5,7 +5,7 @@ import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.StepFailedException;
-import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
+import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -30,7 +30,7 @@ public class ExecuteDelegate extends AbstractContextAwarePrimitiveDelegate imple
   public CompletableFuture<Map<String, Object>> execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
-    @Nonnull PayloadFunction action,
+    @Nonnull PayloadProcessor action,
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping,
     @Nonnull Duration timeout,

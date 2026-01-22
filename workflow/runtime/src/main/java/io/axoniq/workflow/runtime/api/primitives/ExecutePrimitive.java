@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.api.primitives;
 
-import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
+import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
@@ -25,7 +25,7 @@ public interface ExecutePrimitive {
   CompletableFuture<Map<String, Object>> execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
-    @Nonnull PayloadFunction action,
+    @Nonnull PayloadProcessor action,
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping,
     @Nonnull Duration timeout,

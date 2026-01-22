@@ -22,7 +22,7 @@ public interface WorkflowContext extends
 
   StateManager getStateManager();
 
-  void modifyPayload(PayloadFunction payloadModification);
+  void modifyPayload(PayloadProcessor payloadModification);
 
   void addStep(StepExecution execution);
 

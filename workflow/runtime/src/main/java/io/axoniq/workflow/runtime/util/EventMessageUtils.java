@@ -6,6 +6,7 @@ import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
@@ -98,7 +99,7 @@ public class EventMessageUtils {
     }
 
     // Subscribe for future events
-    var subscription = stateManager.subscribe(eventType, eventCondition, event -> {
+    var subscription = stateManager.subscribe(new QualifiedName(eventType), eventCondition, event -> {
       future.complete(event);
       return true; // Remove subscription after completion
     });

@@ -1,10 +1,8 @@
 package io.axoniq.workflow.runtime.engine;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import io.axoniq.workflow.runtime.context.WorkflowExecutionImpl;
 import io.axoniq.workflow.runtime.exception.WorkflowFailedException;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,15 +32,11 @@ public class WorkflowEngine {
     this.stateManager = stateManager;
   }
 
-  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowDefinition<T> definition) {
-    return execute(definition, Map.of(), apply(definition, Map.of()));
+  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowConfiguration<T> configuration) {
+    return execute(configuration, apply(configuration, Map.of()));
   }
 
-  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
-    return execute(definition, workflowPayload, apply(definition, workflowPayload));
-  }
-
-  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowDefinition<T> definition, Map<String, Object> workflowPayload, T context) {
+  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowConfiguration<T> configuration, T context) {
     return CompletableFuture.supplyAsync(() -> {
       var impl = (WorkflowExecutionImpl) context;
       try {
@@ -51,7 +45,7 @@ public class WorkflowEngine {
           return context;
         }
 
-        definition.execute(context);
+        configuration.workflowDefinition().execute(context);
 
         impl.setStatus(WorkflowStatus.COMPLETED);
         stateManager.append(completedWorkflow(context));
@@ -64,10 +58,7 @@ public class WorkflowEngine {
       } catch (RuntimeException e) {
         // Any other runtime exception - log and rethrow, stay ACTIVE
         log.warn("Workflow {} encountered error, staying active: {}",
-                 context.getWorkflowId(), e.getMessage());
-        throw e;
-      } catch (Error e) {
-        // JVM errors - rethrow without marking FAILED
+          context.getWorkflowId(), e.getMessage());
         throw e;
       }
     }, virtualThreadExecutor);
@@ -79,8 +70,8 @@ public class WorkflowEngine {
    * and workflow-level state. Must be called before workflow execution to ensure
    * the context reflects the complete event history.
    */
-  public <T extends WorkflowContext> T apply(WorkflowDefinition<T> definition, Map<String, Object> workflowPayload) {
-    T context = definition.createContext(this.stateManager, workflowPayload);
+  public <T extends WorkflowContext> T apply(WorkflowConfiguration<T> configuration, Map<String, Object> workflowPayload) {
+    T context = configuration.workflowContextFactory().createContext(workflowPayload, this.stateManager);
     List<EventMessage> history = stateManager.getHistory(context.getWorkflowId());
 
     for (EventMessage event : history) {

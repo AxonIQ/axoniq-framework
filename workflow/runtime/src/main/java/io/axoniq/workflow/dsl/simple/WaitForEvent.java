@@ -7,7 +7,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName;
 
 public interface WaitForEvent extends WaitForPrimitive {
 
@@ -16,14 +16,14 @@ public interface WaitForEvent extends WaitForPrimitive {
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
-    return this.waitFor(stepName, eventType, predicate, timeout, t -> typeToPayloadConverter().apply(t), defaults()).join();
+    return this.waitFor(stepName, eventType, predicate, timeout, t -> typeToPayloadConverter().apply(t), eventName()).join();
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout, EventNameCustomizer eventNameCustomizer) {
     return this.waitFor(stepName, eventType, (e) -> true, timeout, t -> typeToPayloadConverter().apply(t), eventNameCustomizer).join();
   }
   default <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout) {
-    return this.waitFor(stepName, eventType, (e) -> true, timeout, t -> typeToPayloadConverter().apply(t), defaults()).join();
+    return this.waitFor(stepName, eventType, (e) -> true, timeout, t -> typeToPayloadConverter().apply(t), eventName()).join();
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType) {
@@ -39,7 +39,7 @@ public interface WaitForEvent extends WaitForPrimitive {
   }
 
   default void wait(String stepName, Duration timeout) {
-    wait(stepName, timeout, defaults());
+    wait(stepName, timeout, eventName());
   }
 
 }

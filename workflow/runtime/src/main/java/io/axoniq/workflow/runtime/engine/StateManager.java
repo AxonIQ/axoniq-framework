@@ -2,6 +2,7 @@ package io.axoniq.workflow.runtime.engine;
 
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,14 +49,13 @@ public class StateManager {
   /**
    * Subscribe to events of a specific type that match the given filter.
    *
-   * @param eventType the class of the event payload to listen for
+   * @param qualifiedName the qualified name of the event payload to listen for
    * @param filter predicate to filter events (applied to EventMessage)
    * @param listener callback invoked when a matching event is appended
-   * @param <T> the event payload type
    * @return a Subscription handle to cancel the subscription
    */
-  public <T> Subscription subscribe(Class<T> eventType, Predicate<EventMessage> filter, EventListener listener) {
-    var entry = new SubscriptionEntry(eventType, filter, listener);
+  public Subscription subscribe(QualifiedName qualifiedName, Predicate<EventMessage> filter, EventListener listener) {
+    var entry = new SubscriptionEntry(qualifiedName, filter, listener);
     subscriptions.add(entry);
     return entry;
   }
@@ -73,20 +73,20 @@ public class StateManager {
    * Internal subscription entry that implements Subscription for cancellation.
    */
   private class SubscriptionEntry implements Subscription {
-    private final Class<?> eventType;
+    private final QualifiedName qualifiedName;
     private final Predicate<EventMessage> filter;
     private final EventListener listener;
     private final AtomicBoolean active = new AtomicBoolean(true);
 
-    SubscriptionEntry(Class<?> eventType, Predicate<EventMessage> filter, EventListener listener) {
-      this.eventType = eventType;
+    SubscriptionEntry(QualifiedName qualifiedName, Predicate<EventMessage> filter, EventListener listener) {
+      this.qualifiedName = qualifiedName;
       this.filter = filter;
       this.listener = listener;
     }
 
     boolean matches(EventMessage event) {
       return active.get()
-          && event.payloadType().equals(eventType)
+          && event.type().qualifiedName().equals(qualifiedName)
           && filter.test(event);
     }
 

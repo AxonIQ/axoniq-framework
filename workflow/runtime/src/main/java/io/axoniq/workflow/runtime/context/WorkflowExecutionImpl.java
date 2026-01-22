@@ -2,11 +2,11 @@ package io.axoniq.workflow.runtime.context;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.StateManager;
-import io.axoniq.workflow.runtime.api.workflow.PayloadFunction;
-import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import jakarta.annotation.Nonnull;
@@ -15,6 +15,7 @@ import jakarta.annotation.Nullable;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,9 +26,10 @@ public class WorkflowExecutionImpl implements WorkflowContext {
 
   private final String workflowId;
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
-  private final StateManager stateManager;
-  private Map<String, Object> global;
+  private Map<String, Object> payload;
   private WorkflowStatus status = WorkflowStatus.STARTED;
+
+  private final transient StateManager stateManager;
 
   // primitive implementations
   private final ExecutePrimitive executePrimitive = new ExecuteDelegate(this);
@@ -36,23 +38,23 @@ public class WorkflowExecutionImpl implements WorkflowContext {
 
   public WorkflowExecutionImpl(
     @Nonnull String workflowId,
-    @Nonnull StateManager stateManager,
-    @Nonnull Map<String, Object> payload) {
+    @Nonnull Map<String, Object> payload,
+    @Nonnull StateManager stateManager) {
     this.workflowId = workflowId;
+    this.payload = payload;
     this.stateManager = stateManager;
-    this.global = payload;
   }
 
   @Override
   public CompletableFuture<Map<String, Object>> execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
-    @Nonnull PayloadFunction action,
+    @Nonnull PayloadProcessor action,
     @Nonnull PayloadReducer parameterMapping,
     @Nonnull PayloadReducer resultMapping,
     @Nonnull Duration timeout,
     @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
+  ) {
     return executePrimitive.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
   }
 
@@ -74,7 +76,7 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   }
 
   @Override
-  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(Class<T> type) {
+  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(@Nonnull Class<T> type) {
     return conversionDelegate.payloadToTypeConverter(type);
   }
 
@@ -85,7 +87,7 @@ public class WorkflowExecutionImpl implements WorkflowContext {
 
   @Override
   public Map<String, Object> getPayload() {
-    return global;
+    return payload;
   }
 
   @Override
@@ -94,8 +96,8 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   }
 
   @Override
-  public void modifyPayload(PayloadFunction payloadModification) {
-    this.global = payloadModification.apply(global);
+  public void modifyPayload(PayloadProcessor payloadModification) {
+    this.payload = Objects.requireNonNull(payloadModification.apply(payload), "Payload must not be null");
   }
 
   @Override

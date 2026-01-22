@@ -5,5 +5,5 @@ import io.axoniq.workflow.runtime.engine.StepStatus;
 import java.util.Map;
 
 public interface EventNameCustomizer {
-  String getEventName(String stepName, Map<String, Object> payload, StepStatus stepStatus);
+  String getEventName(String stepName, Map<String, Object> parameters, StepStatus stepStatus);
 }

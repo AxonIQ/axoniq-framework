@@ -6,6 +6,8 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
+import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,10 +47,10 @@ class CoordinatorUserSignupTest {
   record RegistrationReceivedEvent(String id, String email) {
   }
 
-  public static class UserSignupWorkflow extends SimpleDefinition.Type {
+  public static class UserSignupWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String workflowId(@Nonnull Map<String, Object> trigger) {
       return "signup-" + trigger.get("id").toString();
     }
 
@@ -79,7 +81,10 @@ class CoordinatorUserSignupTest {
   @Test
   void shouldExecuteAllStepsOnFirstRun() {
 
-    coordinator.register(UserSignupWorkflow.class, RegistrationReceivedEvent.class);
+    coordinator.declarative().register(
+      new QualifiedName(RegistrationReceivedEvent.class),
+      new UserSignupWorkflow()
+    );
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(

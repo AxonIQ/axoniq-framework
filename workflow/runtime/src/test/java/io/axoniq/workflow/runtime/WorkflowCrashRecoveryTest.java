@@ -5,7 +5,9 @@ import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
+import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.AfterEach;
@@ -132,10 +134,10 @@ class WorkflowCrashRecoveryTest {
    * 4. createShipment
    * 5. sendConfirmation
    */
-  static class SequentialOrderWorkflow extends SimpleDefinition.Type {
+  static class SequentialOrderWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String workflowId(@Nonnull Map<String, Object> trigger) {
       return "order-" + trigger.getOrDefault("orderId", UUID.randomUUID().toString());
     }
 
@@ -278,7 +280,7 @@ class WorkflowCrashRecoveryTest {
     shouldBlockBeforeStep4 = true;  // Enable blocking before step 4
 
     coordinator1 = new Coordinator(stateManager);
-    coordinator1.register(SequentialOrderWorkflow.class, OrderReceivedEvent.class);
+    coordinator1.declarative().register(new QualifiedName(OrderReceivedEvent.class), new SequentialOrderWorkflow());
     coordinator1.start();
 
     // Publish trigger event
@@ -330,7 +332,7 @@ class WorkflowCrashRecoveryTest {
     shouldBlockBeforeStep4 = false;  // Don't block during recovery
 
     coordinator2 = new Coordinator(stateManager);  // SAME stateManager!
-    coordinator2.register(SequentialOrderWorkflow.class, OrderReceivedEvent.class);
+    coordinator2.declarative().register(new QualifiedName(OrderReceivedEvent.class), new SequentialOrderWorkflow());
     coordinator2.start();
 
     // Re-publish same trigger event (same orderId = same workflowId)

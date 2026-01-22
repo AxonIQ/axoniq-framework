@@ -5,6 +5,7 @@ import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
+import jakarta.annotation.Nonnull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
-import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.baseName;
 import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,10 +42,10 @@ class UserSignupTest {
   record User(String id, String email) {
   }
 
-  static class UserSignupWorkflow extends SimpleDefinition.Type {
+  static class UserSignupWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String workflowId(@Nonnull Map<String, Object> trigger) {
       if (trigger.containsKey("id")) {
         return "signing-" + trigger.get("id");
       } else {
@@ -97,16 +97,19 @@ class UserSignupTest {
   void shouldReturnCachedResultForCompletedSteps() {
     String workflowId = "signup001";
 
-    class MyWorkflowDefinition extends SimpleDefinition.Type {
+    class MyWorkflowDefinition implements SimpleDefinition {
 
       @Override
       public void execute(SimpleContext context) {
         String value = context.execute("getValue", String.class, () -> "cached-value",
-          namespace("other.namespace").baseName("getValueStep"));
+          namespace("other.namespace")
+            .baseName("getValueStep")
+            .started("Initialized")
+        );
       }
 
       @Override
-      public String workflowId(Map<String, Object> trigger) {
+      public String workflowId(@Nonnull Map<String, Object> trigger) {
         return workflowId;
       }
     }

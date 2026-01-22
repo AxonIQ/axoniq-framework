@@ -6,6 +6,8 @@ import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
+import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +24,7 @@ import java.util.concurrent.TimeoutException;
 
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
-import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -94,12 +96,12 @@ class LoanApplicationTimeoutTest {
 
   // ============== WORKFLOW DEFINITION ==============
 
-  static class LoanApplicationWorkflow extends SimpleDefinition.Type {
+  static class LoanApplicationWorkflow implements SimpleDefinition {
 
     private static final Duration CREDIT_CHECK_TIMEOUT = Duration.ofMillis(500);
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String workflowId(@Nonnull Map<String, Object> trigger) {
       return "loan-" + trigger.getOrDefault("applicationId", UUID.randomUUID().toString());
     }
 
@@ -232,7 +234,7 @@ class LoanApplicationTimeoutTest {
         PayloadReducer.local(),
         PayloadReducer.all(),
         CREDIT_CHECK_TIMEOUT,
-        defaults()
+        eventName()
       ).join();
 
       return (CreditScore) result.get(stepSpecificKey);
@@ -267,7 +269,7 @@ class LoanApplicationTimeoutTest {
   @Test
   void shouldCompensateWhenCreditCheckTimesOut() {
     // Given - loan application where credit check will timeout
-    coordinator.register(LoanApplicationWorkflow.class, LoanApplicationEvent.class);
+    coordinator.declarative().register(new QualifiedName(LoanApplicationEvent.class), new LoanApplicationWorkflow());
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(100, new LoanApplicationEvent(
@@ -310,7 +312,7 @@ class LoanApplicationTimeoutTest {
   @Test
   void shouldCompleteSuccessfullyWhenCreditCheckRespondsInTime() {
     // Given - loan application where credit check responds quickly
-    coordinator.register(LoanApplicationWorkflow.class, LoanApplicationEvent.class);
+    coordinator.declarative().register(new QualifiedName(LoanApplicationEvent.class), new LoanApplicationWorkflow());
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(100, new LoanApplicationEvent(
