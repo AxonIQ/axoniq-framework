@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.namespace;
+import static io.axoniq.workflow.runtime.util.MetadataUtils.create;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,7 +46,7 @@ class UserSignupTest {
   static class UserSignupWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(@Nonnull Map<String, Object> trigger) {
+    public String association(@Nonnull Map<String, Object> trigger) {
       if (trigger.containsKey("id")) {
         return "signing-" + trigger.get("id");
       } else {
@@ -78,7 +79,9 @@ class UserSignupTest {
   void shouldExecuteAllStepsOnFirstRun() {
     User user = new User("user-123", "test@example.com");
 
-    var context = engine.execute(new UserSignupWorkflow(), payload("user", user).getValues()).join();
+    var workflow = new UserSignupWorkflow();
+    var context = engine.restore(workflow, payload("user", user).getValues());
+    context = engine.execute(workflow, context).join();
     assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail");
 
     // Verify events published
@@ -109,7 +112,7 @@ class UserSignupTest {
       }
 
       @Override
-      public String workflowId(@Nonnull Map<String, Object> trigger) {
+      public String association(@Nonnull Map<String, Object> trigger) {
         return workflowId;
       }
     }

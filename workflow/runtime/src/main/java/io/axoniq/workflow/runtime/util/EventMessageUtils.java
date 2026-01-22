@@ -3,7 +3,6 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
-import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -11,7 +10,6 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
@@ -24,20 +22,15 @@ public class EventMessageUtils {
 
   public static EventMessage failedWorkflow(WorkflowContext context, Exception exception) {
     var name = context.getWorkflowId() + "Failed" + "#0.1";
-    var payload = new HashMap<String, Object>();
-    payload.put("message", exception.getMessage());
-    if (exception.getCause() != null) {
-      payload.put("cause", exception.getCause().toString());
-    }
-    return new GenericEventMessage(MessageType.fromString(name), payload,
-      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.FAILED)
+    return new GenericEventMessage(MessageType.fromString(name), exception,
+      MetadataUtils.create(context.getWorkflowId())
     );
   }
 
   public static EventMessage completedWorkflow(WorkflowContext context) {
     var name = context.getWorkflowId() + "Completed" + "#0.1";
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),
-      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.COMPLETED)
+      MetadataUtils.create(context.getWorkflowId())
     );
   }
 

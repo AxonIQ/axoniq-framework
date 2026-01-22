@@ -86,7 +86,7 @@ class ParallelWorkflowSubscriptionTest {
         private static final Duration EXTERNAL_API_TIMEOUT = Duration.ofMillis(500);
 
         @Override
-        public String workflowId(Map<String, Object> trigger) {
+        public String association(Map<String, Object> trigger) {
             return "order-" + trigger.get("orderId");
         }
 

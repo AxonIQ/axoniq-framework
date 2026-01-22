@@ -1,9 +1,5 @@
-package io.axoniq.workflow.runtime.engine;
+package io.axoniq.workflow.runtime.api.workflow;
 
-import io.axoniq.workflow.runtime.api.workflow.CorrelationProvider;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import jakarta.annotation.Nonnull;
 
 /**
@@ -20,5 +16,5 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
   WorkflowContextFactory<T> workflowContextFactory();
 
   @Nonnull
-  CorrelationProvider correlatorProvider();
+  AssociationProvider associationProvider();
 }

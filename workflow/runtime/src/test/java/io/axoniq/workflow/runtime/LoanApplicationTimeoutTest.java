@@ -101,7 +101,7 @@ class LoanApplicationTimeoutTest {
     private static final Duration CREDIT_CHECK_TIMEOUT = Duration.ofMillis(500);
 
     @Override
-    public String workflowId(@Nonnull Map<String, Object> trigger) {
+    public String association(@Nonnull Map<String, Object> trigger) {
       return "loan-" + trigger.getOrDefault("applicationId", UUID.randomUUID().toString());
     }
 

@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime.engine;
 
+import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.context.ConversionDelegate;
-import io.axoniq.workflow.runtime.engine.registration.SimpleWorkflowConfigurationRegistry;
 import org.axonframework.messaging.core.QualifiedName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +72,7 @@ public class Coordinator {
           consumedMessages.add(event.identifier());
 
           var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());
-          var workflowId = workflowConfiguration.correlatorProvider().correlationKey(payload)
+          var workflowId = workflowConfiguration.associationProvider().associationKey(payload)
             .orElseThrow(() -> new IllegalStateException("Correlation key is a mandatory requirement"));
 
           boolean workflowIdExists = running.contains(workflowId);
@@ -121,7 +121,7 @@ public class Coordinator {
   private <T extends WorkflowContext> CompletableFuture<T> applyAndExecute(
     WorkflowConfiguration<T> configuration, Map<String, Object> payload) {
     //Event Source context
-    T context = workflowEngine.apply(configuration, payload);
+    T context = workflowEngine.restore(configuration, payload);
     //Execute on context
     return workflowEngine.execute(configuration, context);
   }

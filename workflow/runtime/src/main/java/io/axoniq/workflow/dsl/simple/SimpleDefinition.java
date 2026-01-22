@@ -1,10 +1,10 @@
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.workflow.CorrelationProvider;
+import io.axoniq.workflow.runtime.api.workflow.AssociationProvider;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
-import io.axoniq.workflow.runtime.engine.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 
@@ -14,14 +14,14 @@ import java.util.Optional;
 public interface SimpleDefinition extends
   WorkflowDefinition<SimpleContext>,
   WorkflowContextFactory<SimpleContext>,
-  CorrelationProvider,
+  AssociationProvider,
   WorkflowConfiguration<SimpleContext> {
 
   @Nonnull
   @Override
   default SimpleContext createContext(@Nonnull Map<String, Object> payload, @Nonnull StateManager stateManager) {
     return new SimpleContext(
-      correlationKey(payload).orElseThrow(() -> new IllegalStateException("Could not extract correlation key from payload : " + payload)),
+      associationKey(payload).orElseThrow(() -> new IllegalStateException("Could not extract correlation key from payload : " + payload)),
       payload,
       stateManager
     );
@@ -29,11 +29,11 @@ public interface SimpleDefinition extends
 
   @NotNull
   @Override
-  default Optional<String> correlationKey(@NotNull Map<String, Object> payload) {
-    return Optional.of(workflowId(payload));
+  default Optional<String> associationKey(@NotNull Map<String, Object> payload) {
+    return Optional.of(association(payload));
   }
 
-  String workflowId(@NotNull Map<String, Object> payload);
+  String association(@NotNull Map<String, Object> payload);
 
   @Override
   @Nonnull
@@ -49,7 +49,7 @@ public interface SimpleDefinition extends
 
   @Override
   @Nonnull
-  default CorrelationProvider correlatorProvider() {
+  default AssociationProvider associationProvider() {
     return this;
   }
 }

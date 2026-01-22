@@ -137,7 +137,7 @@ class WorkflowCrashRecoveryTest {
   static class SequentialOrderWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(@Nonnull Map<String, Object> trigger) {
+    public String association(@Nonnull Map<String, Object> trigger) {
       return "order-" + trigger.getOrDefault("orderId", UUID.randomUUID().toString());
     }
 

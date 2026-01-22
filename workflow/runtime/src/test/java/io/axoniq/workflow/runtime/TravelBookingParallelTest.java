@@ -2,33 +2,40 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
+import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepFailedException;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
+import org.axonframework.messaging.core.QualifiedName;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 class TravelBookingParallelTest {
 
   private static final Logger logger = LoggerFactory.getLogger(TravelBookingParallelTest.class);
 
   private StateManager stateManager;
-  private WorkflowEngine engine;
+  private Coordinator coordinator;
+  private DelayedPublisher delayedPublisher;
 
   @BeforeEach
   void setUp() {
     stateManager = new StateManager();
-    engine = new WorkflowEngine(stateManager);
+    coordinator = new Coordinator(stateManager);
+    delayedPublisher = new DelayedPublisher(stateManager);
   }
 
   @AfterEach
@@ -47,7 +54,7 @@ class TravelBookingParallelTest {
     }
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String association(Map<String, Object> trigger) {
       return "travel-booking-" + trigger.getOrDefault("bookingId", "default");
     }
 
@@ -107,9 +114,29 @@ class TravelBookingParallelTest {
     }
   }
 
+  public record TravelRequired(
+    String bookingId
+  ) {
+
+  }
+
   @Test
   void shouldExecuteParallelStepsAndHandleFailureWithAlternativePath() {
-    var context = engine.execute(new TravelBookingWorkflow(), Map.of("bookingId", "booking-001")).join();
+
+    coordinator.declarative().register(new QualifiedName(TravelRequired.class), new TravelBookingWorkflow());
+    delayedPublisher.addSchedules(List.of(
+      DelayedPublisher.Schedule.ofMillis(100, new TravelRequired("booking-001"))
+    ));
+
+    coordinator.start();
+    delayedPublisher.start();
+
+    await().untilAsserted(() -> {
+      assertThat(coordinator.getHistory()).isNotEmpty();
+    });
+
+    var context = coordinator.getHistory().getFirst();
+    assertThat(context).isNotNull();
 
     // Verify parallel steps ran
     assertThat(context.getStepHistory()).contains("reserveFlight", "reserveHotel");
@@ -119,5 +146,10 @@ class TravelBookingParallelTest {
 
     // Verify success path was NOT taken
     assertThat(context.getStepHistory()).doesNotContain("sendConfirmation");
+  }
+
+  @AfterEach
+  void tearDown() {
+    coordinator.stop();
   }
 }

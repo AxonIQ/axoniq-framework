@@ -106,6 +106,9 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   }
 
   @Override
+  public void restoreStep(StepExecution step) { steps.put(step.stepName(), step);}
+
+  @Override
   public StepExecution getStep(String stepName) {
     return steps.get(stepName);
   }
@@ -120,25 +123,13 @@ public class WorkflowExecutionImpl implements WorkflowContext {
     return Clock.systemDefaultZone();
   }
 
-  @Override
-  public void restoreStep(StepExecution step) {
-    steps.put(step.stepName(), step);
-  }
 
   @Override
-  public void restoreCompleted() {
-    this.status = WorkflowStatus.COMPLETED;
-  }
-
-  @Override
-  public void restoreFailed() {
-    this.status = WorkflowStatus.FAILED;
-  }
-
   public WorkflowStatus getStatus() {
     return status;
   }
 
+  @Override
   public void setStatus(WorkflowStatus status) {
     this.status = status;
   }

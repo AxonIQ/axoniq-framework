@@ -1,6 +1,6 @@
-package io.axoniq.workflow.runtime.engine.registration;
+package io.axoniq.workflow.runtime.engine;
 
-import io.axoniq.workflow.runtime.engine.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 

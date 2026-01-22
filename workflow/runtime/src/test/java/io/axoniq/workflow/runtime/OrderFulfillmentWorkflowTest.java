@@ -149,7 +149,7 @@ class OrderFulfillmentWorkflowTest {
   static class OrderFulfillmentWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String association(Map<String, Object> trigger) {
       return "order-" + trigger.getOrDefault("orderId", UUID.randomUUID().toString());
     }
 
@@ -350,7 +350,7 @@ class OrderFulfillmentWorkflowTest {
     private static final BigDecimal APPROVAL_THRESHOLD = BigDecimal.valueOf(1000);
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
+    public String association(Map<String, Object> trigger) {
       return "order-approval-" + trigger.getOrDefault("orderId", UUID.randomUUID().toString());
     }
 

@@ -50,7 +50,7 @@ class CoordinatorUserSignupTest {
   public static class UserSignupWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(@Nonnull Map<String, Object> trigger) {
+    public String association(@Nonnull Map<String, Object> trigger) {
       return "signup-" + trigger.get("id").toString();
     }
 

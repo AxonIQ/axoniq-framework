@@ -4,6 +4,7 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 public class Payload {
 
@@ -41,6 +42,16 @@ public class Payload {
     //noinspection unchecked
     return (T) payload.get(key);
   }
+
+  public <T> T getPayloadAs(String key, Function<Map<String, Object>, T> converter) {
+    Object value = payload.get(key);
+    if (value instanceof Map) {
+      //noinspection unchecked
+      return (T)converter.apply((Map<String, Object>)value);
+    }
+    return (T) value;
+  }
+
 
   public Payload set(String key, Object value) {
     payload.put(key, value);

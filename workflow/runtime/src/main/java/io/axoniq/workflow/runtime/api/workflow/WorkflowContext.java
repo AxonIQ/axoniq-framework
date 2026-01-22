@@ -4,6 +4,7 @@ import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepExecution;
+import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 
 import java.time.Clock;
 import java.util.Map;
@@ -17,6 +18,7 @@ public interface WorkflowContext extends
 
   Map<String, Object> getPayload();
 
+  WorkflowStatus getStatus();
 
   // TODO segregate to a different interface
 
@@ -34,8 +36,5 @@ public interface WorkflowContext extends
 
   void restoreStep(StepExecution stepExecution);
 
-  void restoreCompleted();
-
-  void restoreFailed();
-
+  void setStatus(WorkflowStatus status);
 }

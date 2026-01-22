@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime.engine;
 
+import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.context.WorkflowExecutionImpl;
-import io.axoniq.workflow.runtime.exception.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +19,7 @@ import static io.axoniq.workflow.runtime.util.MetadataUtils.*;
 
 public class WorkflowEngine {
 
-  private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
+  private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
   private final StateManager stateManager;
   private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -33,32 +33,30 @@ public class WorkflowEngine {
   }
 
   public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowConfiguration<T> configuration) {
-    return execute(configuration, apply(configuration, Map.of()));
+    return execute(configuration, restore(configuration, Map.of()));
   }
 
   public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowConfiguration<T> configuration, T context) {
     return CompletableFuture.supplyAsync(() -> {
-      var impl = (WorkflowExecutionImpl) context;
       try {
         // Check if workflow is already in terminal state - do nothing
-        if (impl.getStatus().isTerminal()) {
+        if (context.getStatus().isTerminal()) {
           return context;
         }
-
         configuration.workflowDefinition().execute(context);
 
-        impl.setStatus(WorkflowStatus.COMPLETED);
+        context.setStatus(WorkflowStatus.COMPLETED);
         stateManager.append(completedWorkflow(context));
+
         return context;
       } catch (WorkflowFailedException e) {
         // User explicitly failed the workflow
-        impl.setStatus(WorkflowStatus.FAILED);
+        context.setStatus(WorkflowStatus.FAILED);
         stateManager.append(failedWorkflow(context, e));
         throw e;
       } catch (RuntimeException e) {
         // Any other runtime exception - log and rethrow, stay ACTIVE
-        log.warn("Workflow {} encountered error, staying active: {}",
-          context.getWorkflowId(), e.getMessage());
+        logger.warn("Workflow {} encountered error, staying active: {}", context.getWorkflowId(), e.getMessage());
         throw e;
       }
     }, virtualThreadExecutor);
@@ -70,8 +68,8 @@ public class WorkflowEngine {
    * and workflow-level state. Must be called before workflow execution to ensure
    * the context reflects the complete event history.
    */
-  public <T extends WorkflowContext> T apply(WorkflowConfiguration<T> configuration, Map<String, Object> workflowPayload) {
-    T context = configuration.workflowContextFactory().createContext(workflowPayload, this.stateManager);
+  public <T extends WorkflowContext> T restore(WorkflowConfiguration<T> configuration, Map<String, Object> initialWorkflowPayload) {
+    T context = configuration.workflowContextFactory().createContext(initialWorkflowPayload, this.stateManager);
     List<EventMessage> history = stateManager.getHistory(context.getWorkflowId());
 
     for (EventMessage event : history) {
@@ -100,13 +98,7 @@ public class WorkflowEngine {
       });
 
       // Apply workflow-level state changes
-      getWorkflowStatus(metadata).ifPresent(workflowStatus -> {
-        if (workflowStatus == WorkflowStatus.COMPLETED) {
-          context.restoreCompleted();
-        } else if (workflowStatus == WorkflowStatus.FAILED) {
-          context.restoreFailed();
-        }
-      });
+      getWorkflowStatus(metadata).ifPresent(context::setStatus);
     }
 
     return context;

@@ -2,10 +2,11 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
+import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
-import io.axoniq.workflow.runtime.engine.WorkflowEngine;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,14 +24,15 @@ import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 class UserSignupPayloadTest {
 
   private static final Logger logger = LoggerFactory.getLogger(UserSignupPayloadTest.class);
 
   private StateManager stateManager;
-  private WorkflowEngine engine;
   private DelayedPublisher delayedPublisher;
+  private Coordinator coordinator;
 
   record EmailConfirmed(String userId, String email) {
   }
@@ -38,13 +40,14 @@ class UserSignupPayloadTest {
   @BeforeEach
   void setUp() {
     stateManager = new StateManager();
-    engine = new WorkflowEngine(stateManager);
+    coordinator = new Coordinator(stateManager);
     delayedPublisher = new DelayedPublisher(stateManager);
   }
 
   @AfterEach
   void printEvents() {
     stateManager.printPayloads();
+    coordinator.stop();
   }
 
   record User(String id, String email) {
@@ -53,7 +56,7 @@ class UserSignupPayloadTest {
   public static class UserSignupWorkflow implements SimpleDefinition {
 
     @Override
-    public String workflowId(@Nonnull Map<String, Object> trigger) {
+    public String association(@Nonnull Map<String, Object> trigger) {
       return "signup-" + trigger.getOrDefault("id", UUID.randomUUID()).toString();
     }
 
@@ -81,7 +84,7 @@ class UserSignupPayloadTest {
       var activated = context.execute("activateUser",
         startParams,
         payload -> {
-          User user = payload.get("user");
+          User user = payload.getPayloadAs("user", context.payloadToTypeConverter(User.class));
           logger.info("Activating user {}.", user.id);
           return payload()
             .with("email", user.email)
@@ -120,12 +123,23 @@ class UserSignupPayloadTest {
 
   }
 
+  record UserSignedUp(
+    User user
+  ) {
+
+  }
+
   @Test
   void shouldExecuteAllStepsOnManualRun() {
     User user = new User("user-123", "test@example.com");
-    var payload = payload().with("user", user);
+
+    coordinator.declarative()
+      .register(new QualifiedName(UserSignedUp.class), new UserSignupWorkflow());
 
     delayedPublisher.addSchedules(List.of(
+      ofMillis(500,
+        new UserSignedUp(user)
+      ),
       ofMillis(
         500,
         new EmailConfirmed("user-456", "kermit@muppets.biz") // wrong event, filtered by the predicate
@@ -136,10 +150,14 @@ class UserSignupPayloadTest {
       )
     ));
 
-    // Arm the publisher to start the delayed execution
+    coordinator.start();
     delayedPublisher.start();
 
-    var context = engine.execute(new UserSignupWorkflow(), payload.getValues()).join();
+    await().untilAsserted(() -> {
+      assertThat(coordinator.getHistory()).isNotEmpty();
+    });
+
+    var context = coordinator.getHistory().getFirst();
 
     assertThat(context.getStepHistory()).containsExactlyInAnyOrderElementsOf(
       Set.of("createUser", "activateUser", "emailConfirmed", "blocked500ms", "sendWelcomeEmail")

@@ -41,7 +41,7 @@ internal class UserSignupPayloadTest {
   internal data class User(val id: String, val email: String)
 
   class UserSignupWorkflow : KDefinition(
-    workflowIdRetriever = { trigger -> "signup-${trigger.getOrDefault("id", UUID.randomUUID())}" },
+    associate = { trigger -> "signup-${trigger.getOrDefault("id", UUID.randomUUID())}" },
     execute = { context: Kontext ->
       with(context) {
 
@@ -126,7 +126,9 @@ internal class UserSignupPayloadTest {
 
     delayedPublisher.start()
 
-    val context = engine.execute<Kontext>(UserSignupWorkflow(), payload.values).join()
+    val workflow = UserSignupWorkflow()
+    var context = engine.restore(workflow, payload.values)
+    context = engine.execute<Kontext>(workflow, context).join()
 
     assertThat(context.stepHistory).containsExactlyInAnyOrder(
       "createUser", "activateUser", "emailConfirmed", "blocked500ms", "sendWelcomeEmail"
