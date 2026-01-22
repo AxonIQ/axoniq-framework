@@ -109,7 +109,7 @@ class UserSignupTest {
         String value = context.execute("getValue", String.class, () -> "cached-value",
           namespace("other.namespace")
             .baseName("getValueStep")
-            .started("Initialized")
+            .stepStarted("Initialized")
         );
       }
 

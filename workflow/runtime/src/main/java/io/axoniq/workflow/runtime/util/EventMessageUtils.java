@@ -5,6 +5,7 @@ import io.axoniq.workflow.runtime.api.workflow.StateManager;
 import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -21,21 +22,21 @@ public class EventMessageUtils {
     return m -> MetadataUtils.workflowIdFilter(workflowId).test(m.metadata());
   }
 
-  public static EventMessage failedWorkflow(WorkflowContext context, Exception exception) {
-    var name = context.getWorkflowId() + "Failed" + "#0.1";
+  public static EventMessage failedWorkflow(WorkflowContext context, Exception exception, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.FAILED);
     return new GenericEventMessage(MessageType.fromString(name), exception,
       MetadataUtils.create(context.getWorkflowId())
     );
   }
 
-  public static EventMessage startedWorkflow(WorkflowContext context) {
-    var name = context.getWorkflowId() + "Started" + "#0.1";
+  public static EventMessage startedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.STARTED);
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),
       MetadataUtils.create(context.getWorkflowId())
     );
   }
-  public static EventMessage completedWorkflow(WorkflowContext context) {
-    var name = context.getWorkflowId() + "Completed" + "#0.1";
+  public static EventMessage completedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),
       MetadataUtils.create(context.getWorkflowId())
     );

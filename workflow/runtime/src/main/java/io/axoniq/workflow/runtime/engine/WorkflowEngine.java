@@ -104,18 +104,18 @@ public class WorkflowEngine {
         }
 
         state.setStatus(WorkflowStatus.STARTED);
-        eventAppender.append(startedWorkflow(context));
+        eventAppender.append(startedWorkflow(context, configuration.eventNameCustomizer()));
 
         configuration.workflowDefinition().execute(context);
 
         state.setStatus(WorkflowStatus.COMPLETED);
-        eventAppender.append(completedWorkflow(context));
+        eventAppender.append(completedWorkflow(context, configuration.eventNameCustomizer()));
 
         return context;
       } catch (WorkflowFailedException e) {
         // User explicitly failed the workflow
         state.setStatus(WorkflowStatus.FAILED);
-        eventAppender.append(failedWorkflow(context, e));
+        eventAppender.append(failedWorkflow(context, e, configuration.eventNameCustomizer()));
 
         throw e;
       } catch (RuntimeException e) {

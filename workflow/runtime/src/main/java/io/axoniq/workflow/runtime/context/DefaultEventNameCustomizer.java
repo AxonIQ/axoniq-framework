@@ -2,6 +2,7 @@ package io.axoniq.workflow.runtime.context;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.StepStatus;
+import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import org.axonframework.common.StringUtils;
 
 import java.util.HashMap;
@@ -12,6 +13,7 @@ import java.util.function.Function;
 public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   private final Map<StepStatus, String> stepStatusToName = new HashMap<>();
+  private final Map<WorkflowStatus, String> workflowStatusToName = new HashMap<>();
   private String namespace = "io.axoniq.workflow";
   private String baseName = null;
   private String baseVersion = "#0.1";
@@ -22,7 +24,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   public record PayloadCustomization(
     Map<String, Object> payload,
-    StepStatus status,
+    String status,
     String template
   ) {
   }
@@ -45,25 +47,26 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
       return eventName().namespace(namespace);
     }
 
-    public static DefaultEventNameCustomizer completed(String completed) {
-      return eventName().completed(completed);
+    public static DefaultEventNameCustomizer stepCompleted(String completed) {
+      return eventName().stepCompleted(completed);
     }
 
-    public static DefaultEventNameCustomizer started(String started) {
-      return eventName().started(started);
+    public static DefaultEventNameCustomizer stepStarted(String started) {
+      return eventName().stepStarted(started);
     }
 
-    public static DefaultEventNameCustomizer failed(String failed) {
-      return eventName().failed(failed);
+    public static DefaultEventNameCustomizer stepFailed(String failed) {
+      return eventName().stepFailed(failed);
     }
 
-    public static DefaultEventNameCustomizer timedOut(String timedOut) {
-      return eventName().timedOut(timedOut);
+    public static DefaultEventNameCustomizer stepTimedOut(String timedOut) {
+      return eventName().stepTimedOut(timedOut);
     }
 
     public static DefaultEventNameCustomizer appendToBaseName(boolean appendToBaseName) {
       return eventName().appendToBaseName(appendToBaseName);
     }
+
     public static DefaultEventNameCustomizer capitalizeSimpleName(boolean capitalizeSimpleName) {
       return eventName().capitalizeSimpleName(capitalizeSimpleName);
     }
@@ -78,10 +81,15 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
   }
 
   DefaultEventNameCustomizer() {
-    started("Started");
-    completed("Completed");
-    timedOut("TimedOut");
-    failed("Failed");
+    stepStarted("Started");
+    stepCompleted("Completed");
+    stepTimedOut("TimedOut");
+    stepFailed("Failed");
+    
+    workflowStarted("Started");
+    workflowCompleted("Completed");
+    workflowTimedOut("TimedOut");
+    workflowFailed("Failed");
   }
 
   public DefaultEventNameCustomizer baseName(String baseName) {
@@ -114,23 +122,43 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     return this;
   }
 
-  public DefaultEventNameCustomizer completed(String completed) {
+  public DefaultEventNameCustomizer stepCompleted(String completed) {
     this.stepStatusToName.put(StepStatus.COMPLETED, completed);
     return this;
   }
 
-  public DefaultEventNameCustomizer started(String started) {
+  public DefaultEventNameCustomizer stepStarted(String started) {
     this.stepStatusToName.put(StepStatus.STARTED, started);
     return this;
   }
 
-  public DefaultEventNameCustomizer timedOut(String timedOut) {
+  public DefaultEventNameCustomizer stepTimedOut(String timedOut) {
     this.stepStatusToName.put(StepStatus.TIMED_OUT, timedOut);
     return this;
   }
 
-  public DefaultEventNameCustomizer failed(String failed) {
+  public DefaultEventNameCustomizer stepFailed(String failed) {
     this.stepStatusToName.put(StepStatus.FAILED, failed);
+    return this;
+  }
+
+  public DefaultEventNameCustomizer workflowCompleted(String completed) {
+    this.workflowStatusToName.put(WorkflowStatus.COMPLETED, completed);
+    return this;
+  }
+
+  public DefaultEventNameCustomizer workflowStarted(String started) {
+    this.workflowStatusToName.put(WorkflowStatus.STARTED, started);
+    return this;
+  }
+
+  public DefaultEventNameCustomizer workflowTimedOut(String timedOut) {
+    this.workflowStatusToName.put(WorkflowStatus.TIMED_OUT, timedOut);
+    return this;
+  }
+
+  public DefaultEventNameCustomizer workflowFailed(String failed) {
+    this.workflowStatusToName.put(WorkflowStatus.FAILED, failed);
     return this;
   }
 
@@ -155,7 +183,26 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
       eventNameTemplate.append(baseVersion);
     }
 
-    return payloadCustomization.apply(new PayloadCustomization(parameters, stepStatus, eventNameTemplate.toString()));
+    return payloadCustomization.apply(new PayloadCustomization(parameters, stepStatus.name(), eventNameTemplate.toString()));
+  }
+
+  @Override
+  public String getEventName(String stepName, Map<String, Object> parameters, WorkflowStatus workflowStatus) {
+    final StringBuilder eventNameTemplate = new StringBuilder();
+    if (appendToBaseName) {
+      eventNameTemplate
+        .append(namespace != null ? (namespace.endsWith(".") ? namespace : namespace + ".") : "")
+        .append(capitalize(baseName != null ? baseName : stepName))
+        .append(Objects.requireNonNull(workflowStatusToName.get(workflowStatus)));
+    } else {
+      eventNameTemplate
+        .append(Objects.requireNonNull(workflowStatusToName.get(workflowStatus)));
+    }
+    if (appendVersion) {
+      eventNameTemplate.append(baseVersion);
+    }
+
+    return payloadCustomization.apply(new PayloadCustomization(parameters, workflowStatus.name(), eventNameTemplate.toString()));
   }
 
   private String capitalize(String string) {

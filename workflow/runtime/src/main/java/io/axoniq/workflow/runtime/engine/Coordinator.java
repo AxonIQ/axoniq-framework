@@ -30,6 +30,7 @@ public class Coordinator {
 
   private volatile boolean isRunning = false;
 
+  // FIXME -> get rid of it
   public Coordinator(SimpleStateManager stateManager) {
     this(stateManager, stateManager);
   }
