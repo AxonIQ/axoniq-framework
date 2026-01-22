@@ -85,7 +85,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     stepCompleted("Completed");
     stepTimedOut("TimedOut");
     stepFailed("Failed");
-    
+
     workflowStarted("Started");
     workflowCompleted("Completed");
     workflowTimedOut("TimedOut");

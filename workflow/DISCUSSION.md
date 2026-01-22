@@ -78,8 +78,6 @@ Options:
 
 
 # TODO's
-- Workflow name and Workflow name customizer
-- EventNameCustomizer -> Functional Interface (Expose Customization)
 - Options on workflow level
   - workflow event name customizer
   - QOS
