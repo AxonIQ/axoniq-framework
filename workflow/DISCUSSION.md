@@ -9,12 +9,13 @@
   - Completed
   - Failed
   - Timed Out
-- Workflow States
-  - STARTED
-  - COMPLETED
-  - FAILED
-  - TIMED_OUT
-
+- Workflow Lifecycle
+  - Started
+  - Completed
+  - Failed
+  - Timed Out
+- Workflow Status Listener support
+- Restart/Recovery: repeating workflows in terminal states skip execution
 - Restart/Recovery: repeating execution of workflow code, skipping already executed steps (based on event-sourced execution)
 - DSL uses host language for control flow and data flow
 - DSL based on primitives (2)
