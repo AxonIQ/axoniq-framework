@@ -32,7 +32,10 @@ public class WorkflowExecutionImpl implements WorkflowContext {
   private final WaitForPrimitive waitForPrimitive = new WaitForDelegate(this);
   private final ConversionDelegate conversionDelegate = new ConversionDelegate();
 
-  public WorkflowExecutionImpl(String workflowId, StateManager stateManager, Map<String, Object> payload) {
+  public WorkflowExecutionImpl(
+    @Nonnull String workflowId,
+    @Nonnull StateManager stateManager,
+    @Nonnull Map<String, Object> payload) {
     this.workflowId = workflowId;
     this.stateManager = stateManager;
     this.global = payload;

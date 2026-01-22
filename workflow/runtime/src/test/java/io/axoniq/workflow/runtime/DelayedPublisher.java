@@ -19,11 +19,11 @@ public class DelayedPublisher {
     this.stateManager = stateManager;
   }
 
-  void addSchedules(List<Schedule> schedules) {
+  public void addSchedules(List<Schedule> schedules) {
     this.schedules.addAll(schedules);
   }
 
-  CompletableFuture<Void> start() {
+  public CompletableFuture<Void> start() {
     CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
 
     for (Schedule schedule : schedules) {
@@ -40,16 +40,15 @@ public class DelayedPublisher {
     return future;
   }
 
-
-  record Schedule(
+  public record Schedule(
     Duration duration,
     Object event
   ) {
-    static Schedule of(Duration duration, Object event) {
+    public static Schedule of(Duration duration, Object event) {
       return new Schedule(duration, event);
     }
 
-    static Schedule ofMillis(long millis, Object event) {
+    public static Schedule ofMillis(long millis, Object event) {
       return new Schedule(Duration.ofMillis(millis), event);
     }
   }

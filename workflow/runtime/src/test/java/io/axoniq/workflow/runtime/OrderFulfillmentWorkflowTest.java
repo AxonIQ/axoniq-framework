@@ -5,6 +5,7 @@ import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
 import io.axoniq.workflow.runtime.engine.StateManager;
+import jakarta.annotation.Nonnull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -152,7 +153,7 @@ class OrderFulfillmentWorkflowTest {
     }
 
     @Override
-    public void execute(SimpleContext context) {
+    public void execute(@Nonnull SimpleContext context) {
       // Extract order data from trigger event payload
       var triggerData = payload(context);
       Order order = new Order(
@@ -353,7 +354,7 @@ class OrderFulfillmentWorkflowTest {
     }
 
     @Override
-    public void execute(SimpleContext context) {
+    public void execute(@Nonnull SimpleContext context) {
       // Extract order details from the trigger event payload
       var triggerData = payload(context);
       Order order = new Order(

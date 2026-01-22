@@ -25,19 +25,19 @@ public class StateManager {
       .toList();
   }
 
+  public List<Object> getEventPayloads(String workflowId) {
+    return getHistory(workflowId)
+      .stream()
+      .map(event -> event.payloadAs(Object.class))
+      .toList();
+  }
+
   public List<EventMessage> getEventByPayloadType(Class<?> clazz) {
     return events.stream().filter(e -> e.payloadType().equals(clazz)).toList();
   }
 
   public void append(EventMessage eventMessage) {
     events.add(eventMessage);
-  }
-
-  public List<Object> getEventPayloads(String workflowId) {
-    return getHistory(workflowId)
-      .stream()
-      .map(event -> event.payloadAs(Object.class))
-      .toList();
   }
 
   public void printPayloads() {

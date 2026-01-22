@@ -1,3 +1,27 @@
+# Features
+
+- Imperative workflow definition style
+- Separation of DSL from execution
+- Durable execution implementation based on lifecycle events
+- Lifecycle events with dynamic, "business" naming and step parameters / result as payload
+- Step Lifecycle:
+  - Started
+  - Completed
+  - Failed
+  - Timed Out
+- Restart/Recovery: repeating execution of workflow code, skipping already executed steps (based on event-sourced execution)
+- DSL uses host language for control flow and data flow
+- DSL based on primitives (2)
+- Primitives:
+  - Execute 
+  - WaitFor (Event)
+- Two DSLs
+  - Simple Java (blocking)
+  - Kotlin
+- Data flow based on payload as Map<String, Object>
+- Support with step/workflow variable scopes and in/out mapping
+- Implementation of coordinator, workflow engine, state manager
+
 # Questions
 
 ## Question 1: How many events do we have?
@@ -19,7 +43,7 @@ they are stored and correlated with workflow (in order to rehydrate the workflow
 Options:
 - busy loop for non DCB and non Axon Server (✓)
 - scheduled events with Axon Server and DCB - distributed durability
-- postgress scheduler for postgres extension
+- postgresql scheduler for postgres extension
 
 
 ## Question 3: Data flow in the workflow

@@ -5,6 +5,7 @@ import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
+import jakarta.annotation.Nonnull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,15 +53,12 @@ class UserSignupPayloadTest {
   public static class UserSignupWorkflow extends SimpleDefinition.Type {
 
     @Override
-    public String workflowId(Map<String, Object> trigger) {
-      if (trigger != null && trigger.containsKey("id")) {
-        return "signup-" + trigger.get("id").toString();
-      }
-      return "signup-" + UUID.randomUUID();
+    public String workflowId(@Nonnull Map<String, Object> trigger) {
+      return "signup-" + trigger.getOrDefault("id", UUID.randomUUID()).toString();
     }
 
     @Override
-    public void execute(SimpleContext context) {
+    public void execute(@Nonnull SimpleContext context) {
 
       var startParams = payload(context);
       logger.info("Starting user signup workflow with payload {}", startParams);
@@ -88,7 +86,7 @@ class UserSignupPayloadTest {
           return payload()
             .with("email", user.email)
             .with("userid", user.id)
-          ;
+            ;
         });
 
       String activatedEmail = activated.get("email");

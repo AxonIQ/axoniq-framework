@@ -1,14 +1,15 @@
 package io.axoniq.workflow.runtime.api.workflow;
 
 import io.axoniq.workflow.runtime.engine.StateManager;
+import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 
 public interface WorkflowDefinition<T extends WorkflowContext> {
 
-  void execute(T context);
+  void execute(@Nonnull T context);
 
-  T createContext(StateManager stateManager, Map<String, Object> trigger);
+  T createContext(@Nonnull StateManager stateManager, @Nonnull Map<String, Object> trigger);
 
-  String workflowId(Map<String, Object> trigger);
+  String workflowId(@Nonnull Map<String, Object> trigger);
 }
