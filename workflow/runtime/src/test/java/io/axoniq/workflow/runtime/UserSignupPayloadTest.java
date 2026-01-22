@@ -147,7 +147,7 @@ class UserSignupPayloadTest {
 
     // Verify events published
     var events = stateManager.getHistory(context.getWorkflowId());
-    assertThat(events).hasSize(10); // 5 starts + 5 completes
+    assertThat(events).hasSize(11); // 5 starts + 5 completes + 1 workflow completed
     assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
     assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);
     assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.STARTED);

@@ -1,6 +1,7 @@
 package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.engine.StepStatus;
+import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import org.axonframework.messaging.core.Metadata;
 
 import java.util.Optional;
@@ -11,6 +12,7 @@ public class MetadataUtils {
   public static final String METADATA_KEY_WORKFLOW_ID = "workflowId";
   public static final String METADATA_KEY_TYPE = "stepType";
   public static final String METADATA_KEY_STEP_NAME = "stepName";
+  public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
 
   public static Metadata create(String workflowId) {
     return Metadata
@@ -21,6 +23,18 @@ public class MetadataUtils {
     return create(workflowId)
       .and(METADATA_KEY_TYPE, stepStatus.name())
       .and(METADATA_KEY_STEP_NAME, stepName);
+  }
+
+  public static Metadata create(String workflowId, WorkflowStatus workflowStatus) {
+    return create(workflowId)
+      .and(METADATA_KEY_WORKFLOW_STATUS, workflowStatus.name());
+  }
+
+  public static Optional<WorkflowStatus> getWorkflowStatus(Metadata metadata) {
+    if (metadata.containsKey(METADATA_KEY_WORKFLOW_STATUS)) {
+      return Optional.of(WorkflowStatus.valueOf(metadata.get(METADATA_KEY_WORKFLOW_STATUS)));
+    }
+    return Optional.empty();
   }
 
   public static Optional<StepStatus> getStepStatus(Metadata metadata) {

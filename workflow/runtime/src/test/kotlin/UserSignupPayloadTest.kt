@@ -134,7 +134,7 @@ internal class UserSignupPayloadTest {
 
     // Verify events published
     val events = stateManager.getHistory(context.workflowId)
-    assertThat(events).hasSize(10) // 5 starts + 5 completes
+    assertThat(events).hasSize(11) // 5 starts + 5 completes + 1 workflow completed
     assertThat(getStepStatus(events[0]!!.metadata())).contains(StepStatus.STARTED)
     assertThat(getStepStatus(events[1]!!.metadata())).contains(StepStatus.COMPLETED)
     assertThat(getStepStatus(events[2]!!.metadata())).contains(StepStatus.STARTED)

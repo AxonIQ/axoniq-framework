@@ -34,4 +34,8 @@ public interface WorkflowContext extends
 
   void restoreStep(StepExecution stepExecution);
 
+  void restoreCompleted();
+
+  void restoreFailed();
+
 }

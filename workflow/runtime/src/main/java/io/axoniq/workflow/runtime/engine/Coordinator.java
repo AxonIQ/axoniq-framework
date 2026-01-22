@@ -78,7 +78,7 @@ public class Coordinator {
               logger.info("Starting workflow {}:{} with payload {}.", workflowDefinitionType.getSimpleName(), workflowId, payload);
 
               running.add(workflowId);
-              ((CompletableFuture<WorkflowContext>) workflowEngine.execute(definition, payload))
+              applyAndExecute(definition, payload)
                   .whenComplete((completedContext, ex) -> {
                     if (ex != null) {
                       logger.error("Workflow {} finished with error.", workflowId, ex);
@@ -108,5 +108,17 @@ public class Coordinator {
 
   public List<String> getRunning() {
     return Collections.unmodifiableList(running);
+  }
+
+  /**
+   * Event Sourcing: Hydrate context state from history, then execute workflow.
+   */
+  private <T extends WorkflowContext> CompletableFuture<T> applyAndExecute(
+      WorkflowDefinition<T> definition,
+      Map<String, Object> payload) {
+    //Event Source context
+    T context = workflowEngine.apply(definition, payload);
+    //Execute on context
+    return workflowEngine.execute(definition, payload, context);
   }
 }

@@ -115,7 +115,7 @@ class CoordinatorUserSignupTest {
 
       // Verify events published for this workflow
       var events = stateManager.getHistory(context.getWorkflowId());
-      assertThat(events).hasSize(8); // 4 starts + 4 completes/timeouts
+      assertThat(events).hasSize(9); // 4 starts + 4 completes/timeouts + 1 workflow completed
       assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
       assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);
       assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.STARTED);

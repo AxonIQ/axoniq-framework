@@ -5,5 +5,9 @@ public enum WorkflowStatus {
   COMPLETED,
   FAILED,
   CANCELLED,
-  TIMED_OUT
+  TIMED_OUT;
+
+  public boolean isTerminal() {
+    return this == COMPLETED || this == FAILED || this == CANCELLED || this == TIMED_OUT;
+  }
 }
