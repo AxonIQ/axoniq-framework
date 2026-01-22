@@ -8,6 +8,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 
 import java.time.Instant;
 import java.util.Map;
@@ -27,6 +28,12 @@ public class EventMessageUtils {
     );
   }
 
+  public static EventMessage startedWorkflow(WorkflowContext context) {
+    var name = context.getWorkflowId() + "Started" + "#0.1";
+    return new GenericEventMessage(MessageType.fromString(name), Map.of(),
+      MetadataUtils.create(context.getWorkflowId())
+    );
+  }
   public static EventMessage completedWorkflow(WorkflowContext context) {
     var name = context.getWorkflowId() + "Completed" + "#0.1";
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),

@@ -165,16 +165,16 @@ class UserSignupPayloadTest {
 
     // Verify events published
     var events = stateManager.getHistory(context.getWorkflowId());
-    assertThat(events).hasSize(11); // 5 starts + 5 completes + 1 workflow completed
-    assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);
-    assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.COMPLETED);
-    assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.COMPLETED);
-    assertThat(getStepStatus(events.get(6).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(7).metadata())).contains(StepStatus.TIMED_OUT);
-    assertThat(getStepStatus(events.get(8).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(9).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(events).hasSize(12); // 1 workflow start + 5 starts + 5 completes + 1 workflow completed
+    assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(6).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(7).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(8).metadata())).contains(StepStatus.TIMED_OUT);
+    assertThat(getStepStatus(events.get(9).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(10).metadata())).contains(StepStatus.COMPLETED);
   }
 }

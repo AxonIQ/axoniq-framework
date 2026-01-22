@@ -4,7 +4,9 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
+import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,8 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.completedWorkflow;
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
+import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.*;
 
 public class WorkflowEngine {
@@ -23,14 +24,14 @@ public class WorkflowEngine {
   private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
   private final StateManager stateManager;
+  private final EventAppender eventAppender;
   private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-  public WorkflowEngine() {
-    this(new StateManager());
-  }
-
-  public WorkflowEngine(StateManager stateManager) {
+  public WorkflowEngine(
+    @Nonnull StateManager stateManager
+  ) {
     this.stateManager = stateManager;
+    this.eventAppender = stateManager;
   }
 
   /**
@@ -38,8 +39,8 @@ public class WorkflowEngine {
    */
   public <T extends WorkflowContext> CompletableFuture<T> restoreAndExecute(WorkflowConfiguration<T> configuration, Map<String, Object> payload) {
     T context = initialize(configuration, payload);
-    WorkflowState lifecycle = restore(configuration, context);
-    return execute(configuration, context, lifecycle);
+    WorkflowState state = restore(configuration, context);
+    return execute(configuration, context, state);
   }
 
   public <T extends WorkflowContext> CompletableFuture<T> restoreAndExecute(WorkflowConfiguration<T> configuration) {
@@ -61,7 +62,7 @@ public class WorkflowEngine {
    * the context reflects the complete event history.
    */
   public <T extends WorkflowContext> WorkflowState restore(WorkflowConfiguration<T> configuration, T context) {
-    var lifecycle = configuration.workflowLifecycleFactory().create(context);
+    var state = configuration.workflowStateFactory().create(context);
     List<EventMessage> history = stateManager.getHistory(context.getWorkflowId());
 
     for (EventMessage event : history) {
@@ -73,16 +74,16 @@ public class WorkflowEngine {
         var stepName = getStepName(metadata);
         switch (stepStatus) {
           case STARTED:
-            lifecycle.addStep(StepExecution.started(stepName, eventPayload));
+            state.addStep(StepExecution.started(stepName, eventPayload));
             break;
           case FAILED:
-            lifecycle.addStep(StepExecution.failed(stepName, (Throwable) eventPayload));
+            state.addStep(StepExecution.failed(stepName, (Throwable) eventPayload));
             break;
           case TIMED_OUT:
-            lifecycle.addStep(StepExecution.timedOut(stepName, eventPayload));
+            state.addStep(StepExecution.timedOut(stepName, eventPayload));
             break;
           case COMPLETED:
-            lifecycle.addStep(StepExecution.completed(stepName, eventPayload));
+            state.addStep(StepExecution.completed(stepName, eventPayload));
             break;
           default:
             break;
@@ -90,29 +91,34 @@ public class WorkflowEngine {
       });
 
       // Apply workflow-level state changes
-      getWorkflowStatus(metadata).ifPresent(lifecycle::setStatus);
+      getWorkflowStatus(metadata).ifPresent(state::setStatus);
     }
 
-    return lifecycle;
+    return state;
   }
 
-  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowConfiguration<T> configuration, T context, WorkflowState lifecycle) {
+  public <T extends WorkflowContext> CompletableFuture<T> execute(WorkflowConfiguration<T> configuration, T context, WorkflowState state) {
     return CompletableFuture.supplyAsync(() -> {
       try {
         // Check if workflow is already in terminal state - do nothing
         if (context.getStatus().isTerminal()) {
           return context;
         }
+
+        state.setStatus(WorkflowStatus.STARTED);
+        eventAppender.append(startedWorkflow(context));
+
         configuration.workflowDefinition().execute(context);
 
-        lifecycle.setStatus(WorkflowStatus.COMPLETED);
-        stateManager.append(completedWorkflow(context));
+        state.setStatus(WorkflowStatus.COMPLETED);
+        eventAppender.append(completedWorkflow(context));
 
         return context;
       } catch (WorkflowFailedException e) {
         // User explicitly failed the workflow
-        lifecycle.setStatus(WorkflowStatus.FAILED);
-        stateManager.append(failedWorkflow(context, e));
+        state.setStatus(WorkflowStatus.FAILED);
+        eventAppender.append(failedWorkflow(context, e));
+
         throw e;
       } catch (RuntimeException e) {
         // Any other runtime exception - log and rethrow, stay ACTIVE
@@ -121,5 +127,4 @@ public class WorkflowEngine {
       }
     }, virtualThreadExecutor);
   }
-
 }

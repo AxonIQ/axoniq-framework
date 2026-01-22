@@ -63,7 +63,7 @@ public interface SimpleDefinition extends
 
   @NotNull
   @Override
-  default WorkflowStateFactory workflowLifecycleFactory() {
+  default WorkflowStateFactory workflowStateFactory() {
     return this;
   }
 

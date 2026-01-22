@@ -6,7 +6,6 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.StepFailedException;
-import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
@@ -20,9 +19,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
+import static io.axoniq.workflow.runtime.util.EventMessageUtils.eventRetriever;
 
-public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate implements WaitForPrimitive {
+public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitForPrimitive {
 
   public WaitForDelegate(WorkflowContext context, WorkflowState workflowState) {
     super(context, workflowState);
@@ -50,30 +49,28 @@ public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate imple
 
     Function<T, T> completionHandler = result -> {
       var resultPayload = converter.apply(result);
-      lifecycle.getStateManager().append(completedStep(context, stepName, resultPayload, eventNameCustomizer)); // TODO: For DCB add a tag, for non-DCB add a technical util (Question 1).
-      lifecycle.addStep(StepExecution.completed(stepName, result));
+      completed(stepName, resultPayload, eventNameCustomizer);
       return result;
     };
 
     Consumer<Instant> timeoutOccurredHandler = (timeoutTimestamp) -> {
-      lifecycle.getStateManager().append(timeoutStep(context, stepName, timeoutTimestamp, eventNameCustomizer));
-      lifecycle.addStep(StepExecution.timedOut(stepName, timeoutTimestamp));
+      timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
     };
 
     Function<Duration, CompletableFuture<T>> eventRetriever = (remainingTimeout) ->
-      eventRetriever(lifecycle.getStateManager(), eventType, eventCondition)
+      eventRetriever(state.stateManager(), eventType, eventCondition)
         .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
         .thenApply(completionHandler)
         .exceptionally(ex -> {
           if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
-            var timeoutTimestamp = Instant.now(lifecycle.getClock());
+            var timeoutTimestamp = Instant.now(state.getClock());
             timeoutOccurredHandler.accept(timeoutTimestamp);
             throw new CompletionException(ex);
           }
           throw new StepFailedException(ex);
         });
 
-    StepExecution existing = lifecycle.getStep(stepName);
+    StepExecution existing = state.getStep(stepName);
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
@@ -88,9 +85,9 @@ public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate imple
         }
         case STARTED -> {
           Instant started = (Instant) existing.result();
-          Duration remainingTimeout = Duration.between(Instant.now(lifecycle.getClock()), started.plus(timeout));
+          Duration remainingTimeout = Duration.between(Instant.now(state.getClock()), started.plus(timeout));
           if (remainingTimeout.isNegative()) {
-            timeoutOccurredHandler.accept(Instant.now(lifecycle.getClock()));
+            timeoutOccurredHandler.accept(Instant.now(state.getClock()));
             return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
           } else {
             // wait for util
@@ -100,10 +97,9 @@ public class WaitForDelegate extends AbstractContextAwarePrimitiveDelegate imple
       }
     }
 
-    var started = Instant.now(lifecycle.getClock());
+    var started = Instant.now(state.getClock());
     var payload = Map.<String, Object>of("started", started, "duration", timeout.toString());
-    lifecycle.getStateManager().append(EventMessageUtils.startedStep(context, stepName, payload, eventNameCustomizer));
-    lifecycle.addStep(StepExecution.started(stepName, started)); // FIXME -> timestamp should be additional step attribute instead of misusing payload
+    started(stepName, payload, eventNameCustomizer);
 
     return eventRetriever.apply(timeout);
   }

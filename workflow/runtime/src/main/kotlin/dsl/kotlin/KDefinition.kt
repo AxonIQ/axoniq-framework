@@ -41,6 +41,6 @@ abstract class KDefinition(
 
   override fun workflowDefinition(): WorkflowDefinition<Kontext> = this
 
-  override fun workflowLifecycleFactory(): WorkflowStateFactory = this
+  override fun workflowStateFactory(): WorkflowStateFactory = this
 
 }

@@ -85,13 +85,13 @@ class UserSignupTest {
 
     // Verify events published
     var events = stateManager.getHistory(context.getWorkflowId());
-    assertThat(events).hasSize(7); // 3 starts + 3 completes + 1 workflow completed
-    assertThat(getStepStatus(events.get(0).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.COMPLETED);
-    assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.COMPLETED);
-    assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.STARTED);
-    assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(events).hasSize(8); // 1 workflow start + 3 starts + 3 completes + 1 workflow completed
+    assertThat(getStepStatus(events.get(1).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(2).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(3).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(4).metadata())).contains(StepStatus.COMPLETED);
+    assertThat(getStepStatus(events.get(5).metadata())).contains(StepStatus.STARTED);
+    assertThat(getStepStatus(events.get(6).metadata())).contains(StepStatus.COMPLETED);
   }
 
 
@@ -123,14 +123,14 @@ class UserSignupTest {
     engine.execute(definition, context, lifecycle).join();
 
     var eventsAfterFirst = stateManager.getEventPayloads(workflowId);
-    assertThat(eventsAfterFirst).hasSize(3); // 1 start + 1 complete + 1 workflow completed
+    assertThat(eventsAfterFirst).hasSize(4); // 1 workflow start + 1 start + 1 complete + 1 workflow completed
     //noinspection unchecked
-    assertEquals("cached-value", ((Map<String, Object>) eventsAfterFirst.get(1)).get("__getValue"));
+    assertEquals("cached-value", ((Map<String, Object>) eventsAfterFirst.get(2)).get("__getValue"));
 
     engine.execute(definition, context, lifecycle).join();
 
     var eventsAfterSecond = stateManager.getEventPayloads(workflowId);
-    assertThat(eventsAfterSecond).describedAs("No new events should be published on replay").hasSize(3);
+    assertThat(eventsAfterSecond).describedAs("No new events should be published on replay").hasSize(4);
   }
 
 }

@@ -135,16 +135,16 @@ internal class UserSignupPayloadTest {
 
     // Verify events published
     val events = stateManager.getHistory(context.workflowId)
-    assertThat(events).hasSize(11) // 5 starts + 5 completes + 1 workflow completed
-    assertThat(getStepStatus(events[0]!!.metadata())).contains(StepStatus.STARTED)
-    assertThat(getStepStatus(events[1]!!.metadata())).contains(StepStatus.COMPLETED)
-    assertThat(getStepStatus(events[2]!!.metadata())).contains(StepStatus.STARTED)
-    assertThat(getStepStatus(events[3]!!.metadata())).contains(StepStatus.COMPLETED)
-    assertThat(getStepStatus(events[4]!!.metadata())).contains(StepStatus.STARTED)
-    assertThat(getStepStatus(events[5]!!.metadata())).contains(StepStatus.COMPLETED)
-    assertThat(getStepStatus(events[6]!!.metadata())).contains(StepStatus.STARTED)
-    assertThat(getStepStatus(events[7]!!.metadata())).contains(StepStatus.TIMED_OUT)
-    assertThat(getStepStatus(events[8]!!.metadata())).contains(StepStatus.STARTED)
-    assertThat(getStepStatus(events[9]!!.metadata())).contains(StepStatus.COMPLETED)
+    assertThat(events).hasSize(12) // 1 workflow start + 5 starts + 5 completes + 1 workflow completed
+    assertThat(getStepStatus(events[1]!!.metadata())).contains(StepStatus.STARTED)
+    assertThat(getStepStatus(events[2]!!.metadata())).contains(StepStatus.COMPLETED)
+    assertThat(getStepStatus(events[3]!!.metadata())).contains(StepStatus.STARTED)
+    assertThat(getStepStatus(events[4]!!.metadata())).contains(StepStatus.COMPLETED)
+    assertThat(getStepStatus(events[5]!!.metadata())).contains(StepStatus.STARTED)
+    assertThat(getStepStatus(events[6]!!.metadata())).contains(StepStatus.COMPLETED)
+    assertThat(getStepStatus(events[7]!!.metadata())).contains(StepStatus.STARTED)
+    assertThat(getStepStatus(events[8]!!.metadata())).contains(StepStatus.TIMED_OUT)
+    assertThat(getStepStatus(events[9]!!.metadata())).contains(StepStatus.STARTED)
+    assertThat(getStepStatus(events[10]!!.metadata())).contains(StepStatus.COMPLETED)
   }
 }

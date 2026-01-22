@@ -12,17 +12,20 @@ import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 public class WorkflowExecution implements WorkflowContext, WorkflowState {
 
@@ -38,6 +41,7 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
   private final transient ExecutePrimitive executePrimitive = new ExecuteDelegate(this, this);
   private final transient WaitForPrimitive waitForPrimitive = new WaitForDelegate(this, this);
   private final transient ConversionDelegate conversionDelegate = new ConversionDelegate();
+  private final transient List<Consumer<WorkflowStatus>> statusChangeListeners = new CopyOnWriteArrayList<>();
 
   public WorkflowExecution(
     @Nonnull String workflowId,
@@ -87,6 +91,11 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
   }
 
   @Override
+  public void registerStatusChangeListener(Consumer<WorkflowStatus> workflowStateListener) {
+    this.statusChangeListeners.add(workflowStateListener);
+  }
+
+  @Override
   public String getWorkflowId() {
     return workflowId;
   }
@@ -97,7 +106,12 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public StateManager getStateManager() {
+  public StateManager stateManager() {
+    return stateManager;
+  }
+
+  @Override
+  public EventAppender eventAppender() {
     return stateManager;
   }
 
@@ -126,7 +140,6 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
     return clock;
   }
 
-
   @Override
   public WorkflowStatus getStatus() {
     return status;
@@ -135,5 +148,12 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
   @Override
   public void setStatus(WorkflowStatus status) {
     this.status = status;
+    this.statusChangeListeners.forEach(listener -> {
+      try {
+        listener.accept(this.status);
+      } catch (Exception e) {
+        // continue
+      }
+    });
   }
 }
