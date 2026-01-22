@@ -4,12 +4,13 @@ import io.axoniq.workflow.dsl.kotlin.*
 import io.axoniq.workflow.dsl.simple.Payload.payload
 import io.axoniq.workflow.runtime.DelayedPublisher
 import io.axoniq.workflow.runtime.DelayedPublisher.Schedule
-import io.axoniq.workflow.runtime.engine.StateManager
+import io.axoniq.workflow.runtime.engine.SimpleStateManager
 import io.axoniq.workflow.runtime.engine.StepStatus
 import io.axoniq.workflow.runtime.engine.WorkflowEngine
 import io.axoniq.workflow.runtime.util.MetadataUtils.getStepStatus
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.assertj.core.api.Assertions.assertThat
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -20,7 +21,7 @@ import java.util.*
 private val logger = KotlinLogging.logger {}
 
 internal class UserSignupPayloadTest {
-  private lateinit var stateManager: StateManager
+  private lateinit var stateManager: SimpleStateManager
   private lateinit var engine: WorkflowEngine
   private lateinit var delayedPublisher: DelayedPublisher
 
@@ -28,14 +29,16 @@ internal class UserSignupPayloadTest {
 
   @BeforeEach
   fun setUp() {
-    stateManager = StateManager()
-    engine = WorkflowEngine(stateManager)
+    stateManager = SimpleStateManager()
+    engine = WorkflowEngine(stateManager, stateManager)
     delayedPublisher = DelayedPublisher(stateManager)
   }
 
   @AfterEach
   fun printEvents() {
-    stateManager.printPayloads()
+    val descriptor = FilesystemStyleComponentDescriptor()
+    stateManager.describeTo(descriptor)
+    logger.info { descriptor.describe() }
   }
 
   internal data class User(val id: String, val email: String)

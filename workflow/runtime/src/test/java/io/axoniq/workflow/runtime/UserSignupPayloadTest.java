@@ -3,9 +3,10 @@ package io.axoniq.workflow.runtime;
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.engine.Coordinator;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ class UserSignupPayloadTest {
 
   private static final Logger logger = LoggerFactory.getLogger(UserSignupPayloadTest.class);
 
-  private StateManager stateManager;
+  private SimpleStateManager stateManager;
   private DelayedPublisher delayedPublisher;
   private Coordinator coordinator;
 
@@ -39,14 +40,16 @@ class UserSignupPayloadTest {
 
   @BeforeEach
   void setUp() {
-    stateManager = new StateManager();
+    stateManager = new SimpleStateManager();
     coordinator = new Coordinator(stateManager);
     delayedPublisher = new DelayedPublisher(stateManager);
   }
 
   @AfterEach
   void printEvents() {
-    stateManager.printPayloads();
+    var descriptor = new FilesystemStyleComponentDescriptor();
+    stateManager.describeTo(descriptor);
+    logger.info(descriptor.describe());
     coordinator.stop();
   }
 

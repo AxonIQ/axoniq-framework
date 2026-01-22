@@ -2,11 +2,13 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
+import io.axoniq.workflow.runtime.api.workflow.StateManager;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,14 +36,17 @@ class CoordinatorUserSignupTest {
 
   @BeforeEach
   void setUp() {
-    stateManager = new StateManager();
-    coordinator = new Coordinator(stateManager);
-    delayedPublisher = new DelayedPublisher(stateManager);
+    var ssm = new SimpleStateManager();
+    stateManager = ssm;
+    coordinator = new Coordinator(ssm, ssm);
+    delayedPublisher = new DelayedPublisher(ssm);
   }
 
   @AfterEach
   void printEvents() {
-    stateManager.printPayloads();
+    var descriptor = new FilesystemStyleComponentDescriptor();
+    stateManager.describeTo(descriptor);
+    logger.info(descriptor.describe());
   }
 
   record RegistrationReceivedEvent(String id, String email) {

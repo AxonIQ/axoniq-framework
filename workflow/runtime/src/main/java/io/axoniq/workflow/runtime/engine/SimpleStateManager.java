@@ -1,9 +1,11 @@
 package io.axoniq.workflow.runtime.engine;
 
+import io.axoniq.workflow.runtime.api.workflow.StateManager;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -23,13 +25,12 @@ import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
 
-public class StateManager implements EventAppender {
-
-  private static final Logger logger = LoggerFactory.getLogger(StateManager.class);
+public class SimpleStateManager implements EventAppender, StateManager {
 
   private final List<EventMessage> events = new ArrayList<>();
   private final List<SubscriptionEntry> subscriptions = new CopyOnWriteArrayList<>();
 
+  @Override
   public List<EventMessage> getHistory(String workflowId) {
     return events.stream()
       .filter(EventMessageUtils.workflowIdFilter(workflowId))
@@ -43,18 +44,12 @@ public class StateManager implements EventAppender {
       .toList();
   }
 
+  @Override
   public List<EventMessage> getEventByPayloadType(Class<?> clazz) {
     return events.stream().filter(e -> e.payloadType().equals(clazz)).toList();
   }
 
-  /**
-   * Subscribe to events of a specific type that match the given filter.
-   *
-   * @param qualifiedName the qualified name of the event payload to listen for
-   * @param filter predicate to filter events (applied to EventMessage)
-   * @param listener callback invoked when a matching event is appended
-   * @return a Subscription handle to cancel the subscription
-   */
+  @Override
   public Subscription subscribe(QualifiedName qualifiedName, Predicate<EventMessage> filter, EventListener listener) {
     var entry = new SubscriptionEntry(qualifiedName, filter, listener);
     subscriptions.add(entry);
@@ -86,11 +81,6 @@ public class StateManager implements EventAppender {
     });
   }
 
-  @Override
-  public void describeTo(@NotNull ComponentDescriptor descriptor) {
-    // TODO
-  }
-
   /**
    * Internal subscription entry that implements Subscription for cancellation.
    */
@@ -108,8 +98,8 @@ public class StateManager implements EventAppender {
 
     boolean matches(EventMessage event) {
       return active.get()
-          && event.type().qualifiedName().equals(qualifiedName)
-          && filter.test(event);
+        && event.type().qualifiedName().equals(qualifiedName)
+        && filter.test(event);
     }
 
     @Override
@@ -125,25 +115,30 @@ public class StateManager implements EventAppender {
     }
   }
 
-  public void printPayloads() {
-    // Group events by workflowId
+  @Override
+  public void describeTo(@NotNull ComponentDescriptor descriptor) {
     Map<String, List<EventMessage>> eventsByWorkflowId = events.stream()
       .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
       .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(METADATA_KEY_WORKFLOW_ID, "none")));
-
-    // Print payloads for each workflowId
-    eventsByWorkflowId.forEach((workflowId, workflowEvents) -> {
-      if (!workflowId.equals("none")) {
-        logger.info("Dumping events for workflow '{}'", workflowId);
-        logger.info("------------------");
-        workflowEvents.forEach(event -> {
-          var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
-          var name = event.type().qualifiedName().toString();
-          logger.info("{} ({}): {}", name, status, event.payloadAs(Object.class));
-        });
-        logger.info("------------------");
-      }
-    });
+    var events = eventsByWorkflowId.entrySet().stream()
+      .filter(entry -> !entry.getKey().equals("none"))
+      .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))
+      .toList();
+    descriptor.describeProperty("workflowEvents", events);
   }
 
+  record WorkflowEventDescriptor(
+    String workflowId,
+    List<EventMessage> events
+  ) implements DescribableComponent {
+
+    @Override
+    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+      descriptor.describeProperty(workflowId, events.stream().map(event -> {
+        var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
+        var name = event.type().qualifiedName().toString();
+        return String.format("%s (%s): %s", name, status, event.payload());
+      }).toList());
+    }
+  }
 }

@@ -5,7 +5,8 @@ import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +41,7 @@ class ParallelWorkflowSubscriptionTest {
 
     private static final Logger logger = LoggerFactory.getLogger(ParallelWorkflowSubscriptionTest.class);
 
-    private StateManager stateManager;
+    private SimpleStateManager stateManager;
     private Coordinator coordinator;
     private DelayedPublisher delayedPublisher;
 
@@ -202,7 +203,7 @@ class ParallelWorkflowSubscriptionTest {
 
     @BeforeEach
     void setUp() {
-        stateManager = new StateManager();
+        stateManager = new SimpleStateManager();
         coordinator = new Coordinator(stateManager);
         delayedPublisher = new DelayedPublisher(stateManager);
         externalApiCalls.set(0);
@@ -210,7 +211,9 @@ class ParallelWorkflowSubscriptionTest {
 
     @AfterEach
     void tearDown() {
-        stateManager.printPayloads();
+        var descriptor = new FilesystemStyleComponentDescriptor();
+        stateManager.describeTo(descriptor);
+        logger.info(descriptor.describe());
         coordinator.stop();
     }
 

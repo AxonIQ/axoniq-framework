@@ -3,11 +3,9 @@ package io.axoniq.workflow.runtime;
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.engine.Coordinator;
-import io.axoniq.workflow.runtime.engine.StateManager;
-import io.axoniq.workflow.runtime.engine.StepFailedException;
-import io.axoniq.workflow.runtime.engine.WorkflowEngine;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,20 +25,22 @@ class TravelBookingParallelTest {
 
   private static final Logger logger = LoggerFactory.getLogger(TravelBookingParallelTest.class);
 
-  private StateManager stateManager;
+  private SimpleStateManager stateManager;
   private Coordinator coordinator;
   private DelayedPublisher delayedPublisher;
 
   @BeforeEach
   void setUp() {
-    stateManager = new StateManager();
+    stateManager = new SimpleStateManager();
     coordinator = new Coordinator(stateManager);
     delayedPublisher = new DelayedPublisher(stateManager);
   }
 
   @AfterEach
   void printEvents() {
-    stateManager.printPayloads();
+    var descriptor = new FilesystemStyleComponentDescriptor();
+    stateManager.describeTo(descriptor);
+    logger.info(descriptor.describe());
   }
 
   static class TravelBookingWorkflow implements SimpleDefinition {

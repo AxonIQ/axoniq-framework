@@ -2,10 +2,11 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.engine.WorkflowEngine;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,18 +27,20 @@ class UserSignupTest {
 
   private static final Logger logger = LoggerFactory.getLogger(UserSignupTest.class);
 
-  private StateManager stateManager;
+  private SimpleStateManager stateManager;
   private WorkflowEngine engine;
 
   @BeforeEach
   void setUp() {
-    stateManager = new StateManager();
-    engine = new WorkflowEngine(stateManager);
+    stateManager = new SimpleStateManager();
+    engine = new WorkflowEngine(stateManager, stateManager);
   }
 
   @AfterEach
   void printEvents() {
-    stateManager.printPayloads();
+    var descriptor = new FilesystemStyleComponentDescriptor();
+    stateManager.describeTo(descriptor);
+    logger.info(descriptor.describe());
   }
 
   record User(String id, String email) {

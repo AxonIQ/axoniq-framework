@@ -1,14 +1,14 @@
 package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.api.workflow.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import io.axoniq.workflow.runtime.engine.StepStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 
 import java.time.Instant;
 import java.util.Map;

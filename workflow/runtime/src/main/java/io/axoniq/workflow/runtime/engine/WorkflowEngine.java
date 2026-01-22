@@ -1,9 +1,6 @@
 package io.axoniq.workflow.runtime.engine;
 
-import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
+import io.axoniq.workflow.runtime.api.workflow.*;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
@@ -28,10 +25,11 @@ public class WorkflowEngine {
   private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
   public WorkflowEngine(
-    @Nonnull StateManager stateManager
+    @Nonnull StateManager stateManager,
+    @Nonnull EventAppender eventAppender
   ) {
     this.stateManager = stateManager;
-    this.eventAppender = stateManager;
+    this.eventAppender = eventAppender;
   }
 
   /**
@@ -48,11 +46,11 @@ public class WorkflowEngine {
   }
 
   public <T extends WorkflowContext> T initialize(WorkflowConfiguration<T> configuration, Map<String, Object> payload) {
-    return configuration.workflowContextFactory().createContext(payload, stateManager);
+    return configuration.workflowContextFactory().createContext(payload, stateManager, eventAppender);
   }
 
   public <T extends WorkflowContext> T initialize(WorkflowConfiguration<T> configuration) {
-    return configuration.workflowContextFactory().createContext(Map.of(), stateManager);
+    return configuration.workflowContextFactory().createContext(Map.of(), stateManager, eventAppender);
   }
 
   /**

@@ -1,6 +1,5 @@
 package io.axoniq.workflow.runtime.api.workflow;
 
-import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;

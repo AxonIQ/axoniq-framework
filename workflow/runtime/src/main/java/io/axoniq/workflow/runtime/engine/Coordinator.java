@@ -1,9 +1,11 @@
 package io.axoniq.workflow.runtime.engine;
 
+import io.axoniq.workflow.runtime.api.workflow.StateManager;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.context.ConversionDelegate;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +20,7 @@ public class Coordinator {
   private final SimpleWorkflowConfigurationRegistry workflowConfigurationRegistry;
   private final WorkflowEngine workflowEngine;
   private final StateManager stateManager;
+  private final EventAppender eventAppender;
   private final ConversionDelegate conversionDelegate = new ConversionDelegate();
 
   private final List<WorkflowContext> history = Collections.synchronizedList(new ArrayList<>());
@@ -27,10 +30,14 @@ public class Coordinator {
 
   private volatile boolean isRunning = false;
 
+  public Coordinator(SimpleStateManager stateManager) {
+    this(stateManager, stateManager);
+  }
 
-  public Coordinator(StateManager stateManager) {
+  public Coordinator(StateManager stateManager, EventAppender eventAppender) {
     this.stateManager = stateManager;
-    this.workflowEngine = new WorkflowEngine(stateManager);
+    this.eventAppender = eventAppender;
+    this.workflowEngine = new WorkflowEngine(stateManager, eventAppender);
     this.workflowConfigurationRegistry = new SimpleWorkflowConfigurationRegistry();
   }
 
@@ -112,4 +119,7 @@ public class Coordinator {
     return Collections.unmodifiableList(running);
   }
 
+  public EventAppender getEventAppender() {
+    return eventAppender;
+  }
 }

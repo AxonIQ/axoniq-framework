@@ -5,9 +5,9 @@ import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.workflow.StateManager;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
-import io.axoniq.workflow.runtime.engine.StateManager;
 import io.axoniq.workflow.runtime.engine.StepExecution;
 import io.axoniq.workflow.runtime.engine.WorkflowStatus;
 import jakarta.annotation.Nonnull;
@@ -35,6 +35,7 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
   private WorkflowStatus status = WorkflowStatus.STARTED;
 
   private final transient Clock clock;
+  private final transient EventAppender eventAppender;
   private final transient StateManager stateManager;
 
   // primitive implementations
@@ -47,11 +48,13 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
     @Nonnull StateManager stateManager,
+    @Nonnull EventAppender eventAppender,
     @Nonnull Clock clock
   ) {
     this.workflowId = workflowId;
     this.payload = payload;
     this.stateManager = stateManager;
+    this.eventAppender = eventAppender;
     this.clock = clock;
   }
 
@@ -112,7 +115,7 @@ public class WorkflowExecution implements WorkflowContext, WorkflowState {
 
   @Override
   public EventAppender eventAppender() {
-    return stateManager;
+    return eventAppender;
   }
 
   @Override

@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.runtime.engine.StateManager;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -12,11 +12,11 @@ import java.util.concurrent.TimeUnit;
 
 public class DelayedPublisher {
 
-  private final StateManager stateManager;
+  private final EventAppender eventAppender;
   private final List<Schedule> schedules = new ArrayList<>();
 
-  public DelayedPublisher(StateManager stateManager) {
-    this.stateManager = stateManager;
+  public DelayedPublisher(EventAppender eventAppender) {
+    this.eventAppender = eventAppender;
   }
 
   public void addSchedules(List<Schedule> schedules) {
@@ -29,7 +29,7 @@ public class DelayedPublisher {
     for (Schedule schedule : schedules) {
       future = future.thenCompose(v ->
         CompletableFuture.supplyAsync(() -> {
-          stateManager.append(new GenericEventMessage(
+          eventAppender.append(new GenericEventMessage(
             MessageType.fromString(schedule.event.getClass().getTypeName() + "#0.1"),
             schedule.event)
           );

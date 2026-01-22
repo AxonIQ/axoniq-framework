@@ -4,8 +4,9 @@ import io.axoniq.workflow.dsl.simple.SimpleContext;
 import io.axoniq.workflow.dsl.simple.SimpleDefinition;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.Coordinator;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -43,7 +44,7 @@ class WorkflowCrashRecoveryTest {
   private static final Logger logger = LoggerFactory.getLogger(WorkflowCrashRecoveryTest.class);
 
   // Shared state manager - simulates persistent event store
-  private StateManager stateManager;
+  private SimpleStateManager stateManager;
   private Coordinator coordinator1;
   private Coordinator coordinator2;
 
@@ -248,7 +249,7 @@ class WorkflowCrashRecoveryTest {
     readyToKillLatch = new CountDownLatch(1);
 
     // Create shared state manager (simulates persistent event store)
-    stateManager = new StateManager();
+    stateManager = new SimpleStateManager();
   }
 
   @AfterEach
@@ -263,7 +264,9 @@ class WorkflowCrashRecoveryTest {
         coordinator2.stop();
       } catch (Exception ignored) {}
     }
-    stateManager.printPayloads();
+    var descriptor = new FilesystemStyleComponentDescriptor();
+    stateManager.describeTo(descriptor);
+    logger.info(descriptor.describe());
   }
 
   // ============== TESTS ==============

@@ -1,8 +1,9 @@
 package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.runtime.api.workflow.*;
-import io.axoniq.workflow.runtime.engine.StateManager;
+import io.axoniq.workflow.runtime.engine.SimpleStateManager;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Clock;
@@ -18,11 +19,15 @@ public interface SimpleDefinition extends
 
   @Nonnull
   @Override
-  default SimpleContext createContext(@Nonnull Map<String, Object> payload, @NotNull StateManager stateManager) {
+  default SimpleContext createContext(
+    @Nonnull Map<String, Object> payload,
+    @NotNull StateManager stateManager,
+    @Nonnull EventAppender eventAppender) {
     return new SimpleContext(
       associationKey(payload).orElseThrow(() -> new IllegalStateException("Could not extract correlation key from payload : " + payload)),
       payload,
       stateManager,
+      eventAppender,
       Clock.systemDefaultZone()
     );
   }

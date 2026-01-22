@@ -3,19 +3,23 @@ package io.axoniq.workflow.dsl.kotlin
 import io.axoniq.workflow.dsl.simple.Payload
 import io.axoniq.workflow.dsl.simple.Payload.payload
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer
+import io.axoniq.workflow.runtime.api.workflow.StateManager
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext
 import io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName
 import io.axoniq.workflow.runtime.context.WorkflowExecution
-import io.axoniq.workflow.runtime.engine.StateManager
+import io.axoniq.workflow.runtime.engine.SimpleStateManager
+import org.axonframework.messaging.eventhandling.gateway.EventAppender
 import java.time.Clock
 import java.time.Duration
 import java.util.concurrent.CompletionException
 
 class Kontext(
   workflowId: String,
+  payload: Map<String, Any>,
   stateManager: StateManager,
-  payload: Map<String, Any>
-) : WorkflowExecution(workflowId, payload, stateManager, Clock.systemDefaultZone()), WorkflowContext
+  eventAppender: EventAppender,
+  clock: Clock
+) : WorkflowExecution(workflowId, payload, stateManager, eventAppender, clock), WorkflowContext
 
 fun Kontext.execute(stepName: String, payload: Payload, action: (Payload) -> Payload): Payload =
   execute(
