@@ -66,6 +66,23 @@ When a workflow is triggered (or recovered after a crash):
 
 There is no "catching up" to a moving target - history replay is a bounded operation that completes before execution resumes.
 
+### In-Flight State Updates
+
+When `execute(step)` runs, it performs two coupled operations:
+
+1. **Publishes event** to the StateManager (for future rehydration)
+2. **Updates local state immediately** (for current execution)
+
+```java
+// From context/AbstractPrimitiveDelegate.java
+protected void started(String stepName, Map<String, Object> payload, EventNameCustomizer eventNameCustomizer) {
+    state.eventAppender().append(startedStep(context, stepName, payload, eventNameCustomizer)); // publish event
+    state.addStep(StepExecution.started(stepName, Instant.now(state.getClock()))); // update local state
+}
+```
+
+This coupling allows workflow execution to drive forward without requiring rehydration from history after each step. The workflow maintains its own in-memory state while simultaneously persisting events for durability.
+
 ## Core Flow (Sequence Diagram)
 
 ```
@@ -514,3 +531,4 @@ All tests located in `runtime/src/test/`
 Open design questions, architectural decisions, and topics under discussion:
 
 [DISCUSSION.md](../../DISCUSSION.md)
+    
