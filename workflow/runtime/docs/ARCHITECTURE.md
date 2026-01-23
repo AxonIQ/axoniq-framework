@@ -31,6 +31,15 @@
                                              └─────────────────┘
 ```
 
+### Component Responsibilities
+
+| Component | Responsibilities                                                                                                                                                             |
+|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Coordinator** | Lifecycle management (start/stop), subscribes to trigger events (that start workflow), deduplication of workflow executions, delegates to WorkflowEngine                     |
+| **Workflow Engine** | Orchestrates workflow lifecycle: initialize → restore → execute. Manages virtual thread execution. Coordinates between state and user code                                   |
+| **State Manager** | Persists and retrieves workflow events. Provides `getHistory()` for restore, `append()` for new events, `subscribe()` for event notifications  (this component needs rework) |
+| **Workflow Context** | Holds current workflow state (`WorkflowExecution`). Provides primitives (`execute()`, `waitFor()`) that user code interacts with                                             |
+
 ## Design Principles
 
 ### Separating State from Actions
