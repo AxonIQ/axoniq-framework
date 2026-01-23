@@ -125,10 +125,10 @@ The DSL is organized in layers, separating low-level primitives from user-friend
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         SimpleContext                            │
-│            (extends WorkflowExecution, user-facing)              │
+│                         SimpleContext                           │
+│            (extends WorkflowExecution, user-facing)             │
 │  ┌─────────────────────┐    ┌─────────────────────┐             │
-│  │ ExecuteInLocalContext│    │    WaitForEvent     │             │
+│  │ExecuteInLocalContext│    │    WaitForEvent     │             │
 │  │ • execute(name, λ)  │    │ • waitForEvent()    │             │
 │  │ • execute(Payload)  │    │ • wait(duration)    │             │
 │  └─────────────────────┘    └─────────────────────┘             │
@@ -324,12 +324,98 @@ The DSL defaults to `local()` for parameters and `all()` for results, meaning:
 
 All file paths relative to `runtime/src/main/java/io/axoniq/workflow/runtime/`
 
-## Virtual Threads
+## Error Handling
 
-- `WorkflowEngine` uses `Executors.newVirtualThreadPerTaskExecutor()` for workflow execution
-- `ExecuteDelegate` uses separate virtual thread executor for step execution
-- Enables thousands of concurrent workflows without thread pool limits
+### Terminal vs Non-Terminal Failures
 
+The runtime distinguishes between two types of errors:
+
+| Error Type | Exception | Workflow Status | Behavior |
+|------------|-----------|-----------------|----------|
+| **Terminal** | `WorkflowFailedException` | `FAILED` | Workflow ends permanently, failure event published |
+| **Non-Terminal** | Any other exception | Stays `STARTED` | Workflow can recover on restart (TODO: retry mechanism) |
+
+### When to Use WorkflowFailedException
+
+Throw `WorkflowFailedException` when the workflow should **permanently fail** and not be retried:
+
+```java
+@Override
+public void execute(SimpleContext ctx) {
+    var result = ctx.execute("validateInput", () -> validate(input));
+
+    if (!result.isValid()) {
+        // Terminal failure - workflow cannot proceed
+        throw new WorkflowFailedException("Invalid input: " + result.getError());
+    }
+
+    // Continue with workflow...
+}
+```
+
+### Handling Step Errors with Try-Catch
+
+Use standard try-catch to handle errors gracefully within the workflow. This allows the workflow to continue or take alternative paths:
+
+```java
+@Override
+public void execute(SimpleContext ctx) {
+    ctx.execute("createUser", () -> createUser());
+
+    try {
+        // Wait for external confirmation with timeout
+        var confirmed = ctx.waitForEvent("emailConfirmed", EmailConfirmed.class, Duration.ofSeconds(30));
+
+        ctx.execute("sendWelcome", () -> sendWelcomeEmail(confirmed.email()));
+    } catch (Exception e) {
+        // Timeout or other error - workflow continues without welcome email
+        logger.warn("Email confirmation failed: {}", e.getMessage());
+    }
+
+    // Workflow completes successfully even if email confirmation failed
+    ctx.execute("finalizeAccount", () -> finalize());
+}
+```
+
+### Step-Level Errors
+
+When a step throws an exception:
+
+1. Step status becomes `FAILED`
+2. `StepFailedException` is thrown (wraps original exception)
+3. Can be caught and handled in workflow code
+4. If uncaught, propagates up (non-terminal by default)
+
+```java
+try {
+    ctx.execute("riskyOperation", () -> {
+        throw new RuntimeException("Something went wrong");
+    });
+} catch (StepFailedException e) {
+    // Handle step failure, maybe retry or take alternative action
+    ctx.execute("fallbackOperation", () -> doFallback());
+}
+```
+
+### Error Handling Summary
+
+```
+Exception in step action
+         │
+         ▼
+    Step marked FAILED
+         │
+         ▼
+  StepFailedException thrown
+         │
+         ├─▶ Caught in workflow code → Handle gracefully, continue
+         │
+         └─▶ Uncaught, propagates up
+                    │
+                    ├─▶ WorkflowFailedException → Workflow FAILED (terminal)
+                    │
+                    └─▶ Other RuntimeException → Workflow stays STARTED (recoverable on restart)
+```
 ## Recovery Flow
 
 ```
