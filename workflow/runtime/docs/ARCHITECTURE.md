@@ -486,3 +486,23 @@ All tests located in `runtime/src/test/`
 |------|-------------|
 | [`UserSignupPayloadTest.kt`](../src/test/kotlin/UserSignupPayloadTest.kt) | Kotlin DSL example. Same user signup flow using Kotlin DSL with `KDefinition` and `Kontext`. Demonstrates try-catch error handling. |
 
+---
+
+## Roadmap
+
+### PoC / 0.1.0
+
+- [x] **Coordinator** - Lifecycle management, trigger event subscription, deduplication
+- [x] **execute() primitive** - Run synchronous actions with caching and timeout
+- [x] **waitForEvent() primitive** - Subscribe and wait for external events with timeout
+- [x] **Java DSL** - `SimpleDefinition`, `SimpleContext`, `Payload` helper
+
+### MVP / 1.0.0
+
+- [x] **Error handling** - `WorkflowFailedException` for terminal failures, try-catch for graceful handling
+- [ ] **Composables** - `parallelRun()` syntactic sugar for concurrent step execution - can be achieved already via host language
+- [x] **Describable / Projection** - Share workflow state for external consumption  - partially implemented via `describeTo()`
+- [x] **DSL Engine** - Pluggable DSL execution layer
+- [x] **Kotlin DSL** - `KDefinition`, `Kontext` with idiomatic Kotlin syntax
+- [ ] **Axon 5 Integration** - move to dedicated module and connect to real Axon components
+- [ ] **Testing support** - Test fixtures, time manipulation, event injection utilities
