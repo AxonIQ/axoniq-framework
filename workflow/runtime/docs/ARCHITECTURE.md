@@ -130,6 +130,57 @@ WorkflowExecution
 | `waitFor()` | Wait for external event | Recalculates remaining timeout from STARTED |
 | `wait()` | Pause execution | Same as waitFor (implemented via waitFor) |
 
+### execute() Examples
+
+```java
+// Simple action, no return value
+ctx.execute("sendNotification", () -> notificationService.send(userId));
+
+// With return value
+String oderId = ctx.execute("createOrder", String.class, () -> orderService.create(items));
+
+// With input payload
+ctx.execute("processPayment", payload("amount", 100, "currency", "EUR"), input -> {
+    paymentService.charge(input.get("amount"), input.get("currency"));
+    return payload("status", "charged");
+});
+
+// With timeout
+String result = ctx.execute("slowApiCall", String.class, () -> externalApi.call(), Duration.ofSeconds(30));
+
+// With custom event name
+ctx.execute("chargeCard", String.class, () -> stripe.charge(amount),
+    namespace("com.myapp.payments")
+        .baseName("CardCharge")
+);
+```
+
+### waitForEvent() Examples
+
+```java
+// Wait for event of specific type
+OrderConfirmed confirmed = ctx.waitForEvent("orderConfirmed", OrderConfirmed.class);
+
+// With timeout
+PaymentReceived payment = ctx.waitForEvent("payment", PaymentReceived.class, Duration.ofMinutes(30));
+
+// With predicate filter (only matching events satisfy the wait)
+ApprovalEvent approval = ctx.waitForEvent("managerApproval", ApprovalEvent.class,
+    event -> event.getApprover().equals(managerId),
+    Duration.ofHours(24)
+);
+```
+
+### wait() Examples
+
+```java
+// Pause for fixed duration (e.g., rate limiting, cooldown)
+ctx.wait("cooldown", Duration.ofSeconds(30));
+
+// Delay before retry
+ctx.wait("retryDelay", Duration.ofMinutes(5));
+```
+
 ## DSL Architecture
 
 The DSL is organized in layers, separating low-level primitives from user-friendly APIs. Both **Java** and **Kotlin** DSLs are available, built on the same underlying primitives.
