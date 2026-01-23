@@ -31,6 +31,32 @@
                                              └─────────────────┘
 ```
 
+## Design Principles
+
+### Separating State from Actions
+
+The runtime follows an event sourcing pattern where state reconstruction is separated from action execution:
+
+1. **Restore phase** (pure state reconstruction): Load historical events and rebuild `WorkflowExecution` state. This phase has no side effects - no I/O, no service calls, no event publishing. It is purely deterministic state reconstruction from events.
+
+2. **Execute phase** (side effects allowed): Once state is restored, the workflow continues execution. User code runs here and may perform any side effects (API calls, database operations, etc.).
+
+This mirrors the split between sourcing an entity's state from events and handling commands/actions.
+
+### Side-Effect Safety in Restore
+
+The `restore()` method is an internal engine operation that users cannot access or influence. User workflow code only interacts with primitives like `execute()` and `waitFor()` during the execute phase. This architectural boundary guarantees that state reconstruction remains pure and deterministic.
+
+### Restore-Then-Execute Flow
+
+When a workflow is triggered (or recovered after a crash):
+
+1. Load all historical events for this workflow ID from the StateManager
+2. Replay events to rebuild step execution state (finite operation)
+3. Once history is fully replayed, begin/continue execution
+
+There is no "catching up" to a moving target - history replay is a bounded operation that completes before execution resumes.
+
 ## Core Flow (Sequence Diagram)
 
 ```
@@ -114,15 +140,17 @@ All file paths relative to `runtime/src/main/java/io/axoniq/workflow/runtime/`
 ```
 Crash → New Coordinator → WorkflowEngine.restore()
                               │
-                              ├─▶ Load events from StateManager
+                              ├─▶ Load events from StateManager (finite history)
                               │
-                              ├─▶ Rebuild StepExecution map
+                              ├─▶ Rebuild StepExecution map (pure, no side effects)
                               │     • COMPLETED → return cached result
                               │     • FAILED → return cached error
                               │     • STARTED → recalculate timeout, retry
                               │
-                              └─▶ Continue execution from last state
+                              └─▶ Continue execution from last state (side effects resume)
 ```
+
+The restore phase is deterministic: given the same event history, the same state is always reconstructed. User code is not invoked during restore - only during the subsequent execute phase.
 
 ## Quick Start Example
 
