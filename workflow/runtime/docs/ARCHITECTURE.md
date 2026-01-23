@@ -331,15 +331,15 @@ The `execute()` primitive accepts a local payload that becomes the STARTED event
 ```java
 // Simple execute - no input payload, no return value
 ctx.execute("notify", () -> sendNotification());
-// STARTED payload: {}
-// COMPLETED payload: {}
+// -> io.axoniq.workflow.NotifyStarted#0.1 {}
+// -> io.axoniq.workflow.NotifyCompleted#0.1 {}
 
 // Execute with return value
 String userId = ctx.execute("createUser", String.class, () -> {
     return userService.create(email);
 });
-// STARTED payload: {}
-// COMPLETED payload: {"__createUser": "user-123"}
+// -> io.axoniq.workflow.CreateUserStarted#0.1 {}
+// -> io.axoniq.workflow.CreateUserCompleted#0.1 {"__createUser": "user-123"}
 
 // Execute with input payload
 ctx.execute("processOrder",
@@ -349,8 +349,8 @@ ctx.execute("processOrder",
         return payload("status", "processed");
     }
 );
-// STARTED payload: {"orderId": "order-456", "amount": 100}
-// COMPLETED payload: {"status": "processed"}
+// -> io.axoniq.workflow.ProcessOrderStarted#0.1 {"orderId": "order-456", "amount": 100}
+// -> io.axoniq.workflow.ProcessOrderCompleted#0.1 {"status": "processed"}
 ```
 
 ### Payload Reducers (Advanced)
