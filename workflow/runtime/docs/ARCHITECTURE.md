@@ -113,6 +113,77 @@ WorkflowExecution
 | `waitFor()` | Wait for external event | Recalculates remaining timeout from STARTED |
 | `wait()` | Pause execution | Same as waitFor (implemented via waitFor) |
 
+## DSL Architecture
+
+The DSL is organized in layers, separating low-level primitives from user-friendly APIs. Both **Java** and **Kotlin** DSLs are available, built on the same underlying primitives.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User Workflow Code                        │
+│                     implements SimpleDefinition                  │
+└─────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         SimpleContext                            │
+│            (extends WorkflowExecution, user-facing)              │
+│  ┌─────────────────────┐    ┌─────────────────────┐             │
+│  │ ExecuteInLocalContext│    │    WaitForEvent     │             │
+│  │ • execute(name, λ)  │    │ • waitForEvent()    │             │
+│  │ • execute(Payload)  │    │ • wait(duration)    │             │
+│  └─────────────────────┘    └─────────────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       API Primitives                             │
+│                    (runtime/api/primitives/)                     │
+│  ┌─────────────────────┐    ┌─────────────────────┐             │
+│  │   ExecutePrimitive  │    │   WaitForPrimitive  │             │
+│  │ Full signature with │    │ Full signature with │             │
+│  │ timeout, reducers,  │    │ predicate, timeout, │             │
+│  │ event customizer    │    │ converter           │             │
+│  └─────────────────────┘    └─────────────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Layer Responsibilities
+
+| Layer | Package | Purpose |
+|-------|---------|---------|
+| **API Primitives** | `runtime/api/primitives/` | Low-level interfaces with full control (timeouts, payload reducers, event customizers) |
+| **DSL Interfaces** | `dsl/simple/` | User-friendly wrappers with sensible defaults. `ExecuteInLocalContext` and `WaitForEvent` provide overloaded methods |
+| **SimpleContext** | `dsl/simple/` | Combines all DSL interfaces into one context object passed to user workflows |
+| **SimpleDefinition** | `dsl/simple/` | Bundles workflow definition with context factory, state factory, and association provider |
+
+### SimpleDefinition Consolidation
+
+`SimpleDefinition` implements multiple interfaces to reduce boilerplate:
+
+```java
+public interface SimpleDefinition extends
+    WorkflowDefinition<SimpleContext>,     // execute(ctx) method
+    WorkflowContextFactory<SimpleContext>, // creates SimpleContext
+    WorkflowStateFactory,                  // creates WorkflowState
+    AssociationProvider,                   // extracts workflow ID from trigger
+    WorkflowConfiguration<SimpleContext>   // bundles all above
+```
+
+Users only need to implement two methods:
+- `association(payload)` → returns workflow ID
+- `execute(ctx)` → workflow logic using primitives
+
+### DSL File Reference
+
+| File | Purpose                                                       |
+|------|---------------------------------------------------------------|
+| `dsl/simple/SimpleDefinition.java` | All-in-one interface for workflow definitions                 |
+| `dsl/simple/SimpleContext.java` | Context passed to user code, extends `WorkflowExecution`      |
+| `dsl/simple/ExecuteInLocalContext.java` | Convenience methods for `execute()` primitive                 |
+| `dsl/simple/WaitForEvent.java` | Convenience methods for `waitFor()` primitive                 |
+| `dsl/simple/Payload.java` | Fluent wrapper for `Map<String, Object>` payload manipulation |
+
+
 ## Event Metadata
 
 ```
@@ -122,6 +193,121 @@ MetadataUtils Keys:
 ├── METADATA_KEY_TYPE         → step status (STARTED/COMPLETED/FAILED/TIMED_OUT)
 └── METADATA_KEY_WORKFLOW_STATUS → workflow status
 ```
+
+## Event Name Customization
+
+The runtime publishes events for workflow and step lifecycle transitions. By default, event names follow a convention, but can be fully customized via `EventNameCustomizer`.
+
+### Default Event Name Format
+
+```
+{namespace}.{BaseName}{Status}{Version}
+```
+
+**Default values:**
+- `namespace`: `io.axoniq.workflow`
+- `baseName`: step name (capitalized)
+- `status`: `Started`, `Completed`, `Failed`, `TimedOut`
+- `version`: `#0.1`
+
+**Example:** Step named `createUser` completing → `io.axoniq.workflow.CreateUserCompleted#0.1`
+
+### Customization Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `namespace(String)` | `io.axoniq.workflow` | Event namespace prefix |
+| `baseName(String)` | step name | Override the base name |
+| `baseVersion(String)` | `#0.1` | Version suffix |
+| `appendToBaseName(boolean)` | `true` | Include namespace and base name |
+| `appendVersion(boolean)` | `true` | Include version suffix |
+| `capitalizeSimpleName(boolean)` | `true` | Capitalize base name |
+| `stepStarted(String)` | `Started` | Status suffix for STARTED |
+| `stepCompleted(String)` | `Completed` | Status suffix for COMPLETED |
+| `stepFailed(String)` | `Failed` | Status suffix for FAILED |
+| `stepTimedOut(String)` | `TimedOut` | Status suffix for TIMED_OUT |
+| `payloadCustomization(Function)` | identity | Dynamic name based on payload |
+
+### Usage Example
+
+```java
+// Using defaults
+ctx.execute("sendEmail", () -> { /* ... */ });
+// Event name: io.axoniq.workflow.SendEmailCompleted#0.1
+
+// Custom namespace and base name
+ctx.execute("getValue", String.class, () -> "result",
+    namespace("com.myapp.signup")
+        .baseName("UserCreation")
+        .stepStarted("Initiated")
+);
+// Started event: com.myapp.signup.UserCreationInitiated#0.1
+// Completed event: com.myapp.signup.UserCreationCompleted#0.1
+```
+
+### Event Payload Content
+
+Events carry payload data that varies by event type:
+
+| Event Type | Payload Content |
+|------------|-----------------|
+| **STARTED** | Input arguments passed to the step (local payload) |
+| **COMPLETED** | Return value from the step action |
+| **FAILED** | Exception information |
+| **TIMED_OUT** | Timeout timestamp |
+
+### Controlling Event Payloads
+
+The `execute()` primitive accepts a local payload that becomes the STARTED event payload. The return value from your action becomes the COMPLETED event payload.
+
+```java
+// Simple execute - no input payload, no return value
+ctx.execute("notify", () -> sendNotification());
+// STARTED payload: {}
+// COMPLETED payload: {}
+
+// Execute with return value
+String userId = ctx.execute("createUser", String.class, () -> {
+    return userService.create(email);
+});
+// STARTED payload: {}
+// COMPLETED payload: {"__createUser": "user-123"}
+
+// Execute with input payload
+ctx.execute("processOrder",
+    payload("orderId", "order-456", "amount", 100),
+    (input) -> {
+        orderService.process(input.get("orderId"), input.get("amount"));
+        return payload("status", "processed");
+    }
+);
+// STARTED payload: {"orderId": "order-456", "amount": 100}
+// COMPLETED payload: {"status": "processed"}
+```
+
+### Payload Reducers (Advanced)
+
+For fine-grained control over what data flows into step execution and back to the workflow context, use `PayloadReducer`:
+
+| Reducer | Behavior |
+|---------|----------|
+| `local()` | Use only the local payload passed to execute |
+| `global()` | Use only the workflow-level payload |
+| `all()` | Merge local and global payloads |
+| `none()` | Empty payload |
+
+The DSL defaults to `local()` for parameters and `all()` for results, meaning:
+- Steps receive only their explicit input (isolation)
+- Results are merged back into the workflow payload (accumulation)
+
+### Implementation
+
+| File | Purpose |
+|------|---------|
+| `api/primitives/EventNameCustomizer.java` | Interface for event name generation |
+| `context/DefaultEventNameCustomizer.java` | Fluent builder with defaults |
+| `api/primitives/PayloadReducer.java` | Controls payload flow between workflow and steps |
+
 
 ## File Reference Table
 
