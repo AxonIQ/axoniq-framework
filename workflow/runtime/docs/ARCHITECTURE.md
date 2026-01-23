@@ -357,14 +357,15 @@ ctx.execute("processOrder",
 
 For fine-grained control over what data flows into step execution and back to the workflow context, use `PayloadReducer`:
 
-| Reducer | Behavior |
-|---------|----------|
-| `local()` | Use only the local payload passed to execute |
-| `global()` | Use only the workflow-level payload |
-| `all()` | Merge local and global payloads |
-| `none()` | Empty payload |
+| Reducer | Behavior                                                  |
+|---------|-----------------------------------------------------------|
+| `local()` | Use only the local payload passed to execute              |
+| `global()` | Use only the workflow-level payload                       |
+| `all()` | Merge local into global payloads (overwriting duplicates) |
+| `none()` | Empty payload                                             |
 
-The DSL defaults to `local()` for parameters and `all()` for results, meaning:
+The reducers defaults can be configured on DSL level. For example current Simple DSL defaults to `local()` 
+for parameters and `all()` for results, meaning:
 - Steps receive only their explicit input (isolation)
 - Results are merged back into the workflow payload (accumulation)
 
@@ -377,18 +378,18 @@ The DSL defaults to `local()` for parameters and `all()` for results, meaning:
 | `api/primitives/PayloadReducer.java` | Controls payload flow between workflow and steps |
 
 
-## File Reference Table
+## Implementation File Reference Table
 
-| Component | File | Key Methods |
-|-----------|------|-------------|
-| Coordinator | `engine/Coordinator.java` | `start()`, `stop()`, `subscribeForTriggerEvents()` |
-| Engine | `engine/WorkflowEngine.java` | `restoreAndExecute()`, `initialize()`, `restore()`, `execute()` |
-| State Manager | `engine/SimpleStateManager.java` | `getHistory()`, `subscribe()`, `append()` |
-| Context | `context/WorkflowExecution.java` | Holds workflow state, delegates to primitives |
-| Execute | `context/ExecuteDelegate.java` | Runs steps with caching, virtual threads |
-| WaitFor | `context/WaitForDelegate.java` | Event subscription with timeout recovery |
-| Step State | `engine/StepExecution.java` | Immutable record for step tracking |
-| DSL | `dsl/simple/SimpleContext.java` | Convenience wrapper for user workflows |
+| Component            | File | Key Methods                                                                                       |
+|----------------------|------|---------------------------------------------------------------------------------------------------|
+| Coordinator          | `engine/Coordinator.java` | `start()`, `stop()`, `subscribeForTriggerEvents()`                                                |
+| Engine               | `engine/WorkflowEngine.java` | `restoreAndExecute()`, `initialize()`, `restore()`, `execute()`                                   |
+| Simple State Manager | `engine/SimpleStateManager.java` | `getHistory()`, `subscribe()`, `append()`, curerntly unifying `StateManager` and `EventAppender`  |
+| Context              | `context/WorkflowExecution.java` | Holds workflow state, delegates to primitives, implementing `WorkflowContext` and `WorkflowState` |
+| Execute Primitive    | `context/ExecuteDelegate.java` | Runs steps with caching, virtual threads                                                          |
+| WaitFor Primitive    | `context/WaitForDelegate.java` | Event subscription with timeout recovery                                                          |
+| Step State           | `engine/StepExecution.java` | Immutable record for step tracking                                                                |
+| DSL                  | `dsl/simple/SimpleContext.java` | Convenience wrapper for user workflows                                                            |
 
 All file paths relative to `runtime/src/main/java/io/axoniq/workflow/runtime/`
 
