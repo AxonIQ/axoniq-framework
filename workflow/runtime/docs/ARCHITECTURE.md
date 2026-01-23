@@ -13,7 +13,7 @@
 ┌─────────────────┐                          ┌─────────────────┐                          ┌─────────────────┐
 │   COORDINATOR   │─────────────────────────▶│  WORKFLOW ENGINE │◀────────────────────────│  STATE MANAGER  │
 │                 │                          │                 │                          │                 │
-│ • Event sub     │   restoreAndExecute()    │ • Initialize    │   getHistory()          │ • Event store   │
+│ • Event sub     │   restoreAndExecute()    │ • Initialize    │   getHistory()           │ • Event store   │
 │ • Lifecycle     │──────────────────────────│ • Restore       │◀─────────────────────────│ • Subscribe     │
 │ • Dedup         │                          │ • Execute       │                          │ • Append        │
 └─────────────────┘                          └────────┬────────┘                          └─────────────────┘
