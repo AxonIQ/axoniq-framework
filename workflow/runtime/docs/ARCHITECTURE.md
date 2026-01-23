@@ -461,6 +461,28 @@ coordinator.declarative().register(
 coordinator.start();
 ```
 
-## Test Reference
+## Test Suite
 
-See `runtime/src/test/java/io/axoniq/workflow/runtime/CoordinatorUserSignupTest.java` for a complete working example.
+All tests located in `runtime/src/test/`
+
+### Java Tests
+
+| Test | Description |
+|------|-------------|
+| [`CoordinatorUserSignupTest`](../src/test/java/io/axoniq/workflow/runtime/CoordinatorUserSignupTest.java) | End-to-end test with Coordinator. User signup flow with trigger events, `waitForEvent`, and step execution. Good starting point for understanding the full stack. |
+| [`UserSignupTest`](../src/test/java/io/axoniq/workflow/runtime/UserSignupTest.java) | Basic workflow execution using WorkflowEngine directly. Tests step caching, event name customization, and replay behavior. |
+| [`UserSignupPayloadTest`](../src/test/java/io/axoniq/workflow/runtime/UserSignupPayloadTest.java) | Payload flow between steps. Tests input/output payload handling and `Payload` helper class. |
+| [`WorkflowFailedExceptionTest`](../src/test/java/io/axoniq/workflow/runtime/WorkflowFailedExceptionTest.java) | Error handling. Verifies terminal (`WorkflowFailedException`) vs non-terminal exceptions behavior. |
+| [`LoanApplicationTimeoutTest`](../src/test/java/io/axoniq/workflow/runtime/LoanApplicationTimeoutTest.java) | Timeout handling and compensation. Tests step timeouts with slow external services and compensation logic. |
+| [`ParallelWorkflowSubscriptionTest`](../src/test/java/io/axoniq/workflow/runtime/ParallelWorkflowSubscriptionTest.java) | Parallel workflow execution. Tests multiple concurrent workflows, event routing to correct instances, and subscription-based notifications. |
+| [`OrderFulfillmentWorkflowTest`](../src/test/java/io/axoniq/workflow/runtime/OrderFulfillmentWorkflowTest.java) | Real-world scenario. Order processing with inventory check, payment, and shipping steps. |
+| [`TravelBookingParallelTest`](../src/test/java/io/axoniq/workflow/runtime/TravelBookingParallelTest.java) | Parallel step execution within a workflow. Books flight, hotel, and car concurrently using `CompletableFuture`. |
+| [`WorkflowCrashRecoveryTest`](../src/test/java/io/axoniq/workflow/runtime/WorkflowCrashRecoveryTest.java) | Crash recovery via event sourcing. Tests that completed steps aren't re-executed after restart. *(Currently disabled - requires Coordinator changes)* |
+| [`JacksonSerializationTest`](../src/test/java/io/axoniq/workflow/runtime/JacksonSerializationTest.java) | Serialization. Verifies Jackson can serialize POJOs, records, and maps for event payloads. |
+
+### Kotlin Tests
+
+| Test | Description |
+|------|-------------|
+| [`UserSignupPayloadTest.kt`](../src/test/kotlin/UserSignupPayloadTest.kt) | Kotlin DSL example. Same user signup flow using Kotlin DSL with `KDefinition` and `Kontext`. Demonstrates try-catch error handling. |
+
