@@ -506,3 +506,11 @@ All tests located in `runtime/src/test/`
 - [x] **Kotlin DSL** - `KDefinition`, `Kontext` with idiomatic Kotlin syntax
 - [ ] **Axon 5 Integration** - move to dedicated module and connect to real Axon components
 - [ ] **Testing support** - Test fixtures, time manipulation, event injection utilities
+
+---
+
+## Open Questions & Discussion
+
+Open design questions, architectural decisions, and topics under discussion:
+
+[DISCUSSION.md](../../DISCUSSION.md)
