@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,24 +73,24 @@ class AxoniqPlatformEventStorageEngine(
         return appendEvents(condition, context, events.toList())
     }
 
-    override fun source(condition: SourcingCondition, context: ProcessingContext?): MessageStream<EventMessage?> {
-        return delegate.source(condition, context)
+    override fun source(condition: SourcingCondition): MessageStream<EventMessage?> {
+        return delegate.source(condition)
     }
 
-    override fun stream(condition: StreamingCondition, context: ProcessingContext?): MessageStream<EventMessage?> {
-        return delegate.stream(condition, context)
+    override fun stream(condition: StreamingCondition): MessageStream<EventMessage?> {
+        return delegate.stream(condition)
     }
 
-    override fun firstToken(context: ProcessingContext?): CompletableFuture<TrackingToken?> {
-        return delegate.firstToken(context)
+    override fun firstToken(): CompletableFuture<TrackingToken?> {
+        return delegate.firstToken()
     }
 
-    override fun latestToken(context: ProcessingContext?): CompletableFuture<TrackingToken?> {
-        return delegate.latestToken(context)
+    override fun latestToken(): CompletableFuture<TrackingToken?> {
+        return delegate.latestToken()
     }
 
-    override fun tokenAt(at: Instant, context: ProcessingContext?): CompletableFuture<TrackingToken?> {
-        return delegate.tokenAt(at, context)
+    override fun tokenAt(at: Instant, ): CompletableFuture<TrackingToken?> {
+        return delegate.tokenAt(at)
     }
 
     override fun describeTo(descriptor: ComponentDescriptor) {

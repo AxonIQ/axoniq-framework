@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import io.axoniq.platform.framework.messaging.HandlerMeasurement.Companion.RESOU
 import io.axoniq.platform.framework.messaging.HandlerMetricsRegistry
 import io.axoniq.platform.framework.messaging.toInformation
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.axonframework.common.infra.ComponentDescriptor
 import org.axonframework.messaging.core.Message
 import org.axonframework.messaging.core.MessageStream
 import org.axonframework.messaging.core.QualifiedName
@@ -93,8 +94,8 @@ class AxoniqPlatformEventHandlingComponent(
         return delegate.sequenceIdentifierFor(event, context)
     }
 
-    override fun subscribe(name: QualifiedName, eventHandler: EventHandler): EventHandlerRegistry? {
-        delegate.subscribe(name, eventHandler)
-        return this
+    override fun describeTo(descriptor: ComponentDescriptor) {
+        descriptor.describeProperty("processorName", processorName)
+        descriptor.describeWrapperOf(delegate)
     }
 }
