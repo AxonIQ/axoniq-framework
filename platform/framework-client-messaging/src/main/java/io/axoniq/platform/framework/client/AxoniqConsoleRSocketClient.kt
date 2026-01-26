@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,8 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.math.pow
 
 /**
@@ -76,9 +78,12 @@ class AxoniqConsoleRSocketClient(
     private var maintenanceTask: ScheduledFuture<*>? = null
     private val logger = LoggerFactory.getLogger(this::class.java)
 
+    private val connectionLock = ReentrantLock()
+    @Volatile
     private var rsocket: RSocket? = null
     private var lastConnectionTry = Instant.EPOCH
     private var connectionRetryCount = 0
+    @Volatile
     private var pausedReports = false
     private var supressConnectMessage = false
 
@@ -110,7 +115,7 @@ class AxoniqConsoleRSocketClient(
      * Sends a report to Axoniq Platform. If reports are paused, does nothing silently.
      */
     fun sendReport(route: String, payload: Any): Mono<Unit> {
-        if(pausedReports) {
+        if (pausedReports) {
             return Mono.empty()
         }
         return sendMessage(payload, route)
@@ -236,10 +241,20 @@ class AxoniqConsoleRSocketClient(
 
     fun isConnected() = rsocket != null
 
+    /**
+     * Disposes the current RSocket connection in a thread-safe manner.
+     * This method can be called from multiple threads (e.g., TCP disconnect callback,
+     * heartbeat checker), but will only perform the disposal once per connection.
+     */
     fun disposeCurrentConnection() {
-        rsocket?.dispose()
-        rsocket = null
-        clientSettingsService.clearSettings()
+        connectionLock.withLock {
+            val currentRSocket = rsocket
+            if (currentRSocket != null) {
+                rsocket = null
+                currentRSocket.dispose()
+                clientSettingsService.clearSettings()
+            }
+        }
     }
 
     fun disposeClient() {

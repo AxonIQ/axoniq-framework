@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,15 @@ class ServerProcessorReporter(
     }
 
     private fun report() {
-        client.sendReport(Routes.EventProcessor.REPORT, processorReportCreator.createReport()).block()
+        if (!client.isConnected()) {
+            return
+        }
+        client.sendReport(Routes.EventProcessor.REPORT, processorReportCreator.createReport())
+                .doOnError { e ->
+                    logger.debug { "Failed to send processor report: ${e.message}" }
+                }
+                .onErrorComplete()
+                .subscribe()
     }
 
     override fun onDisconnected() {
