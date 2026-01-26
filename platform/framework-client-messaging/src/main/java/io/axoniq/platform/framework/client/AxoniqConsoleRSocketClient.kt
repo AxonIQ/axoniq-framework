@@ -80,6 +80,7 @@ class AxoniqConsoleRSocketClient(
     private var lastConnectionTry = Instant.EPOCH
     private var connectionRetryCount = 0
     private var pausedReports = false
+    private var supressConnectMessage = false
 
     init {
         clientSettingsService.subscribeToSettings(heartbeatOrchestrator)
@@ -164,14 +165,18 @@ class AxoniqConsoleRSocketClient(
             val settings = retrieveSettings().block()
                     ?: throw IllegalStateException("Could not receive the settings from Axoniq Platform!")
             clientSettingsService.updateSettings(settings)
-            logger.info("Connection to Axoniq Platform set up successfully! This instance's name: $instanceName, settings: $settings")
+            if (!supressConnectMessage) {
+                logger.info("Connection to Axoniq Platform set up successfully! This instance's name: $instanceName, settings: $settings")
+                supressConnectMessage = true
+            }
             connectionRetryCount = 0
         } catch (e: Exception) {
-            if (connectionRetryCount == 5) {
-                logger.error("Failed to connect to Axoniq Platform. Error: ${e.message}. Will keep trying to connect...", e)
+            if (connectionRetryCount == 10) {
+                logger.error("Failed to connect to Axoniq Platform. Error: ${e.message}. Will keep trying to connect...")
+                supressConnectMessage = false
             }
             disposeCurrentConnection()
-            logger.info("Failed to connect to Axoniq Platform", e)
+            logger.debug("Failed to connect to Axoniq Platform", e)
         }
     }
 
@@ -279,7 +284,6 @@ class AxoniqConsoleRSocketClient(
         }
 
         override fun onDisconnected() {
-            logger.info("This application has lost it's connection to Axoniq Platform. Reconnection will be automatically attempted.")
             this.heartbeatSendTask?.cancel(true)
             this.heartbeatCheckTask?.cancel(true)
         }
