@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,15 @@ class ApplicationMetricReporter(
     }
 
     private fun report() {
-        client.sendReport(Routes.Application.REPORT, reportCreator.createReport()).block()
+        if (!client.isConnected()) {
+            return
+        }
+        client.sendReport(Routes.Application.REPORT, reportCreator.createReport())
+                .doOnError { e ->
+                    logger.debug { "Failed to send application report: ${e.message}" }
+                }
+                .onErrorComplete()
+                .subscribe()
     }
 
     override fun onDisconnected() {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,12 +68,21 @@ class HandlerMetricsRegistry(
     override fun onConnectedWithSettings(settings: ClientSettingsV2) {
         logger.debug { "Sending handler information every ${settings.handlerReportInterval}ms to Axoniq Platform" }
         this.reportTask = executor.scheduleAtFixedRate({
+            if (!axoniqConsoleRSocketClient.isConnected()) {
+                return@scheduleAtFixedRate
+            }
             try {
                 val stats = getStats()
-                logger.debug { "${"Sending metrics: {}"} $stats" }
+                logger.debug { "Sending metrics: $stats" }
+                axoniqConsoleRSocketClient.sendReport(Routes.MessageFlow.STATS, stats)
+                        .doOnError { e ->
+                            logger.debug { "Failed to send handler metrics: ${e.message}" }
+                        }
+                        .onErrorComplete()
+                        .subscribe()
                 axoniqConsoleRSocketClient.sendReport(Routes.MessageFlow.STATS, stats).block()
             } catch (e: Exception) {
-                logger.warn { "${"No metrics could be reported to Axoniq Platform: {}"} ${e.message}" }
+                logger.warn { "No metrics could be reported to AxonIQ Console: ${e.message}" }
             }
         }, 0, settings.handlerReportInterval, TimeUnit.MILLISECONDS)
     }
