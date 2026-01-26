@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2022-2025. AxonIQ B.V.
+  ~ Copyright (c) 2022-2026. AxonIQ B.V.
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@
         <kotlin.version>2.2.20</kotlin.version>
         <dokka.version>2.0.0</dokka.version>
 
-        <axon.version>5.0.0</axon.version>
+        <axon.version>5.0.2</axon.version>
         <spring-boot.version>3.5.7</spring-boot.version>
 
 
