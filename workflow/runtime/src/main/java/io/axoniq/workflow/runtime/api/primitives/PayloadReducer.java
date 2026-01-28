@@ -7,19 +7,19 @@ import java.util.function.BiFunction;
 public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
 
   static PayloadReducer all() {
-    return (global, local) -> {
-      var result = new HashMap<>(global);
+    return (context, local) -> {
+      var result = new HashMap<>(context);
       result.putAll(local);
       return result;
     };
   }
 
-  static PayloadReducer global() {
-    return (global, local) -> global;
+  static PayloadReducer context() {
+    return (context, local) -> context;
   }
 
   static PayloadReducer local() {
-    return (global, local) -> local;
+    return (context, local) -> local;
   }
 
   static PayloadReducer none() {

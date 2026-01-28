@@ -1,15 +1,16 @@
 package io.axoniq.workflow.runtime.api.workflow;
 
+import io.axoniq.workflow.runtime.engine.WorkflowServices;
 import jakarta.annotation.Nonnull;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
 import java.util.Map;
 
+/**
+ * Creates a context for workflow execution.
+ * @param <T> type of the context.
+ */
 @FunctionalInterface
 public interface WorkflowContextFactory<T extends WorkflowContext> {
   @Nonnull
-  T createContext(@Nonnull Map<String, Object> initialPayload,
-                  @Nonnull StateManager stateManager,
-                  @Nonnull EventAppender eventAppender
-  );
+  T createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull WorkflowServices workFlowServices);
 }

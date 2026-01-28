@@ -5,9 +5,9 @@ import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
-import io.axoniq.workflow.runtime.engine.StepExecution;
-import io.axoniq.workflow.runtime.engine.StepFailedException;
+import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
@@ -15,17 +15,16 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class ExecuteDelegate extends AbstractPrimitiveDelegate implements ExecutePrimitive {
+public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
 
-  private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-
-  public ExecuteDelegate(WorkflowContext context, WorkflowState workflowState) {
-    super(context, workflowState);
+  public ExecuteDelegate(@Nonnull WorkflowContext context,
+                         @Nonnull WorkflowState workflowState,
+                         @Nonnull WorkflowServices workflowServices
+  ) {
+    super(context, workflowState, workflowServices);
   }
 
   @Override
@@ -38,13 +37,13 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
     @Nonnull Duration timeout,
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
-    StepExecution existing = state.getStep(stepName);
+    var existing = workflowState.getStep(stepName);
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
           @SuppressWarnings("unchecked")
           var result = (Map<String, Object>) existing.result();
-          state.modifyPayload(p -> resultMapping.apply(p, result)); // reduce results back
+          workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // reduce results back
           return CompletableFuture.completedFuture(result);
         }
         case FAILED -> {
@@ -59,22 +58,21 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
     return CompletableFuture.supplyAsync(
         () -> {
           try {
-
             started(stepName, local, eventNameCustomizer);
 
             // step execution
-            var parameters = parameterMapping.apply(context.getPayload(), local); // local copy of the payload
+            var parameters = parameterMapping.apply(workflowContext.getPayload(), local); // local copy of the payload
             Map<String, Object> result = action.apply(parameters);
 
             completed(stepName, result, eventNameCustomizer);
 
-            state.modifyPayload(p -> resultMapping.apply(p, result)); // write back payload
+            workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // write back payload
             return result;
           } catch (RuntimeException ex) {
             failed(stepName, ex, eventNameCustomizer);
             throw ex;
           }
-        }, executor //todo reuse execute from workflow engine
+        }, workflowServices.getExecutor()
       ).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
       .exceptionally(ex -> {
         if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
@@ -85,5 +83,4 @@ public class ExecuteDelegate extends AbstractPrimitiveDelegate implements Execut
       });
 
   }
-
 }

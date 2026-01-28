@@ -2,6 +2,7 @@ package io.axoniq.workflow.runtime.api.workflow;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;
 
 /**

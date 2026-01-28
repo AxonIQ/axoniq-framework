@@ -3,10 +3,13 @@ package io.axoniq.workflow.runtime.context;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowState;
-import io.axoniq.workflow.runtime.engine.StepExecution;
-import io.axoniq.workflow.runtime.engine.StepFailedException;
+import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -19,22 +22,26 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.eventRetriever;
+public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {
 
-public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitForPrimitive {
+  private static final Logger logger = LoggerFactory.getLogger(WaitForDelegate.class);
 
-  public WaitForDelegate(WorkflowContext context, WorkflowState workflowState) {
-    super(context, workflowState);
+  public WaitForDelegate(
+    @Nonnull WorkflowContext workflowContext,
+    @Nonnull WorkflowState workflowState,
+    @Nonnull WorkflowServices workflowServices
+  ) {
+    super(workflowContext, workflowState, workflowServices);
   }
 
   @Override
   public Function<Object, Map<String, Object>> typeToPayloadConverter() {
-    return context.typeToPayloadConverter();
+    return workflowContext.typeToPayloadConverter();
   }
 
   @Override
   public <T> Function<Map<String, Object>, T> payloadToTypeConverter(@Nonnull Class<T> payloadType) {
-    return context.payloadToTypeConverter(payloadType);
+    return workflowContext.payloadToTypeConverter(payloadType);
   }
 
   @Override
@@ -53,24 +60,29 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
       return result;
     };
 
+
     Consumer<Instant> timeoutOccurredHandler = (timeoutTimestamp) -> {
       timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
     };
 
     Function<Duration, CompletableFuture<T>> eventRetriever = (remainingTimeout) ->
-      eventRetriever(state.stateManager(), eventType, eventCondition)
+      workflowServices.getEventSubscriptionManager().subscribe(
+          new QualifiedName(eventType),
+          eventMessage -> eventCondition.test(eventMessage.payloadAs(eventType)),
+          eventType
+        )
         .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
         .thenApply(completionHandler)
         .exceptionally(ex -> {
-          if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
-            var timeoutTimestamp = Instant.now(state.getClock());
-            timeoutOccurredHandler.accept(timeoutTimestamp);
-            throw new CompletionException(ex);
+            if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
+              timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
+              throw new CompletionException(ex);
+            }
+            throw new StepFailedException(ex);
           }
-          throw new StepFailedException(ex);
-        });
+        );
 
-    StepExecution existing = state.getStep(stepName);
+    var existing = workflowState.getStep(stepName);
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
@@ -85,22 +97,27 @@ public class WaitForDelegate extends AbstractPrimitiveDelegate implements WaitFo
         }
         case STARTED -> {
           Instant started = (Instant) existing.result();
-          Duration remainingTimeout = Duration.between(Instant.now(state.getClock()), started.plus(timeout));
+          Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), started.plus(timeout));
           if (remainingTimeout.isNegative()) {
-            timeoutOccurredHandler.accept(Instant.now(state.getClock()));
+            timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
             return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
           } else {
-            // wait for util
+            // wait for event
             return eventRetriever.apply(remainingTimeout);
           }
         }
       }
     }
 
-    var started = Instant.now(state.getClock());
+    var started = Instant.now(workflowState.getClock());
     var payload = Map.<String, Object>of("started", started, "duration", timeout.toString());
+
     started(stepName, payload, eventNameCustomizer);
 
-    return eventRetriever.apply(timeout);
+    // wait for event
+    return eventRetriever.apply(timeout).thenApply(c -> {
+      logger.info("----------------------> Completed");
+      return c;
+    });
   }
 }

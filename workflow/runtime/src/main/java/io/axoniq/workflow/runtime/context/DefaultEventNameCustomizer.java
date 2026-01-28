@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime.context;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.engine.StepStatus;
-import io.axoniq.workflow.runtime.engine.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.common.StringUtils;
 
 import java.util.HashMap;

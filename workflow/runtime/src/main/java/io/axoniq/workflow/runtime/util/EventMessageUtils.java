@@ -1,19 +1,15 @@
 package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.workflow.StateManager;
-import io.axoniq.workflow.runtime.engine.SimpleStateManager;
-import io.axoniq.workflow.runtime.engine.StepStatus;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 public class EventMessageUtils {
@@ -22,23 +18,23 @@ public class EventMessageUtils {
     return m -> MetadataUtils.workflowIdFilter(workflowId).test(m.metadata());
   }
 
-  public static EventMessage failedWorkflow(WorkflowContext context, Exception exception, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.FAILED);
-    return new GenericEventMessage(MessageType.fromString(name), exception,
-      MetadataUtils.create(context.getWorkflowId())
-    );
-  }
-
   public static EventMessage startedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
     var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.STARTED);
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),
-      MetadataUtils.create(context.getWorkflowId())
+      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.STARTED)
     );
   }
   public static EventMessage completedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
     var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),
-      MetadataUtils.create(context.getWorkflowId())
+      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.COMPLETED)
+    );
+  }
+
+  public static EventMessage failedWorkflow(WorkflowContext context, Exception exception, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.FAILED);
+    return new GenericEventMessage(MessageType.fromString(name), exception,
+      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.FAILED)
     );
   }
 
@@ -69,52 +65,6 @@ public class EventMessageUtils {
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.TIMED_OUT)
     );
   }
-
-  public static <T> CompletableFuture<T> eventRetriever(
-    StateManager stateManager,
-    Class<T> eventType,
-    Predicate<T> eventCondition
-  ) {
-    return eventMessageRetriever(
-      stateManager,
-      eventType,
-      (m) -> eventCondition.test(m.payloadAs(eventType))
-    ).thenApply(e -> e.payloadAs(eventType));
-  }
-
-  public static <T> CompletableFuture<EventMessage> eventMessageRetriever(
-    StateManager stateManager,
-    Class<T> eventType,
-    Predicate<EventMessage> eventCondition
-  ) {
-    CompletableFuture<EventMessage> future = new CompletableFuture<>();
-
-    // Check if event already exists
-    var existing = stateManager.getEventByPayloadType(eventType)
-        .stream()
-        .filter(eventCondition)
-        .findFirst();
-
-    if (existing.isPresent()) {
-      return CompletableFuture.completedFuture(existing.get());
-    }
-
-    // Subscribe for future events
-    var subscription = stateManager.subscribe(new QualifiedName(eventType), eventCondition, event -> {
-      future.complete(event);
-      return true; // Remove subscription after completion
-    });
-
-    // Cancel subscription if the future is cancelled externally
-    future.whenComplete((result, ex) -> {
-      if (ex != null || future.isCancelled()) {
-        subscription.cancel();
-      }
-    });
-
-    return future;
-  }
-
 
   private EventMessageUtils() {
     // avoid
