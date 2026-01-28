@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
-import static org.assertj.core.api.Assertions.assertThat
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
