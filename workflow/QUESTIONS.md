@@ -75,6 +75,28 @@ Affected areas:
 - Example 1 for workflow lifecycle: WorkflowStartedEvent (technical) vs. OrderSubmitted (domain)
 - Example 2 for step lifecycle for waiting for event: StepCompletedEvent (technical) vs. EmailReceived (domain)
 
+Example:
+
+```
+── workflowEvents/
+   └── [0]/
+       ├── _ref: 553879264
+       ├── _type: io.axoniq.workflow.runtime.engine.execution.PrettyPrintingRecordingEventStore$WorkflowEventDescriptor
+       └── signup-user-456/
+           ├── [0]: io.axoniq.workflow.Signup-user-456Started (none): {}
+           ├── [1]: io.axoniq.workflow.CreateUserStarted (STARTED): {}
+           ├── [2]: io.axoniq.workflow.CreateUserCompleted (COMPLETED): {__createUser=true}
+           ├── [3]: io.axoniq.workflow.ActivateUserStarted (STARTED): {}
+           ├── [4]: io.axoniq.workflow.ActivateUserCompleted (COMPLETED): {}
+           ├── [5]: io.axoniq.workflow.SendWelcomeEmailStarted (STARTED): {}
+           ├── [6]: io.axoniq.workflow.SendWelcomeEmailCompleted (COMPLETED): {}
+           ├── [7]: io.axoniq.workflow.WaitASecondStarted (STARTED): {duration=PT1S, started=2026-01-28T17:48:03.604382Z}
+           ├── [8]: io.axoniq.workflow.WaitASecondCompleted (TIMED_OUT): 2026-01-28T17:48:04.605768Z
+           ├── [9]: io.axoniq.workflow.WaitForMagicToHappenStarted (STARTED): {duration=PT5S, started=2026-01-28T17:48:04.607512Z}
+           ├── [10]: io.axoniq.workflow.WaitForMagicToHappenCompleted (COMPLETED): {magician=Merlin}
+           └── [11]: io.axoniq.workflow.Signup-user-456Completed (none): {}
+```
+
 Options:
 
 - If only domain events are taken, we need a way to mark those domain events as relevant for the current workflow, after
