@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat
 import static org.awaitility.Awaitility.await;
 
 class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
@@ -26,6 +26,24 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
   record MagicHappenedEvent(String magician) {
   }
 
+  static class UserService {
+    static boolean createUser() {
+      logger.info("Creating user.");
+      return true;
+    }
+
+    static void activateUser() {
+      logger.info("Activating user.");
+    }
+  }
+
+  static class NotificationService {
+    static void sendEmail() {
+      logger.info("Sending welcome mail to user.");
+    }
+  }
+
+
   public static class UserSignupWorkflow implements TestDefinition {
 
     @Override
@@ -34,30 +52,23 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
     }
 
     @Override
-    public void execute(TestWorkflowContext context) {
-      logger.info("User signup workflow started at {} for {}", Instant.now(context.getClock()), context.getPayload());
-      var success = context.execute("createUser", Boolean.class, () -> {
-        logger.info("Creating user.");
-        return true;
-      });
+    public void execute(TestWorkflowContext ctx) {
+
+      logger.info("User signup workflow started at {} for {}", Instant.now(ctx.getClock()), ctx.getPayload());
+
+      // -> start
+      var success = ctx.execute("createUser", Boolean.class, UserService::createUser);
       if (!success) {
         return;
       }
-      context.execute("activateUser",
-        () -> {
-          logger.info("Activating user.");
-        });
-
-      context.execute("sendWelcomeEmail", () -> {
-        logger.info("Sending welcome mail to user.");
-      });
-
-      context.wait("waitASecond", Duration.ofSeconds(1));
-
-      var magic = context.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class);
+      ctx.execute("activateUser", UserService::activateUser);
+      ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
+      ctx.wait("waitASecond", Duration.ofSeconds(1));
+      var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class);
       logger.info("Magic happened because of the magician {}", magic.magician);
+      // -> end
 
-      logger.info("User signup workflow ended at {} for {}", Instant.now(context.getClock()), context.getPayload());
+      logger.info("User signup workflow ended at {} for {}", Instant.now(ctx.getClock()), ctx.getPayload());
     }
   }
 
