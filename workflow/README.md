@@ -19,27 +19,18 @@ Event sourcing delivers all of this, but comes with significant complexity: comm
 ```
 // Developer writes this
 loanWorkflow = workflow {
-    creditScore = run("check-credit") { creditBureau.getScore(customerId) }
+    creditScore = execute("check-credit") { creditBureau.getScore(customerId) }
 
     if (creditScore < 650) return failed("Credit too low")
 
     documents = waitForEvent("DocumentsUploaded", timeout = 7.days)
-    approval = run("underwriter-review") { underwriter.review(creditScore, documents) }
+    approval = execute("underwriter-review") { underwriter.review(creditScore, documents) }
 
     return success(approval.contractId)
 }
 
 // Engine handles: events, retries, timeouts, state persistence, crash recovery
 ```
-
-## Specifications
-
-| # | Document | Description |
-|---|----------|-------------|
-| 1 | [General](./01-general.md) | Core concepts and architecture |
-| 2 | [Engine Lifecycle](./02-engine-lifecycle.md) | Workflow states and transitions |
-| 3 | [DSL](./03-dsl.md) | Workflow definition language |
-| 4 | [Decisions](./04-decisions.md) | Architecture Decision Records |
 
 ## Contributing
 

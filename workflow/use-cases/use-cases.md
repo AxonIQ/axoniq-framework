@@ -1,4 +1,5 @@
 # Primitives and States
+
 ![Primitives and States](./cases-in-bpmn/primitives-and-states.png)
 
 # Decorator
