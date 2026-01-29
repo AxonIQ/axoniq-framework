@@ -64,7 +64,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
       ctx.execute("activateUser", UserService::activateUser);
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
       ctx.wait("waitASecond", Duration.ofSeconds(1));
-      var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class);
+      var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
       logger.info("Magic happened because of the magician {}", magic.magician);
       // -> end
 
