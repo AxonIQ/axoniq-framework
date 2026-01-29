@@ -20,6 +20,7 @@
 #### Contra:
 
 - Host language is hard to control (cancellation, suspension) between the steps
+- Harder to migrate instances
 
 ### Option 2: Declarative model constructing a workflow as a graph of nodes that is traversed
 
