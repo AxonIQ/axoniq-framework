@@ -1,9 +1,6 @@
 package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.primitives.*;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.context.ConversionDelegate;
@@ -57,7 +54,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public CompletableFuture<Map<String, Object>> execute(
+  public CompletableFuture<StepResult> execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,
@@ -70,7 +67,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public <T> CompletableFuture<T> waitFor(
+  public <T> CompletableFuture<StepResult> waitFor(
     @Nonnull String stepName,
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> predicate,

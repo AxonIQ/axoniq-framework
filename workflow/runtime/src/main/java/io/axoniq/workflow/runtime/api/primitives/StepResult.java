@@ -1,19 +1,44 @@
 package io.axoniq.workflow.runtime.api.primitives;
 
+import java.util.Optional;
+
 /**
  * Represents a typed result of a step execution.
- * @param <T>
  */
-public interface StepResult<T> {
+public interface StepResult {
 
-  boolean isSuccess();
-  boolean isFailure();
-  boolean isCanceled();
-  boolean isTimeout();
+  boolean isCompleted();
+
+  <T> Optional<T> result();
+
+  Optional<Throwable> error();
 
   /**
-   * Blocks and delivers result after the step is executed.
-   * @return result of step execution.
+   * Blocks until step execution is finished.
+   *
+   * @return true, if the operation completed successfully.
    */
-  T await();
+  boolean isSuccess();
+
+  /**
+   * Blocks until step execution is finished.
+   *
+   * @return true, if the operation completed with an exception.
+   */
+  boolean isFailure();
+
+  /**
+   * Blocks until step execution is finished.
+   *
+   * @return true, if the operation was interrupted by external party.
+   */
+  boolean isCanceled();
+
+  /**
+   * Blocks until step execution is finished.
+   *
+   * @return true, if the operation was interrupted by timeout specified on start.
+   */
+  boolean isTimeout();
+
 }

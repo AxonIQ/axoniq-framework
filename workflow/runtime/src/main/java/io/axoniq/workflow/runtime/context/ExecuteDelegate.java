@@ -3,6 +3,7 @@ package io.axoniq.workflow.runtime.context;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
+import io.axoniq.workflow.runtime.api.primitives.StepResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
@@ -28,7 +29,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
   }
 
   @Override
-  public CompletableFuture<Map<String, Object>> execute(
+  public CompletableFuture<StepResult> execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,
@@ -44,13 +45,13 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
           @SuppressWarnings("unchecked")
           var result = (Map<String, Object>) existing.result();
           workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // reduce results back
-          return CompletableFuture.completedFuture(result);
+          return CompletableFuture.completedFuture(CompletedStepResult.completed(result));
         }
         case FAILED -> {
-          return CompletableFuture.failedFuture(new StepFailedException(existing.error()));
+          return CompletableFuture.completedFuture(CompletedStepResult.failed(existing.error()));
         }
         case TIMED_OUT -> {
-          return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
+          return CompletableFuture.completedFuture(CompletedStepResult.timeout(timeout));
         }
       }
     }
@@ -59,7 +60,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         () -> {
           try {
             started(stepName, local, eventNameCustomizer);
-
             // step execution
             var parameters = parameterMapping.apply(workflowContext.getPayload(), local); // local copy of the payload
             Map<String, Object> result = action.apply(parameters);
@@ -67,19 +67,19 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             completed(stepName, result, eventNameCustomizer);
 
             workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // write back payload
-            return result;
+            return CompletedStepResult.completed(result);
           } catch (RuntimeException ex) {
             failed(stepName, ex, eventNameCustomizer);
-            throw ex;
+            return CompletedStepResult.failed(ex);
           }
         }, workflowServices.getExecutor()
       ).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
       .exceptionally(ex -> {
-        if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
+        if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) { // FIXME: Make sure we really unwinded all
           timedOut(stepName, eventNameCustomizer);
-          throw new CompletionException(ex);
+          return CompletedStepResult.timeout(timeout);
         }
-        throw new StepFailedException(ex);
+        return CompletedStepResult.failed(ex);
       });
 
   }

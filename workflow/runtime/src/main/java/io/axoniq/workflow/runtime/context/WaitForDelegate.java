@@ -1,6 +1,7 @@
 package io.axoniq.workflow.runtime.context;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.primitives.StepResult;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
@@ -8,8 +9,6 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -23,8 +22,6 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {
-
-  private static final Logger logger = LoggerFactory.getLogger(WaitForDelegate.class);
 
   public WaitForDelegate(
     @Nonnull WorkflowContext workflowContext,
@@ -45,7 +42,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
-  public <T> CompletableFuture<T> waitFor(
+  public <T> CompletableFuture<StepResult> waitFor(
     @Nonnull String stepName,
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> eventCondition,
@@ -54,10 +51,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
 
-    Function<T, T> completionHandler = result -> {
+    Function<T, StepResult> completionHandler = result -> {
       var resultPayload = converter.apply(result);
       completed(stepName, resultPayload, eventNameCustomizer);
-      return result;
+      return CompletedStepResult.completed(result);
     };
 
 
@@ -65,7 +62,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
     };
 
-    Function<Duration, CompletableFuture<T>> eventRetriever = (remainingTimeout) ->
+    Function<Duration, CompletableFuture<StepResult>> eventRetriever = (remainingTimeout) ->
       workflowServices.getEventSubscriptionManager().subscribe(
           new QualifiedName(eventType),
           eventMessage -> eventCondition.test(eventMessage.payloadAs(eventType)),
@@ -76,9 +73,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         .exceptionally(ex -> {
             if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
               timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
-              throw new CompletionException(ex);
+              return CompletedStepResult.timeout(timeout);
             }
-            throw new StepFailedException(ex);
+            return CompletedStepResult.failed(new StepFailedException(ex));
           }
         );
 
@@ -86,21 +83,20 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
-          //noinspection unchecked
-          return CompletableFuture.completedFuture((T) existing.result());
+          return CompletableFuture.completedFuture(CompletedStepResult.completed(existing.result()));
         }
         case FAILED -> {
-          return CompletableFuture.failedFuture(new StepFailedException(existing.error()));
+          return CompletableFuture.completedFuture(CompletedStepResult.failed(new StepFailedException(existing.error())));
         }
         case TIMED_OUT -> {
-          return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
+          return CompletableFuture.completedFuture(CompletedStepResult.timeout(timeout));
         }
         case STARTED -> {
           Instant started = (Instant) existing.result();
           Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), started.plus(timeout));
           if (remainingTimeout.isNegative()) {
             timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
-            return CompletableFuture.failedFuture(new TimeoutException("Timed out waiting for " + stepName));
+            return CompletableFuture.completedFuture(CompletedStepResult.timeout(timeout));
           } else {
             // wait for event
             return eventRetriever.apply(remainingTimeout);
@@ -115,9 +111,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     started(stepName, payload, eventNameCustomizer);
 
     // wait for event
-    return eventRetriever.apply(timeout).thenApply(c -> {
-      logger.info("----------------------> Completed");
-      return c;
-    });
+    return eventRetriever.apply(timeout);
   }
 }

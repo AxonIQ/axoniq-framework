@@ -20,9 +20,9 @@ public interface ExecutePrimitive {
    * @param resultMapping    reducer for result (to reduce result and global context -> global context after action).
    * @param timeout          timeout of the action.
    * @param eventNameCustomizer event name customizer.
-   * @return payload.
+   * @return result.
    */
-  CompletableFuture<Map<String, Object>> execute(
+  CompletableFuture<StepResult> execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,

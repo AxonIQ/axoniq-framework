@@ -22,7 +22,7 @@ public interface WaitForPrimitive extends ConverterAware {
    * @param eventNameCustomizer event name customizer.
    * @return completable future.
    */
-  <T> CompletableFuture<T> waitFor(
+  <T> CompletableFuture<StepResult> waitFor(
     @Nonnull String stepName,
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> predicate,
