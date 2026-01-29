@@ -59,6 +59,7 @@ import org.postgresql.PGNotification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -189,15 +190,14 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     /**
      * Upserts a tag with the latest global index, if it would be consistent, after inserting an event.
      *
-     * <li>Parameter 1 {@code String}: the tag key
-     * <li>Parameter 2 {@code String}: the tag value
-     * <li>Parameter 3 {@code long}: the global index associated with the newly inserted event
-     * <li>Parameter 4 {@code long}: the global index which it must be consistent with
+     * <li>Parameter 1 {@code int}: the tag hash
+     * <li>Parameter 2 {@code long}: the global index associated with the newly inserted event
+     * <li>Parameter 3 {@code long}: the global index which it must be consistent with
      */
     private static final String CONSISTENCY_TAGS_UPSERT =
         """
-        INSERT INTO consistency_tags (key, value, global_index) VALUES (?, ?, ?)
-          ON CONFLICT (key, value) DO UPDATE
+        INSERT INTO consistency_tags (tag_hash, global_index) VALUES (?, ?)
+          ON CONFLICT (tag_hash) DO UPDATE
             SET global_index = EXCLUDED.global_index
             WHERE consistency_tags.global_index <= ? AND consistency_tags.global_index >= 0
         """;
@@ -205,14 +205,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     /**
      * Upserts a tag with the latest global index unconditionally after inserting an event.
      *
-     * <li>Parameter 1 {@code String}: the tag key
-     * <li>Parameter 2 {@code String}: the tag value
-     * <li>Parameter 3 {@code long}: the global index associated with the newly inserted event
+     * <li>Parameter 1 {@code int}: the tag hash
+     * <li>Parameter 2 {@code long}: the global index associated with the newly inserted event
      */
     private static final String UNCONDITIONAL_CONSISTENCY_TAGS_UPSERT =
         """
-        INSERT INTO consistency_tags (key, value, global_index) VALUES (?, ?, ?)
-          ON CONFLICT (key, value) DO UPDATE
+        INSERT INTO consistency_tags (tag_hash, global_index) VALUES (?, ?)
+          ON CONFLICT (tag_hash) DO UPDATE
             SET global_index = LEAST(consistency_tags.global_index, EXCLUDED.global_index)
         """;
 
@@ -276,6 +275,36 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
     private final DataSource dataSource;
     private final EventConverter converter;
+
+    /**
+     * Capacity of 1,048,576 entries (2^20).
+     *
+     * This size was chosen to accommodate roughly 500 concurrent appends,
+     * assuming an average of 3 tags per event, while keeping the hash collision
+     * rate below 1%.
+     *
+     * Must be a power of two to allow efficient bitmask-based indexing.
+     */
+    private final int hashCapacity = 1024 * 1024;  // must be a power of 2
+
+    /**
+     * Derived from capacity (which must be a power of 2)
+     */
+    private final int hashMask = hashCapacity - 1;
+
+    /*
+     * This can become configurable at some later stage with a big warning that it can't be
+     * changed easily later on; also, we may want to add detection if an existing store is
+     * accidentally configured with an engine with different settings (ie. different hash
+     * or different size) as that would be very bad.
+     */
+
+    private final HashPolicy hashPolicy = new HashPolicy() {
+        @Override
+        public int hash(byte[] data) {
+            return MurmurHash3.hash32(data);
+        }
+    };
 
     /**
      * A static {@link AppendTransaction} implementation. As this engine doesn't manage its own
@@ -361,12 +390,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                 );
 
                 CREATE TABLE IF NOT EXISTS consistency_tags (
-                   key VARCHAR NOT NULL,
-                   value VARCHAR NOT NULL,
-                   global_index INT8 NOT NULL REFERENCES events(global_index),
+                   tag_hash INT4 NOT NULL,
+                   global_index INT8 NOT NULL,
 
                    -- keys
-                   PRIMARY KEY (key, value)
+                   PRIMARY KEY (tag_hash)
                 );
 
                 -- Create a sequence used for monotonic final global index values. Starts at 1.
@@ -382,6 +410,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                 -- GIN index on tags (JSONB)
                 CREATE INDEX IF NOT EXISTS events_tags_gin
                   ON events USING GIN (tags);
+
+                -- BTREE index on global_index in consistency_tags (for faster finalizations)
+                CREATE INDEX IF NOT EXISTS consistency_tags_global_index_idx
+                  ON consistency_tags (global_index);
                 """
             );
 
@@ -570,9 +602,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                     // Update unconditional tags (tags not part of the append condition):
                     for (Tag tag : tem.tags()) {
                         if (!lockedTags.contains(tag)) {
-                            unconditionalConsistencyTagsUpsert.setString(1, tag.key());
-                            unconditionalConsistencyTagsUpsert.setString(2, tag.value());
-                            unconditionalConsistencyTagsUpsert.setLong(3, temporaryGlobalIndex);
+                            int hash = hashPolicy.hash((tag.key() + ":" + tag.value()).getBytes(StandardCharsets.UTF_8));
+
+                            unconditionalConsistencyTagsUpsert.setInt(1, hash & hashMask);
+                            unconditionalConsistencyTagsUpsert.setLong(2, temporaryGlobalIndex);
                             unconditionalConsistencyTagsUpsert.execute();
                         }
                     }
@@ -848,10 +881,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         for(EventCriterion criterion : condition.criteria().flatten()) {
             // TODO #10 Support type based append transactions
             for (Tag tag : criterion.tags()) {
-                tagUpsert.setString(1, tag.key());
-                tagUpsert.setString(2, tag.value());
-                tagUpsert.setLong(3, temporaryGlobalIndex);  // the temporary global index to write
-                tagUpsert.setLong(4, globalIndex);  // the (permanent) global index to check for consistency (never negative)
+                int hash = hashPolicy.hash((tag.key() + ":" + tag.value()).getBytes(StandardCharsets.UTF_8));
+
+                tagUpsert.setInt(1, hash & hashMask);
+                tagUpsert.setLong(2, temporaryGlobalIndex);  // the temporary global index to write
+                tagUpsert.setLong(3, globalIndex);  // the (permanent) global index to check for consistency (never negative)
 
                 if (tagUpsert.executeUpdate() == 0) {
                     return null;
@@ -994,5 +1028,20 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         catch (JsonProcessingException e) {  // should never occur
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Defines a pluggable hash policy.
+     */
+    interface HashPolicy {
+
+        /**
+         * Computes a hash of the given data.
+         *
+         * @param data the input byte array to hash, cannot be {@code null} but can be empty
+         * @return a 32-bit hash code for the input
+         */
+        int hash(@Nonnull byte[] data);
+
     }
 }
