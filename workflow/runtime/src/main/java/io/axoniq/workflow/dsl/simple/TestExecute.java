@@ -18,27 +18,32 @@ import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Buil
 public interface TestExecute extends ExecutePrimitive {
 
   default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action, EventNameCustomizer eventNameCustomizer) {
-    return execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventNameCustomizer)
-      .join()
-      .<Map<String, Object>>result().get();
+    var result = execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventNameCustomizer);
+    if (result.isSuccess()) {
+      return result.<Map<String, Object>>payload().get();
+    } else {
+      throw result.error().get();
+    }
   }
 
   default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action) {
-    return execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventName())
-      .join()
-      .<Map<String, Object>>result().get();
+    var result = execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventName());
+    if (result.isSuccess()) {
+      return result.<Map<String, Object>>payload().get();
+    } else {
+      throw result.error().get();
+    }
   }
 
   default <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action, EventNameCustomizer eventNameCustomizer) {
     var stepSpecificName = "__" + stepName;
-    //noinspection unchecked
-    return (T) execute(
+    var result = execute(
       stepName,
       payload,
       p -> {
-        var result = action.apply(payload);
-        if (result != null) {
-          return Map.of(stepSpecificName, result);
+        var stepResult = action.apply(payload);
+        if (stepResult != null) {
+          return Map.of(stepSpecificName, stepResult);
         } else {
           return Map.of();
         }
@@ -47,9 +52,13 @@ public interface TestExecute extends ExecutePrimitive {
       all(),
       Duration.ofSeconds(5),
       eventNameCustomizer
-    ).join()
-      .<Map<String, Object>>result().get()
-      .get(stepSpecificName);
+    );
+    if (result.isSuccess()) {
+      //noinspection unchecked
+      return (T) result.<Map<String, Object>>payload().get().get(stepSpecificName);
+    } else {
+      throw result.error().get();
+    }
   }
 
   // simple overloads
@@ -61,6 +70,7 @@ public interface TestExecute extends ExecutePrimitive {
   default Payload execute(String stepName, Payload payload, Function<Payload, Payload> action) {
     return payload(this.execute(stepName, payload.getValues(), p -> action.apply(payload(p)).getValues()));
   }
+
   default <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action) {
     return this.execute(stepName, payload, returnType, action, eventName());
   }

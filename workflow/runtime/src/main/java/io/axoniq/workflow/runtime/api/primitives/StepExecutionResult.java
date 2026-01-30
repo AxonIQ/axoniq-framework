@@ -1,17 +1,19 @@
 package io.axoniq.workflow.runtime.api.primitives;
 
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+
 import java.util.Optional;
 
 /**
  * Represents a typed result of a step execution.
  */
-public interface StepResult {
+public interface StepExecutionResult {
 
   boolean isCompleted();
 
-  <T> Optional<T> result();
+  <T> Optional<T> payload();
 
-  Optional<Throwable> error();
+  Optional<StepFailedException> error();
 
   /**
    * Blocks until step execution is finished.

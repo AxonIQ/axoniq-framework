@@ -54,11 +54,23 @@ public class DefaultWorkflowRepository implements WorkflowRepository<DefaultWork
 
   @Override
   public void describeTo(@NotNull ComponentDescriptor descriptor) {
-    this.workflowsConfigurations.forEach((q, defs) -> {
-      descriptor.describeProperty("workflow",
-        String.format("Event: '%s' starts: %s", q, String.join(",", defs.stream().map(w -> w.workflowDefinition().getClass().getName()).toList()))
-      );
-    });
-
+    var qualifiedNamesToDefinitions = this.workflowsConfigurations.entrySet().stream()
+      .map((e) -> new WorkflowDefinitionDescriptor(e.getKey(), e.getValue())).toList();
+    descriptor.describeProperty("workflowDefinitions", qualifiedNamesToDefinitions);
   }
+
+  record WorkflowDefinitionDescriptor(
+    QualifiedName qualifiedName,
+    List<WorkflowConfiguration<?>> configurations
+  ) implements DescribableComponent {
+
+    @Override
+    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+      descriptor.describeProperty(qualifiedName.toString(), configurations.stream().map(configuration -> {
+        var definitionClass = configuration.workflowDefinition().getClass();
+        return String.format("%s", definitionClass.getName());
+      }).toList());
+    }
+  }
+
 }

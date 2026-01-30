@@ -8,23 +8,22 @@ import io.axoniq.workflow.runtime.context.ExecuteDelegate;
 import io.axoniq.workflow.runtime.context.WaitForDelegate;
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
-import io.axoniq.workflow.runtime.engine.streaming.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.streaming.WorkflowEventAppender;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.function.Consumer;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.MetadataUtils.*;
+import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowContext, WorkflowState {
 
@@ -45,7 +44,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
     @Nonnull WorkflowServices workflowServices
-    ) {
+  ) {
     this.workflowId = workflowId;
     this.payload = payload;
     this.clock = workflowServices.getClock();
@@ -54,7 +53,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public CompletableFuture<StepResult> execute(
+  public StepExecutionResult execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,
@@ -67,7 +66,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public <T> CompletableFuture<StepResult> waitFor(
+  public <T> StepExecutionResult waitFor(
     @Nonnull String stepName,
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> predicate,
@@ -128,7 +127,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     Object eventPayload = eventMessage.payloadAs(Object.class);
     var metadata = eventMessage.metadata();
     // Apply step-level state changes
-    getStepStatus(metadata).ifPresent(stepStatus -> {
+    MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
       var stepName = getStepName(metadata);
       switch (stepStatus) {
         case STARTED:
@@ -149,7 +148,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     });
 
     // Apply workflow-level state changes
-    getWorkflowStatus(metadata).ifPresent(status ->
+    MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
       this.status = status
     );
   }

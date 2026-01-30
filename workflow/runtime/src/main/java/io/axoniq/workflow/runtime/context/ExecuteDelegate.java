@@ -3,19 +3,17 @@ package io.axoniq.workflow.runtime.context;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.StepResult;
+import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -29,7 +27,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
   }
 
   @Override
-  public CompletableFuture<StepResult> execute(
+  public StepExecutionResult execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,
@@ -45,18 +43,19 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
           @SuppressWarnings("unchecked")
           var result = (Map<String, Object>) existing.result();
           workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // reduce results back
-          return CompletableFuture.completedFuture(CompletedStepResult.completed(result));
+          return StepExecutionResults.completed(result);
         }
         case FAILED -> {
-          return CompletableFuture.completedFuture(CompletedStepResult.failed(existing.error()));
+          return StepExecutionResults.failed(existing.error());
         }
         case TIMED_OUT -> {
-          return CompletableFuture.completedFuture(CompletedStepResult.timeout(timeout));
+          return StepExecutionResults.timeout(timeout);
         }
       }
     }
 
-    return CompletableFuture.supplyAsync(
+    // FIXME -> Shift away from the primitive!!!
+    return StepExecutionResults.fromFuture(CompletableFuture.supplyAsync(
         () -> {
           try {
             started(stepName, local, eventNameCustomizer);
@@ -67,20 +66,20 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             completed(stepName, result, eventNameCustomizer);
 
             workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // write back payload
-            return CompletedStepResult.completed(result);
+            return StepExecutionResults.completed(result);
           } catch (RuntimeException ex) {
             failed(stepName, ex, eventNameCustomizer);
-            return CompletedStepResult.failed(ex);
+            return StepExecutionResults.failed(ex);
           }
-        }, workflowServices.getExecutor()
+        }, workflowServices.getExecutor() // => FIXME This is not the right place to decide
       ).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
       .exceptionally(ex -> {
-        if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) { // FIXME: Make sure we really unwinded all
+        if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) { // FIXME: Make sure we really unwind all
           timedOut(stepName, eventNameCustomizer);
-          return CompletedStepResult.timeout(timeout);
+          return StepExecutionResults.timeout(timeout);
         }
-        return CompletedStepResult.failed(ex);
-      });
+        return StepExecutionResults.failed(ex);
+      }));
 
   }
 }

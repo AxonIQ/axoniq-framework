@@ -22,7 +22,7 @@ public interface ExecutePrimitive {
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
-  CompletableFuture<StepResult> execute(
+  StepExecutionResult execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,

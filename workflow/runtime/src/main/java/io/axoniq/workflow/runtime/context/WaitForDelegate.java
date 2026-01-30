@@ -1,7 +1,7 @@
 package io.axoniq.workflow.runtime.context;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.StepResult;
+import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
@@ -13,8 +13,6 @@ import org.axonframework.messaging.core.QualifiedName;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -42,7 +40,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
-  public <T> CompletableFuture<StepResult> waitFor(
+  public <T> StepExecutionResult waitFor(
     @Nonnull String stepName,
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> eventCondition,
@@ -51,10 +49,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
 
-    Function<T, StepResult> completionHandler = result -> {
+    Function<T, StepExecutionResult> completionHandler = result -> {
       var resultPayload = converter.apply(result);
       completed(stepName, resultPayload, eventNameCustomizer);
-      return CompletedStepResult.completed(result);
+      return StepExecutionResults.completed(result);
     };
 
 
@@ -62,8 +60,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
     };
 
-    Function<Duration, CompletableFuture<StepResult>> eventRetriever = (remainingTimeout) ->
-      workflowServices.getEventSubscriptionManager().subscribe(
+    Function<Duration, StepExecutionResult> eventRetriever = (remainingTimeout) ->
+      new FutureStepExecutionResult(workflowServices.getEventSubscriptionManager().subscribe(
           new QualifiedName(eventType),
           eventMessage -> eventCondition.test(eventMessage.payloadAs(eventType)),
           eventType
@@ -73,30 +71,30 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         .exceptionally(ex -> {
             if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
               timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
-              return CompletedStepResult.timeout(timeout);
+              return StepExecutionResults.timeout(timeout);
             }
-            return CompletedStepResult.failed(new StepFailedException(ex));
+            return StepExecutionResults.failed(new StepFailedException(ex));
           }
-        );
+        ));
 
     var existing = workflowState.getStep(stepName);
     if (existing != null) {
       switch (existing.status()) {
         case COMPLETED -> {
-          return CompletableFuture.completedFuture(CompletedStepResult.completed(existing.result()));
+          return StepExecutionResults.completed(existing.result());
         }
         case FAILED -> {
-          return CompletableFuture.completedFuture(CompletedStepResult.failed(new StepFailedException(existing.error())));
+          return StepExecutionResults.failed(new StepFailedException(existing.error()));
         }
         case TIMED_OUT -> {
-          return CompletableFuture.completedFuture(CompletedStepResult.timeout(timeout));
+          return StepExecutionResults.timeout(timeout);
         }
         case STARTED -> {
           Instant started = (Instant) existing.result();
           Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), started.plus(timeout));
           if (remainingTimeout.isNegative()) {
             timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
-            return CompletableFuture.completedFuture(CompletedStepResult.timeout(timeout));
+            return StepExecutionResults.timeout(timeout);
           } else {
             // wait for event
             return eventRetriever.apply(remainingTimeout);

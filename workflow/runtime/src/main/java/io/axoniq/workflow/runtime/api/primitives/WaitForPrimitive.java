@@ -20,9 +20,9 @@ public interface WaitForPrimitive extends ConverterAware {
    * @param <T>       type of event.
    * @param converter converter from event to payload.
    * @param eventNameCustomizer event name customizer.
-   * @return completable future.
+   * @return result.
    */
-  <T> CompletableFuture<StepResult> waitFor(
+  <T> StepExecutionResult waitFor(
     @Nonnull String stepName,
     @Nonnull Class<T> eventType,
     @Nonnull Predicate<T> predicate,

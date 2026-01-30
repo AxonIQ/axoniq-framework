@@ -1,0 +1,70 @@
+package io.axoniq.workflow.runtime.context;
+
+import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import jakarta.annotation.Nullable;
+
+import java.time.Duration;
+import java.util.Optional;
+
+/**
+ * A step execution result that already has completed.
+ */
+public class CompletedStepExecutionResult implements StepExecutionResult {
+
+  private final Object payload;
+  private final StepFailedException error;
+  private final Duration timeout;
+  private final boolean cancelled;
+
+  CompletedStepExecutionResult(@Nullable Object payload, @Nullable Throwable error, @Nullable Duration timeout, boolean cancelled) {
+    this.payload = payload;
+    if (error != null) {
+      if (error instanceof StepFailedException) {
+        this.error = (StepFailedException) error;
+      } else {
+        this.error = new StepFailedException(error);
+      }
+    } else {
+      this.error = null;
+    }
+    this.timeout = timeout;
+    this.cancelled = cancelled;
+  }
+
+  @Override
+  public boolean isCompleted() {
+    return true;
+  }
+
+  @Override
+  public <T> Optional<T> payload() {
+    //noinspection unchecked
+    return Optional.ofNullable((T) payload);
+  }
+
+  @Override
+  public Optional<StepFailedException> error() {
+    return Optional.ofNullable(error);
+  }
+
+  @Override
+  public boolean isSuccess() {
+    return !cancelled && timeout == null && error == null;
+  }
+
+  @Override
+  public boolean isFailure() {
+    return error != null;
+  }
+
+  @Override
+  public boolean isCanceled() {
+    return cancelled;
+  }
+
+  @Override
+  public boolean isTimeout() {
+    return timeout != null;
+  }
+}

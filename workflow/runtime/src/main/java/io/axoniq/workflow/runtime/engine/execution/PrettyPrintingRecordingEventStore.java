@@ -43,7 +43,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
   @Override
   public void describeTo(@NotNull ComponentDescriptor descriptor) {
-    descriptor.describeWrapperOf(this.delegate);
+    // descriptor.describeWrapperOf(this.delegate);
     var eventsByWorkflowId = publishedEvents.stream()
       .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
       .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(METADATA_KEY_WORKFLOW_ID, "none")));
