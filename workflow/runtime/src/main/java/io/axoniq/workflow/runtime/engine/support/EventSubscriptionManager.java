@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
@@ -19,19 +20,29 @@ public class EventSubscriptionManager {
   private static final Logger logger = LoggerFactory.getLogger(EventSubscriptionManager.class);
   private final WorkflowServices workflowServices;
   private final Map<EventSubscription, List<CompletableFuture<Object>>> subscriptions = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, List<EventSubscriptionWithFuture>> subscriptionsByWorkflowId = new ConcurrentHashMap<>();
 
   public EventSubscriptionManager(WorkflowServices workflowServices) {
     this.workflowServices = workflowServices;
   }
 
-  public CompletableFuture<Object> subscribe(QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
+  public CompletableFuture<Object> subscribe(String workflowId, QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
     var subscription = new EventSubscription(qualifiedName, predicate);
     var future = new CompletableFuture<>();
+
     subscriptions.compute(subscription, (key, existingFutures) -> {
       List<CompletableFuture<Object>> newFutures = existingFutures != null ? existingFutures : new ArrayList<>();
       newFutures.add(future);
       return newFutures;
     });
+
+    subscriptionsByWorkflowId.compute(workflowId, (key, existingSubscriptions) -> {
+      List<EventSubscriptionWithFuture> workflowSubscriptions = existingSubscriptions != null ?
+          existingSubscriptions : new CopyOnWriteArrayList<>();
+      workflowSubscriptions.add(new EventSubscriptionWithFuture(subscription, future));
+      return workflowSubscriptions;
+    });
+
     return future;
   }
 
@@ -53,8 +64,17 @@ public class EventSubscriptionManager {
                 logger.error("Failed on event {}, waiting future is already completed / cancelled", event);
                 // Skip this future and continue with others
               } else {
+                //noinspection unchecked
                 ((CompletableFuture<Object>) future).complete(payload);
                 result.set(true);
+
+                // Remove from subscriptionsByWorkflowId
+                subscriptionsByWorkflowId.forEach((workflowId, subsForWorkflow) -> {
+                  subsForWorkflow.removeIf(sub -> sub.future == future);
+                  if (subsForWorkflow.isEmpty()) {
+                    subscriptionsByWorkflowId.remove(workflowId);
+                  }
+                });
               }
             }
           }
@@ -64,9 +84,39 @@ public class EventSubscriptionManager {
     }, workflowServices.getExecutor());
   }
 
+  public int cancel(String workflowId) {
+    List<EventSubscriptionWithFuture> workflowSubscriptions = subscriptionsByWorkflowId.remove(workflowId);
+
+    if (workflowSubscriptions == null || workflowSubscriptions.isEmpty()) {
+      return 0;
+    }
+
+    int count = 0;
+    for (EventSubscriptionWithFuture subscriptionWithFuture : workflowSubscriptions) {
+      CompletableFuture<Object> future = subscriptionWithFuture.future;
+      if (!future.isDone()) {
+        future.completeExceptionally(new InterruptedException("Workflow interrupted: " + workflowId));
+        count++;
+
+        // Also remove from the main subscriptions map
+        subscriptions.computeIfPresent(subscriptionWithFuture.subscription, (sub, futures) -> {
+          futures.remove(future);
+          return futures.isEmpty() ? null : futures;
+        });
+      }
+    }
+    return count;
+  }
+
   record EventSubscription(
     QualifiedName qualifiedName,
     Predicate<EventMessage> predicate
+  ) {
+  }
+
+  record EventSubscriptionWithFuture(
+    EventSubscription subscription,
+    CompletableFuture<Object> future
   ) {
   }
 }

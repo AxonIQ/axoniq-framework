@@ -79,6 +79,7 @@ public class AbstractTestBase {
     configuration.getComponent(EventSink.class).describeTo(descriptor);
     workflowRegistry.describeTo(descriptor);
     logger.info(descriptor.describe());
+    workflowEngine.shutdown();
     configuration.shutdown();
   }
 

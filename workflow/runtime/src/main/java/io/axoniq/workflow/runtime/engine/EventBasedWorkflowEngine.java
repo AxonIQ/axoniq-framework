@@ -71,6 +71,7 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.eventSubscriptionManager = new EventSubscriptionManager(this);
     this.taskManager = new TaskManager(this);
+    this.taskManager.start();
   }
 
   @NotNull
@@ -133,6 +134,16 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
 
   public Map<String, ExecutionHandle> workflowInstances() {
     return workflowInstances;
+  }
+
+  public void shutdown() {
+    taskManager.shutdown();
+  }
+
+  public int cancel(String workflowId) {
+    int tasksCancelled = taskManager.cancel(workflowId);
+    int subscriptionsCancelled = eventSubscriptionManager.cancel(workflowId);
+    return tasksCancelled + subscriptionsCancelled;
   }
 
   public static class ExecutionHandle {

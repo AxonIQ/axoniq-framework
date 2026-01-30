@@ -16,7 +16,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -56,6 +55,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
     Function<Duration, StepExecutionResult> waitForEvent = (remainingTimeout) ->
       new FutureStepExecutionResult(workflowServices.getEventSubscriptionManager().subscribe(
+          workflowContext.getWorkflowId(),
           qualifiedName,
           eventCondition
         )
