@@ -79,7 +79,7 @@ public class SimpleStateManager implements EventAppender, StateManager {
   }
 
   /**
-   * Internal streaming entry that implements Subscription for cancellation.
+   * Internal support entry that implements Subscription for cancellation.
    */
   private class SubscriptionEntry implements Subscription {
     private final QualifiedName qualifiedName;

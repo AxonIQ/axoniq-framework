@@ -8,8 +8,9 @@ import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
-import io.axoniq.workflow.runtime.engine.streaming.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.streaming.WorkflowEventAppender;
+import io.axoniq.workflow.runtime.engine.support.EventSubscriptionManager;
+import io.axoniq.workflow.runtime.engine.support.TaskManager;
+import io.axoniq.workflow.runtime.engine.support.WorkflowEventAppender;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.Message;
@@ -54,6 +55,8 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
   private final EventSubscriptionManager eventSubscriptionManager;
   // Stateful appender
   private final WorkflowEventAppender workflowEventAppender;
+  // stateful task manager
+  private final TaskManager taskManager;
 
   public EventBasedWorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -67,6 +70,7 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
     this.clock = Clock.systemDefaultZone();
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.eventSubscriptionManager = new EventSubscriptionManager(this);
+    this.taskManager = new TaskManager(this);
   }
 
   @NotNull
@@ -105,6 +109,11 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
   @Override
   public WorkflowEventAppender getWorkflowEventAppender() {
     return workflowEventAppender;
+  }
+
+  @Override
+  public TaskManager getTaskManager() {
+    return taskManager;
   }
 
   @Override

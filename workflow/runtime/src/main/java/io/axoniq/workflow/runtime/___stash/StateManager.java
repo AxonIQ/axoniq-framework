@@ -19,7 +19,7 @@ public interface StateManager extends DescribableComponent {
    * @param qualifiedName the qualified name of the event payload to listen for
    * @param filter predicate to filter events (applied to EventMessage)
    * @param listener callback invoked when a matching event is appended
-   * @return a Subscription handle to cancel the streaming
+   * @return a Subscription handle to cancel the support
    */
   Subscription subscribe(QualifiedName qualifiedName, Predicate<EventMessage> filter, EventListener listener);
 }

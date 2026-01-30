@@ -49,28 +49,28 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
 
-    Function<Object, StepExecutionResult> completionHandler = result -> {
-      var resultPayload = typeToPayloadConverter().apply(result);
-      completed(stepName, resultPayload, eventNameCustomizer);
-      return StepExecutionResults.completed(result);
-    };
-
-
-    Consumer<Instant> timeoutOccurredHandler = (timeoutTimestamp) -> {
+    Function<Instant, StepExecutionResult> timeoutOccurredHandler = (timeoutTimestamp) -> {
       timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
+      return StepExecutionResults.timeout(timeout);
     };
 
-    Function<Duration, StepExecutionResult> eventRetriever = (remainingTimeout) ->
+    Function<Duration, StepExecutionResult> waitForEvent = (remainingTimeout) ->
       new FutureStepExecutionResult(workflowServices.getEventSubscriptionManager().subscribe(
           qualifiedName,
           eventCondition
         )
         .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-        .thenApply(completionHandler)
+        .thenApply(result -> {
+          var resultPayload = typeToPayloadConverter().apply(result);
+          completed(stepName, resultPayload, eventNameCustomizer);
+          return StepExecutionResults.completed(result);
+        })
         .exceptionally(ex -> {
             if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
-              timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
-              return StepExecutionResults.timeout(timeout);
+              return timeoutOccurredHandler.apply(Instant.now(workflowState.getClock()));
+            }
+            if (ex.getCause() instanceof InterruptedException) {
+              return StepExecutionResults.cancelled();
             }
             return StepExecutionResults.failed(new StepFailedException(ex));
           }
@@ -89,25 +89,32 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
           return StepExecutionResults.timeout(timeout);
         }
         case STARTED -> {
-          Instant started = (Instant) existing.result();
-          Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), started.plus(timeout));
+          var startedPayload = (Map<?, ?>) existing.result();
+          Instant startedAt = (Instant) startedPayload.get("started");
+          Duration startedDuration = (Duration) startedPayload.get("duration");
+          if (startedDuration != timeout) {
+            // FIXME
+            // the timeout duration has changed => instance migration?
+          }
+          Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), startedAt.plus(timeout));
           if (remainingTimeout.isNegative()) {
-            timeoutOccurredHandler.accept(Instant.now(workflowState.getClock()));
-            return StepExecutionResults.timeout(timeout);
+            return timeoutOccurredHandler.apply(Instant.now(workflowState.getClock()));
           } else {
             // wait for event
-            return eventRetriever.apply(remainingTimeout);
+            return waitForEvent.apply(remainingTimeout);
           }
         }
       }
     }
 
-    var started = Instant.now(workflowState.getClock());
-    var payload = Map.<String, Object>of("started", started, "duration", timeout.toString());
+    var payload = Map.<String, Object>of(
+      "started", Instant.now(workflowState.getClock()),
+      "duration", timeout
+    );
 
     started(stepName, payload, eventNameCustomizer);
 
     // wait for event
-    return eventRetriever.apply(timeout);
+    return waitForEvent.apply(timeout);
   }
 }

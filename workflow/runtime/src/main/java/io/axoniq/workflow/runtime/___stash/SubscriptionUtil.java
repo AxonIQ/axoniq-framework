@@ -39,10 +39,10 @@ public class SubscriptionUtil {
     // Subscribe for future events
     var subscription = stateManager.subscribe(new QualifiedName(eventType), eventCondition, event -> {
       future.complete(event);
-      return true; // Remove streaming after completion
+      return true; // Remove support after completion
     });
 
-    // Cancel streaming if the future is cancelled externally
+    // Cancel support if the future is cancelled externally
     future.whenComplete((result, ex) -> {
       if (ex != null || future.isCancelled()) {
         subscription.cancel();

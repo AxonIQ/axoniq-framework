@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.streaming;
+package io.axoniq.workflow.runtime.engine.support;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;

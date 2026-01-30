@@ -26,8 +26,8 @@ public interface TestExecute extends ExecutePrimitive {
     }
   }
 
-  default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action) {
-    var result = execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventName());
+  default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action, Duration timeout) {
+    var result = execute(stepName, payload, action, local(), all(), timeout, eventName());
     if (result.isSuccess()) {
       return result.<Map<String, Object>>payload().get();
     } else {
@@ -62,6 +62,10 @@ public interface TestExecute extends ExecutePrimitive {
   }
 
   // simple overloads
+
+  default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action) {
+    return this.execute(stepName, payload, action, Duration.ofSeconds(5));
+  }
 
   default Payload execute(String stepName, Payload payload, Function<Payload, Payload> action, EventNameCustomizer eventNameCustomizer) {
     return payload(this.execute(stepName, payload.getValues(), p -> action.apply(payload(p)).getValues(), eventNameCustomizer));
@@ -114,5 +118,4 @@ public interface TestExecute extends ExecutePrimitive {
   default <T> T execute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
     return this.execute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
   }
-
 }

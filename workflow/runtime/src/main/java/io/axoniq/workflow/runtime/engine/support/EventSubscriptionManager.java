@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.streaming;
+package io.axoniq.workflow.runtime.engine.support;
 
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
 import org.axonframework.messaging.core.QualifiedName;
@@ -26,7 +26,7 @@ public class EventSubscriptionManager {
 
   public CompletableFuture<Object> subscribe(QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
     var subscription = new EventSubscription(qualifiedName, predicate);
-    var future = new CompletableFuture<Object>();
+    var future = new CompletableFuture<>();
     subscriptions.compute(subscription, (key, existingFutures) -> {
       List<CompletableFuture<Object>> newFutures = existingFutures != null ? existingFutures : new ArrayList<>();
       newFutures.add(future);

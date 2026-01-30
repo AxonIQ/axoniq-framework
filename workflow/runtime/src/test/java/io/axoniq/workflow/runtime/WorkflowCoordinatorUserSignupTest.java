@@ -32,8 +32,12 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
       return true;
     }
 
-    static void activateUser() {
-      logger.info("Activating user.");
+    static Map<String, Object> activateUser(Map<String, Object> payload) {
+      Instant now = Instant.now();
+      logger.info("Activating user with id: {}", payload.get("id"));
+      waitWithProgress(1_000);
+      logger.info("Activation took {}.", Duration.between(Instant.now(), now));
+      return Map.of();
     }
   }
 
@@ -61,7 +65,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
       if (!success) {
         return;
       }
-      ctx.execute("activateUser", UserService::activateUser);
+      ctx.execute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
       ctx.wait("waitASecond", Duration.ofSeconds(1));
       var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
@@ -86,7 +90,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
         new RegistrationReceivedEvent("user-456", "kermit@muppets.biz")
       ),
       ofMillis(
-        2500,
+        6500,
         new MagicHappenedEvent("Merlin")
       )
     ));
@@ -103,7 +107,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
     workflowEngine.runWorkflows();
 
     // run to the end
-    await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+    await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
       assertThat(workflowEngine.workflowInstances().values()).allMatch(h -> h.getStatus().isTerminal());
     });
 

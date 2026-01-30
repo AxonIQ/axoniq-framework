@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.streaming;
+package io.axoniq.workflow.runtime.engine.support;
 
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;

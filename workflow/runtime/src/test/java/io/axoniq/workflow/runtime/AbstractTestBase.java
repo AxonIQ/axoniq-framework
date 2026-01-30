@@ -4,7 +4,7 @@ import io.axoniq.workflow.runtime.engine.EventBasedWorkflowEngine;
 import io.axoniq.workflow.runtime.engine.execution.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowRepository;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
-import io.axoniq.workflow.runtime.engine.streaming.SingleEventHandlerComponent;
+import io.axoniq.workflow.runtime.engine.support.SingleEventHandlerComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -80,6 +80,17 @@ public class AbstractTestBase {
     workflowRegistry.describeTo(descriptor);
     logger.info(descriptor.describe());
     configuration.shutdown();
+  }
+
+  static void waitWithProgress(long millis) {
+    try {
+      for (long i = 0; i < millis; i = i + 200) {
+        Thread.sleep(i);
+        logger.info("Waiting for {} / {} millis.", i, millis);
+      }
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
   }
 
 }
