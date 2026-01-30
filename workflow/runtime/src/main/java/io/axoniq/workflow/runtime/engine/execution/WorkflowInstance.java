@@ -11,6 +11,7 @@ import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -66,15 +67,14 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public <T> StepExecutionResult waitFor(
+  public StepExecutionResult waitFor(
     @Nonnull String stepName,
-    @Nonnull Class<T> eventType,
-    @Nonnull Predicate<T> predicate,
+    @Nonnull QualifiedName qualifiedName,
+    @Nonnull Predicate<EventMessage> predicate,
     @Nonnull Duration timeout,
-    @Nonnull Function<T, Map<String, Object>> converter,
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
-    return waitForPrimitive.waitFor(stepName, eventType, predicate, timeout, converter, eventNameCustomizer);
+    return waitForPrimitive.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
   }
 
   @Override

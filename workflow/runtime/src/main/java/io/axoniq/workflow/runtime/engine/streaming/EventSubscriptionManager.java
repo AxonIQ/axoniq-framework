@@ -18,17 +18,17 @@ public class EventSubscriptionManager {
 
   private static final Logger logger = LoggerFactory.getLogger(EventSubscriptionManager.class);
   private final WorkflowServices workflowServices;
-  private final Map<EventSubscription, List<CompletableFuture<?>>> subscriptions = new ConcurrentHashMap<>();
+  private final Map<EventSubscription, List<CompletableFuture<Object>>> subscriptions = new ConcurrentHashMap<>();
 
   public EventSubscriptionManager(WorkflowServices workflowServices) {
     this.workflowServices = workflowServices;
   }
 
-  public <T> CompletableFuture<T> subscribe(QualifiedName qualifiedName, Predicate<EventMessage> predicate, Class<T> clazz) {
-    var subscription = new EventSubscription(qualifiedName, predicate, clazz);
-    var future = new CompletableFuture<T>();
+  public CompletableFuture<Object> subscribe(QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
+    var subscription = new EventSubscription(qualifiedName, predicate);
+    var future = new CompletableFuture<Object>();
     subscriptions.compute(subscription, (key, existingFutures) -> {
-      List<CompletableFuture<?>> newFutures = existingFutures != null ? existingFutures : new ArrayList<>();
+      List<CompletableFuture<Object>> newFutures = existingFutures != null ? existingFutures : new ArrayList<>();
       newFutures.add(future);
       return newFutures;
     });
@@ -44,17 +44,16 @@ public class EventSubscriptionManager {
           && subscription.predicate().test(event);
 
         if (eventMatchesCondition) {
-          List<CompletableFuture<?>> removedFutures = subscriptions.remove(subscription);
+          List<CompletableFuture<Object>> removedFutures = subscriptions.remove(subscription);
           if (removedFutures != null) {
             logger.debug("Received event {} the workflow was waiting for", event);
-            Object payload = event.payloadAs(subscription.payloadClass());
-
+            Object payload = event.payload();
             for (CompletableFuture<?> future : removedFutures) {
               if (future.isCompletedExceptionally() || future.isCancelled()) {
                 logger.error("Failed on event {}, waiting future is already completed / cancelled", event);
                 // Skip this future and continue with others
               } else {
-                ((CompletableFuture) future).complete(payload);
+                ((CompletableFuture<Object>) future).complete(payload);
                 result.set(true);
               }
             }
@@ -67,8 +66,7 @@ public class EventSubscriptionManager {
 
   record EventSubscription(
     QualifiedName qualifiedName,
-    Predicate<EventMessage> predicate,
-    Class<?> payloadClass
+    Predicate<EventMessage> predicate
   ) {
   }
 }

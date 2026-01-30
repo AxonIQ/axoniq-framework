@@ -2,9 +2,9 @@ package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
+import org.axonframework.messaging.core.QualifiedName;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName;
@@ -12,7 +12,7 @@ import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Buil
 public interface TestWaitForEvent extends WaitForPrimitive {
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-    var result = waitFor(stepName, eventType, predicate, timeout, t -> typeToPayloadConverter().apply(t), eventNameCustomizer);
+    var result = waitFor(stepName, new QualifiedName(eventType), e -> predicate.test(e.payloadAs(eventType)), timeout, eventNameCustomizer);
     if (result.isSuccess()) {
       return result.<T>payload().get();
     } else {
@@ -21,7 +21,7 @@ public interface TestWaitForEvent extends WaitForPrimitive {
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
-    var result = waitFor(stepName, eventType, predicate, timeout, t -> typeToPayloadConverter().apply(t), eventName());
+    var result = waitFor(stepName, new QualifiedName(eventType), e -> predicate.test(e.payloadAs(eventType)), timeout, eventName());
     if (result.isSuccess()) {
       return result.<T>payload().get();
     } else {
@@ -30,7 +30,7 @@ public interface TestWaitForEvent extends WaitForPrimitive {
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-    var result = waitFor(stepName, eventType, (e) -> true, timeout, t -> typeToPayloadConverter().apply(t), eventNameCustomizer);
+    var result = waitFor(stepName, new QualifiedName(eventType), (e) -> true, timeout, eventNameCustomizer);
     if (result.isSuccess()) {
       return result.<T>payload().get();
     } else {
@@ -39,7 +39,7 @@ public interface TestWaitForEvent extends WaitForPrimitive {
   }
 
   default <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout) {
-    var result = waitFor(stepName, eventType, (e) -> true, timeout, t -> typeToPayloadConverter().apply(t), eventName());
+    var result = waitFor(stepName, new QualifiedName(eventType), (e) -> true, timeout, eventName());
     if (result.isSuccess()) {
       return result.<T>payload().get();
     } else {
@@ -52,7 +52,7 @@ public interface TestWaitForEvent extends WaitForPrimitive {
   }
 
   default void wait(String stepName, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-    var result = waitFor(stepName, Void.class, (e) -> false, timeout, t -> Map.of(), eventNameCustomizer);
+    var result = waitFor(stepName, new QualifiedName(Void.class), (e) -> false, timeout, eventNameCustomizer);
     if (result.isFailure()) {
       throw result.error().get();
     }

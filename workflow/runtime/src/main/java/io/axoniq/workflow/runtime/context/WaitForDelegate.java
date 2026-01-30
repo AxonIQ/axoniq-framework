@@ -9,6 +9,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -40,17 +41,16 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
-  public <T> StepExecutionResult waitFor(
+  public StepExecutionResult waitFor(
     @Nonnull String stepName,
-    @Nonnull Class<T> eventType,
-    @Nonnull Predicate<T> eventCondition,
+    @Nonnull QualifiedName qualifiedName,
+    @Nonnull Predicate<EventMessage> eventCondition,
     @Nonnull Duration timeout,
-    @Nonnull Function<T, Map<String, Object>> converter,
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
 
-    Function<T, StepExecutionResult> completionHandler = result -> {
-      var resultPayload = converter.apply(result);
+    Function<Object, StepExecutionResult> completionHandler = result -> {
+      var resultPayload = typeToPayloadConverter().apply(result);
       completed(stepName, resultPayload, eventNameCustomizer);
       return StepExecutionResults.completed(result);
     };
@@ -62,9 +62,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
     Function<Duration, StepExecutionResult> eventRetriever = (remainingTimeout) ->
       new FutureStepExecutionResult(workflowServices.getEventSubscriptionManager().subscribe(
-          new QualifiedName(eventType),
-          eventMessage -> eventCondition.test(eventMessage.payloadAs(eventType)),
-          eventType
+          qualifiedName,
+          eventCondition
         )
         .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
         .thenApply(completionHandler)

@@ -1,11 +1,10 @@
 package io.axoniq.workflow.runtime.api.primitives;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 public interface WaitForPrimitive extends ConverterAware {
@@ -13,21 +12,18 @@ public interface WaitForPrimitive extends ConverterAware {
   /**
    * Wait for event.
    *
-   * @param stepName  name of the workflow step.
-   * @param eventType type of event to wait for.
-   * @param timeout   maximum wait duration until timeout.
-   * @param predicate execution predicate for the event of given type.
-   * @param <T>       type of event.
-   * @param converter converter from event to payload.
+   * @param stepName            name of the workflow step.
+   * @param qualifiedName       type of event to wait for.
+   * @param timeout             maximum wait duration until timeout.
+   * @param predicate           execution predicate for the event of given type.
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
-  <T> StepExecutionResult waitFor(
+  StepExecutionResult waitFor(
     @Nonnull String stepName,
-    @Nonnull Class<T> eventType,
-    @Nonnull Predicate<T> predicate,
+    @Nonnull QualifiedName qualifiedName,
+    @Nonnull Predicate<EventMessage> predicate,
     @Nonnull Duration timeout,
-    @Nonnull Function<T, Map<String, Object>> converter,
     @Nonnull EventNameCustomizer eventNameCustomizer
   );
 
