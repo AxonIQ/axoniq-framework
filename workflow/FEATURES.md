@@ -1,29 +1,15 @@
-# Features
+# News and noteworthy
 
-- Imperative workflow definition style
-- Separation of DSL from execution
-- Durable execution implementation based on lifecycle events
-- Lifecycle events with dynamic, "business" naming and step parameters / result as payload
-- Step Lifecycle:
-    - Started
-    - Completed
-    - Failed
-    - Timed Out
-- Workflow Lifecycle
-    - Started
-    - Completed
-    - Failed
-    - Timed Out
-- Restart/Recovery: repeating workflows in terminal states skip execution
-- Restart/Recovery: repeating execution of workflow code, skipping already executed steps (based on event-sourced execution)
-- DSL uses host language for control flow and data flow
-- DSL based on primitives (2)
-- Primitives:
-    - Execute
-    - WaitFor (Event)
-- Two DSLs
-    - Simple Java (blocking)
-    - Kotlin
-- Data flow based on payload as Map<String, Object>
-- Support with step/workflow variable scopes and in/out mapping
-- Implementation of coordinator, workflow engine, state manager
+## 26.01.2026
+
+- Create initial implementation based on declarative DSL
+- Provide integration with Axon Framework 5
+
+## 01.02.2026
+
+- Introduce `StepExecutionResult` (completed and future)
+- Use `StepExecutionResult` as return value for the primitive calls
+- Switch `WaitFor` primitive to use `QualifiedName` (no types anymore)
+- Offload task execution from the `Execute` primitive to the dedicated `TaskManager`
+- Implement `cancel` on `TaskManager` and `EventSubscriptionManager`
+

@@ -12,9 +12,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TaskManager {
 
+  public static final Integer MAX = 100; // FIXME
+
   private static final Logger logger = LoggerFactory.getLogger(TaskManager.class);
   private final WorkflowServices workflowServices;
-  private final BlockingQueue<TaskWithFuture> submissionQueue = new LinkedBlockingQueue<>();
+  private final BlockingQueue<TaskWithFuture> submissionQueue = new LinkedBlockingQueue<>(MAX);
   private final ConcurrentHashMap<String, List<CompletableFuture<Map<String, Object>>>> tasksByWorkflowId = new ConcurrentHashMap<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private CompletableFuture<Void> executionFuture;
@@ -44,22 +46,34 @@ public class TaskManager {
           try {
             TaskWithFuture taskWithFuture = submissionQueue.take();
             // offload from task manager thread
-            CompletableFuture.supplyAsync(
+            var taskExecution = CompletableFuture.supplyAsync(
               () -> taskWithFuture.task.payloadProcessor().apply(taskWithFuture.task.payload()),
               this.workflowServices.getExecutor()
-            ).thenApply(result -> {
+            );
+            // couple the timeout of the "client's" future to the future of the task execution.
+            taskWithFuture.future.exceptionally((e) -> {
+              if (e instanceof TimeoutException) {
+                taskExecution.completeExceptionally(e);
+              }
+              throw new CompletionException(e);
+            });
+            taskExecution.thenApply(result -> {
                 AtomicBoolean completed = new AtomicBoolean(false);
                 tasksByWorkflowId.computeIfPresent(taskWithFuture.task.workflowId(),
                   (id, tasksForWorkflow) -> {
                     tasksForWorkflow.remove(taskWithFuture.future);
-                    taskWithFuture.future.complete(result);
-                    completed.set(true);
+                    if (!taskWithFuture.future.isDone()) {
+                      taskWithFuture.future.complete(result);
+                      completed.set(true);
+                    }
                     return tasksForWorkflow;
                   });
                 return completed.get();
               }
             );
           } catch (InterruptedException e) {
+            // FIXME -> Make sure on complete, timeout, error, cancel the futures are removed from the data structures above
+            //
             Thread.currentThread().interrupt();
             break;
           } catch (Exception e) {

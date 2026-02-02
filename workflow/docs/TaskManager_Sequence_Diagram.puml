@@ -4,6 +4,7 @@ title TaskManager Sequence Diagram
 
 participant "Client Thread" as Client
 participant "TaskManager Execution Thread" as TaskManager
+participant "TaskManager Queue" as Queue
 participant "Task Execution Thread" as TaskExecution
 
 == Client Invokes start() ==
@@ -16,8 +17,8 @@ note over TaskManager: ...\n(polling multiple times)\n...
 
 == Task Submission ==
 
-Client -> TaskManager: execute(workflowId, action, payload)
-TaskManager --> Client: CompletableFuture<Map>
+Client -> Queue: execute(workflowId, action, payload)
+Queue --> Client: CompletableFuture<Map>
 
 TaskManager -> TaskManager: submissionQueue.take()\n(task found)
 TaskManager -> TaskManager: CompletableFuture.supplyAsync\n(offload to executor)
