@@ -2,6 +2,7 @@
 @startuml
 title TaskManager Sequence Diagram
 
+participant Framework
 participant "Client Thread" as Client
 participant "TaskManager Execution Thread" as TaskManager
 participant "TaskManager Queue" as Queue
@@ -9,7 +10,7 @@ participant "Task Execution Thread" as TaskExecution
 
 == Client Invokes start() ==
 
-Client -> TaskManager: start()
+Framework -> TaskManager: start()
 note right of TaskManager: Created via runAsync()\n(from workflowServices.getExecutor())
 TaskManager -> TaskManager: submissionQueue.take()\n(waiting for tasks)
 
@@ -33,7 +34,7 @@ TaskManager -> TaskManager: submissionQueue.take()\n(waiting for more tasks)
 
 == Shutdown ==
 
-Client -> TaskManager: shutdown()
+Framework -> TaskManager: shutdown()
 TaskManager -> TaskManager: running.set(false)
 TaskManager -> TaskManager: Cancel execution future
 destroy TaskManager
