@@ -1,0 +1,41 @@
+
+@startuml
+title TaskManager Sequence Diagram
+
+participant "Client Thread" as Client
+participant "TaskManager Execution Thread" as TaskManager
+participant "Task Execution Thread" as TaskExecution
+
+== Client Invokes start() ==
+
+Client -> TaskManager: start()
+note right of TaskManager: Created via runAsync()\n(from workflowServices.getExecutor())
+TaskManager -> TaskManager: submissionQueue.take()\n(waiting for tasks)
+
+note over TaskManager: ...\n(polling multiple times)\n...
+
+== Task Submission ==
+
+Client -> TaskManager: execute(workflowId, action, payload)
+TaskManager --> Client: CompletableFuture<Map>
+
+TaskManager -> TaskManager: submissionQueue.take()\n(task found)
+TaskManager -> TaskManager: CompletableFuture.supplyAsync\n(offload to executor)
+
+create TaskExecution
+TaskManager -> TaskExecution: Created via supplyAsync()\n(from workflowServices.getExecutor())
+TaskExecution -> TaskExecution: Execute user action\n(PayloadProcessor)
+TaskExecution -> TaskExecution: Process result\nand complete future
+
+TaskExecution --> Client: Future completed
+TaskManager -> TaskManager: submissionQueue.take()\n(waiting for more tasks)
+
+== Shutdown ==
+
+Client -> TaskManager: shutdown()
+TaskManager -> TaskManager: running.set(false)
+TaskManager -> TaskManager: Cancel execution future
+destroy TaskManager
+note over TaskManager: Thread terminated
+
+@enduml
