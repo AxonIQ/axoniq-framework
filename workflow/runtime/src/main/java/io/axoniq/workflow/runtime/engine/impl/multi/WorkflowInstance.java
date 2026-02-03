@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -107,11 +108,6 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public Clock getClock() {
-    return clock;
-  }
-
-  @Override
   public WorkflowStatus getStatus() {
     return status;
   }
@@ -152,7 +148,48 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     );
   }
 
-  private void addStep(StepExecution execution) {
+  public void addStep(StepExecution execution) {
     steps.put(execution.stepName(), execution);
+  }
+
+
+  /*
+   Unused
+   */
+
+  @Override
+  public void applyStateChange(EventMessage eventMessage) {
+
+  }
+
+  @Override
+  public void runNextStateChange() throws InterruptedException {
+
+  }
+
+
+  @Override
+  public boolean containsStep(String stepName) {
+    return steps.containsKey(stepName);
+  }
+
+  @Override
+  public boolean appendTask(Consumer<WorkflowState> task) {
+    return false;
+  }
+
+  @Override
+  public Consumer<WorkflowState> getNextTask() {
+    return null;
+  }
+
+  @Override
+  public boolean isExecutable() {
+    return false;
+  }
+
+  @Override
+  public boolean hasTasks() {
+    return false;
   }
 }

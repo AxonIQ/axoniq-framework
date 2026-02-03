@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.execution;
+package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;

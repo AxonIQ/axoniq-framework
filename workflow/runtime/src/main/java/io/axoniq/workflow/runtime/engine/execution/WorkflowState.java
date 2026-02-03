@@ -6,22 +6,30 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Clock;
+import java.util.function.Consumer;
 
 /**
  * Internal looking API for the execution.
  */
 public interface WorkflowState {
 
-  Clock getClock();
+  void applyStateChange(EventMessage eventMessage);
 
-  void applyPayloadModification(PayloadProcessor payloadModification);
+  void runNextStateChange() throws InterruptedException;
 
   StepExecution getStep(String stepName);
 
-  /**
-   * Mutate itself based on a new message.
-   * @param eventMessage message mutating the workflow state.
-   */
   void onEvent(EventMessage eventMessage, ProcessingContext processingContext);
 
+  void addStep(StepExecution stepExecution);
+
+  boolean containsStep(String stepName);
+
+  boolean appendTask(Consumer<WorkflowState> task);
+
+  Consumer<WorkflowState> getNextTask();
+
+  boolean isExecutable();
+
+  boolean hasTasks();
 }

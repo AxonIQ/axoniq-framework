@@ -41,6 +41,7 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
   private final Executor executor;
   private final UnitOfWorkFactory unitOfWorkFactory;
   private final Clock clock;
+  private final EventSink eventSink;
 
   // Stateful registry
   private final WorkflowRepository<?> workflowRepository;
@@ -55,6 +56,7 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
   // stateful task manager
   private final TaskManager taskManager;
 
+
   public EventBasedWorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
     @Nonnull EventSink eventSink,
@@ -63,7 +65,7 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
     this.workflowRepository = workflowRepository;
     this.workflowEventAppender = new WorkflowEventAppender(eventSink);
     this.unitOfWorkFactory = unitOfWorkFactory;
-
+    this.eventSink = eventSink;
     this.clock = Clock.systemDefaultZone();
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.eventSubscriptionManager = new EventSubscriptionManager(this);
@@ -122,6 +124,11 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
   @Override
   public Executor getExecutor() {
     return executor;
+  }
+
+  @Override
+  public EventSink getEventSink() {
+    return null;
   }
 
   @Override
@@ -256,4 +263,6 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
       null
     ).join();
   }
+
+
 }

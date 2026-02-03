@@ -58,7 +58,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
     @Override
     public void execute(TestWorkflowContext ctx) {
 
-      logger.info("User signup workflow started at {} for {}", Instant.now(ctx.getClock()), ctx.getPayload());
+      logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
 
       // -> start
       var success = ctx.execute("createUser", Boolean.class, UserService::createUser);
@@ -72,7 +72,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
       logger.info("Magic happened because of the magician {}", magic.magician);
       // -> end
 
-      logger.info("User signup workflow ended at {} for {}", Instant.now(ctx.getClock()), ctx.getPayload());
+      logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.getPayload());
     }
   }
 

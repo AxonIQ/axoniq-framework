@@ -41,7 +41,7 @@ public abstract class AbstractStepExecutor {
   }
 
   protected void timedOut(String stepName, EventNameCustomizer eventNameCustomizer) {
-    timedOut(stepName, Instant.now(workflowState.getClock()), eventNameCustomizer);
+    timedOut(stepName, Instant.now(workflowServices.getClock()), eventNameCustomizer);
   }
 
   protected void timedOut(String stepName, Instant timeoutTimestamp, EventNameCustomizer eventNameCustomizer) {

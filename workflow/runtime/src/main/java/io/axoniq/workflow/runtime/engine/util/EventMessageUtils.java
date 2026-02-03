@@ -1,9 +1,9 @@
 package io.axoniq.workflow.runtime.engine.util;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -24,6 +24,7 @@ public class EventMessageUtils {
       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.STARTED)
     );
   }
+
   public static EventMessage completedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
     var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), Map.of(),
@@ -56,6 +57,13 @@ public class EventMessageUtils {
     var name = customizer.getEventName(stepName, Map.of(), StepStatus.COMPLETED);
     return new GenericEventMessage(MessageType.fromString(name), exception,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.FAILED)
+    );
+  }
+
+  public static EventMessage cancelledStep(WorkflowContext context, String stepName, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
+    return new GenericEventMessage(MessageType.fromString(name), null,
+      MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.CANCELLED)
     );
   }
 

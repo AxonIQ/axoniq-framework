@@ -69,7 +69,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         })
         .exceptionally(ex -> {
             if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) {
-              return timeoutOccurredHandler.apply(Instant.now(workflowState.getClock()));
+              return timeoutOccurredHandler.apply(Instant.now(workflowServices.getClock()));
             }
             if (ex.getCause() instanceof InterruptedException) {
               return StepExecutionResults.cancelled();
@@ -98,9 +98,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             // FIXME
             // the timeout duration has changed => instance migration?
           }
-          Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), startedAt.plus(timeout));
+          Duration remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), startedAt.plus(timeout));
           if (remainingTimeout.isNegative()) {
-            return timeoutOccurredHandler.apply(Instant.now(workflowState.getClock()));
+            return timeoutOccurredHandler.apply(Instant.now(workflowServices.getClock()));
           } else {
             // wait for event
             return waitForEvent.apply(remainingTimeout);
@@ -110,7 +110,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     var payload = Map.<String, Object>of(
-      "started", Instant.now(workflowState.getClock()),
+      "started", Instant.now(workflowServices.getClock()),
       "duration", timeout
     );
 

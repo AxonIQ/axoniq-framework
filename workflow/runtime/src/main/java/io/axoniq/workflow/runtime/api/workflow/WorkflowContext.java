@@ -18,6 +18,8 @@ public interface WorkflowContext extends
 
   Map<String, Object> getPayload();
 
+  void applyPayloadModification(PayloadProcessor payloadModification);
+
   WorkflowStatus getStatus();
 
   List<String> getStepHistory();

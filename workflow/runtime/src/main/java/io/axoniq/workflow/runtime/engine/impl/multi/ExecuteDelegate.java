@@ -49,13 +49,13 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
           )
           .thenApply(result -> {
               completed(stepName, result, eventNameCustomizer);
-              workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // write back payload
+              workflowContext.applyPayloadModification(p -> resultMapping.apply(p, result)); // write back payload
               return StepExecutionResults.completed(result);
             }
           ).orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
           .exceptionally(ex -> {
             if (ex instanceof TimeoutException || ex.getCause() instanceof TimeoutException) { // FIXME: Make sure we really unwind all
-              return timeoutOccurredHandler.apply(Instant.now(workflowState.getClock()));
+              return timeoutOccurredHandler.apply(Instant.now(workflowServices.getClock()));
             } else if (ex instanceof InterruptedException) {
               // FIXME report cancelled step !!!
               return StepExecutionResults.cancelled();
@@ -71,7 +71,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         case COMPLETED -> {
           @SuppressWarnings("unchecked")
           var result = (Map<String, Object>) existing.result();
-          workflowState.applyPayloadModification(p -> resultMapping.apply(p, result)); // reduce results back
+          workflowContext.applyPayloadModification(p -> resultMapping.apply(p, result)); // reduce results back
           return StepExecutionResults.completed(result);
         }
         case FAILED -> {
@@ -88,9 +88,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             // FIXME
             // the timeout duration has changed => instance migration?
           }
-          Duration remainingTimeout = Duration.between(Instant.now(workflowState.getClock()), startedAt.plus(timeout));
+          Duration remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), startedAt.plus(timeout));
           if (remainingTimeout.isNegative()) {
-            return timeoutOccurredHandler.apply(Instant.now(workflowState.getClock()));
+            return timeoutOccurredHandler.apply(Instant.now(workflowServices.getClock()));
           } else {
             // execute with remaining
             return execute.apply(remainingTimeout);
@@ -102,7 +102,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     started(
       stepName,
       withValue(local,
-        "started", Instant.now(workflowState.getClock()),
+        "started", Instant.now(workflowServices.getClock()),
         "duration", timeout
       ),
       eventNameCustomizer);
