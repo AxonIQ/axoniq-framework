@@ -1,9 +1,6 @@
 package io.axoniq.workflow.runtime.context;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.*;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.WorkflowServices;
@@ -38,7 +35,11 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @Nonnull Duration timeout,
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
-    Function<Instant, StepExecutionResult> timeoutOccurredHandler = (timeoutTimestamp) -> {
+
+
+
+
+/*    Function<Instant, StepExecutionResult> timeoutOccurredHandler = (timeoutTimestamp) -> {
       timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
       return StepExecutionResults.timeout(timeout);
     };
@@ -66,6 +67,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             return StepExecutionResults.failed(ex);
           })
       );
+*/
+
 
     var existing = workflowState.getStep(stepName);
     if (existing != null) {
@@ -108,8 +111,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         "duration", timeout
       ),
       eventNameCustomizer);
-
-    return execute.apply(timeout);
+*/
+    return new StateBasedStepExecutionResult(stepName, workflowState::applyNextStateChange, workflowState);
   }
 
   Map<String, Object> withValue(Map<String, Object> map, String key, Object value, String key2, Object value2) {

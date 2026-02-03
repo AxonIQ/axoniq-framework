@@ -23,4 +23,8 @@ public interface WorkflowState {
    * @param eventMessage message mutating the workflow state.
    */
   void onEvent(EventMessage eventMessage, ProcessingContext processingContext);
+
+  default void applyNextStateChange() {
+    // TODO
+  }
 }
