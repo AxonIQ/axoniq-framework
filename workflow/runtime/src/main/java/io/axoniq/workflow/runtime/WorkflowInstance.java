@@ -2,7 +2,7 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.StateBasedStepExecutionResult;
+import io.axoniq.workflow.runtime.context.StateBasedStepExecutionResult;
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
@@ -35,16 +35,21 @@ import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
 public class WorkflowInstance implements WorkflowState {
 
     private final BlockingQueue<Consumer<WorkflowInstance>> taskQueue = new ArrayBlockingQueue<>(1000);
+    private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
 
-    private Map<String, StepExecution> steps = new ConcurrentHashMap<>();
     private boolean executable = false;
+    private boolean suspended = false;
     private WorkflowStatus status = WorkflowStatus.NONE;
 
     public WorkflowInstance() {
     }
 
     public void suspend() {
+        suspended = true;
+    }
 
+    public boolean isSuspended() {
+        return suspended;
     }
 
     public void switchToExecutable() {

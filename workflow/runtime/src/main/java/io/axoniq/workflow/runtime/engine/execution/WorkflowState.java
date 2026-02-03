@@ -24,7 +24,4 @@ public interface WorkflowState {
    */
   void onEvent(EventMessage eventMessage, ProcessingContext processingContext);
 
-  default void applyNextStateChange() {
-    // TODO
-  }
 }

@@ -131,16 +131,16 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
       var stepName = getStepName(metadata);
       switch (stepStatus) {
         case STARTED:
-          addStep(StepExecution.started(stepName, eventPayload));
+          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp()));
           break;
         case FAILED:
-          addStep(StepExecution.failed(stepName, (Throwable) eventPayload));
+          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp()));
           break;
         case TIMED_OUT:
-          addStep(StepExecution.timedOut(stepName, eventPayload));
+          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp()));
           break;
         case COMPLETED:
-          addStep(StepExecution.completed(stepName, eventPayload));
+          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp()));
           break;
         default:
           break;

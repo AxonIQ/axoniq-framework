@@ -35,11 +35,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @Nonnull Duration timeout,
     @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
-
-
-
-
-/*    Function<Instant, StepExecutionResult> timeoutOccurredHandler = (timeoutTimestamp) -> {
+    Function<Instant, StepExecutionResult> timeoutOccurredHandler = (timeoutTimestamp) -> {
       timedOut(stepName, timeoutTimestamp, eventNameCustomizer);
       return StepExecutionResults.timeout(timeout);
     };
@@ -67,8 +63,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             return StepExecutionResults.failed(ex);
           })
       );
-*/
-
 
     var existing = workflowState.getStep(stepName);
     if (existing != null) {
@@ -111,8 +105,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         "duration", timeout
       ),
       eventNameCustomizer);
-*/
-    return new StateBasedStepExecutionResult(stepName, workflowState::applyNextStateChange, workflowState);
+    return execute.apply(timeout);
   }
 
   Map<String, Object> withValue(Map<String, Object> map, String key, Object value, String key2, Object value2) {

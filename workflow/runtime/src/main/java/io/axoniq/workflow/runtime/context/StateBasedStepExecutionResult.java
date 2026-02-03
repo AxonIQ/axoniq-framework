@@ -1,5 +1,6 @@
-package io.axoniq.workflow.runtime.api.primitives;
+package io.axoniq.workflow.runtime.context;
 
+import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 
@@ -49,7 +50,11 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
                 case TIMED_OUT:
                     return false;
             }
-            stateChangeTrigger.run();
+            try {
+                stateChangeTrigger.call();
+            }  catch (Exception e) {
+                return false;
+            }
         } while (true /* workflow is not suspended */);
     }
 
