@@ -1,10 +1,10 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.runtime.engine.EventBasedWorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.multi.EventBasedWorkflowEngine;
 import io.axoniq.workflow.runtime.engine.execution.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowRepository;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
-import io.axoniq.workflow.runtime.engine.support.SingleEventHandlerComponent;
+import io.axoniq.workflow.runtime.engine.impl.multi.SingleEventHandlerComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;

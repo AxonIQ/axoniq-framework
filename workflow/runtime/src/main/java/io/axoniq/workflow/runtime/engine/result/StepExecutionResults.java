@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.context;
+package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import jakarta.annotation.Nonnull;
@@ -58,7 +58,7 @@ public class StepExecutionResults {
    * @param timeout timeout duration.
    * @return timed out result.
    */
-  static StepExecutionResult timeout(@Nonnull Duration timeout) {
+  public static StepExecutionResult timeout(@Nonnull Duration timeout) {
     return new CompletedStepExecutionResult(null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
   }
 

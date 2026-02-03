@@ -1,8 +1,8 @@
-package io.axoniq.workflow.runtime.engine;
+package io.axoniq.workflow.runtime.api.workflow;
 
-import io.axoniq.workflow.runtime.engine.support.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.support.TaskManager;
-import io.axoniq.workflow.runtime.engine.support.WorkflowEventAppender;
+import io.axoniq.workflow.runtime.engine.impl.multi.EventSubscriptionManager;
+import io.axoniq.workflow.runtime.engine.impl.multi.TaskManager;
+import io.axoniq.workflow.runtime.engine.impl.multi.WorkflowEventAppender;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 
 import java.time.Clock;

@@ -7,7 +7,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import java.time.Duration;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName;
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
 public interface TestWaitForEvent extends WaitForPrimitive {
 

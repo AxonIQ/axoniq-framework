@@ -3,7 +3,7 @@ package io.axoniq.workflow.runtime;
 import io.axoniq.workflow.dsl.simple.TestDefinition;
 import io.axoniq.workflow.dsl.simple.TestWorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.EventBasedWorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.multi.EventBasedWorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.Test;

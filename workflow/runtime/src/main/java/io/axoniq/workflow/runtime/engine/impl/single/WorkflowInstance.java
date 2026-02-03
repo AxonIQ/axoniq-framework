@@ -1,8 +1,8 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.engine.impl.single;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.context.StateBasedStepExecutionResult;
+import io.axoniq.workflow.runtime.engine.result.StateBasedStepExecutionResult;
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
@@ -11,8 +11,8 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
-import io.axoniq.workflow.runtime.util.EventMessageUtils;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.engine.util.EventMessageUtils;
+import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
+import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowState {
 

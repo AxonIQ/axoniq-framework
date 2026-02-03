@@ -1,8 +1,8 @@
-package io.axoniq.workflow.runtime.context;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -10,7 +10,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
+import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 
 public abstract class AbstractStepExecutor {
 

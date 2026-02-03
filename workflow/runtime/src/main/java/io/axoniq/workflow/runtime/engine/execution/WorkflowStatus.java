@@ -9,6 +9,9 @@ public enum WorkflowStatus {
   TIMED_OUT;
 
   public boolean isTerminal() {
-    return this == COMPLETED || this == FAILED || this == CANCELLED || this == TIMED_OUT;
+    return switch (this) {
+      case NONE, STARTED -> false;
+      case COMPLETED, FAILED, CANCELLED, TIMED_OUT -> true;
+    };
   }
 }

@@ -1,14 +1,13 @@
-package io.axoniq.workflow.runtime.engine.execution;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import io.axoniq.workflow.runtime.api.primitives.*;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.context.ConversionDelegate;
-import io.axoniq.workflow.runtime.context.ExecuteDelegate;
-import io.axoniq.workflow.runtime.context.WaitForDelegate;
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.QualifiedName;
@@ -24,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
+import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowContext, WorkflowState {
 

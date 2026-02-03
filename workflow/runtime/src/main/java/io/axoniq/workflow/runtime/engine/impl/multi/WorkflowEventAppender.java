@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.support;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;

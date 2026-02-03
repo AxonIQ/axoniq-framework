@@ -24,4 +24,8 @@ public record StepExecution(
   public static StepExecution timedOut(String name, Object payload, Instant timestamp) {
     return new StepExecution(name, StepStatus.TIMED_OUT, payload, null, timestamp);
   }
+
+  public static StepExecution cancelled(String name, Instant timestamp) {
+    return new StepExecution(name, StepStatus.CANCELLED, null, null, timestamp);
+  }
 }

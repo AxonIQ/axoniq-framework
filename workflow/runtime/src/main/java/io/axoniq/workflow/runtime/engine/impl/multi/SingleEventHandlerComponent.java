@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.support;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;

@@ -1,7 +1,7 @@
 package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.runtime.api.workflow.*;
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;

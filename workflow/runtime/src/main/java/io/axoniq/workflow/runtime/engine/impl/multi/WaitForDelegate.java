@@ -1,12 +1,14 @@
-package io.axoniq.workflow.runtime.context;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import io.axoniq.workflow.runtime.engine.result.FutureStepExecutionResult;
+import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -54,7 +56,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     };
 
     Function<Duration, StepExecutionResult> waitForEvent = (remainingTimeout) ->
-      new FutureStepExecutionResult(workflowServices.getEventSubscriptionManager().subscribe(
+      StepExecutionResults.fromFuture(workflowServices.getEventSubscriptionManager().subscribe(
           workflowContext.getWorkflowId(),
           qualifiedName,
           eventCondition

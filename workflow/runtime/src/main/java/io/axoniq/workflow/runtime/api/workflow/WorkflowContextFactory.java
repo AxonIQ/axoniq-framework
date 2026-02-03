@@ -1,6 +1,5 @@
 package io.axoniq.workflow.runtime.api.workflow;
 
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
 import jakarta.annotation.Nonnull;
 
 import java.util.Map;

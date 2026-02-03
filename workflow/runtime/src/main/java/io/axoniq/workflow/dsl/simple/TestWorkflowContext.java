@@ -1,7 +1,7 @@
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.engine.impl.multi.WorkflowInstance;
 import jakarta.annotation.Nonnull;
 
 import java.util.Map;

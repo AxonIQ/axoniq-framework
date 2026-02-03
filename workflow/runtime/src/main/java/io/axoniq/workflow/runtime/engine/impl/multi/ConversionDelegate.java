@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.context;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.MapType;

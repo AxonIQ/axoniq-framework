@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 import static io.axoniq.workflow.dsl.simple.Payload.payload;
 import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.all;
 import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.local;
-import static io.axoniq.workflow.runtime.context.DefaultEventNameCustomizer.Builder.eventName;
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
 public interface TestExecute extends ExecutePrimitive {
 

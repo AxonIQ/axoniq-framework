@@ -1,6 +1,6 @@
-package io.axoniq.workflow.runtime.engine.support;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
-import io.axoniq.workflow.runtime.engine.WorkflowServices;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;

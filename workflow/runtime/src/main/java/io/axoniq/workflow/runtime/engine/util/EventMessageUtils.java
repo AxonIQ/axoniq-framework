@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.util;
+package io.axoniq.workflow.runtime.engine.util;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;

@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.context;
+package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;

@@ -1,17 +1,14 @@
-package io.axoniq.workflow.runtime.engine;
+package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
-import io.axoniq.workflow.runtime.context.ConversionDelegate;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
-import io.axoniq.workflow.runtime.engine.support.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.support.TaskManager;
-import io.axoniq.workflow.runtime.engine.support.WorkflowEventAppender;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -33,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
+import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 
 public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices {
 
