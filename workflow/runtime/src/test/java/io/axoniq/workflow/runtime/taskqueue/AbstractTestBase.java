@@ -1,10 +1,9 @@
-package io.axoniq.workflow.runtime.simple;
+package io.axoniq.workflow.runtime.taskqueue;
 
 import io.axoniq.workflow.runtime.DelayedPublisher;
 import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.impl.SingleEventHandlerComponent;
-import io.axoniq.workflow.runtime.engine.impl.multi.MultiThreadedWorkflowEngine;
-import io.axoniq.workflow.runtime.engine.impl.single.WorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.taskqueue.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowRepository;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
 import org.axonframework.common.configuration.AxonConfiguration;

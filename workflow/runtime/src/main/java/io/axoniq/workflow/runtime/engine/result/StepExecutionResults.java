@@ -1,11 +1,14 @@
 package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -60,6 +63,46 @@ public class StepExecutionResults {
    */
   public static StepExecutionResult timeout(@Nonnull Duration timeout) {
     return new CompletedStepExecutionResult(null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
+  }
+
+
+  public static StepExecutionResult all(StepExecutionResult... results) {
+    return new StepExecutionResult() {
+      @Override
+      public boolean isCompleted() {
+        return Arrays.stream(results).allMatch(StepExecutionResult::isCompleted);
+      }
+
+      @Override
+      public <T> Optional<T> payload() {
+        return Optional.empty();
+      }
+
+      @Override
+      public Optional<StepFailedException> error() {
+        return Arrays.stream(results).filter(StepExecutionResult::isFailure).findFirst().flatMap(StepExecutionResult::error);
+      }
+
+      @Override
+      public boolean isSuccess() {
+        return Arrays.stream(results).allMatch(StepExecutionResult::isSuccess);
+      }
+
+      @Override
+      public boolean isFailure() {
+        return Arrays.stream(results).anyMatch(StepExecutionResult::isFailure);
+      }
+
+      @Override
+      public boolean isCanceled() {
+        return Arrays.stream(results).anyMatch(StepExecutionResult::isCanceled);
+      }
+
+      @Override
+      public boolean isTimeout() {
+        return Arrays.stream(results).anyMatch(StepExecutionResult::isCompleted);
+      }
+    };
   }
 
 

@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl.multi;
+package io.axoniq.workflow.runtime.engine.impl.threadsandfutures;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;

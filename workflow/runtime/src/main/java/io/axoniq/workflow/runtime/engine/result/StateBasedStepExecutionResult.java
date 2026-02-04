@@ -21,12 +21,7 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
 
   @Override
   public boolean isCompleted() {
-    return switch (workflowState.getStep(stepName).status()) {
-      case COMPLETED -> true;
-      case FAILED -> true;
-      case TIMED_OUT -> true;
-      default -> false;
-    };
+    return workflowState.getStep(stepName).status().isTerminal();
   }
 
   @Override

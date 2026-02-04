@@ -1,9 +1,9 @@
-package io.axoniq.workflow.runtime.simple;
+package io.axoniq.workflow.runtime.threadsandfutures;
 
-import io.axoniq.workflow.dsl.simple2.OtherDefinition;
-import io.axoniq.workflow.dsl.simple2.OtherWorkflowContext;
+import io.axoniq.workflow.dsl.simple.TestDefinition;
+import io.axoniq.workflow.dsl.simple.TestWorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.impl.single.WorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.MultiThreadedWorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-class UserSignupTest extends AbstractTestBase {
+class ThreadAndFuturesUserSignupTest extends AbstractTestBase {
 
   record RegistrationReceivedEvent(String id, String email) {
   }
@@ -48,7 +48,7 @@ class UserSignupTest extends AbstractTestBase {
   }
 
 
-  public static class UserSignupWorkflow implements OtherDefinition {
+  public static class UserSignupWorkflow implements TestDefinition {
 
     @Override
     public String association(@Nonnull Map<String, Object> trigger) {
@@ -56,7 +56,7 @@ class UserSignupTest extends AbstractTestBase {
     }
 
     @Override
-    public void execute(@Nonnull OtherWorkflowContext ctx) {
+    public void execute(@Nonnull TestWorkflowContext ctx) {
 
       logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
 
@@ -67,9 +67,9 @@ class UserSignupTest extends AbstractTestBase {
       }
       ctx.execute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
-      // ctx.wait("waitASecond", Duration.ofSeconds(1));
-      // var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
-      // logger.info("Magic happened because of the magician {}", magic.magician);
+      ctx.wait("waitASecond", Duration.ofSeconds(1));
+      var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
+      logger.info("Magic happened because of the magician {}", magic.magician);
       // -> end
 
       logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.getPayload());
@@ -112,10 +112,8 @@ class UserSignupTest extends AbstractTestBase {
     });
 
     // Verify that both workflows executed all steps
-    for (WorkflowContext context : workflowEngine.workflowInstances().values().stream().map(WorkflowEngine.ExecutionHandle::workflowContext).toList()) {
-      assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail"
-        //, "waitASecond", "waitForMagicToHappen"
-      );
+    for (WorkflowContext context : workflowEngine.workflowInstances().values().stream().map(MultiThreadedWorkflowEngine.ExecutionHandle::getContext).toList()) {
+      assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail", "waitASecond", "waitForMagicToHappen");
     }
   }
 

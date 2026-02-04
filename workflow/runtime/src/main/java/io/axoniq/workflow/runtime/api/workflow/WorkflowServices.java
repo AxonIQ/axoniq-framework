@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime.api.workflow;
 
-import io.axoniq.workflow.runtime.engine.impl.multi.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.impl.multi.TaskManager;
-import io.axoniq.workflow.runtime.engine.impl.multi.WorkflowEventAppender;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.EventSubscriptionManager;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.TaskManager;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.WorkflowEventAppender;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 

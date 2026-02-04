@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl.single;
+package io.axoniq.workflow.runtime.engine.impl.taskqueue;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
@@ -53,8 +53,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       }
     }
     if (workflowState.getStep(stepName) == null) {
-      // TODO: fishy
+      // TODO: fishy / HACK
       workflowState.appendTask(i -> started(stepName, local, eventNameCustomizer));
+/*
+      runNextStateChange(); // append event
+      runNextStateChange(); // apply change from event
+*/
       workflowState.addStep(StepExecution.started(stepName, local, workflowServices.getClock().instant()));
     }
     if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
@@ -74,7 +78,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
           timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
         });
       } else {
-        result.orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
+        result
+          .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
           .whenComplete((r, e) -> {
             if (r != null) {
               workflowState.appendTask(i -> {
@@ -86,11 +91,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
               if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                 // FIXME - This is where we should publish using an append condition
                 timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
+                /* FIXME Condition 1?
+                workflowState.appendTask(i -> {
+
+                });*/
               } else if (e instanceof InterruptedException) {
                 // FIXME - This is where we should publish using an append condition
+                // FIXME see Condition 1
                 cancelled(stepName, eventNameCustomizer);
               } else {
                 // FIXME - This is where we should publish using an append condition
+                // FIXME see Condition 1
                 failed(stepName, e, eventNameCustomizer);
               }
             }

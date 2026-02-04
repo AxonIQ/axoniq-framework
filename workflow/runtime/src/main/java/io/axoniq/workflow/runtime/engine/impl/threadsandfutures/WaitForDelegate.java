@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl.multi;
+package io.axoniq.workflow.runtime.engine.impl.threadsandfutures;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
@@ -7,7 +7,6 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
-import io.axoniq.workflow.runtime.engine.result.FutureStepExecutionResult;
 import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;

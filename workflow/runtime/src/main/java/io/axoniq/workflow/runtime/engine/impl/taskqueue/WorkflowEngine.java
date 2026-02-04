@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl.single;
+package io.axoniq.workflow.runtime.engine.impl.taskqueue;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
@@ -6,9 +6,9 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
-import io.axoniq.workflow.runtime.engine.impl.multi.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.impl.multi.TaskManager;
-import io.axoniq.workflow.runtime.engine.impl.multi.WorkflowEventAppender;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.EventSubscriptionManager;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.TaskManager;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.WorkflowEventAppender;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -41,7 +41,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
   private final ConversionDelegate conversionDelegate = new ConversionDelegate();
 
-  private final Map<String, ExecutionHandle> workflowInstances = new ConcurrentHashMap<>();
+  private final Map<String, ExecutionHandle> executionHandles = new ConcurrentHashMap<>();
 
 
   public WorkflowEngine(
@@ -64,7 +64,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
       // state update
       var workflowId = MetadataUtils.getWorkflowId(event.metadata());
       // append task
-      workflowInstances.get(workflowId).workflowState.appendTask(
+      executionHandles.get(workflowId).workflowState.appendTask(
         (w) -> w.applyStateChange(event)
       );
     } else {
@@ -79,8 +79,8 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
    * This is a place to be called from Event Processor
    */
   public void runWorkflows() {
-    logger.debug("Starting {} workflows.", workflowInstances.size());
-    for (var handle : workflowInstances.values()) {
+    logger.debug("Starting {} workflows.", executionHandles.size());
+    for (var handle : executionHandles.values()) {
       try {
         handle.workflowState.execute(handle.workflowConfiguration, handle.workflowContext);
       } catch (Throwable t) {
@@ -100,7 +100,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
         var workflowId = workflowContext.getWorkflowId();
 
         // avoid multiple workflows for the same workflow id.
-        workflowInstances.computeIfAbsent(workflowId, (id) -> {
+        executionHandles.computeIfAbsent(workflowId, (id) -> {
           logger.info("Starting new workflow with '{}'", event.payload());
           var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
           return new ExecutionHandle(workflowConfiguration, workflowContext, workflowState);
@@ -149,11 +149,14 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   }
 
   public Map<String, ExecutionHandle> workflowInstances() {
-    return this.workflowInstances;
+    return this.executionHandles;
   }
 
-  public record ExecutionHandle(WorkflowConfiguration<?> workflowConfiguration, WorkflowContext workflowContext,
-                         WorkflowState workflowState) {
+  public record ExecutionHandle(
+    WorkflowConfiguration<?> workflowConfiguration,
+    WorkflowContext workflowContext,
+    WorkflowState workflowState)
+  {
 
     public WorkflowStatus getStatus() {
       return workflowContext.getStatus();

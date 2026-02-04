@@ -1,8 +1,9 @@
-package io.axoniq.workflow.dsl.simple;
+package io.axoniq.workflow.dsl.simple2;
 
 import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 
 import java.time.Duration;
@@ -16,7 +17,11 @@ import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.all;
 import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
-public interface TestExecute extends ExecutePrimitive {
+public interface OtherExecute extends ExecutePrimitive {
+
+  default StepExecutionResult executeWithResult(String stepName, Map<String, Object> payload, PayloadProcessor action, Duration duration) {
+    return execute(stepName, payload, action, local(), all(), duration, eventName());
+  }
 
   default Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action, EventNameCustomizer eventNameCustomizer) {
     var result = execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventNameCustomizer);

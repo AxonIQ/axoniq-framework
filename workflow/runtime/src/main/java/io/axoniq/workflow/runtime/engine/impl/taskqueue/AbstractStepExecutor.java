@@ -1,10 +1,9 @@
-package io.axoniq.workflow.runtime.engine.impl.single;
+package io.axoniq.workflow.runtime.engine.impl.taskqueue;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.util.EventMessageUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
 

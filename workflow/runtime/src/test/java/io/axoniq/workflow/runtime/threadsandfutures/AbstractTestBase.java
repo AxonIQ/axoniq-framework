@@ -1,7 +1,7 @@
-package io.axoniq.workflow.runtime.multi;
+package io.axoniq.workflow.runtime.threadsandfutures;
 
 import io.axoniq.workflow.runtime.DelayedPublisher;
-import io.axoniq.workflow.runtime.engine.impl.multi.MultiThreadedWorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.MultiThreadedWorkflowEngine;
 import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowRepository;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
