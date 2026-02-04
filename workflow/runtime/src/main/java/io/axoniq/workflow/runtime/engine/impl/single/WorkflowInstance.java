@@ -35,6 +35,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowState, WorkflowContext {
@@ -69,13 +70,35 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
     // FIXME
     switchToExecutable();
-    logger.trace("Executing workflow context {} from thread {}", workflowContext, Thread.currentThread().getName());
     return CompletableFuture.supplyAsync(() -> {
-      @SuppressWarnings("unchecked")
-      var ctx = (T) workflowContext;
-      configuration.workflowDefinition().execute(ctx);
-      return ctx;
-    }, workflowServices.getExecutor()).join();
+        @SuppressWarnings("unchecked")
+        var ctx = (T) workflowContext;
+        // TODO: check?
+        appendTask((i) -> started(workflowContext, configuration));
+
+        logger.trace("Executing workflow with init payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread().getName());
+        try {
+          configuration.workflowDefinition().execute(ctx);
+          logger.trace("Workflow executed. Result context {}.", workflowContext.getPayload());
+        } catch (Exception w) {
+          // TODO: check?
+          appendTask((i) -> failed(workflowContext, configuration, w));
+        }
+        // TODO: check?
+        appendTask((i) -> completed(workflowContext, configuration));
+        return ctx;
+      }, workflowServices.getExecutor())
+      .thenApply((c) -> {
+        try {
+          // FIXME -> HACK
+          runNextStateChange(); // append event
+          runNextStateChange(); // apply change from event
+        } catch (Throwable t) {
+
+        }
+        return c;
+      })
+      .join();
 
   }
 
@@ -213,6 +236,22 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   public void switchToExecutable() {
     executable = true;
+  }
+
+  void started(WorkflowContext context, WorkflowConfiguration<?> configuration) {
+    sendEvent(startedWorkflow(context, configuration.eventNameCustomizer()));
+  }
+
+  void completed(WorkflowContext context, WorkflowConfiguration<?> configuration) {
+    sendEvent(completedWorkflow(context, configuration.eventNameCustomizer()));
+  }
+
+  void failed(WorkflowContext context, WorkflowConfiguration<?> configuration, Exception e) {
+    sendEvent(failedWorkflow(context, e, configuration.eventNameCustomizer()));
+  }
+
+  private void sendEvent(EventMessage eventMessage) {
+    workflowServices.getEventSink().publish(null, eventMessage);
   }
 
 }

@@ -53,9 +53,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       }
     }
     if (workflowState.getStep(stepName) == null) {
-      workflowState.addStep(
-        StepExecution.started(stepName, null, workflowServices.getClock().instant())
-      );
+      // TODO: fishy
+      workflowState.appendTask(i -> started(stepName, local, eventNameCustomizer));
+      workflowState.addStep(StepExecution.started(stepName, local, workflowServices.getClock().instant()));
     }
     if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
       var actualStartTime = workflowState.getStep(stepName).timestamp();
