@@ -14,6 +14,8 @@ import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -23,6 +25,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
+
+  private static final Logger logger = LoggerFactory.getLogger(ExecuteDelegate.class);
 
   public ExecuteDelegate(@Nonnull WorkflowContext context,
                          @Nonnull WorkflowState workflowState,
@@ -41,6 +45,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @NotNull Duration timeout,
     @NotNull EventNameCustomizer eventNameCustomizer
   ) {
+    logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread().getName());
     while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
       var poll = workflowState.getNextTask();
       if (poll != null) {

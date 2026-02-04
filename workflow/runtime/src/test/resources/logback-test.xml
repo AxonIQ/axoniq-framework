@@ -10,6 +10,7 @@
     <!-- Set all org.axonframework loggers to INFO level -->
     <logger name="org.axonframework" level="INFO"/>
     <logger name="org.axonframework.messaging.eventhandling.processing.streaming.pooled" level="INFO"/>
+    <logger name="io.axoniq.workflow.runtime.engine.impl.single" level="TRACE"/>
 
     <!-- Root logger -->
     <root level="INFO">

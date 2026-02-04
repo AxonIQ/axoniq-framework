@@ -1,5 +1,6 @@
 package io.axoniq.workflow.dsl.simple;
 
+import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
@@ -10,7 +11,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static io.axoniq.workflow.dsl.simple.Payload.payload;
+import static io.axoniq.workflow.dsl.Payload.payload;
 import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.all;
 import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;

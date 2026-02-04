@@ -1,6 +1,8 @@
 package io.axoniq.workflow.runtime.engine.execution;
 
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -12,6 +14,8 @@ import java.util.function.Consumer;
  * Internal looking API for the execution.
  */
 public interface WorkflowState {
+
+  <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended;
 
   void applyStateChange(EventMessage eventMessage);
 

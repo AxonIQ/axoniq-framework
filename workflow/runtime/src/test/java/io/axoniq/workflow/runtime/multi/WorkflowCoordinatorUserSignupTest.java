@@ -1,9 +1,9 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.multi;
 
 import io.axoniq.workflow.dsl.simple.TestDefinition;
 import io.axoniq.workflow.dsl.simple.TestWorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.impl.multi.EventBasedWorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.multi.MultiThreadedWorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.Test;
@@ -56,7 +56,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
     }
 
     @Override
-    public void execute(TestWorkflowContext ctx) {
+    public void execute(@Nonnull TestWorkflowContext ctx) {
 
       logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
 
@@ -112,7 +112,7 @@ class WorkflowCoordinatorUserSignupTest extends AbstractTestBase {
     });
 
     // Verify that both workflows executed all steps
-    for (WorkflowContext context : workflowEngine.workflowInstances().values().stream().map(EventBasedWorkflowEngine.ExecutionHandle::getContext).toList()) {
+    for (WorkflowContext context : workflowEngine.workflowInstances().values().stream().map(MultiThreadedWorkflowEngine.ExecutionHandle::getContext).toList()) {
       assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser", "sendWelcomeEmail", "waitASecond", "waitForMagicToHappen");
     }
   }

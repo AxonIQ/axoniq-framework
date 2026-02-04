@@ -1,44 +1,49 @@
 package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import io.axoniq.workflow.runtime.api.primitives.*;
-import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.workflow.*;
+import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowContext, WorkflowState {
 
+  private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
   private final String workflowId;
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private Map<String, Object> payload;
   private WorkflowStatus status = WorkflowStatus.NONE;
 
-  private final transient Clock clock;
-
   // primitive implementations
   private final transient ExecutePrimitive executePrimitive;
   private final transient WaitForPrimitive waitForPrimitive;
   private final transient ConversionDelegate conversionDelegate = new ConversionDelegate();
+
+  private final WorkflowServices workflowServices;
 
 
   public WorkflowInstance(
@@ -48,7 +53,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   ) {
     this.workflowId = workflowId;
     this.payload = payload;
-    this.clock = workflowServices.getClock();
+    this.workflowServices = workflowServices;
     this.executePrimitive = new ExecuteDelegate(this, this, workflowServices);
     this.waitForPrimitive = new WaitForDelegate(this, this, workflowServices);
   }
@@ -148,48 +153,110 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     );
   }
 
+  @Override
   public void addStep(StepExecution execution) {
     steps.put(execution.stepName(), execution);
   }
 
+  @Override
+  public <T extends WorkflowContext> T execute(
+    WorkflowConfiguration<T> configuration,
+    WorkflowContext workflowContext
+  ) throws ExecutionSuspended {
+    return CompletableFuture.supplyAsync(() -> {
+        //noinspection unchecked
+        T context = (T) workflowContext;
+        try {
+          // Check if workflow is already in terminal state - do nothing
+          if (context.getStatus().isTerminal()) {
+            return context;
+          }
+
+          // Optional, maybe we don't need a workflow started event at all
+          if (context.getStatus() == WorkflowStatus.NONE) {
+            started(context, configuration);
+          }
+
+          // this execution will run until it is blocked by a wait for event
+          configuration.workflowDefinition().execute(context);
+
+          completed(context, configuration);
+
+          return context;
+        } catch (WorkflowFailedException e) {
+          // User explicitly failed the workflow
+          failed(context, configuration, e);
+          throw e;
+        } catch (RuntimeException e) {
+          // Any other runtime exception - log and rethrow, stay ACTIVE
+          logger.warn("Workflow {} encountered error, staying active: {}", context.getWorkflowId(), e.getMessage());
+          throw e;
+        }
+      }, workflowServices.getExecutor())
+      .join();
+  }
+
+  void started(WorkflowContext context, WorkflowConfiguration<?> configuration) {
+    sendEvent(startedWorkflow(context, configuration.eventNameCustomizer()));
+  }
+
+  void completed(WorkflowContext context, WorkflowConfiguration<?> configuration) {
+    sendEvent(completedWorkflow(context, configuration.eventNameCustomizer()));
+  }
+
+  void failed(WorkflowContext context, WorkflowConfiguration<?> configuration, Exception e) {
+    sendEvent(failedWorkflow(context, e, configuration.eventNameCustomizer()));
+  }
+
+  private void sendEvent(EventMessage eventMessage) {
+
+    workflowServices.getUnitOfWorkFactory().create().on(ProcessingLifecycle.DefaultPhases.PRE_INVOCATION, (c) -> {
+      return CompletableFuture.completedFuture("");
+    });
+
+    // block
+    workflowServices.getWorkflowEventAppender().appendEvent(
+      eventMessage,
+      null
+    ).join();
+  }
 
   /*
-   Unused
+   Unused in this implementation
    */
 
   @Override
   public void applyStateChange(EventMessage eventMessage) {
-
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
   public void runNextStateChange() throws InterruptedException {
-
+    throw new UnsupportedOperationException("Not implemented");
   }
-
 
   @Override
   public boolean containsStep(String stepName) {
-    return steps.containsKey(stepName);
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
   public boolean appendTask(Consumer<WorkflowState> task) {
-    return false;
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
   public Consumer<WorkflowState> getNextTask() {
-    return null;
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
   public boolean isExecutable() {
-    return false;
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
   public boolean hasTasks() {
-    return false;
+    throw new UnsupportedOperationException("Not implemented");
   }
 }

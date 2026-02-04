@@ -1,4 +1,4 @@
-package io.axoniq.workflow.dsl.simple;
+package io.axoniq.workflow.dsl;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 

@@ -4,12 +4,13 @@ import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.multi.ConversionDelegate;
+import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -18,8 +19,9 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,20 +39,22 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
+  private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
+
   private final WorkflowServices workflowServices;
+  // primitive implementations
   private final ExecuteDelegate executeDelegate;
   private final WaitForDelegate waitForDelegate;
   private final ConversionDelegate conversionDelegate;
 
   // State variables
-  private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000);
+  private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
-  private final String workflowId;
-
-  private Map<String, Object> payload;
+  private WorkflowStatus status = WorkflowStatus.NONE;
   private boolean executable = false;
   private boolean suspended = false;
-  private WorkflowStatus status = WorkflowStatus.NONE;
+  private final String workflowId;
+  private Map<String, Object> payload;
 
   public WorkflowInstance(String workflowId, Map<String, Object> initial, WorkflowServices workflowServices) {
     this.workflowId = workflowId;
@@ -61,12 +65,19 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     this.payload = initial;
   }
 
-  public void execute(WorkflowDefinition<WorkflowContext> workflowDefinition) {
-    CompletableFuture.runAsync(() -> {
-      workflowDefinition.execute(this);
-    }, workflowServices.getExecutor());
-  }
+  @Override
+  public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
+    // FIXME
+    switchToExecutable();
+    logger.trace("Executing workflow context {} from thread {}", workflowContext, Thread.currentThread().getName());
+    return CompletableFuture.supplyAsync(() -> {
+      @SuppressWarnings("unchecked")
+      var ctx = (T) workflowContext;
+      configuration.workflowDefinition().execute(ctx);
+      return ctx;
+    }, workflowServices.getExecutor()).join();
 
+  }
 
   @Override
   public void applyStateChange(EventMessage eventMessage) {
@@ -92,12 +103,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
           break;
       }
     });
-
     // Apply workflow-level state changes
     MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
       this.status = status
     );
-
   }
 
   @Override
@@ -153,7 +162,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     return new ArrayList<>(steps.keySet());
   }
 
-
   // delegation
   @Override
   public StepExecutionResult execute(@NotNull String stepName, @Nullable Map<String, Object> local, @NotNull PayloadProcessor action, @NotNull PayloadReducer parameterMapping, @NotNull PayloadReducer resultMapping, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
@@ -185,6 +193,16 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     return this.taskQueue.offer(task);
   }
 
+  @Override
+  public boolean hasTasks() {
+    return this.taskQueue.isEmpty();
+  }
+
+  @Override
+  public boolean isExecutable() {
+    return executable;
+  }
+
   public void suspend() {
     suspended = true;
   }
@@ -197,13 +215,4 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     executable = true;
   }
 
-  @Override
-  public boolean isExecutable() {
-    return executable;
-  }
-
-  @Override
-  public boolean hasTasks() {
-    return this.taskQueue.isEmpty();
-  }
 }

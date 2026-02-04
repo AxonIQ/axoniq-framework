@@ -1,6 +1,7 @@
 package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 
@@ -45,9 +46,7 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
             switch (workflowState.getStep(stepName).status()) {
                 case COMPLETED:
                     return true;
-                case FAILED:
-                    return false;
-                case TIMED_OUT:
+                case FAILED, TIMED_OUT, CANCELLED:
                     return false;
             }
             try {
@@ -60,16 +59,52 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
 
     @Override
     public boolean isFailure() {
-        return false;
+        do {
+            switch (workflowState.getStep(stepName).status()) {
+                case FAILED:
+                    return true;
+                case COMPLETED, TIMED_OUT, CANCELLED:
+                    return false;
+            }
+            try {
+                stateChangeTrigger.call();
+            }  catch (Exception e) {
+                return false;
+            }
+        } while (true /* workflow is not suspended */);
     }
 
     @Override
     public boolean isCanceled() {
-        return false;
+        do {
+            switch (workflowState.getStep(stepName).status()) {
+                case CANCELLED:
+                    return true;
+                case COMPLETED, TIMED_OUT, FAILED:
+                    return false;
+            }
+            try {
+                stateChangeTrigger.call();
+            }  catch (Exception e) {
+                return false;
+            }
+        } while (true /* workflow is not suspended */);
     }
 
     @Override
     public boolean isTimeout() {
-        return false;
+        do {
+            switch (workflowState.getStep(stepName).status()) {
+                case TIMED_OUT:
+                    return true;
+                case COMPLETED, FAILED, CANCELLED:
+                    return false;
+            }
+            try {
+                stateChangeTrigger.call();
+            }  catch (Exception e) {
+                return false;
+            }
+        } while (true /* workflow is not suspended */);
     }
 }

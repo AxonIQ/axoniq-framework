@@ -2,18 +2,17 @@ package io.axoniq.workflow.runtime.engine.impl.multi;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -30,11 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
+public class MultiThreadedWorkflowEngine implements EventHandler, WorkflowServices {
 
-public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices {
-
-  private static final Logger logger = LoggerFactory.getLogger(EventBasedWorkflowEngine.class);
+  private static final Logger logger = LoggerFactory.getLogger(MultiThreadedWorkflowEngine.class);
 
   // Stateless services
   private final ConversionDelegate conversionDelegate = new ConversionDelegate();
@@ -57,15 +54,15 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
   private final TaskManager taskManager;
 
 
-  public EventBasedWorkflowEngine(
+  public MultiThreadedWorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
     @Nonnull EventSink eventSink,
     @Nonnull WorkflowRepository<?> workflowRepository
   ) {
     this.workflowRepository = workflowRepository;
-    this.workflowEventAppender = new WorkflowEventAppender(eventSink);
     this.unitOfWorkFactory = unitOfWorkFactory;
     this.eventSink = eventSink;
+    this.workflowEventAppender = new WorkflowEventAppender(this.eventSink);
     this.clock = Clock.systemDefaultZone();
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.eventSubscriptionManager = new EventSubscriptionManager(this);
@@ -90,14 +87,19 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
     return MessageStream.empty();
   }
 
-
   /**
    * This is a place to be called from Event Processor
    */
   public void runWorkflows() {
     logger.debug("Starting {} workflows.", workflowInstances.size());
     for (var handle : workflowInstances.values()) {
-      executeVirtual(handle.workflowConfiguration, handle.context);
+      CompletableFuture.runAsync(() -> {
+        try {
+          handle.state.execute(handle.workflowConfiguration, handle.context);
+        } catch (ExecutionSuspended e) {
+          throw new RuntimeException(e);
+        }
+      }, executor);
     }
   }
 
@@ -195,74 +197,4 @@ public class EventBasedWorkflowEngine implements EventHandler, WorkflowServices 
     var workflowInstance = Objects.requireNonNull(workflowInstances.get(workflowId), "No workflow found for id " + workflowId);
     workflowInstance.state.onEvent(event, processingContext);
   }
-
-
-  private <T extends WorkflowContext> CompletableFuture<T> executeVirtual(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) {
-    return CompletableFuture.supplyAsync(() -> {
-      try {
-        return execute(configuration, workflowContext);
-      } catch (ExecutionSuspended e) {
-        throw new RuntimeException(e);
-      }
-    }, executor);
-  }
-
-  private <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
-    //noinspection unchecked
-    T context = (T) workflowContext;
-    try {
-      // Check if workflow is already in terminal state - do nothing
-      if (context.getStatus().isTerminal()) {
-        return context;
-      }
-
-      // Optional, maybe we don't need a workflow started event at all
-      if (context.getStatus() == WorkflowStatus.NONE) {
-        started(context, configuration);
-      }
-
-      // this execution will run until it is blocked by a wait for event
-      configuration.workflowDefinition().execute(context);
-
-      completed(context, configuration);
-
-      return context;
-    } catch (WorkflowFailedException e) {
-      // User explicitly failed the workflow
-      failed(context, configuration, e);
-      throw e;
-    } catch (RuntimeException e) {
-      // Any other runtime exception - log and rethrow, stay ACTIVE
-      logger.warn("Workflow {} encountered error, staying active: {}", context.getWorkflowId(), e.getMessage());
-      throw e;
-    }
-  }
-
-
-  void started(WorkflowContext context, WorkflowConfiguration<?> configuration) throws ExecutionSuspended {
-    sendEvent(startedWorkflow(context, configuration.eventNameCustomizer()));
-  }
-
-  void completed(WorkflowContext context, WorkflowConfiguration<?> configuration) throws ExecutionSuspended {
-    sendEvent(completedWorkflow(context, configuration.eventNameCustomizer()));
-  }
-
-  void failed(WorkflowContext context, WorkflowConfiguration<?> configuration, Exception e) throws ExecutionSuspended {
-    sendEvent(failedWorkflow(context, e, configuration.eventNameCustomizer()));
-  }
-
-  private void sendEvent(EventMessage eventMessage) throws ExecutionSuspended {
-
-    unitOfWorkFactory.create().on(ProcessingLifecycle.DefaultPhases.PRE_INVOCATION, (c) -> {
-      return CompletableFuture.completedFuture("");
-    });
-
-    // block
-    workflowEventAppender.appendEvent(
-      eventMessage,
-      null
-    ).join();
-  }
-
-
 }

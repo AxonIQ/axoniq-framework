@@ -1,10 +1,12 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.simple;
 
-import io.axoniq.workflow.runtime.engine.impl.multi.EventBasedWorkflowEngine;
+import io.axoniq.workflow.runtime.DelayedPublisher;
 import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
+import io.axoniq.workflow.runtime.engine.impl.SingleEventHandlerComponent;
+import io.axoniq.workflow.runtime.engine.impl.multi.MultiThreadedWorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.single.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowRepository;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
-import io.axoniq.workflow.runtime.engine.impl.multi.SingleEventHandlerComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -22,7 +24,7 @@ public class AbstractTestBase {
 
   protected static final Logger logger = LoggerFactory.getLogger(AbstractTestBase.class);
   protected AxonConfiguration configuration;
-  protected EventBasedWorkflowEngine workflowEngine;
+  protected WorkflowEngine workflowEngine;
   protected DelayedPublisher delayedPublisher;
   protected WorkflowRepository<?> workflowRegistry;
 
@@ -32,8 +34,8 @@ public class AbstractTestBase {
     var configurer = MessagingConfigurer.create();
     // configurer.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class));
     configurer.componentRegistry(r -> r.registerEnhancer(registry ->
-      registry.registerComponent(EventBasedWorkflowEngine.class, cfg ->
-        new EventBasedWorkflowEngine(
+      registry.registerComponent(WorkflowEngine.class, cfg ->
+        new WorkflowEngine(
           cfg.getComponent(UnitOfWorkFactory.class),
           cfg.getComponent(EventSink.class),
           cfg.getComponent(WorkflowRepository.class)
@@ -43,7 +45,7 @@ public class AbstractTestBase {
       ).registerComponent(DelayedPublisher.class, cfg ->
         new DelayedPublisher(
           cfg.getComponent(EventSink.class),
-          cfg.getComponent(EventBasedWorkflowEngine.class).getExecutor()
+          cfg.getComponent(WorkflowEngine.class).getExecutor()
         )
       ).registerDecorator(EventStore.class, Integer.MAX_VALUE, (configuration, name, delegate) ->
         PrettyPrintingRecordingEventStore.eventStore(delegate)
@@ -53,7 +55,7 @@ public class AbstractTestBase {
       EventProcessorModule
         .pooledStreaming("workflow")
         .eventHandlingComponents(req -> req.declarative(cfg -> new SingleEventHandlerComponent(
-          cfg.getComponent(EventBasedWorkflowEngine.class)
+          cfg.getComponent(WorkflowEngine.class)
         )))
         .customized((cfg, c) -> c.eventCriteria(
           set -> {
@@ -67,7 +69,7 @@ public class AbstractTestBase {
     )));
 
     configuration = configurer.start();
-    workflowEngine = configuration.getComponent(EventBasedWorkflowEngine.class);
+    workflowEngine = configuration.getComponent(WorkflowEngine.class);
     delayedPublisher = configuration.getComponent(DelayedPublisher.class);
     workflowRegistry = configuration.getComponent(WorkflowRepository.class);
 
