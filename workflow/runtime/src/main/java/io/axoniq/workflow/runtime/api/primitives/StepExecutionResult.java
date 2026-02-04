@@ -9,6 +9,8 @@ import java.util.Optional;
  */
 public interface StepExecutionResult {
 
+  String getStepName();
+
   boolean isCompleted();
 
   <T> Optional<T> payload();

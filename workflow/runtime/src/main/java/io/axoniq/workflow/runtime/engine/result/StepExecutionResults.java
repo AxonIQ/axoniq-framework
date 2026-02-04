@@ -68,6 +68,12 @@ public class StepExecutionResults {
 
   public static StepExecutionResult all(StepExecutionResult... results) {
     return new StepExecutionResult() {
+
+      @Override
+      public String getStepName() {
+        return "all(" + String.join(", ", Arrays.stream(results).map(StepExecutionResult::getStepName).toList()) + ")";
+      }
+
       @Override
       public boolean isCompleted() {
         return Arrays.stream(results).allMatch(StepExecutionResult::isCompleted);
