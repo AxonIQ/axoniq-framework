@@ -57,6 +57,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     var instance = (WorkflowInstance) workflowState;
 
     if (!workflowState.containsStep(stepName)) {
+      //Start time of wait will be last completed timestamp of any step or start time of workflow if no steps
       Instant lastStepTimestamp = instance.getLastStepTimestamp();
       workflowState.addStep(StepExecution.started(stepName, null, lastStepTimestamp));
 
