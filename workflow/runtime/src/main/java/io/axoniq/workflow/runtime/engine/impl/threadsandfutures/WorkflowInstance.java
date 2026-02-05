@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -49,6 +50,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   public WorkflowInstance(
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
+    @Nonnull Instant startTime,
     @Nonnull WorkflowServices workflowServices
   ) {
     this.workflowId = workflowId;

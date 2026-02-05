@@ -7,6 +7,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
@@ -29,9 +30,10 @@ public interface TestDefinition extends
     @Override
     public TestWorkflowContext createContext(
       @NotNull Map<String, Object> initialPayload,
+      @Nonnull Instant startTime,
       @Nonnull WorkflowServices workflowServices) {
       var workflowId = associationProvider.associationKey(initialPayload).orElseThrow(() -> new IllegalStateException("Could not create workflow id"));
-      return new TestWorkflowContext(workflowId, initialPayload, workflowServices);
+      return new TestWorkflowContext(workflowId, initialPayload, startTime, workflowServices);
     }
   }
 

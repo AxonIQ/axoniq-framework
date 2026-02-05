@@ -12,6 +12,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
@@ -23,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -51,15 +53,18 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   // State variables
   private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
+  private final Map<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
   private WorkflowStatus status = WorkflowStatus.NONE;
   private boolean executable = false;
   private boolean suspended = false;
   private final String workflowId;
+  private final Instant startTime;
   private Map<String, Object> payload;
 
-  public WorkflowInstance(String workflowId, Map<String, Object> initial, WorkflowServices workflowServices) {
+  public WorkflowInstance(String workflowId, Map<String, Object> initial, Instant startTime, WorkflowServices workflowServices) {
     this.workflowId = workflowId;
     this.workflowServices = workflowServices;
+    this.startTime = startTime;
     this.executeDelegate = new ExecuteDelegate(this, this, workflowServices);
     this.waitForDelegate = new WaitForDelegate(this, this, workflowServices);
     this.conversionDelegate = new ConversionDelegate();
@@ -252,6 +257,42 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   private void sendEvent(EventMessage eventMessage) {
     workflowServices.getEventSink().publish(null, eventMessage);
+  }
+
+  Instant getLastStepTimestamp() {
+    return steps.values().stream()
+      .map(StepExecution::timestamp)
+      .max(Instant::compareTo)
+      .orElse(startTime);
+  }
+
+  record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
+  }
+
+  void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
+    waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate));
+  }
+
+  void removeWaitCondition(String stepName) {
+    waitConditions.remove(stepName);
+  }
+
+  void tryMatchEvent(EventMessage event) {
+    for (var entry : waitConditions.entrySet()) {
+      var condition = entry.getValue();
+      if (event.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(event)) {
+        //EVENT MATCHED
+        String stepName = entry.getKey();
+        waitConditions.remove(stepName);
+        Object payload = event.payload();
+        appendTask(i -> {
+          if (i.getStep(stepName) != null && i.getStep(stepName).status() == StepStatus.STARTED) {
+            i.addStep(StepExecution.completed(stepName, payload, workflowServices.getClock().instant()));
+          }
+        });
+        return;
+      }
+    }
   }
 
 }

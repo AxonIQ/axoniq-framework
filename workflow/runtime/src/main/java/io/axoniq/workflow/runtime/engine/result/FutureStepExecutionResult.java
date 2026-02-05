@@ -15,6 +15,14 @@ public class FutureStepExecutionResult implements StepExecutionResult {
   }
 
   @Override
+  public String getStepName() {
+    if (isCompleted()) {
+      return futureResult.join().getStepName();
+    }
+    return null;
+  }
+
+  @Override
   public boolean isCompleted() {
     return futureResult.isDone();
   }

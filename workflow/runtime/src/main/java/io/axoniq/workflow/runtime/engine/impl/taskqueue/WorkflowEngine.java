@@ -70,6 +70,12 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     } else {
       // handle starting of new processes
       checkAndCreateNewWorkflow(event, context);
+      // route external events to workflows waiting for them
+      for (var handle : executionHandles.values()) {
+        if (handle.workflowState() instanceof WorkflowInstance wi) {
+          wi.tryMatchEvent(event);
+        }
+      }
     }
 
     return MessageStream.empty();
@@ -96,7 +102,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
       workflowConfiguration -> {
         var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());
 
-        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, this);
+        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, event.timestamp(), this);
         var workflowId = workflowContext.getWorkflowId();
 
         // avoid multiple workflows for the same workflow id.

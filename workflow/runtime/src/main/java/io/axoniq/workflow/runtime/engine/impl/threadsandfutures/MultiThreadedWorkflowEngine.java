@@ -179,7 +179,7 @@ public class MultiThreadedWorkflowEngine implements EventHandler, WorkflowServic
       workflowConfiguration -> {
         var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());
 
-        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, this);
+        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, event.timestamp(), this);
         var workflowId = workflowContext.getWorkflowId();
 
         // avoid multiple workflows for the same workflow id.

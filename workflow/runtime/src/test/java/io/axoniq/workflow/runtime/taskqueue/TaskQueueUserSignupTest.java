@@ -75,9 +75,9 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
       */
 
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
-      // ctx.wait("waitASecond", Duration.ofSeconds(1));
-      // var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
-      // logger.info("Magic happened because of the magician {}", magic.magician);
+      ctx.wait("waitASecond", Duration.ofSeconds(1));
+      var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
+      logger.info("Magic happened because of the magician {}", magic.magician());
       // -> end
 
       logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.getPayload());
@@ -123,8 +123,8 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
     for (WorkflowContext context : workflowEngine.workflowInstances().values().stream().map(WorkflowEngine.ExecutionHandle::workflowContext).toList()) {
       assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser",
         // "activateUser2",
-        "sendWelcomeEmail"
-        //, "waitASecond", "waitForMagicToHappen"
+        "sendWelcomeEmail",
+        "waitASecond", "waitForMagicToHappen"
       );
     }
   }

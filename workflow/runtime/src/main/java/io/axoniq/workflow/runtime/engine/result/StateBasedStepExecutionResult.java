@@ -20,6 +20,11 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
   }
 
   @Override
+  public String getStepName() {
+    return stepName;
+  }
+
+  @Override
   public boolean isCompleted() {
     return workflowState.getStep(stepName).status().isTerminal();
   }

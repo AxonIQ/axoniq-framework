@@ -2,6 +2,7 @@ package io.axoniq.workflow.runtime.api.workflow;
 
 import jakarta.annotation.Nonnull;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -11,5 +12,5 @@ import java.util.Map;
 @FunctionalInterface
 public interface WorkflowContextFactory<T extends WorkflowContext> {
   @Nonnull
-  T createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull WorkflowServices workFlowServices);
+  T createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull Instant startTime, @Nonnull WorkflowServices workFlowServices);
 }

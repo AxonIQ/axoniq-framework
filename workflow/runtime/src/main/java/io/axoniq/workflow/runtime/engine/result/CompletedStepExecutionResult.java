@@ -33,6 +33,11 @@ public class CompletedStepExecutionResult implements StepExecutionResult {
   }
 
   @Override
+  public String getStepName() {
+    return null;
+  }
+
+  @Override
   public boolean isCompleted() {
     return true;
   }

@@ -6,6 +6,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,9 +29,10 @@ public interface OtherDefinition extends
     @Override
     public OtherWorkflowContext createContext(
       @NotNull Map<String, Object> initialPayload,
+      @Nonnull Instant startTime,
       @Nonnull WorkflowServices workflowServices) {
       var workflowId = associationProvider.associationKey(initialPayload).orElseThrow(() -> new IllegalStateException("Could not create workflow id"));
-      return new OtherWorkflowContext(workflowId, initialPayload, workflowServices);
+      return new OtherWorkflowContext(workflowId, initialPayload, startTime, workflowServices);
     }
   }
 
