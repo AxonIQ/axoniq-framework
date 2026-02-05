@@ -64,9 +64,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       // Register wait condition
       instance.registerWaitCondition(stepName, qualifiedName, predicate);
 
+      // Compute remaining time (accounts for replay: elapsed time since last step may exceed timeout)
+      Duration elapsed = Duration.between(lastStepTimestamp, Instant.now(workflowServices.getClock()));
+      Duration remaining = timeout.minus(elapsed);
+
       // Schedule delayed timeout task
-      if (timeout.isNegative() || timeout.isZero()) {
-        workflowState.addStep(StepExecution.timedOut(stepName, null, lastStepTimestamp));
+      if (remaining.isNegative() || remaining.isZero()) {
+        workflowState.addStep(StepExecution.timedOut(stepName, null, lastStepTimestamp.plus(timeout)));
         instance.removeWaitCondition(stepName);
       } else {
         CompletableFuture.runAsync(() ->
@@ -76,7 +80,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
               instance.removeWaitCondition(stepName);
             }
           }),
-          CompletableFuture.delayedExecutor(timeout.toMillis(), TimeUnit.MILLISECONDS)
+          CompletableFuture.delayedExecutor(remaining.toMillis(), TimeUnit.MILLISECONDS)
         );
       }
     }
