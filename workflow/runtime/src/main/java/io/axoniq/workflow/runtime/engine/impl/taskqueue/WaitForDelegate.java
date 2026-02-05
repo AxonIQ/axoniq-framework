@@ -64,7 +64,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       // Register wait condition
       instance.registerWaitCondition(stepName, qualifiedName, predicate);
 
-      // Compute remaining time (accounts for replay: elapsed time since last step may exceed timeout)
+      // Compute remaining time
       Duration elapsed = Duration.between(lastStepTimestamp, Instant.now(workflowServices.getClock()));
       Duration remaining = timeout.minus(elapsed);
 
