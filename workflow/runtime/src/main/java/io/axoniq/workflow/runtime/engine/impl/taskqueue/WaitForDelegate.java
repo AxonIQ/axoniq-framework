@@ -44,7 +44,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     @NotNull Duration timeout,
     @NotNull EventNameCustomizer eventNameCustomizer
   ) {
-    logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread().getName());
+    logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
     // Process pending tasks
     while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
