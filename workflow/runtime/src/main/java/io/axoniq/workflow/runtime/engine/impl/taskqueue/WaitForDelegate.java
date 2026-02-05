@@ -62,7 +62,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       workflowState.addStep(StepExecution.started(stepName, null, lastStepTimestamp));
 
       // Register wait condition
-      instance.registerWaitCondition(stepName, qualifiedName, predicate);
+      instance.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
 
       // Compute remaining time
       Duration elapsed = Duration.between(lastStepTimestamp, Instant.now(workflowServices.getClock()));

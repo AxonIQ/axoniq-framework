@@ -95,9 +95,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       }, workflowServices.getExecutor())
       .thenApply((c) -> {
         try {
-          // FIXME -> HACK
-          runNextStateChange(); // append event
-          runNextStateChange(); // apply change from event
+          // Process tasks until workflow reaches terminal status
+          while (!status.isTerminal()) {
+            runNextStateChange();
+          }
         } catch (Throwable t) {
 
         }
@@ -266,11 +267,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       .orElse(startTime);
   }
 
-  record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
+  record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
   }
 
-  void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate) {
-    waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate));
+  void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
+    waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate, eventNameCustomizer));
   }
 
   void removeWaitCondition(String stepName) {
@@ -285,6 +286,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         String stepName = entry.getKey();
         waitConditions.remove(stepName);
         Object payload = event.payload();
+        Map<String, Object> resultMap = conversionDelegate.typeToPayloadConverter().apply(payload);
+        // Publish completion event for replay durability
+        sendEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer()));
+        // Append direct task for immediate processing (use original typed payload)
         appendTask(i -> {
           if (i.getStep(stepName) != null && i.getStep(stepName).status() == StepStatus.STARTED) {
             i.addStep(StepExecution.completed(stepName, payload, workflowServices.getClock().instant()));
