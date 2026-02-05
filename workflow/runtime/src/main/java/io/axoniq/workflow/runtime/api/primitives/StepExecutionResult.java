@@ -11,6 +11,10 @@ public interface StepExecutionResult {
 
   String getStepName();
 
+  /**
+   * Check (non-blocking)
+   * @return
+   */
   boolean isCompleted();
 
   <T> Optional<T> payload();

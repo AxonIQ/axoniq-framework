@@ -54,15 +54,20 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       }
     }
 
-    var instance = (WorkflowInstance) workflowState;
-
     if (!workflowState.containsStep(stepName)) {
-      //Start time of wait will be last completed timestamp of any step or start time of workflow if no steps
-      Instant lastStepTimestamp = instance.getLastStepTimestamp();
+      // Start time of wait will be last completed timestamp of any step or start time of workflow if no steps
+      var lastStepTimestamp = workflowContext
+        .getStepHistory()
+        .stream()
+        .map(workflowState::getStep)
+        .map(StepExecution::timestamp)
+        .max(Instant::compareTo)
+        .orElse(workflowContext.getStartTime());
+
       workflowState.addStep(StepExecution.started(stepName, null, lastStepTimestamp));
 
       // Register wait condition
-      instance.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
+      workflowState.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
 
       // Compute remaining time
       Duration elapsed = Duration.between(lastStepTimestamp, Instant.now(workflowServices.getClock()));
@@ -71,22 +76,22 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       // Schedule delayed timeout task
       if (remaining.isNegative() || remaining.isZero()) {
         workflowState.addStep(StepExecution.timedOut(stepName, null, lastStepTimestamp.plus(timeout)));
-        instance.removeWaitCondition(stepName);
+        workflowState.removeWaitCondition(stepName);
       } else {
         CompletableFuture.runAsync(() ->
-          workflowState.appendTask(i -> {
-            if (i.getStep(stepName) != null && i.getStep(stepName).status() == StepStatus.STARTED) {
-              i.addStep(StepExecution.timedOut(stepName, null, Instant.now(workflowServices.getClock())));
-              instance.removeWaitCondition(stepName);
-            }
-          }),
+            workflowState.appendTask(i -> {
+              if (i.getStep(stepName) != null && i.getStep(stepName).status() == StepStatus.STARTED) {
+                i.addStep(StepExecution.timedOut(stepName, null, Instant.now(workflowServices.getClock())));
+                workflowState.removeWaitCondition(stepName);
+              }
+            }),
           CompletableFuture.delayedExecutor(remaining.toMillis(), TimeUnit.MILLISECONDS)
         );
       }
     }
 
     return new StateBasedStepExecutionResult(stepName, () -> {
-      workflowState.runNextStateChange();
+      workflowState.runNextStateChange(s -> true);
       return null;
     }, workflowState);
   }

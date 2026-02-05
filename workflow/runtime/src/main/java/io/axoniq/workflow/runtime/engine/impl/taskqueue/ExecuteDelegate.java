@@ -9,7 +9,7 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.StateBasedStepExecutionResult;
-import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
@@ -53,13 +53,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       }
     }
     if (workflowState.getStep(stepName) == null) {
-      // TODO: fishy / HACK
       workflowState.appendTask(i -> started(stepName, local, eventNameCustomizer));
-/*
-      runNextStateChange(); // append event
-      runNextStateChange(); // apply change from event
-*/
-      workflowState.addStep(StepExecution.started(stepName, local, workflowServices.getClock().instant()));
+      try {
+        workflowState.runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
+      } catch (InterruptedException e) {
+        return StepExecutionResults.failed(e);
+      }
     }
     if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
       var actualStartTime = workflowState.getStep(stepName).timestamp();
@@ -91,9 +90,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
               if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                 // FIXME - This is where we should publish using an append condition
                 timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
-                /* FIXME Condition 1?
+                // FIXME Condition 1?
+                /*
                 workflowState.appendTask(i -> {
-
+                  timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
                 });*/
               } else if (e instanceof InterruptedException) {
                 // FIXME - This is where we should publish using an append condition
@@ -110,7 +110,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     }
 
     return new StateBasedStepExecutionResult(stepName, () -> {
-      workflowState.runNextStateChange();
+      workflowState.runNextStateChange(s -> true); // FIXME -> can we do better and provide conditions direct from the result then?
       return null;
     }, this.workflowState);
   }

@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.workflow.runtime.engine.result.StepExecutionResults.all;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -68,11 +69,13 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
       }
 
       ctx.execute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
+
       /*
       var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
       var a2 = ctx.executeWithResult("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
       all(a1, a2).isSuccess();
-      */
+       */
+
 
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
       ctx.wait("waitASecond", Duration.ofSeconds(1));

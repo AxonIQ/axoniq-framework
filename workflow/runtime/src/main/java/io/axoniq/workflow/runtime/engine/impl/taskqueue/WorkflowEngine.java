@@ -72,9 +72,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
       checkAndCreateNewWorkflow(event, context);
       // route external events to workflows waiting for them
       for (var handle : executionHandles.values()) {
-        if (handle.workflowState() instanceof WorkflowInstance wi) {
-          wi.tryMatchEvent(event);
-        }
+        handle.workflowState.onEvent(event, context);
       }
     }
 

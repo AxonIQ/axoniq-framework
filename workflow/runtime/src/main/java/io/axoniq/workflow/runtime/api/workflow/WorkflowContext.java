@@ -4,6 +4,7 @@ import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -23,4 +24,6 @@ public interface WorkflowContext extends
   WorkflowStatus getStatus();
 
   List<String> getStepHistory();
+
+  Instant getStartTime();
 }

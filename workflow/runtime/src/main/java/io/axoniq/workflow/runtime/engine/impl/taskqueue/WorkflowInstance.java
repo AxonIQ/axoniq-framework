@@ -95,12 +95,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       }, workflowServices.getExecutor())
       .thenApply((c) -> {
         try {
+          // FIXME -> tell the coordinator to clean up and wait for final .
           // Process tasks until workflow reaches terminal status
-          while (!status.isTerminal()) {
-            runNextStateChange();
-          }
+          runNextStateChange(s -> s.getStatus().isTerminal());
         } catch (Throwable t) {
-
+          // FIXME?
         }
         return c;
       })
@@ -139,8 +138,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void runNextStateChange() throws InterruptedException {
-    taskQueue.take().accept(this);
+  public void runNextStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
+    do {
+      taskQueue.take().accept(this);
+    } while (!predicate.test(this));
   }
 
   @Override
@@ -165,10 +166,23 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   @Override
   public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
-    if (!taskQueue.offer(i -> i.applyStateChange(eventMessage))) {
-      // whoops, we're overloading this workflow with events. STOP!!!
-      throw new RuntimeException("Too many events for this workflow instance");
+    for (var entry : waitConditions.entrySet()) {
+      var condition = entry.getValue();
+      if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
+        String stepName = entry.getKey();
+        waitConditions.remove(stepName);
+        Object payload = eventMessage.payload();
+        Map<String, Object> resultMap = conversionDelegate.typeToPayloadConverter().apply(payload);
+        appendTask(i -> sendEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer())));
+        try {
+          runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.COMPLETED);
+        } catch (InterruptedException e) {
+          // FIXME? this code is executed on
+        }
+        return;
+      }
     }
+    appendTask(i -> i.applyStateChange(eventMessage));
   }
 
   @Override
@@ -189,6 +203,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   @Override
   public List<String> getStepHistory() {
     return new ArrayList<>(steps.keySet());
+  }
+
+  @Override
+  public Instant getStartTime() {
+    return startTime;
   }
 
   // delegation
@@ -218,8 +237,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public boolean appendTask(Consumer<WorkflowState> task) {
-    return this.taskQueue.offer(task);
+  public void appendTask(Consumer<WorkflowState> task) {
+    if (!this.taskQueue.offer(task)) {
+      // whoops, we're overloading this workflow with events. STOP!!!
+      throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
+    }
   }
 
   @Override
@@ -260,44 +282,18 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     workflowServices.getEventSink().publish(null, eventMessage);
   }
 
-  Instant getLastStepTimestamp() {
-    return steps.values().stream()
-      .map(StepExecution::timestamp)
-      .max(Instant::compareTo)
-      .orElse(startTime);
+  record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate,
+                            EventNameCustomizer eventNameCustomizer) {
   }
 
-  record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
-  }
-
-  void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
+  @Override
+  public void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
     waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate, eventNameCustomizer));
   }
 
-  void removeWaitCondition(String stepName) {
+  @Override
+  public void removeWaitCondition(String stepName) {
     waitConditions.remove(stepName);
-  }
-
-  void tryMatchEvent(EventMessage event) {
-    for (var entry : waitConditions.entrySet()) {
-      var condition = entry.getValue();
-      if (event.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(event)) {
-        //EVENT MATCHED
-        String stepName = entry.getKey();
-        waitConditions.remove(stepName);
-        Object payload = event.payload();
-        Map<String, Object> resultMap = conversionDelegate.typeToPayloadConverter().apply(payload);
-        // Publish completion event for replay durability
-        sendEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer()));
-        // Append direct task for immediate processing (use original typed payload)
-        appendTask(i -> {
-          if (i.getStep(stepName) != null && i.getStep(stepName).status() == StepStatus.STARTED) {
-            i.addStep(StepExecution.completed(stepName, payload, workflowServices.getClock().instant()));
-          }
-        });
-        return;
-      }
-    }
   }
 
 }

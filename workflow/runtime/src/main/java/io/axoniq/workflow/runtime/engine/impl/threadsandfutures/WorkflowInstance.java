@@ -38,6 +38,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private Map<String, Object> payload;
   private WorkflowStatus status = WorkflowStatus.NONE;
+  private final Instant startTime;
 
   // primitive implementations
   private final transient ExecutePrimitive executePrimitive;
@@ -58,6 +59,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     this.workflowServices = workflowServices;
     this.executePrimitive = new ExecuteDelegate(this, this, workflowServices);
     this.waitForPrimitive = new WaitForDelegate(this, this, workflowServices);
+    this.startTime = startTime;
   }
 
   @Override
@@ -125,34 +127,13 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
-    Object eventPayload = eventMessage.payloadAs(Object.class);
-    var metadata = eventMessage.metadata();
-    // Apply step-level state changes
-    MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
-      var stepName = getStepName(metadata);
-      switch (stepStatus) {
-        case STARTED:
-          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp()));
-          break;
-        case FAILED:
-          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp()));
-          break;
-        case TIMED_OUT:
-          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp()));
-          break;
-        case COMPLETED:
-          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp()));
-          break;
-        default:
-          break;
-      }
-    });
+  public Instant getStartTime() {
+    return startTime;
+  }
 
-    // Apply workflow-level state changes
-    MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
-      this.status = status
-    );
+  @Override
+  public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
+    applyStateChange(eventMessage);
   }
 
   @Override
@@ -223,17 +204,42 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
     ).join();
   }
 
-  /*
-   Unused in this implementation
-   */
-
   @Override
   public void applyStateChange(EventMessage eventMessage) {
-    throw new UnsupportedOperationException("Not implemented");
+    Object eventPayload = eventMessage.payloadAs(Object.class);
+    var metadata = eventMessage.metadata();
+    // Apply step-level state changes
+    MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
+      var stepName = getStepName(metadata);
+      switch (stepStatus) {
+        case STARTED:
+          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp()));
+          break;
+        case FAILED:
+          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp()));
+          break;
+        case TIMED_OUT:
+          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp()));
+          break;
+        case COMPLETED:
+          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp()));
+          break;
+        default:
+          break;
+      }
+    });
+
+    // Apply workflow-level state changes
+    MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
+      this.status = status
+    );
   }
 
+  /*
+ Unused in this implementation
+ */
   @Override
-  public void runNextStateChange() throws InterruptedException {
+  public void runNextStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
     throw new UnsupportedOperationException("Not implemented");
   }
 
@@ -243,7 +249,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public boolean appendTask(Consumer<WorkflowState> task) {
+  public void appendTask(Consumer<WorkflowState> task) {
     throw new UnsupportedOperationException("Not implemented");
   }
 
@@ -259,6 +265,16 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
 
   @Override
   public boolean hasTasks() {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+  @Override
+  public void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+  @Override
+  public void removeWaitCondition(String stepName) {
     throw new UnsupportedOperationException("Not implemented");
   }
 }
