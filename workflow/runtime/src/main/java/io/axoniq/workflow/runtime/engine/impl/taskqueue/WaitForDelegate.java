@@ -7,7 +7,7 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.StateBasedStepExecutionResult;
-import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
@@ -46,17 +46,23 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   ) {
     logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
-    // Process pending tasks
-    while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
-      var poll = workflowState.getNextTask();
-      if (poll != null) {
-        poll.accept(this.workflowState);
+    acceptAllPendingTasksForStep(stepName);
+
+    if (!workflowState.containsStep(stepName)) {
+      workflowState.appendTask(i ->
+        started(stepName, Map.of("startTime", workflowServices.getClock().instant()), eventNameCustomizer)
+      );
+      try {
+        workflowState.runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
+      } catch (InterruptedException e) {
+        return StepExecutionResults.failed(e);
       }
     }
 
-    if (!workflowState.containsStep(stepName)) {
+    if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
       // Start time of wait will be last completed timestamp of any step or start time of workflow if no steps
-      var lastStepTimestamp = workflowContext
+/*
+      var actualStartTime = workflowContext // TODO: discuss if we use it if no started event is there
         .getStepHistory()
         .stream()
         .map(workflowState::getStep)
@@ -64,29 +70,38 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         .max(Instant::compareTo)
         .orElse(workflowContext.getStartTime());
 
-      workflowState.addStep(StepExecution.started(stepName, null, lastStepTimestamp));
+ */
+      var actualStartTime = workflowState.getStep(stepName).timestamp();
+      var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), actualStartTime.plus(timeout));
 
-      // Register wait condition
-      workflowState.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
+      if (remainingTimeout.isNegative()) {
+        workflowState.appendTask(i -> {
+          // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
+          // FIXME - This is where we should publish using an append condition
+          timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
+        });
 
-      // Compute remaining time
-      Duration elapsed = Duration.between(lastStepTimestamp, Instant.now(workflowServices.getClock()));
-      Duration remaining = timeout.minus(elapsed);
-
-      // Schedule delayed timeout task
-      if (remaining.isNegative() || remaining.isZero()) {
-        workflowState.addStep(StepExecution.timedOut(stepName, null, lastStepTimestamp.plus(timeout)));
-        workflowState.removeWaitCondition(stepName);
       } else {
+        // Register wait condition
+        workflowState.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
         CompletableFuture.runAsync(() ->
             workflowState.appendTask(i -> {
-              if (i.getStep(stepName) != null && i.getStep(stepName).status() == StepStatus.STARTED) {
-                i.addStep(StepExecution.timedOut(stepName, null, Instant.now(workflowServices.getClock())));
                 workflowState.removeWaitCondition(stepName);
+                timedOut(stepName, eventNameCustomizer);
               }
-            }),
-          CompletableFuture.delayedExecutor(remaining.toMillis(), TimeUnit.MILLISECONDS)
-        );
+            )
+          , CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
+        ).exceptionally(e -> {
+          if (e instanceof InterruptedException) {
+            workflowState.appendTask(i -> {
+              // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
+              // FIXME - This is where we should publish using an append condition
+              workflowState.removeWaitCondition(stepName);
+              cancelled(stepName, eventNameCustomizer);
+            });
+          }
+          return null;
+        });
       }
     }
 

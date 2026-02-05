@@ -45,21 +45,21 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @NotNull Duration timeout,
     @NotNull EventNameCustomizer eventNameCustomizer
   ) {
-    logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread().getName());
-    while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
-      var poll = workflowState.getNextTask();
-      if (poll != null) {
-        poll.accept(this.workflowState);
-      }
-    }
-    if (workflowState.getStep(stepName) == null) {
-      workflowState.appendTask(i -> started(stepName, local, eventNameCustomizer));
+    logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
+
+    acceptAllPendingTasksForStep(stepName);
+
+    if (!workflowState.containsStep(stepName)) {
+      workflowState.appendTask(i ->
+        started(stepName, local, eventNameCustomizer)
+      );
       try {
         workflowState.runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
         return StepExecutionResults.failed(e);
       }
     }
+
     if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
       var actualStartTime = workflowState.getStep(stepName).timestamp();
       var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), actualStartTime.plus(timeout));

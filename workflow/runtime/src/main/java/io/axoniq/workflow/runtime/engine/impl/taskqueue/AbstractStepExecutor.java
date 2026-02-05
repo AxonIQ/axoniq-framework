@@ -4,10 +4,15 @@ import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -15,6 +20,7 @@ import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 
 public abstract class AbstractStepExecutor {
 
+  private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
   protected final WorkflowContext workflowContext;
   protected final WorkflowState workflowState;
   protected final WorkflowServices workflowServices;
@@ -29,12 +35,21 @@ public abstract class AbstractStepExecutor {
     this.workflowServices = workflowServices;
   }
 
+  protected void acceptAllPendingTasksForStep(String stepName) {
+    while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
+      var poll = workflowState.getNextTask();
+      if (poll != null) {
+        poll.accept(this.workflowState);
+      }
+    }
+  }
+
   protected CompletableFuture<Void> started(String stepName, Map<String, Object> payload, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(startedStep(workflowContext, stepName, payload, eventNameCustomizer));
+    return sendEvent(startedStep(workflowContext, stepName, sanitize(payload), eventNameCustomizer));
   }
 
   protected CompletableFuture<Void> completed(String stepName, Map<String, Object> payload, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(completedStep(workflowContext, stepName, payload, eventNameCustomizer));
+    return sendEvent(completedStep(workflowContext, stepName, sanitize(payload), eventNameCustomizer));
   }
 
   protected CompletableFuture<Void> cancelled(String stepName, EventNameCustomizer eventNameCustomizer) {
@@ -55,7 +70,14 @@ public abstract class AbstractStepExecutor {
 
   private CompletableFuture<Void> sendEvent(EventMessage eventMessage) {
     // FIXME -> processing context? uof?
-    return workflowServices.getEventSink().publish( null, eventMessage);
+    logger.trace("Appending event {}", eventMessage.type());
+    return workflowServices.getEventSink().publish(null, eventMessage);
   }
 
+  private Map<String, Object> sanitize(Map<String, Object> payload) {
+    if (payload == null) {
+      return new LinkedHashMap<>();
+    }
+    return payload;
+  }
 }

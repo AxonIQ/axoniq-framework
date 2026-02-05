@@ -39,6 +39,20 @@ public class EventMessageUtils {
     );
   }
 
+  public static EventMessage timeoutWorkflow(WorkflowContext context, Instant time, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.TIMED_OUT);
+    return new GenericEventMessage(MessageType.fromString(name), time,
+      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.TIMED_OUT)
+    );
+  }
+
+  public static EventMessage cancelledWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.CANCELLED);
+    return new GenericEventMessage(MessageType.fromString(name), null,
+      MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.CANCELLED)
+    );
+  }
+
   public static EventMessage startedStep(WorkflowContext context, String stepName, Map<String, Object> local, EventNameCustomizer customizer) {
     var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
     return new GenericEventMessage(MessageType.fromString(name), local,

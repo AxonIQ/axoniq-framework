@@ -12,7 +12,6 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
-import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
@@ -29,10 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -78,19 +74,25 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     return CompletableFuture.supplyAsync(() -> {
         @SuppressWarnings("unchecked")
         var ctx = (T) workflowContext;
-        // TODO: check?
-        appendTask((i) -> started(workflowContext, configuration));
+        // TODO: discuss
+        appendTask((i) -> sendEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer())));
 
-        logger.trace("Executing workflow with init payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread().getName());
+        logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
         try {
           configuration.workflowDefinition().execute(ctx);
-          logger.trace("Workflow executed. Result context {}.", workflowContext.getPayload());
-        } catch (Exception w) {
-          // TODO: check?
-          appendTask((i) -> failed(workflowContext, configuration, w));
+          logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
+          appendTask((i) -> completed(workflowContext, configuration));
+        } catch (Exception we) {
+          // TODO: discuss
+          if (we instanceof TimeoutException) {
+            appendTask(i -> sendEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer())));
+          } else if (we instanceof InterruptedException) {
+            appendTask(i -> sendEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer())));
+          }
+          // TODO: discuss
+          appendTask(i -> sendEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer())));
         }
-        // TODO: check?
-        appendTask((i) -> completed(workflowContext, configuration));
+
         return ctx;
       }, workflowServices.getExecutor())
       .thenApply((c) -> {
@@ -109,6 +111,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   @Override
   public void applyStateChange(EventMessage eventMessage) {
+    logger.trace("Applying event {}", eventMessage.type());
     Object eventPayload = eventMessage.payloadAs(Object.class);
     var metadata = eventMessage.metadata();
     // Apply step-level state changes
@@ -166,6 +169,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   @Override
   public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
+    logger.info("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
     for (var entry : waitConditions.entrySet()) {
       var condition = entry.getValue();
       if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
@@ -174,12 +178,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         Object payload = eventMessage.payload();
         Map<String, Object> resultMap = conversionDelegate.typeToPayloadConverter().apply(payload);
         appendTask(i -> sendEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer())));
-        try {
-          runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.COMPLETED);
-        } catch (InterruptedException e) {
-          // FIXME? this code is executed on
-        }
-        return;
       }
     }
     appendTask(i -> i.applyStateChange(eventMessage));
@@ -266,17 +264,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     executable = true;
   }
 
-  void started(WorkflowContext context, WorkflowConfiguration<?> configuration) {
-    sendEvent(startedWorkflow(context, configuration.eventNameCustomizer()));
-  }
-
   void completed(WorkflowContext context, WorkflowConfiguration<?> configuration) {
     sendEvent(completedWorkflow(context, configuration.eventNameCustomizer()));
   }
 
-  void failed(WorkflowContext context, WorkflowConfiguration<?> configuration, Exception e) {
-    sendEvent(failedWorkflow(context, e, configuration.eventNameCustomizer()));
-  }
 
   private void sendEvent(EventMessage eventMessage) {
     workflowServices.getEventSink().publish(null, eventMessage);

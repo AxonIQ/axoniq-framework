@@ -59,14 +59,10 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   @NotNull
   @Override
   public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    logger.trace("Received event {}", event.type());
     if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
-      logger.info("Updating workflow with '{}'", event.type().qualifiedName());
-      // state update
       var workflowId = MetadataUtils.getWorkflowId(event.metadata());
-      // append task
-      executionHandles.get(workflowId).workflowState.appendTask(
-        (w) -> w.applyStateChange(event)
-      );
+      executionHandles.get(workflowId).workflowState.onEvent(event, context);
     } else {
       // handle starting of new processes
       checkAndCreateNewWorkflow(event, context);
@@ -83,7 +79,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
    * This is a place to be called from Event Processor
    */
   public void runWorkflows() {
-    logger.debug("Starting {} workflows.", executionHandles.size());
+    logger.debug("Executing {} workflows.", executionHandles.size());
     for (var handle : executionHandles.values()) {
       try {
         handle.workflowState.execute(handle.workflowConfiguration, handle.workflowContext);
@@ -113,19 +109,20 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     );
   }
 
-  @Override
-  public EventSubscriptionManager getEventSubscriptionManager() {
-    throw new UnsupportedOperationException("Not implemented yet");
+  public Map<String, ExecutionHandle> workflowInstances() {
+    return this.executionHandles;
   }
 
-  @Override
-  public WorkflowEventAppender getWorkflowEventAppender() {
-    throw new UnsupportedOperationException("Not implemented yet");
-  }
+  public record ExecutionHandle(
+    WorkflowConfiguration<?> workflowConfiguration,
+    WorkflowContext workflowContext,
+    WorkflowState workflowState)
+  {
 
-  @Override
-  public TaskManager getTaskManager() {
-    throw new UnsupportedOperationException("Not implemented yet");
+    public WorkflowStatus getStatus() {
+      return workflowContext.getStatus();
+    }
+
   }
 
   @Override
@@ -152,20 +149,24 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
   }
 
-  public Map<String, ExecutionHandle> workflowInstances() {
-    return this.executionHandles;
+  /*
+   Not used in this implementation.
+   */
+
+  @Override
+  public EventSubscriptionManager getEventSubscriptionManager() {
+    throw new UnsupportedOperationException("Not implemented yet");
   }
 
-  public record ExecutionHandle(
-    WorkflowConfiguration<?> workflowConfiguration,
-    WorkflowContext workflowContext,
-    WorkflowState workflowState)
-  {
-
-    public WorkflowStatus getStatus() {
-      return workflowContext.getStatus();
-    }
-
+  @Override
+  public WorkflowEventAppender getWorkflowEventAppender() {
+    throw new UnsupportedOperationException("Not implemented yet");
   }
+
+  @Override
+  public TaskManager getTaskManager() {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
 
 }

@@ -1,6 +1,5 @@
 package io.axoniq.workflow.dsl.simple2;
 
-import io.axoniq.workflow.dsl.simple.TestWaitForEvent;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.impl.taskqueue.WorkflowInstance;
 import jakarta.annotation.Nonnull;
@@ -9,7 +8,7 @@ import java.time.Instant;
 import java.util.Map;
 
 public class OtherWorkflowContext extends WorkflowInstance
-  implements OtherExecute, TestWaitForEvent // DSL customizations
+  implements OtherExecute, OtherWaitForEvent // DSL customizations
 {
   public OtherWorkflowContext(
     @Nonnull String workflowId,
