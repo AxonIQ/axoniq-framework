@@ -3,6 +3,7 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;

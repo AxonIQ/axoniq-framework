@@ -87,6 +87,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         CompletableFuture.runAsync(() ->
             workflowState.appendTask(i -> {
                 workflowState.removeWaitCondition(stepName);
+                // FIXME -> check if we really timed out or reached another terminal state
                 timedOut(stepName, eventNameCustomizer);
               }
             )

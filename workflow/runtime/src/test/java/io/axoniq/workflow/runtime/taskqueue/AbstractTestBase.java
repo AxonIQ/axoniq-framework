@@ -4,8 +4,8 @@ import io.axoniq.workflow.runtime.DelayedPublisher;
 import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.impl.SingleEventHandlerComponent;
 import io.axoniq.workflow.runtime.engine.impl.taskqueue.WorkflowEngine;
-import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowRepository;
-import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
+import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -25,7 +25,7 @@ public class AbstractTestBase {
   protected AxonConfiguration configuration;
   protected WorkflowEngine workflowEngine;
   protected DelayedPublisher delayedPublisher;
-  protected WorkflowRepository<?> workflowRegistry;
+  protected WorkflowDefinitionRegistry<?> workflowRegistry;
 
   @BeforeEach
   void setUp() {
@@ -37,10 +37,10 @@ public class AbstractTestBase {
         new WorkflowEngine(
           cfg.getComponent(UnitOfWorkFactory.class),
           cfg.getComponent(EventSink.class),
-          cfg.getComponent(WorkflowRepository.class)
+          cfg.getComponent(WorkflowDefinitionRegistry.class)
         )
-      ).registerComponent(WorkflowRepository.class, cfg ->
-        new DefaultWorkflowRepository()
+      ).registerComponent(WorkflowDefinitionRegistry.class, cfg ->
+        new DefaultWorkflowDefinitionRegistry()
       ).registerComponent(DelayedPublisher.class, cfg ->
         new DelayedPublisher(
           cfg.getComponent(EventSink.class),
@@ -70,7 +70,7 @@ public class AbstractTestBase {
     configuration = configurer.start();
     workflowEngine = configuration.getComponent(WorkflowEngine.class);
     delayedPublisher = configuration.getComponent(DelayedPublisher.class);
-    workflowRegistry = configuration.getComponent(WorkflowRepository.class);
+    workflowRegistry = configuration.getComponent(WorkflowDefinitionRegistry.class);
 
   }
 

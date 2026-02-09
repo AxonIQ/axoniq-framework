@@ -8,8 +8,9 @@ import org.axonframework.messaging.core.QualifiedName;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
-public interface WorkflowRepository<W extends WorkflowRepository<W>> extends DescribableComponent {
+public interface WorkflowDefinitionRegistry<W extends WorkflowDefinitionRegistry<W>> extends DescribableComponent {
 
   @Nonnull
   default W register(

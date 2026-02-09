@@ -14,13 +14,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class DefaultWorkflowRepository implements WorkflowRepository<DefaultWorkflowRepository> {
+public class DefaultWorkflowDefinitionRegistry implements WorkflowDefinitionRegistry<DefaultWorkflowDefinitionRegistry> {
 
   private final ConcurrentHashMap<QualifiedName, List<WorkflowConfiguration<?>>> workflowsConfigurations = new ConcurrentHashMap<>();
 
   @Override
   @Nonnull
-  public DefaultWorkflowRepository register(@NotNull Set<QualifiedName> names, @NotNull WorkflowConfiguration<?> workflowConfiguration) {
+  public DefaultWorkflowDefinitionRegistry register(@NotNull Set<QualifiedName> names, @NotNull WorkflowConfiguration<?> workflowConfiguration) {
     Objects.requireNonNull(workflowConfiguration, "The given workflow configuration cannot be null.");
     names.forEach(name -> workflowsConfigurations.compute(name, (q, workflowConfigurations) -> {
       if (workflowConfigurations == null) {

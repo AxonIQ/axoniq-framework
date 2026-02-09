@@ -61,7 +61,7 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
       } catch (Exception e) {
         return false;
       }
-    } while (true /* workflow is not suspended */);
+    } while (true /* FIXME workflow is not suspended */);
   }
 
   @Override
@@ -78,7 +78,7 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
       } catch (Exception e) {
         return false;
       }
-    } while (true /* workflow is not suspended */);
+    } while (true /* FIXME workflow is not suspended */);
   }
 
   @Override
@@ -95,7 +95,7 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
       } catch (Exception e) {
         return false;
       }
-    } while (true /* workflow is not suspended */);
+    } while (true /* FIXME workflow is not suspended */);
   }
 
   @Override
@@ -112,6 +112,6 @@ public class StateBasedStepExecutionResult implements StepExecutionResult {
       } catch (Exception e) {
         return false;
       }
-    } while (true /* workflow is not suspended */);
+    } while (true /* FIXME workflow is not suspended */);
   }
 }

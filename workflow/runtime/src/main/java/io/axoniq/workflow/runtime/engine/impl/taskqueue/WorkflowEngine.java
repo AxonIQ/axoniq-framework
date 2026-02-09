@@ -9,7 +9,7 @@ import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.EventSubscriptionManager;
 import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.TaskManager;
 import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.WorkflowEventAppender;
-import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
+import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.Message;
@@ -33,7 +33,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
   private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-  private final WorkflowRepository<?> workflowRepository;
+  private final WorkflowDefinitionRegistry<?> workflowDefinitionRegistry;
   private final EventSink eventSink;
   private final Clock clock;
   private final Executor executor;
@@ -41,16 +41,20 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
   private final ConversionDelegate conversionDelegate = new ConversionDelegate();
 
+  // FIXME -> offload it from here to some kind of a "store"
+  // key => workflowId
+  // value => configuration/context/state
+  // currently it holds all instances, running and historic
   private final Map<String, ExecutionHandle> executionHandles = new ConcurrentHashMap<>();
 
 
   public WorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
     @Nonnull EventSink eventSink,
-    @Nonnull WorkflowRepository<?> workflowRepository
+    @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry
   ) {
     this.eventSink = eventSink;
-    this.workflowRepository = workflowRepository;
+    this.workflowDefinitionRegistry = workflowDefinitionRegistry;
     this.clock = Clock.systemDefaultZone();
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.unitOfWorkFactory = unitOfWorkFactory;
@@ -95,11 +99,12 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
 
   private void checkAndCreateNewWorkflow(EventMessage event, ProcessingContext context) {
-    var definitions = workflowRepository.getWorkflowsConfigurations(event.type().qualifiedName());
+    var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(event.type().qualifiedName());
     definitions.forEach(
       workflowConfiguration -> {
         var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());
 
+        // FIXME -> move the whole event in, and pass processing context inside
         var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, event.timestamp(), this);
         var workflowId = workflowContext.getWorkflowId();
 

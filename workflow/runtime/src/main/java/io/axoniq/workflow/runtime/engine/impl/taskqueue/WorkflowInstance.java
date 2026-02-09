@@ -14,6 +14,8 @@ import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -46,8 +48,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   private final WaitForDelegate waitForDelegate;
   private final ConversionDelegate conversionDelegate;
 
+  private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
   // State variables
-  private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private final Map<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
   private WorkflowStatus status = WorkflowStatus.NONE;
@@ -74,23 +76,23 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     return CompletableFuture.supplyAsync(() -> {
         @SuppressWarnings("unchecked")
         var ctx = (T) workflowContext;
-        // TODO: discuss when when sending is done via task
-        appendTask((i) -> sendEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer())));
+        // FIXME -> if terminal -> finish execution
+        // FIXME -> if none -> start
+        sendEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer())).join(); // FIXME join
 
         logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
         try {
           configuration.workflowDefinition().execute(ctx);
           logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
-          appendTask((i) -> completed(workflowContext, configuration));
+          sendEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer())).get(5, TimeUnit.SECONDS); // FIXME constant
         } catch (Exception we) {
-          // TODO: discuss when when sending is done via task
           if (we instanceof TimeoutException) {
-            appendTask(i -> sendEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer())));
+            sendEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer())).join(); // FIXME join
           } else if (we instanceof InterruptedException) {
-            appendTask(i -> sendEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer())));
+            sendEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer())).join(); // FIXME join;
           }
-          // TODO: discuss when when sending is done via task
-          appendTask(i -> sendEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer())));
+          // FIXME -> check for `WorkflowFailedException`
+          sendEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer())).join(); // FIXME join;
         }
 
         return ctx;
@@ -172,12 +174,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
     logger.info("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
     for (var entry : waitConditions.entrySet()) {
+      // synchronized ?
       var condition = entry.getValue();
       if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
         String stepName = entry.getKey();
         waitConditions.remove(stepName);
-        Object payload = eventMessage.payload();
-        Map<String, Object> resultMap = conversionDelegate.typeToPayloadConverter().apply(payload);
+        Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {}, processingContext.component(Converter.class));
         appendTask(i -> sendEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer())));
       }
     }
@@ -265,13 +267,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     executable = true;
   }
 
-  void completed(WorkflowContext context, WorkflowConfiguration<?> configuration) {
-    sendEvent(completedWorkflow(context, configuration.eventNameCustomizer()));
-  }
 
-
-  private void sendEvent(EventMessage eventMessage) {
-    workflowServices.getEventSink().publish(null, eventMessage);
+  private CompletableFuture<Void> sendEvent(EventMessage eventMessage) {
+    // TODO: make sure the consistency marker is used
+    return workflowServices.getEventSink().publish(null, eventMessage);
   }
 
   record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate,

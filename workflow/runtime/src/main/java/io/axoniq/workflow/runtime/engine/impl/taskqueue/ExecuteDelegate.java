@@ -60,6 +60,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       }
     }
 
+    // FIXME -> consider to use QOS (at least once/at most once)
     if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
       var actualStartTime = workflowState.getStep(stepName).timestamp();
       var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), actualStartTime.plus(timeout));
@@ -68,7 +69,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         () -> {
           var payload = parameterMapping.apply(workflowContext.getPayload(), local);
           return action.apply(payload);
-        }, workflowServices.getExecutor()
+        }, workflowServices.getExecutor() // FIXME -> define a new thread pool for execution customer code
       );
       if (remainingTimeout.isNegative()) {
         workflowState.appendTask(i -> {

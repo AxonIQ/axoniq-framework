@@ -7,7 +7,7 @@ import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
-import io.axoniq.workflow.runtime.engine.registry.WorkflowRepository;
+import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.Message;
@@ -41,7 +41,7 @@ public class MultiThreadedWorkflowEngine implements EventHandler, WorkflowServic
   private final EventSink eventSink;
 
   // Stateful registry
-  private final WorkflowRepository<?> workflowRepository;
+  private final WorkflowDefinitionRegistry<?> workflowDefinitionRegistry;
 
   // State of the workflow engine
   private final Map<String, ExecutionHandle> workflowInstances = new ConcurrentHashMap<>();
@@ -57,9 +57,9 @@ public class MultiThreadedWorkflowEngine implements EventHandler, WorkflowServic
   public MultiThreadedWorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
     @Nonnull EventSink eventSink,
-    @Nonnull WorkflowRepository<?> workflowRepository
+    @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry
   ) {
-    this.workflowRepository = workflowRepository;
+    this.workflowDefinitionRegistry = workflowDefinitionRegistry;
     this.unitOfWorkFactory = unitOfWorkFactory;
     this.eventSink = eventSink;
     this.workflowEventAppender = new WorkflowEventAppender(this.eventSink);
@@ -174,7 +174,7 @@ public class MultiThreadedWorkflowEngine implements EventHandler, WorkflowServic
 
 
   private void checkAndCreateNewWorkflow(EventMessage event, ProcessingContext context) {
-    var definitions = workflowRepository.getWorkflowsConfigurations(event.type().qualifiedName());
+    var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(event.type().qualifiedName());
     definitions.forEach(
       workflowConfiguration -> {
         var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());

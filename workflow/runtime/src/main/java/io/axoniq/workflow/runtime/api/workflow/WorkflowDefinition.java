@@ -4,6 +4,7 @@ import jakarta.annotation.Nonnull;
 
 /**
  * Definition of the workflow.
+ *
  * @param <T>
  */
 @FunctionalInterface
