@@ -20,7 +20,7 @@ public interface WorkflowState {
 
   void applyStateChange(EventMessage eventMessage);
 
-  void runNextStateChange(Predicate<WorkflowState> condition) throws InterruptedException;
+  void awaitStateChange(Predicate<WorkflowState> condition) throws InterruptedException;
 
   StepExecution getStep(String stepName);
 

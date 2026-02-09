@@ -69,7 +69,7 @@ public abstract class AbstractStepExecutor {
   }
 
   private CompletableFuture<Void> sendEvent(EventMessage eventMessage) {
-    // FIXME -> processing context? uof?
+    // FIXME -> processing context? uof factory?
     logger.trace("Appending event {}", eventMessage.type());
     return workflowServices.getEventSink().publish(null, eventMessage);
   }

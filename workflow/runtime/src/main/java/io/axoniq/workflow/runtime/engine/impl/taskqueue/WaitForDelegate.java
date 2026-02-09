@@ -53,7 +53,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         started(stepName, Map.of("startTime", workflowServices.getClock().instant()), eventNameCustomizer)
       );
       try {
-        workflowState.runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
+        workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
         return StepExecutionResults.failed(e);
       }
@@ -106,7 +106,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     return new StateBasedStepExecutionResult(stepName, () -> {
-      workflowState.runNextStateChange(s -> true);
+      workflowState.awaitStateChange(s -> true);
       return null;
     }, workflowState);
   }

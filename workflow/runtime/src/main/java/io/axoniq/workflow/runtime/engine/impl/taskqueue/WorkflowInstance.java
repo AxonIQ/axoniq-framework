@@ -69,12 +69,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   @Override
   public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
-    // FIXME
+    // TODO: discuss when we switch to the executable
     switchToExecutable();
     return CompletableFuture.supplyAsync(() -> {
         @SuppressWarnings("unchecked")
         var ctx = (T) workflowContext;
-        // TODO: discuss
+        // TODO: discuss when when sending is done via task
         appendTask((i) -> sendEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer())));
 
         logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
@@ -83,13 +83,13 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
           logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
           appendTask((i) -> completed(workflowContext, configuration));
         } catch (Exception we) {
-          // TODO: discuss
+          // TODO: discuss when when sending is done via task
           if (we instanceof TimeoutException) {
             appendTask(i -> sendEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer())));
           } else if (we instanceof InterruptedException) {
             appendTask(i -> sendEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer())));
           }
-          // TODO: discuss
+          // TODO: discuss when when sending is done via task
           appendTask(i -> sendEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer())));
         }
 
@@ -97,11 +97,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       }, workflowServices.getExecutor())
       .thenApply((c) -> {
         try {
-          // FIXME -> tell the coordinator to clean up and wait for final .
+          // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
           // Process tasks until workflow reaches terminal status
-          runNextStateChange(s -> s.getStatus().isTerminal());
+          awaitStateChange(s -> s.getStatus().isTerminal());
         } catch (Throwable t) {
-          // FIXME?
+          // FIXME? discuss if we can react to this
         }
         return c;
       })
@@ -141,16 +141,17 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void runNextStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
+  public void applyPayloadModification(PayloadProcessor payloadModification) {
+    this.payload = Objects.requireNonNull(payloadModification.apply(payload), "Payload must not be null");
+  }
+
+  @Override
+  public void awaitStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
     do {
       taskQueue.take().accept(this);
     } while (!predicate.test(this));
   }
 
-  @Override
-  public void applyPayloadModification(PayloadProcessor payloadModification) {
-    this.payload = Objects.requireNonNull(payloadModification.apply(payload), "Payload must not be null");
-  }
 
   @Override
   public StepExecution getStep(String stepName) {

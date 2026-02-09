@@ -54,7 +54,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         started(stepName, local, eventNameCustomizer)
       );
       try {
-        workflowState.runNextStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
+        workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
         return StepExecutionResults.failed(e);
       }
@@ -110,7 +110,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     }
 
     return new StateBasedStepExecutionResult(stepName, () -> {
-      workflowState.runNextStateChange(s -> true); // FIXME -> can we do better and provide conditions direct from the result then?
+      workflowState.awaitStateChange(s -> true); // FIXME -> can we do better and provide conditions direct from the result then?
       return null;
     }, this.workflowState);
   }

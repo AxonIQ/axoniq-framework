@@ -239,7 +239,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
  Unused in this implementation
  */
   @Override
-  public void runNextStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
+  public void awaitStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
     throw new UnsupportedOperationException("Not implemented");
   }
 

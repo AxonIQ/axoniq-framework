@@ -62,12 +62,16 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     logger.trace("Received event {}", event.type());
     if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
       var workflowId = MetadataUtils.getWorkflowId(event.metadata());
+      // TODO: discussion regarding hibernating workflows ->
+      // TODO: is it safe to put an event in the queue?
       executionHandles.get(workflowId).workflowState.onEvent(event, context);
     } else {
       // handle starting of new processes
       checkAndCreateNewWorkflow(event, context);
       // route external events to workflows waiting for them
       for (var handle : executionHandles.values()) {
+        // TODO: discussion regarding hibernating workflows ->
+        // TODO: is it safe to put an event in the queue?
         handle.workflowState.onEvent(event, context);
       }
     }
