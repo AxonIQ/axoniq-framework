@@ -35,6 +35,16 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+            <version>1.0.0-RC1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-eventsourcing</artifactId>
         </dependency>
@@ -94,7 +104,7 @@
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
+            <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
