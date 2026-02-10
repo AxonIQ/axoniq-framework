@@ -1,16 +1,12 @@
-package io.axoniq.workflow.runtime.engine.impl.taskqueue;
+package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
-import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.api.workflow.*;
 import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
@@ -19,7 +15,6 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -48,7 +43,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   // primitive implementations
   private final ExecuteDelegate executeDelegate;
   private final WaitForDelegate waitForDelegate;
-  private final ConversionDelegate conversionDelegate;
 
   private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
   // State variables
@@ -73,7 +67,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     this.processingContext = processingContext;
     this.executeDelegate = new ExecuteDelegate(this, this, workflowServices);
     this.waitForDelegate = new WaitForDelegate(this, this, workflowServices);
-    this.conversionDelegate = new ConversionDelegate();
     this.payload = initial;
   }
 
@@ -86,34 +79,44 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
     // TODO: discuss when we switch to the executable
     switchToExecutable();
-    UnitOfWork uow = workflowServices.getUnitOfWorkFactory()
-      .create(workflowId, customize -> customize.workScheduler(workflowServices.getExecutor()));
-    return uow.executeWithResult(processingContext1 -> {
-        var processingContext2 = ContextUtils.copyResources(workflowContext.processingContext(), processingContext1);
+    return ContextUtils.executeWithResult(
+        workflowId,
+        workflowServices,
+        workflowContext.processingContext(),
+        pc -> {
 
-        @SuppressWarnings("unchecked")
-        var ctx = (T) workflowContext;
-        // FIXME -> if terminal -> finish execution
-        // FIXME -> if none -> start
-        sendWorkflowEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer()), processingContext2).join(); // FIXME join
-
-        logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
-        try {
-          configuration.workflowDefinition().execute(ctx);
-          logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
-          sendWorkflowEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer()), processingContext2).get(5, TimeUnit.SECONDS); // FIXME constant
-        } catch (Exception we) {
-          if (we instanceof TimeoutException) {
-            sendWorkflowEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer()), processingContext()).join(); // FIXME join
-          } else if (we instanceof InterruptedException) {
-            sendWorkflowEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer()), processingContext2).join(); // FIXME join;
+          @SuppressWarnings("unchecked")
+          var ctx = (T) workflowContext;
+          if (ctx.getStatus().isTerminal()) {
+            logger.trace("Workflow instance has reached terminal state {}, skipping execution.", ctx.getStatus());
+            return CompletableFuture.completedFuture(ctx);
           }
-          // FIXME -> check for `WorkflowFailedException`
-          sendWorkflowEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer()), processingContext2).join(); // FIXME join;
+          if (ctx.getStatus() == WorkflowStatus.NONE) {
+            sendWorkflowEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).join(); // FIXME join
+          }
+
+          try {
+            logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
+            configuration.workflowDefinition().execute(ctx);
+            logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
+
+            sendWorkflowEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).get(5, TimeUnit.SECONDS); // FIXME constant
+
+          } catch (WorkflowFailedException wfe) {
+            sendWorkflowEvent(failedWorkflow(workflowContext, wfe, configuration.eventNameCustomizer()), pc).join(); // FIXME join;
+          } catch (Exception e) {
+            if (e instanceof TimeoutException) {
+              sendWorkflowEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer()), processingContext()).join(); // FIXME join
+            } else if (e instanceof InterruptedException) {
+              sendWorkflowEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).join(); // FIXME join;
+            } else {
+              logger.error("Error occurred in workflow {}", workflowId, e);
+            }
+          }
+
+          return CompletableFuture.completedFuture(ctx);
         }
-        return CompletableFuture.completedFuture(ctx);
-      })
-      .thenApply((c) -> {
+      ).thenApply(wc -> {
         try {
           // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
           // Process tasks until workflow reaches terminal status
@@ -121,7 +124,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         } catch (Throwable t) {
           // FIXME? discuss if we can react to this
         }
-        return c;
+        return wc;
       })
       .join();
   }
@@ -198,11 +201,14 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
         }, processingContext.component(Converter.class));
         appendTask(state ->
-          workflowServices.getUnitOfWorkFactory().create().executeWithResult(
-            processingContext1 -> workflowServices.getEventSink().publish(
-              ContextUtils.copyResources(state.getStep(stepName).context(), processingContext1),
-              completedStep(this, stepName, resultMap, condition.eventNameCustomizer())
-            )).join()
+          workflowServices.getUnitOfWorkFactory()
+            .create(stepName, customize -> customize.workScheduler(workflowServices.getExecutor()))
+            .executeWithResult(
+              processingContext1 -> workflowServices.getEventSink().publish(
+                ContextUtils.copyResources(state.getStep(stepName).context(), processingContext1),
+                completedStep(this, stepName, resultMap, condition.eventNameCustomizer())
+              ))
+            .join()
         );
       }
     }
@@ -243,16 +249,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   @Override
   public StepExecutionResult waitFor(@NotNull String stepName, @NotNull QualifiedName qualifiedName, @NotNull Predicate<EventMessage> predicate, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
     return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
-  }
-
-  @Override
-  public Function<Object, Map<String, Object>> typeToPayloadConverter() {
-    return conversionDelegate.typeToPayloadConverter();
-  }
-
-  @Override
-  public <T> Function<Map<String, Object>, T> payloadToTypeConverter(@Nonnull Class<T> type) {
-    return conversionDelegate.payloadToTypeConverter(type);
   }
 
   @Override

@@ -1,19 +1,26 @@
 package io.axoniq.workflow.runtime.engine.util;
 
+import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.Context;
-import org.axonframework.messaging.core.SimpleContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 public class ContextUtils {
 
-  public static ProcessingContext withResources(ProcessingContext processingContext, Map<Context.ResourceKey<?>, Object> resources) {
-    ProcessingContext copy = processingContext;
-    for (Map.Entry<Context.ResourceKey<?>, Object> resourceEntry : resources.entrySet()) {
-      copy = copy.withResource((Context.ResourceKey<? super Object>) resourceEntry.getKey(), resourceEntry.getValue());
-    }
-    return copy;
+  public static <R> CompletableFuture<R> executeWithResult(
+    @Nonnull String id,
+    @Nonnull WorkflowServices workflowServices,
+    @Nonnull ProcessingContext parentContext,
+    @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
+    var uow = workflowServices.getUnitOfWorkFactory()
+      .create(id, customize -> customize.workScheduler(workflowServices.getExecutor()));
+    return uow.executeWithResult(c -> {
+      var ctx = ContextUtils.copyResources(parentContext, c);
+      return action.apply(ctx);
+    });
   }
 
   public static ProcessingContext copyResources(Context from,

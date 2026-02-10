@@ -3,15 +3,15 @@ package io.axoniq.workflow.runtime.taskqueue;
 import io.axoniq.workflow.runtime.DelayedPublisher;
 import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.impl.SingleEventHandlerComponent;
-import io.axoniq.workflow.runtime.engine.impl.taskqueue.WorkflowEngine;
+import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
+import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.core.correlation.MessageOriginProvider;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -39,7 +39,8 @@ public class AbstractTestBase {
         new WorkflowEngine(
           cfg.getComponent(UnitOfWorkFactory.class),
           cfg.getComponent(EventSink.class),
-          cfg.getComponent(WorkflowDefinitionRegistry.class)
+          cfg.getComponent(WorkflowDefinitionRegistry.class),
+          cfg.getComponent(Converter.class)
         )
       ).registerComponent(WorkflowDefinitionRegistry.class, cfg ->
         new DefaultWorkflowDefinitionRegistry()

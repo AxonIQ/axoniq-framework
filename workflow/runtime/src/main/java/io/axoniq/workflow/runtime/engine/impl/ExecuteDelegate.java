@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl.taskqueue;
+package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;

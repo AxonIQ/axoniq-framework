@@ -7,7 +7,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import java.time.Duration;
 import java.util.function.Predicate;
 
-public interface WaitForPrimitive extends ConverterAware {
+public interface WaitForPrimitive {
 
   /**
    * Wait for event.

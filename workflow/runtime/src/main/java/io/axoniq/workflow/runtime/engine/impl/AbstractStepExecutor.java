@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl.taskqueue;
+package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
@@ -38,7 +38,6 @@ public abstract class AbstractStepExecutor {
   protected void acceptAllPendingTasksForStep(String stepName) {
     while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
       var poll = workflowState.getNextTask();
-
       if (poll != null) { // FIXME
         poll.accept(this.workflowState);
       }

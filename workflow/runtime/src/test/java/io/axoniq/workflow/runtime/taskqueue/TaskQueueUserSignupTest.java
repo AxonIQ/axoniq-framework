@@ -3,7 +3,8 @@ package io.axoniq.workflow.runtime.taskqueue;
 import io.axoniq.workflow.dsl.simple2.OtherDefinition;
 import io.axoniq.workflow.dsl.simple2.OtherWorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.impl.taskqueue.WorkflowEngine;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
-import static io.axoniq.workflow.runtime.engine.result.StepExecutionResults.all;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -78,7 +78,7 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
 
 
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
-      ctx.wait("waitASecond", Duration.ofSeconds(1));
+      ctx.wait("waitASecond", Duration.ofSeconds(1L));
       var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
       logger.info("Magic happened because of the magician {}", magic.magician());
       // -> end
@@ -124,6 +124,8 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
 
     // Verify that both workflows executed all steps
     for (WorkflowContext context : workflowEngine.workflowInstances().values().stream().map(WorkflowEngine.ExecutionHandle::workflowContext).toList()) {
+      assertThat(context.getStatus().isTerminal()).isTrue();
+      assertThat(context.getStatus()).isEqualTo(WorkflowStatus.COMPLETED);
       assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser",
         // "activateUser2",
         "sendWelcomeEmail",

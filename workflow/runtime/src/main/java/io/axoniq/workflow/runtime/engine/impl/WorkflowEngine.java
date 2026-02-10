@@ -1,17 +1,15 @@
-package io.axoniq.workflow.runtime.engine.impl.taskqueue;
+package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
-import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.EventSubscriptionManager;
-import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.TaskManager;
-import io.axoniq.workflow.runtime.engine.impl.threadsandfutures.WorkflowEventAppender;
 import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -39,8 +37,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   private final Clock clock;
   private final Executor executor;
   private final UnitOfWorkFactory unitOfWorkFactory;
-
-  private final ConversionDelegate conversionDelegate = new ConversionDelegate();
+  private final Converter converter;
 
   // FIXME -> offload it from here to some kind of a "store"
   // key => workflowId
@@ -48,16 +45,19 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   // currently it holds all instances, running and historic
   private final Map<String, ExecutionHandle> executionHandles = new ConcurrentHashMap<>();
 
+
   public WorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
     @Nonnull EventSink eventSink,
-    @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry
+    @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry,
+    @Nonnull Converter converter
   ) {
     this.eventSink = eventSink;
     this.workflowDefinitionRegistry = workflowDefinitionRegistry;
     this.clock = GenericEventMessage.clock;
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.unitOfWorkFactory = unitOfWorkFactory;
+    this.converter = converter;
   }
 
   @NotNull
@@ -103,7 +103,12 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
     definitions.forEach(
       workflowConfiguration -> {
-        var payload = conversionDelegate.typeToPayloadConverter().apply(eventMessage.payload());
+
+        var payload = eventMessage.payloadAs(
+          new TypeReference<Map<String, Object>>() {
+          },
+          processingContext.component(Converter.class)
+        );
 
         var workflowContext = workflowConfiguration.workflowContextFactory()
           .createContext(payload, eventMessage.timestamp(), processingContext, this);
@@ -154,28 +159,13 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     return eventSink;
   }
 
+  @Override
+  public Converter getConverter() {
+    return converter;
+  }
+
   public void shutdown() {
 
   }
-
-  /*
-   Not used in this implementation.
-   */
-
-  @Override
-  public EventSubscriptionManager getEventSubscriptionManager() {
-    throw new UnsupportedOperationException("Not implemented yet");
-  }
-
-  @Override
-  public WorkflowEventAppender getWorkflowEventAppender() {
-    throw new UnsupportedOperationException("Not implemented yet");
-  }
-
-  @Override
-  public TaskManager getTaskManager() {
-    throw new UnsupportedOperationException("Not implemented yet");
-  }
-
 
 }
