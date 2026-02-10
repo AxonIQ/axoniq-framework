@@ -12,6 +12,7 @@ import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -51,17 +52,14 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   private final ProcessingContext processingContext;
   private boolean executable = false;
   private final String workflowId;
-  private final Instant startTime;
   private Map<String, Object> payload;
 
   public WorkflowInstance(@Nonnull String workflowId,
                           @Nonnull Map<String, Object> initial,
-                          @Nonnull Instant startTime,
                           @Nonnull ProcessingContext processingContext,
                           @Nonnull WorkflowServices workflowServices) {
     this.workflowId = workflowId;
     this.workflowServices = workflowServices;
-    this.startTime = startTime;
     this.processingContext = processingContext;
     this.executeDelegate = new ExecuteDelegate(this, this, workflowServices);
     this.waitForDelegate = new WaitForDelegate(this, this, workflowServices);
@@ -77,6 +75,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
     // TODO: discuss when we switch to the executable
     switchToExecutable();
+
     return ContextUtils.executeWithResult(
         workflowId,
         workflowServices,
@@ -117,10 +116,9 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       ).thenApply(wc -> {
         try {
           // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
-          // Process tasks until workflow reaches terminal status
           awaitStateChange(s -> s.getStatus().isTerminal());
-        } catch (Throwable t) {
-          // FIXME? discuss if we can react to this
+        } catch (Exception te) {
+          logger.error("Error waiting for workflow instance termination", te);
         }
         return wc;
       })
@@ -160,7 +158,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   @Override
   public void applyPayloadModification(PayloadModification payloadModification) {
-    this.payload = Objects.requireNonNull(payloadModification.apply(payload), "Payload must not be null");
+    this.payload = Objects.requireNonNull(
+      payloadModification.apply(payload),
+      "Payload must not be null"
+    );
   }
 
   @Override
@@ -174,7 +175,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
     logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
     for (var entry : waitConditions.entrySet()) {
-      // synchronized ?
+      // TODO synchronized ?
       var condition = entry.getValue();
       if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
         String stepName = entry.getKey();
@@ -259,11 +260,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public Instant getStartTime() {
-    return startTime;
-  }
-
-  @Override
   public boolean hasTasks() {
     return this.taskQueue.isEmpty();
   }
@@ -297,4 +293,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     waitConditions.remove(stepName);
   }
 
+  @Override
+  public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    // FIXME
+  }
 }

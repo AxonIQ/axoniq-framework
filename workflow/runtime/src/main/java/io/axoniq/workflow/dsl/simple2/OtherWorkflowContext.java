@@ -32,11 +32,10 @@ public class OtherWorkflowContext extends WorkflowInstance
   public OtherWorkflowContext(
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
-    @Nonnull Instant startTime,
     @Nonnull ProcessingContext processingContext,
     @Nonnull WorkflowServices workflowServices
   ) {
-    super(workflowId, payload, startTime, processingContext, workflowServices);
+    super(workflowId, payload, processingContext, workflowServices);
   }
 
   public <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout, EventNameCustomizer eventNameCustomizer) {

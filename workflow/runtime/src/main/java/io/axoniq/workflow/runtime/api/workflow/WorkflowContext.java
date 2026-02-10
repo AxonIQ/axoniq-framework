@@ -3,9 +3,9 @@ package io.axoniq.workflow.runtime.api.workflow;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -14,7 +14,8 @@ import java.util.Map;
  */
 public interface WorkflowContext extends
   ExecutePrimitive,
-  WaitForPrimitive {
+  WaitForPrimitive,
+  DescribableComponent {
 
   String getWorkflowId();
 
@@ -25,8 +26,6 @@ public interface WorkflowContext extends
   WorkflowStatus getStatus();
 
   List<String> getStepHistory();
-
-  Instant getStartTime();
 
   ProcessingContext processingContext();
 }

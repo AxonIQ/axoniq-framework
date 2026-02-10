@@ -30,12 +30,11 @@ public interface OtherDefinition extends
     @Override
     public OtherWorkflowContext createContext(
       @NotNull Map<String, Object> initialPayload,
-      @Nonnull Instant startTime,
       @Nonnull ProcessingContext processingContext,
       @Nonnull WorkflowServices workflowServices) {
       var workflowId = associationProvider.associationKey(initialPayload)
         .orElseThrow(() -> new IllegalStateException("Could not create workflow id"));
-      return new OtherWorkflowContext(workflowId, initialPayload, startTime, processingContext, workflowServices);
+      return new OtherWorkflowContext(workflowId, initialPayload, processingContext, workflowServices);
     }
   }
 
@@ -73,6 +72,7 @@ public interface OtherDefinition extends
   class TestWorkflowStateFactory implements WorkflowStateFactory {
 
     @Override
+    @Nonnull
     public WorkflowState create(@NotNull WorkflowContext context) {
       if (context instanceof OtherWorkflowContext testWorkflowContext) {
         return testWorkflowContext;
