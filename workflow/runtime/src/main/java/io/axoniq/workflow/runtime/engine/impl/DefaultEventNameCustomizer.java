@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
-// TODO -> allow to have this on the workflow level
 public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   private final Map<StepStatus, String> stepStatusToName = new HashMap<>();
@@ -235,8 +234,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     final StringBuilder eventNameTemplate = new StringBuilder();
     if (appendToBaseName) {
       eventNameTemplate
-        .append(capitalize(baseName != null ? baseName : stepName))
-        .append(Objects.requireNonNull(workflowStatusToName.get(workflowStatus)));
+        .append(capitalize(baseName != null ? baseName : stepName));
     }
     eventNameTemplate
       .append(Objects.requireNonNull(workflowStatusToName.get(workflowStatus)));
