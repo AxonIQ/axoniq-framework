@@ -3,6 +3,8 @@ package io.axoniq.workflow.runtime.api.workflow;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,4 +28,6 @@ public interface WorkflowContext extends
   List<String> getStepHistory();
 
   Instant getStartTime();
+
+  ProcessingContext processingContext();
 }

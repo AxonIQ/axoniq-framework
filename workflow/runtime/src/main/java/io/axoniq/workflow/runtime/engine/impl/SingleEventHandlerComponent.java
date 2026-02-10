@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -53,9 +54,8 @@ public class SingleEventHandlerComponent implements EventHandlingComponent {
     return sequencingPolicy.getSequenceIdentifierFor(event, context);
   }
 
-
   @Override
-  public EventHandlerRegistry subscribe(@NotNull QualifiedName name, @NotNull EventHandler eventHandler) {
-    throw new UnsupportedOperationException("Subscription is not supported");
+  public void describeTo(@NotNull ComponentDescriptor descriptor) {
+   descriptor.describeProperty("event-handler", eventHandler.getClass());
   }
 }

@@ -10,13 +10,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
+// TODO -> allow to have this on the workflow level
+// FIXME: make sure we use MessageType as return
 public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   private final Map<StepStatus, String> stepStatusToName = new HashMap<>();
   private final Map<WorkflowStatus, String> workflowStatusToName = new HashMap<>();
   private String namespace = "io.axoniq.workflow";
   private String baseName = null;
-  private String baseVersion = "#0.1";
+  private String baseVersion = "#0.0.1";
   private boolean appendToBaseName = true;
   private boolean appendVersion = true;
   private boolean capitalizeSimpleName = true;

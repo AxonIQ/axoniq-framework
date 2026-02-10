@@ -173,18 +173,20 @@ public class MultiThreadedWorkflowEngine implements EventHandler, WorkflowServic
   }
 
 
-  private void checkAndCreateNewWorkflow(EventMessage event, ProcessingContext context) {
-    var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(event.type().qualifiedName());
+  private void checkAndCreateNewWorkflow(EventMessage eventMessage,
+                                         ProcessingContext processingContext) {
+    var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
     definitions.forEach(
       workflowConfiguration -> {
-        var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());
+        var payload = conversionDelegate.typeToPayloadConverter().apply(eventMessage.payload());
 
-        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, event.timestamp(), this);
+        var workflowContext = workflowConfiguration.workflowContextFactory()
+          .createContext(payload, eventMessage.timestamp(), processingContext, this);
         var workflowId = workflowContext.getWorkflowId();
 
         // avoid multiple workflows for the same workflow id.
         workflowInstances.computeIfAbsent(workflowId, (id) -> {
-          logger.info("Starting new workflow with '{}'", event.payload());
+          logger.info("Starting new workflow with '{}'", eventMessage.payload());
           var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
           return new ExecutionHandle(workflowConfiguration, workflowContext, workflowState);
         });

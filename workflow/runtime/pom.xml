@@ -13,18 +13,19 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.version>2.2.21</kotlin.version>
+        <axon.version>5.0.2-SNAPSHOT</axon.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
-            <version>5.0.1</version>
+            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-eventsourcing</artifactId>
-            <version>5.0.1</version>
+            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -55,7 +56,7 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-test</artifactId>
-            <version>5.0.1</version>
+            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>

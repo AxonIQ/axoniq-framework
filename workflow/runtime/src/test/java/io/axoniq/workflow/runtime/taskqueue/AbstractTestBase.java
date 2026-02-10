@@ -10,6 +10,7 @@ import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.correlation.MessageOriginProvider;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -57,14 +58,15 @@ public class AbstractTestBase {
           cfg.getComponent(WorkflowEngine.class)
         )))
         .customized((cfg, c) -> c.eventCriteria(
-          set -> {
-            if (set.isEmpty()) {
-              return EventCriteria.havingAnyTag();
-            } else {
-              return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+            set -> {
+              if (set.isEmpty()) {
+                return EventCriteria.havingAnyTag();
+              } else {
+                return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+              }
             }
-          }
-        ).initialSegmentCount(1))
+          ).initialSegmentCount(1)
+        )
     )));
 
     configuration = configurer.start();

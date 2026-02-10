@@ -5,6 +5,7 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
@@ -31,6 +32,7 @@ public interface TestDefinition extends
     public TestWorkflowContext createContext(
       @NotNull Map<String, Object> initialPayload,
       @Nonnull Instant startTime,
+      @Nonnull ProcessingContext processingContext,
       @Nonnull WorkflowServices workflowServices) {
       var workflowId = associationProvider.associationKey(initialPayload).orElseThrow(() -> new IllegalStateException("Could not create workflow id"));
       return new TestWorkflowContext(workflowId, initialPayload, startTime, workflowServices);

@@ -10,6 +10,7 @@ import io.axoniq.workflow.runtime.engine.step.StepExecution;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
@@ -19,9 +20,11 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -47,6 +50,10 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
 
   private final WorkflowServices workflowServices;
 
+  @Override
+  public ProcessingContext processingContext() {
+    return null; // TODO we don't care, so fuck off
+  }
 
   public WorkflowInstance(
     @Nonnull String workflowId,
@@ -133,7 +140,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
 
   @Override
   public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
-    applyStateChange(eventMessage);
+    applyStateChange(eventMessage, processingContext);
   }
 
   @Override
@@ -205,7 +212,7 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
   }
 
   @Override
-  public void applyStateChange(EventMessage eventMessage) {
+  public void applyStateChange(EventMessage eventMessage, ProcessingContext processingContext) {
     Object eventPayload = eventMessage.payloadAs(Object.class);
     var metadata = eventMessage.metadata();
     // Apply step-level state changes
@@ -213,16 +220,16 @@ public class WorkflowInstance implements WorkflowContext, WorkflowState {
       var stepName = getStepName(metadata);
       switch (stepStatus) {
         case STARTED:
-          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp(), null));
           break;
         case FAILED:
-          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp(), null));
           break;
         case TIMED_OUT:
-          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp(), null));
           break;
         case COMPLETED:
-          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp(), null));
           break;
         default:
           break;

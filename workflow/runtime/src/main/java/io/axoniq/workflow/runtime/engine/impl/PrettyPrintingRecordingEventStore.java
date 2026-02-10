@@ -64,7 +64,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
       descriptor.describeProperty(workflowId, events.stream().map(event -> {
         var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
         var name = event.type().qualifiedName().toString();
-        return String.format("%s (%s): %s", name, status, event.payload());
+        return String.format("%s (%s): %s meta ={ %s }", name, status, event.payload(), event.metadata());
       }).toList());
     }
   }

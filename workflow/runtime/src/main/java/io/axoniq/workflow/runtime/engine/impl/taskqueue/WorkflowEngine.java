@@ -19,6 +19,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,6 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   // currently it holds all instances, running and historic
   private final Map<String, ExecutionHandle> executionHandles = new ConcurrentHashMap<>();
 
-
   public WorkflowEngine(
     @Nonnull UnitOfWorkFactory unitOfWorkFactory,
     @Nonnull EventSink eventSink,
@@ -55,28 +55,29 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   ) {
     this.eventSink = eventSink;
     this.workflowDefinitionRegistry = workflowDefinitionRegistry;
-    this.clock = Clock.systemDefaultZone();
+    this.clock = GenericEventMessage.clock;
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.unitOfWorkFactory = unitOfWorkFactory;
   }
 
   @NotNull
   @Override
-  public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
-    logger.trace("Received event {}", event.type());
-    if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
-      var workflowId = MetadataUtils.getWorkflowId(event.metadata());
+  public MessageStream.Empty<Message> handle(@NotNull EventMessage eventMessage,
+                                             @NotNull ProcessingContext processingContext) {
+    logger.trace("Received eventMessage {}", eventMessage.type());
+    if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
+      var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
       // TODO: discussion regarding hibernating workflows ->
-      // TODO: is it safe to put an event in the queue?
-      executionHandles.get(workflowId).workflowState.onEvent(event, context);
+      // TODO: is it safe to put an eventMessage in the queue?
+      executionHandles.get(workflowId).workflowState.onEvent(eventMessage, processingContext);
     } else {
       // handle starting of new processes
-      checkAndCreateNewWorkflow(event, context);
+      checkAndCreateNewWorkflow(eventMessage, processingContext);
       // route external events to workflows waiting for them
       for (var handle : executionHandles.values()) {
         // TODO: discussion regarding hibernating workflows ->
-        // TODO: is it safe to put an event in the queue?
-        handle.workflowState.onEvent(event, context);
+        // TODO: is it safe to put an eventMessage in the queue?
+        handle.workflowState.onEvent(eventMessage, processingContext);
       }
     }
 
@@ -97,20 +98,20 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     }
   }
 
-
-  private void checkAndCreateNewWorkflow(EventMessage event, ProcessingContext context) {
-    var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(event.type().qualifiedName());
+  private void checkAndCreateNewWorkflow(EventMessage eventMessage,
+                                         ProcessingContext processingContext) {
+    var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
     definitions.forEach(
       workflowConfiguration -> {
-        var payload = conversionDelegate.typeToPayloadConverter().apply(event.payload());
+        var payload = conversionDelegate.typeToPayloadConverter().apply(eventMessage.payload());
 
-        // FIXME -> move the whole event in, and pass processing context inside
-        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(payload, event.timestamp(), this);
+        var workflowContext = workflowConfiguration.workflowContextFactory()
+          .createContext(payload, eventMessage.timestamp(), processingContext, this);
         var workflowId = workflowContext.getWorkflowId();
 
         // avoid multiple workflows for the same workflow id.
         executionHandles.computeIfAbsent(workflowId, (id) -> {
-          logger.info("Starting new workflow with '{}'", event.payload());
+          logger.info("Starting new workflow with '{}'", eventMessage.payload());
           var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
           return new ExecutionHandle(workflowConfiguration, workflowContext, workflowState);
         });
@@ -125,8 +126,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   public record ExecutionHandle(
     WorkflowConfiguration<?> workflowConfiguration,
     WorkflowContext workflowContext,
-    WorkflowState workflowState)
-  {
+    WorkflowState workflowState) {
 
     public WorkflowStatus getStatus() {
       return workflowContext.getStatus();

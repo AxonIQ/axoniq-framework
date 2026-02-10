@@ -3,6 +3,7 @@ package io.axoniq.workflow.dsl.simple2;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.impl.taskqueue.WorkflowInstance;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.time.Instant;
 import java.util.Map;
@@ -14,7 +15,9 @@ public class OtherWorkflowContext extends WorkflowInstance
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
     @Nonnull Instant startTime,
-    @Nonnull WorkflowServices workflowServices) {
-    super(workflowId, payload, startTime, workflowServices);
+    @Nonnull ProcessingContext processingContext,
+    @Nonnull WorkflowServices workflowServices
+  ) {
+    super(workflowId, payload, startTime, processingContext, workflowServices);
   }
 }

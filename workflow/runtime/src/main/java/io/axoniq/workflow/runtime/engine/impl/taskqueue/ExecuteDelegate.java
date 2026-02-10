@@ -11,6 +11,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.StateBasedStepExecutionResult;
 import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
+import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -65,12 +66,14 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       var actualStartTime = workflowState.getStep(stepName).timestamp();
       var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), actualStartTime.plus(timeout));
       // FIXME - This is where we capture our current consistency marker
-      var result = CompletableFuture.supplyAsync(
-        () -> {
+      var result = workflowServices.getUnitOfWorkFactory()
+        .create(stepName, customize -> customize.workScheduler(workflowServices.getExecutor())) // FIXME -> define a new thread pool for execution customer code
+        .executeWithResult(processingContext -> {
+          // FIXME - this procContext should be given to the user's input in the DSL so that they can get resource or add lifecycle phase shit
+          var procContext = ContextUtils.copyResources(workflowState.getStep(stepName).context(), processingContext);
           var payload = parameterMapping.apply(workflowContext.getPayload(), local);
-          return action.apply(payload);
-        }, workflowServices.getExecutor() // FIXME -> define a new thread pool for execution customer code
-      );
+          return CompletableFuture.completedFuture(action.apply(payload));
+        });
       if (remainingTimeout.isNegative()) {
         workflowState.appendTask(i -> {
           // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
@@ -90,20 +93,19 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             } else {
               if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                 // FIXME - This is where we should publish using an append condition
-                timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
-                // FIXME Condition 1?
-                /*
                 workflowState.appendTask(i -> {
                   timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
-                });*/
+                });
               } else if (e instanceof InterruptedException) {
                 // FIXME - This is where we should publish using an append condition
-                // FIXME see Condition 1
-                cancelled(stepName, eventNameCustomizer);
+                workflowState.appendTask(i -> {
+                  cancelled(stepName, eventNameCustomizer);
+                });
               } else {
                 // FIXME - This is where we should publish using an append condition
-                // FIXME see Condition 1
-                failed(stepName, e, eventNameCustomizer);
+                workflowState.appendTask(i -> {
+                  failed(stepName, e, eventNameCustomizer);
+                });
               }
             }
           });

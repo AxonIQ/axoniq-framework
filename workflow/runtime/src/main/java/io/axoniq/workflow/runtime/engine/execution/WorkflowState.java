@@ -3,12 +3,14 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import jakarta.annotation.Nullable;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.beans.PropertyEditor;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -17,9 +19,12 @@ import java.util.function.Predicate;
  */
 public interface WorkflowState {
 
-  <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended;
+  <T extends WorkflowContext> T execute(
+    WorkflowConfiguration<T> configuration,
+    WorkflowContext workflowContext
+  ) throws ExecutionSuspended;
 
-  void applyStateChange(EventMessage eventMessage);
+  void applyStateChange(EventMessage eventMessage, ProcessingContext processingContext);
 
   void awaitStateChange(Predicate<WorkflowState> condition) throws InterruptedException;
 
@@ -44,4 +49,7 @@ public interface WorkflowState {
   void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer);
 
   void removeWaitCondition(String stepName);
+
+  // FIXME check if we can replace this for the Context interface
+  ProcessingContext processingContext();
 }

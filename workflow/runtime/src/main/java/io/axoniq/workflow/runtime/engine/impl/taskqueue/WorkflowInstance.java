@@ -12,12 +12,14 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.ConversionDelegate;
 import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -53,16 +55,22 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
   private final Map<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
   private WorkflowStatus status = WorkflowStatus.NONE;
+  private final ProcessingContext processingContext;
   private boolean executable = false;
   private boolean suspended = false;
   private final String workflowId;
   private final Instant startTime;
   private Map<String, Object> payload;
 
-  public WorkflowInstance(String workflowId, Map<String, Object> initial, Instant startTime, WorkflowServices workflowServices) {
+  public WorkflowInstance(@Nonnull String workflowId,
+                          @Nonnull Map<String, Object> initial,
+                          @Nonnull Instant startTime,
+                          @Nonnull ProcessingContext processingContext,
+                          @Nonnull WorkflowServices workflowServices) {
     this.workflowId = workflowId;
     this.workflowServices = workflowServices;
     this.startTime = startTime;
+    this.processingContext = processingContext;
     this.executeDelegate = new ExecuteDelegate(this, this, workflowServices);
     this.waitForDelegate = new WaitForDelegate(this, this, workflowServices);
     this.conversionDelegate = new ConversionDelegate();
@@ -70,33 +78,41 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
+  public ProcessingContext processingContext() {
+    return processingContext;
+  }
+
+  @Override
   public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
     // TODO: discuss when we switch to the executable
     switchToExecutable();
-    return CompletableFuture.supplyAsync(() -> {
+    UnitOfWork uow = workflowServices.getUnitOfWorkFactory()
+      .create(workflowId, customize -> customize.workScheduler(workflowServices.getExecutor()));
+    return uow.executeWithResult(processingContext1 -> {
+        var processingContext2 = ContextUtils.copyResources(workflowContext.processingContext(), processingContext1);
+
         @SuppressWarnings("unchecked")
         var ctx = (T) workflowContext;
         // FIXME -> if terminal -> finish execution
         // FIXME -> if none -> start
-        sendEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer())).join(); // FIXME join
+        sendWorkflowEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer()), processingContext2).join(); // FIXME join
 
         logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
         try {
           configuration.workflowDefinition().execute(ctx);
           logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
-          sendEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer())).get(5, TimeUnit.SECONDS); // FIXME constant
+          sendWorkflowEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer()), processingContext2).get(5, TimeUnit.SECONDS); // FIXME constant
         } catch (Exception we) {
           if (we instanceof TimeoutException) {
-            sendEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer())).join(); // FIXME join
+            sendWorkflowEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer()), processingContext()).join(); // FIXME join
           } else if (we instanceof InterruptedException) {
-            sendEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer())).join(); // FIXME join;
+            sendWorkflowEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer()), processingContext2).join(); // FIXME join;
           }
           // FIXME -> check for `WorkflowFailedException`
-          sendEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer())).join(); // FIXME join;
+          sendWorkflowEvent(failedWorkflow(workflowContext, we, configuration.eventNameCustomizer()), processingContext2).join(); // FIXME join;
         }
-
-        return ctx;
-      }, workflowServices.getExecutor())
+        return CompletableFuture.completedFuture(ctx);
+      })
       .thenApply((c) -> {
         try {
           // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
@@ -108,11 +124,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         return c;
       })
       .join();
-
   }
 
   @Override
-  public void applyStateChange(EventMessage eventMessage) {
+  public void applyStateChange(EventMessage eventMessage, ProcessingContext processingContext) {
     logger.trace("Applying event {}", eventMessage.type());
     Object eventPayload = eventMessage.payloadAs(Object.class);
     var metadata = eventMessage.metadata();
@@ -121,16 +136,16 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       var stepName = getStepName(metadata);
       switch (stepStatus) {
         case STARTED:
-          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         case FAILED:
-          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         case TIMED_OUT:
-          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         case COMPLETED:
-          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp()));
+          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         default:
           break;
@@ -179,11 +194,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
         String stepName = entry.getKey();
         waitConditions.remove(stepName);
-        Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {}, processingContext.component(Converter.class));
-        appendTask(i -> sendEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer())));
+        Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
+        }, processingContext.component(Converter.class));
+        appendTask(state -> sendWorkflowEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer()), state.processingContext()));
       }
     }
-    appendTask(i -> i.applyStateChange(eventMessage));
+    appendTask(i -> i.applyStateChange(eventMessage, processingContext));
   }
 
   @Override
@@ -268,9 +284,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
 
-  private CompletableFuture<Void> sendEvent(EventMessage eventMessage) {
+  private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage, ProcessingContext processingContext) {
     // TODO: make sure the consistency marker is used
-    return workflowServices.getEventSink().publish(null, eventMessage);
+    return workflowServices.getEventSink()
+      .publish(processingContext, eventMessage);
   }
 
   record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate,

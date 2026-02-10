@@ -4,9 +4,9 @@ import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
-import io.axoniq.workflow.runtime.engine.step.StepStatus;
+import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,20 +45,27 @@ public abstract class AbstractStepExecutor {
     }
   }
 
+  protected Context getContext(String stepName) {
+    return workflowState.containsStep(stepName)
+      ? workflowState.getStep(stepName).context()
+      : workflowState.processingContext();
+  }
+
   protected CompletableFuture<Void> started(String stepName, Map<String, Object> payload, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(startedStep(workflowContext, stepName, sanitize(payload), eventNameCustomizer));
+    return sendStepEvent(startedStep(workflowContext, stepName, sanitize(payload), eventNameCustomizer), getContext(stepName));
   }
 
   protected CompletableFuture<Void> completed(String stepName, Map<String, Object> payload, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(completedStep(workflowContext, stepName, sanitize(payload), eventNameCustomizer));
+    return sendStepEvent(completedStep(workflowContext, stepName, sanitize(payload), eventNameCustomizer), getContext(stepName));
   }
 
   protected CompletableFuture<Void> cancelled(String stepName, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(cancelledStep(workflowContext, stepName, eventNameCustomizer));
+    return sendStepEvent(cancelledStep(workflowContext, stepName, eventNameCustomizer), getContext(stepName));
   }
 
   protected CompletableFuture<Void> failed(String stepName, Throwable ex, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(failStep(workflowContext, stepName, ex, eventNameCustomizer));
+    LoggerFactory.getLogger(AbstractStepExecutor.class).error("Error", ex);
+    return sendStepEvent(failStep(workflowContext, stepName, ex, eventNameCustomizer), getContext(stepName));
   }
 
   protected CompletableFuture<Void> timedOut(String stepName, EventNameCustomizer eventNameCustomizer) {
@@ -66,13 +73,16 @@ public abstract class AbstractStepExecutor {
   }
 
   protected CompletableFuture<Void> timedOut(String stepName, Instant timeoutTimestamp, EventNameCustomizer eventNameCustomizer) {
-    return sendEvent(timeoutStep(workflowContext, stepName, timeoutTimestamp, eventNameCustomizer));
+    return sendStepEvent(timeoutStep(workflowContext, stepName, timeoutTimestamp, eventNameCustomizer), getContext(stepName));
   }
 
-  private CompletableFuture<Void> sendEvent(EventMessage eventMessage) {
-    // FIXME -> processing context? uof factory?
+  private CompletableFuture<Void> sendStepEvent(EventMessage eventMessage, Context context) {
     logger.trace("Appending event {}", eventMessage.type());
-    return workflowServices.getEventSink().publish(null, eventMessage);
+    return workflowServices.getUnitOfWorkFactory().create().executeWithResult(
+      processingContext -> workflowServices.getEventSink().publish(
+        ContextUtils.copyResources(context, processingContext),
+        eventMessage
+      ));
   }
 
   private Map<String, Object> sanitize(Map<String, Object> payload) {
