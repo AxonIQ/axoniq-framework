@@ -20,6 +20,8 @@ package io.axoniq.framework.extension.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.axoniq.license.entitlement.EnforcingEntitlementManager;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.jdbc.ConnectionExecutor;
 import org.axonframework.common.jdbc.ConnectionProvider;
 import org.axonframework.conversion.CachingSupplier;
@@ -32,7 +34,8 @@ import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransact
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.mockito.Mockito;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -43,15 +46,17 @@ import javax.sql.DataSource;
 public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBackedEventStoreTestSuite<PostgresqlEventStorageEngine> {
     private static final UnitOfWorkFactory FACTORY = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
 
-    private static PostgreSQLContainer<?> postgresContainer;
+    private static PostgreSQLContainer postgresContainer;
     private static DataSource dataSource;
 
     private static PostgresqlEventStorageEngine engine;
+    private static EntitlementManager entitlementManager;
 
     @SuppressWarnings("resource")
     @BeforeAll
     static void buildEngine() {
-        postgresContainer = new PostgreSQLContainer<>("postgres:16.2")
+        entitlementManager = Mockito.mock(EnforcingEntitlementManager.class);
+        postgresContainer = new PostgreSQLContainer("postgres:16.2")
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test");
@@ -84,7 +89,7 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
     @Override
     protected PostgresqlEventStorageEngine getStorageEngine(EventConverter converter) {
         if (engine == null) {
-            engine = new PostgresqlEventStorageEngine(dataSource, converter);
+            engine = new PostgresqlEventStorageEngine(dataSource, converter, entitlementManager);
         }
 
         return engine;

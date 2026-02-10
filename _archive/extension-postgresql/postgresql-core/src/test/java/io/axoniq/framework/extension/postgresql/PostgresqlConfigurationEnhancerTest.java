@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.extension.postgresql;
 
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -63,6 +64,9 @@ class PostgresqlConfigurationEnhancerTest {
                                                       .componentRegistry(ComponentRegistry::disableEnhancerScanning)
                                                       .componentRegistry(cr -> cr.registerComponent(
                                                               DataSource.class, c -> mockedDataSource
+                                                      ))
+                                                      .componentRegistry(cr -> cr.registerComponent(
+                                                              EntitlementManager.class, c -> mock(EntitlementManager.class)
                                                       ))
                                                       .componentRegistry(cr -> testSubject.enhance(cr))
                                                       .build();
