@@ -35,7 +35,7 @@ public class DelayedPublisher {
       future = future.thenCompose(v ->
         CompletableFuture.supplyAsync(() -> {
           eventSink.publish(null, new GenericEventMessage(
-            MessageType.fromString(schedule.event.getClass().getTypeName() + "#0.1"),
+            MessageType.fromString(schedule.event.getClass().getTypeName() + "#0.0.1"),
             schedule.event)
           );
           return null;

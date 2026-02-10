@@ -9,6 +9,7 @@ import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.correlation.MessageOriginProvider;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -47,7 +48,7 @@ public class AbstractTestBase {
           cfg.getComponent(EventSink.class),
           cfg.getComponent(WorkflowEngine.class).getExecutor()
         )
-      ).registerDecorator(EventStore.class, Integer.MAX_VALUE, (configuration, name, delegate) ->
+      ).registerDecorator(EventStore.class, InterceptingEventStore.DECORATION_ORDER - 1, (configuration, name, delegate) ->
         PrettyPrintingRecordingEventStore.eventStore(delegate)
       )
     ));

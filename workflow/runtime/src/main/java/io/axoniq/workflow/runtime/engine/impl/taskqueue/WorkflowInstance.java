@@ -187,16 +187,23 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   @Override
   public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
-    logger.info("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
+    logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
     for (var entry : waitConditions.entrySet()) {
       // synchronized ?
       var condition = entry.getValue();
       if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
+
         String stepName = entry.getKey();
         waitConditions.remove(stepName);
         Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
         }, processingContext.component(Converter.class));
-        appendTask(state -> sendWorkflowEvent(completedStep(this, stepName, resultMap, condition.eventNameCustomizer()), state.processingContext()));
+        appendTask(state ->
+          workflowServices.getUnitOfWorkFactory().create().executeWithResult(
+            processingContext1 -> workflowServices.getEventSink().publish(
+              ContextUtils.copyResources(state.getStep(stepName).context(), processingContext1),
+              completedStep(this, stepName, resultMap, condition.eventNameCustomizer())
+            )).join()
+        );
       }
     }
     appendTask(i -> i.applyStateChange(eventMessage, processingContext));

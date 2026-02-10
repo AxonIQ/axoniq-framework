@@ -68,7 +68,7 @@ public class EventMessageUtils {
   }
 
   public static EventMessage failStep(WorkflowContext context, String stepName, Throwable exception, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(stepName, Map.of(), StepStatus.COMPLETED);
+    var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
     return new GenericEventMessage(MessageType.fromString(name), exception,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.FAILED)
     );
@@ -82,7 +82,7 @@ public class EventMessageUtils {
   }
 
   public static EventMessage timeoutStep(WorkflowContext context, String stepName, Instant time, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(stepName, Map.of(), StepStatus.COMPLETED);
+    var name = customizer.getEventName(stepName, Map.of(), StepStatus.TIMED_OUT);
     return new GenericEventMessage(MessageType.fromString(name), time,
       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.TIMED_OUT)
     );
