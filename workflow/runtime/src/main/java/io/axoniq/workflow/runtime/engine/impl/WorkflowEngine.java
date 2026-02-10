@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -101,25 +102,29 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   private void checkAndCreateNewWorkflow(EventMessage eventMessage,
                                          ProcessingContext processingContext) {
     var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
-    definitions.forEach(
-      workflowConfiguration -> {
+    definitions.forEach(predicatedWorkflowConfiguration -> {
 
-        var payload = eventMessage.payloadAs(
-          new TypeReference<Map<String, Object>>() {
-          },
-          processingContext.component(Converter.class)
-        );
+        if (predicatedWorkflowConfiguration.predicate().test(eventMessage)) {
 
-        var workflowContext = workflowConfiguration.workflowContextFactory()
-          .createContext(payload, eventMessage.timestamp(), processingContext, this);
-        var workflowId = workflowContext.getWorkflowId();
+          var workflowConfiguration = predicatedWorkflowConfiguration.configuration();
 
-        // avoid multiple workflows for the same workflow id.
-        executionHandles.computeIfAbsent(workflowId, (id) -> {
-          logger.info("Starting new workflow with '{}'", eventMessage.payload());
-          var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
-          return new ExecutionHandle(workflowConfiguration, workflowContext, workflowState);
-        });
+          var payload = Objects.requireNonNull(eventMessage.payloadAs(
+            new TypeReference<Map<String, Object>>() {
+            },
+            processingContext.component(Converter.class)
+          ), "Error converting initial payload");
+
+          var workflowContext = workflowConfiguration.workflowContextFactory()
+            .createContext(payload, processingContext, this);
+          var workflowId = workflowContext.getWorkflowId();
+
+          // avoid multiple workflows for the same workflow id.
+          executionHandles.computeIfAbsent(workflowId, (id) -> {
+            logger.info("Starting new workflow with '{}'", eventMessage.payload());
+            var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
+            return new ExecutionHandle(workflowConfiguration, workflowContext, workflowState);
+          });
+        }
       }
     );
   }

@@ -11,5 +11,6 @@ public interface WorkflowStateFactory {
    * @param context context to create the workflow state for.
    * @return workflow state.
    */
+  @Nonnull
   WorkflowState create(@Nonnull WorkflowContext context);
 }
