@@ -3,6 +3,7 @@ package io.axoniq.workflow.runtime.engine.result;
 import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import jakarta.annotation.Nonnull;
 
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -30,12 +31,14 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
   }
 
   @Override
+  @Nonnull
   public <T> Optional<T> payload() {
     //noinspection unchecked
     return Optional.ofNullable(workflowState.getStep(stepName)).map(step -> (T) step.result());
   }
 
   @Override
+  @Nonnull
   public Optional<StepFailedException> error() {
     return Optional.ofNullable(workflowState.getStep(stepName)).map(step -> {
       var cause = step.error();

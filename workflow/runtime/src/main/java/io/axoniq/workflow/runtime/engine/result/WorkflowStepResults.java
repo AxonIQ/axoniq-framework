@@ -29,6 +29,7 @@ public class WorkflowStepResults {
    * @param payload payload of the result, might be null.
    * @return completed step result.
    */
+  @Nonnull
   public static WorkflowStepResult completed(@Nullable Object payload) {
     return new CompletedWorkflowStepResult(payload, null, null, false);
   }
@@ -39,6 +40,7 @@ public class WorkflowStepResults {
    * @param error failure causing error.
    * @return failed result.
    */
+  @Nonnull
   public static WorkflowStepResult failed(@Nonnull Throwable error) {
     return new CompletedWorkflowStepResult(null, Objects.requireNonNull(error, "Error must be provided"), null, false);
   }
@@ -48,6 +50,7 @@ public class WorkflowStepResults {
    *
    * @return cancelled result.
    */
+  @Nonnull
   public static WorkflowStepResult cancelled() {
     return new CompletedWorkflowStepResult(null, null, null, true);
   }
@@ -58,11 +61,13 @@ public class WorkflowStepResults {
    * @param timeout timeout duration.
    * @return timed out result.
    */
+  @Nonnull
   public static WorkflowStepResult timeout(@Nonnull Duration timeout) {
     return new CompletedWorkflowStepResult(null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
   }
 
 
+  @Nonnull
   public static WorkflowStepResult all(WorkflowStepResult... results) {
     return new WorkflowStepResult() {
 
@@ -77,11 +82,13 @@ public class WorkflowStepResults {
       }
 
       @Override
+      @Nonnull
       public <T> Optional<T> payload() {
         return Optional.empty();
       }
 
       @Override
+      @Nonnull
       public Optional<StepFailedException> error() {
         return Arrays.stream(results).filter(WorkflowStepResult::isFailure).findFirst().flatMap(WorkflowStepResult::error);
       }

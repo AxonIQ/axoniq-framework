@@ -6,7 +6,6 @@ import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.result.StateBasedWorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
@@ -30,9 +29,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   public WaitForDelegate(
     @Nonnull WorkflowContext workflowContext,
     @Nonnull WorkflowState workflowState,
-    @Nonnull WorkflowServices workflowServices
-  ) {
-    super(workflowContext, workflowState, workflowServices);
+    @Nonnull WorkflowServices workflowServices,
+    @Nonnull EventNameCustomizer parentCustomizer) {
+    super(workflowContext, workflowState, workflowServices, parentCustomizer);
   }
 
   @Override

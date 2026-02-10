@@ -14,7 +14,6 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -26,16 +25,19 @@ import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.all;
 import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
+
 public class OtherWorkflowContext extends WorkflowInstance
-  implements WaitForPrimitive, ExecutePrimitive // DSL customizations
-{
+  implements WaitForPrimitive, ExecutePrimitive {
+
+
   public OtherWorkflowContext(
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
     @Nonnull ProcessingContext processingContext,
+    @Nonnull EventNameCustomizer parentCustomizer,
     @Nonnull WorkflowServices workflowServices
   ) {
-    super(workflowId, payload, processingContext, workflowServices);
+    super(workflowId, payload, processingContext, parentCustomizer, workflowServices);
   }
 
   public <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout, EventNameCustomizer eventNameCustomizer) {

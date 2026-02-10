@@ -3,15 +3,15 @@ package io.axoniq.workflow.runtime;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import static org.axonframework.messaging.core.MessageType.DEFAULT_VERSION;
 
 public class DelayedPublisher {
 
@@ -35,7 +35,7 @@ public class DelayedPublisher {
       future = future.thenCompose(v ->
         CompletableFuture.supplyAsync(() -> {
           eventSink.publish(null, new GenericEventMessage(
-            MessageType.fromString(schedule.event.getClass().getTypeName() + "#0.0.1"),
+            MessageType.fromString(schedule.event.getClass().getTypeName() + "#" + DEFAULT_VERSION),
             schedule.event)
           );
           return null;

@@ -4,7 +4,6 @@ import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
 import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.workflow.*;
-import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
@@ -17,13 +16,11 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +29,7 @@ import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
@@ -57,22 +55,23 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   public WorkflowInstance(@Nonnull String workflowId,
                           @Nonnull Map<String, Object> initial,
                           @Nonnull ProcessingContext processingContext,
+                          @Nonnull EventNameCustomizer parentCustomizer,
                           @Nonnull WorkflowServices workflowServices) {
-    this.workflowId = workflowId;
-    this.workflowServices = workflowServices;
-    this.processingContext = processingContext;
-    this.executeDelegate = new ExecuteDelegate(this, this, workflowServices);
-    this.waitForDelegate = new WaitForDelegate(this, this, workflowServices);
-    this.payload = initial;
+    this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
+    this.payload = Objects.requireNonNull(initial, "Payload must not be null");
+    this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
+    this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow service aare mandatory");
+    this.executeDelegate = new ExecuteDelegate(this, this, workflowServices, parentCustomizer);
+    this.waitForDelegate = new WaitForDelegate(this, this, workflowServices, parentCustomizer);
   }
 
-  @Override
-  public ProcessingContext processingContext() {
-    return processingContext;
-  }
 
   @Override
-  public <T extends WorkflowContext> T execute(WorkflowConfiguration<T> configuration, WorkflowContext workflowContext) throws ExecutionSuspended {
+  @Nonnull
+  public <T extends WorkflowContext> T execute(
+    @Nonnull WorkflowConfiguration<T> configuration,
+    @Nonnull WorkflowContext workflowContext
+  ) {
     // TODO: discuss when we switch to the executable
     switchToExecutable();
 
@@ -126,7 +125,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void applyStateChange(EventMessage eventMessage, ProcessingContext processingContext) {
+  public void applyStateChange(
+    @Nonnull EventMessage eventMessage,
+    @Nonnull ProcessingContext processingContext
+  ) {
     logger.trace("Applying event {}", eventMessage.type());
     Object eventPayload = eventMessage.payloadAs(Object.class);
     var metadata = eventMessage.metadata();
@@ -157,7 +159,9 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void applyPayloadModification(PayloadModification payloadModification) {
+  public void applyPayloadModification(
+    @Nonnull PayloadModification payloadModification
+  ) {
     this.payload = Objects.requireNonNull(
       payloadModification.apply(payload),
       "Payload must not be null"
@@ -165,14 +169,16 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void awaitStateChange(Predicate<WorkflowState> predicate) throws InterruptedException {
+  public void awaitStateChange(
+    @Nonnull Predicate<WorkflowState> predicate
+  ) throws InterruptedException {
     do {
       taskQueue.take().accept(this);
     } while (!predicate.test(this));
   }
 
   @Override
-  public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
+  public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
     logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
     for (var entry : waitConditions.entrySet()) {
       // TODO synchronized ?
@@ -190,7 +196,9 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             ctx ->
               workflowServices.getEventSink().publish(
                 ctx,
-                completedStep(this, stepName, resultMap, condition.eventNameCustomizer())
+                completedStep(this, stepName, resultMap,
+                  merge(waitForDelegate.parentEventNameCustomizer, condition.eventNameCustomizer())
+                )
               )
           ).join()
         );
@@ -202,16 +210,17 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   // delegation
   @Override
-  public WorkflowStepResult execute(@NotNull String stepName, @Nullable Map<String, Object> local, @NotNull PayloadProcessor action, @NotNull PayloadReducer parameterMapping, @NotNull PayloadReducer resultMapping, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
+  public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local, @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping, @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
     return executeDelegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
   }
 
   @Override
-  public WorkflowStepResult waitFor(@NotNull String stepName, @NotNull QualifiedName qualifiedName, @NotNull Predicate<EventMessage> predicate, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
+  public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
     return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
   }
 
   @Override
+  @Nullable
   public Consumer<WorkflowState> getNextTask() {
     return this.taskQueue.poll(); // FIXME: forever?
   }
@@ -240,21 +249,36 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
+  public void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull EventNameCustomizer eventNameCustomizer) {
+    waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate, eventNameCustomizer));
+  }
+
+  @Override
+  public void removeWaitCondition(@Nonnull String stepName) {
+    waitConditions.remove(stepName);
+  }
+
+
+  @Override
+  @Nonnull
   public String getWorkflowId() {
     return this.workflowId;
   }
 
   @Override
+  @Nonnull
   public Map<String, Object> getPayload() {
     return this.payload;
   }
 
   @Override
+  @Nonnull
   public WorkflowStatus getStatus() {
     return this.status;
   }
 
   @Override
+  @Nonnull
   public List<String> getStepHistory() {
     return new ArrayList<>(steps.keySet());
   }
@@ -283,18 +307,15 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                             EventNameCustomizer eventNameCustomizer) {
   }
 
+
   @Override
-  public void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer) {
-    waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate, eventNameCustomizer));
+  @Nonnull
+  public ProcessingContext processingContext() {
+    return processingContext;
   }
 
   @Override
-  public void removeWaitCondition(String stepName) {
-    waitConditions.remove(stepName);
-  }
-
-  @Override
-  public void describeTo(@NotNull ComponentDescriptor descriptor) {
+  public void describeTo(@Nonnull ComponentDescriptor descriptor) {
     // FIXME
   }
 }

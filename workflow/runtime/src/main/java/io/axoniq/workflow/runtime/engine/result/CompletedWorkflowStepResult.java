@@ -2,6 +2,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
@@ -43,12 +44,14 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
   }
 
   @Override
+  @Nonnull
   public <T> Optional<T> payload() {
     //noinspection unchecked
     return Optional.ofNullable((T) payload);
   }
 
   @Override
+  @Nonnull
   public Optional<StepFailedException> error() {
     return Optional.ofNullable(error);
   }

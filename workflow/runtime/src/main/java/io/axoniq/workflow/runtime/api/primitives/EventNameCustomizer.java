@@ -2,6 +2,8 @@ package io.axoniq.workflow.runtime.api.primitives;
 
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.QualifiedName;
 
 import java.util.Map;
 
@@ -9,6 +11,8 @@ import java.util.Map;
  * Customizes workflow event names.
  */
 public interface EventNameCustomizer {
-  String getEventName(String stepName, Map<String, Object> parameters, StepStatus stepStatus);
-  String getEventName(String stepName, Map<String, Object> parameters, WorkflowStatus stepStatus);
+  @Nonnull
+  QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters, @Nonnull StepStatus stepStatus);
+  @Nonnull
+  QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters, @Nonnull WorkflowStatus stepStatus);
 }

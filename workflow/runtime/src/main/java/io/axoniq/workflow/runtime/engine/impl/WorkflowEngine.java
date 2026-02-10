@@ -133,6 +133,10 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
     return this.executionHandles;
   }
 
+  public void shutdown() {
+    this.workflowInstances().clear();
+  }
+
   public record ExecutionHandle(
     WorkflowConfiguration<?> workflowConfiguration,
     WorkflowContext workflowContext,
@@ -168,9 +172,4 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
   public Converter getConverter() {
     return converter;
   }
-
-  public void shutdown() {
-
-  }
-
 }

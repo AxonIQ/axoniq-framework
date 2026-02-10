@@ -2,12 +2,15 @@ package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple2.OtherDefinition;
 import io.axoniq.workflow.dsl.simple2.OtherWorkflowContext;
+import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -16,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static io.axoniq.workflow.dsl.Payload.payload;
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -53,6 +55,13 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
 
   public static class UserSignupWorkflow implements OtherDefinition {
 
+
+    @NotNull
+    @Override
+    public EventNameCustomizer eventNameCustomizer() {
+      return DefaultEventNameCustomizer.Builder.namespace("io.axoniq.dsl.wf");
+    }
+
     @Override
     public String association(@Nonnull Map<String, Object> trigger) {
       return "signup-" + trigger.get("id").toString();
@@ -72,10 +81,10 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
       ctx.execute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
 
       /**
-      var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-      var a2 = ctx.executeWithResult("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-      all(a1, a2).isSuccess();
-      */
+       var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
+       var a2 = ctx.executeWithResult("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
+       all(a1, a2).isSuccess();
+       */
 
 
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);

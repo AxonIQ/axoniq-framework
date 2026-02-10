@@ -30,9 +30,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
   public ExecuteDelegate(@Nonnull WorkflowContext context,
                          @Nonnull WorkflowState workflowState,
-                         @Nonnull WorkflowServices workflowServices
+                         @Nonnull WorkflowServices workflowServices,
+                         @Nonnull EventNameCustomizer parentEventNameCustomizer
   ) {
-    super(context, workflowState, workflowServices);
+    super(context, workflowState, workflowServices, parentEventNameCustomizer);
   }
 
   @Override

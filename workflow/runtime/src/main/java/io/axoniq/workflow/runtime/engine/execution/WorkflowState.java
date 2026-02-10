@@ -4,6 +4,8 @@ import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
+import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -16,37 +18,40 @@ import java.util.function.Predicate;
  */
 public interface WorkflowState {
 
-  <T extends WorkflowContext> T execute(
-    WorkflowConfiguration<T> configuration,
-    WorkflowContext workflowContext
-  ) throws ExecutionSuspended;
+  @Nonnull
+  <T extends WorkflowContext> T execute(@Nonnull WorkflowConfiguration<T> workflowConfiguration, @Nonnull WorkflowContext workflowContext) throws ExecutionSuspended;
 
-  void applyStateChange(EventMessage eventMessage, ProcessingContext processingContext);
+  void applyStateChange(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 
-  void awaitStateChange(Predicate<WorkflowState> condition) throws InterruptedException;
+  void awaitStateChange(@Nonnull Predicate<WorkflowState> condition) throws InterruptedException;
 
-  WorkflowStep getStep(String stepName);
+  @Nonnull
+  WorkflowStep getStep(@Nonnull String stepName);
 
-  void onEvent(EventMessage eventMessage, ProcessingContext processingContext);
+  void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 
-  void addStep(WorkflowStep workflowStep);
+  void addStep(@Nonnull WorkflowStep workflowStep);
 
-  boolean containsStep(String stepName);
+  boolean containsStep(@Nonnull String stepName);
 
-  void appendTask(Consumer<WorkflowState> task);
+  void appendTask(@Nonnull Consumer<WorkflowState> task);
 
+  @Nullable
   Consumer<WorkflowState> getNextTask();
 
+  @Nonnull
   WorkflowStatus getStatus();
 
   boolean isExecutable();
 
   boolean hasTasks();
 
-  void registerWaitCondition(String stepName, QualifiedName qualifiedName, Predicate<EventMessage> predicate, EventNameCustomizer eventNameCustomizer);
+  void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull EventNameCustomizer eventNameCustomizer);
 
-  void removeWaitCondition(String stepName);
+  void removeWaitCondition(@Nonnull String stepName);
 
   // FIXME check if we can replace this for the Context interface
+  @Nonnull
   ProcessingContext processingContext();
+
 }

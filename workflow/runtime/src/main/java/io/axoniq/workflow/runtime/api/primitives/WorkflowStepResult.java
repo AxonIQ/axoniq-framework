@@ -1,6 +1,7 @@
 package io.axoniq.workflow.runtime.api.primitives;
 
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import jakarta.annotation.Nonnull;
 
 import java.util.Optional;
 
@@ -17,8 +18,10 @@ public interface WorkflowStepResult {
    */
   boolean isCompleted();
 
+  @Nonnull
   <T> Optional<T> payload();
 
+  @Nonnull
   Optional<StepFailedException> error();
 
   /**
