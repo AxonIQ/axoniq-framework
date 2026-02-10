@@ -25,14 +25,18 @@ import io.axoniq.platform.framework.client.ClientSettingsService
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar
 import io.github.oshai.kotlinlogging.KotlinLogging
 import reactor.core.Disposable
+import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
 import java.time.Instant
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.atomic.AtomicReference
 
 class PlatformLicenseSource(
         private val rSocket: AxoniqConsoleRSocketClient,
         private val registrar: RSocketHandlerRegistrar,
-        private val clientSettingsService: ClientSettingsService
+        private val clientSettingsService: ClientSettingsService,
+       private val executorService: ScheduledExecutorService,
 ) : LicenseSource, ClientSettingsObserver {
 
     private var listener: LicenseSource.Listener? = null
@@ -40,15 +44,18 @@ class PlatformLicenseSource(
     private var subscription: Disposable? = null
     private val currentStatus: AtomicReference<ClientStatus> = AtomicReference(ClientStatus.PENDING)
     private var lastLicenseReceivedTime: Instant? = null
-    private var reconnectionThread: Thread? = null
-    private var shutdown = false
 
     init {
         clientSettingsService.subscribeToSettings(this)
 
-        // Start virtual thread for periodic reconnection
-        reconnectionThread = Thread.ofVirtual().start {
-            reconnectionLoop()
+        registrar.registerHandlerWithPayload(Routes.License.LICENSE, String::class.java) { payload ->
+            logger.debug { "Received license update via request-response: $payload" }
+            if(currentStatus.get().enabled) {
+                currentLicense = payload
+                lastLicenseReceivedTime = Instant.now()
+                listener?.onLicenseAvailable(payload)
+            }
+            true
         }
     }
 
@@ -70,9 +77,8 @@ class PlatformLicenseSource(
 
     override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
         logger.debug { "Connection update: $clientStatus" }
-        currentStatus.set(clientStatus)
 
-        if(clientStatus == ClientStatus.BLOCKED) {
+        if (clientStatus == ClientStatus.BLOCKED) {
             this.currentLicense = null
             this.lastLicenseReceivedTime = null
             subscription?.dispose()
@@ -80,103 +86,45 @@ class PlatformLicenseSource(
             if (this.listener != null) {
                 this.listener!!.onLicenseUnavailable()
             }
-        } else if(clientStatus != ClientStatus.PENDING) {
-            // Immediately establish stream when connection is available
-            logger.debug { "Connection enabled, establishing license stream immediately" }
-            establishLicenseStream()
-        }
+        } else
+            if (!this.currentStatus.get().enabled && clientStatus.enabled) {
+                retrieveLicense()
+            }
+        currentStatus.set(clientStatus)
     }
 
     override fun onDisconnected() {
         logger.debug { "Disconnected" }
         currentStatus.set(ClientStatus.PENDING)
-        subscription?.dispose()
-        subscription = null
     }
 
-    private fun reconnectionLoop() {
-        logger.debug { "Starting license reconnection loop" }
-        while (!shutdown) {
-            try {
-                val status = currentStatus.get()
-                val sub = subscription
-
-                // Check if we need to establish/re-establish the stream
-                if (status != ClientStatus.BLOCKED && status != ClientStatus.PENDING &&
-                    (sub == null || sub.isDisposed)) {
-                    logger.debug { "Establishing license stream (status: $status)" }
-                    establishLicenseStream()
-                }
-
-                // Check if we've exceeded the grace period without a license
-                val lastReceived = lastLicenseReceivedTime
-                if (currentLicense != null && lastReceived != null) {
-                    val timeSinceLastLicense = java.time.Duration.between(lastReceived, Instant.now()).toMillis()
-                    if (timeSinceLastLicense > GRACE_PERIOD_MS) {
-                        logger.warn { "Grace period exceeded without license update, marking as unreachable" }
-                        currentLicense = null
-                        lastLicenseReceivedTime = null
-                        listener?.onLicenseSourceUnreachable()
-                    }
-                }
-
-                Thread.sleep(RETRY_INTERVAL_MS)
-            } catch (e: InterruptedException) {
-                logger.debug { "Reconnection loop interrupted" }
-                break
-            } catch (e: Exception) {
-                logger.warn { "Error in reconnection loop: ${e.message}" }
-            }
-        }
-        logger.info { "License reconnection loop stopped" }
-    }
-
-    private fun establishLicenseStream() {
-        // Dispose old subscription safely
-        try {
-            subscription?.dispose()
-        } catch (e: Exception) {
-            logger.debug { "Error disposing old subscription: ${e.message}" }
-        }
-
-        subscription = rSocket.streamForUpdates("", Routes.License.LICENSE, String::class.java)
-                .onErrorResume { error ->
-                    logger.debug { "License stream error, will retry: ${error.message}" }
-                    reactor.core.publisher.Flux.empty()
-                }
+    private fun retrieveLicense(attempt: Int = 1) {
+        rSocket.retrieve("", Routes.License.LICENSE, String::class.java)
                 .subscribeOn(Schedulers.boundedElastic())
                 .publishOn(Schedulers.boundedElastic())
                 .doOnNext { response ->
-                    logger.debug { "Received license from stream: $response" }
+                    logger.debug { "Received license via request-response: $response" }
                     currentLicense = response
                     lastLicenseReceivedTime = Instant.now()
                     listener?.onLicenseAvailable(response)
                 }
-                .doOnComplete {
-                    logger.debug { "License stream completed" }
-                }
-                .doFinally {
-                    logger.debug { "License stream finalized" }
-                    subscription = null
-                }
-                .subscribe(
-                    {},  // onNext already handled by doOnNext
-                    { error ->
-                        // This should rarely be called due to onErrorResume, but just in case
-                        logger.debug { "Unexpected license stream error: ${error.message}" }
+                .doOnError { error ->
+                    logger.debug { "Failed to retrieve license via request-response: ${error.message}" }
+                    if(attempt == 3) {
+                        logger.warn { "Was unable to retrieve License from Axoniq Platform" }
+                        listener?.onLicenseSourceUnreachable()
                     }
-                )
-    }
 
-    fun shutdown() {
-        shutdown = true
-        reconnectionThread?.interrupt()
-        subscription?.dispose()
+                    executorService.schedule({
+                        retrieveLicense(attempt + 1)
+                    }, RETRY_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
+                .onErrorResume { Mono.empty() }
+                .subscribe()
     }
 
     companion object {
         private val logger = KotlinLogging.logger { }
         private const val RETRY_INTERVAL_MS = 30_000L // 30 seconds
-        private const val GRACE_PERIOD_MS = 5 * 60 * 1000L // 5 minutes
     }
 }

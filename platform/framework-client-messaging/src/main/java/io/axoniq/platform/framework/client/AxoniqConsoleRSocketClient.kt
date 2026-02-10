@@ -135,13 +135,13 @@ class AxoniqConsoleRSocketClient(
             }
             ?: Mono.empty())
 
-    fun <R> streamForUpdates(payload: Any, route: String, responseType: Class<R>): Flux<R> {
+    fun <R> retrieve(payload: Any, route: String, responseType: Class<R>): Mono<R> {
         return rsocket
-                ?.requestStream(encodingStrategy.encode(payload, createRoutingMetadata(route)))
+                ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
                 ?.map { responsePayload ->
                     encodingStrategy.decode(responsePayload, responseType)
                 }
-                ?: Flux.empty()
+                ?: Mono.empty()
     }
 
     /**
