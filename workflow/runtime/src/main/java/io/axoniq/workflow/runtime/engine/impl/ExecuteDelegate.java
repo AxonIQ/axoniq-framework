@@ -3,13 +3,12 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.result.StateBasedStepExecutionResult;
-import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
+import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import jakarta.annotation.Nonnull;
@@ -37,7 +36,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
   }
 
   @Override
-  public StepExecutionResult execute(
+  public WorkflowStepResult execute(
     @NotNull String stepName,
     @Nullable Map<String, Object> local,
     @NotNull PayloadProcessor action,
@@ -57,7 +56,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       try {
         workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
-        return StepExecutionResults.failed(e);
+        return WorkflowStepResults.failed(e);
       }
     }
 
@@ -66,14 +65,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       var actualStartTime = workflowState.getStep(stepName).timestamp();
       var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()), actualStartTime.plus(timeout));
       // FIXME - This is where we capture our current consistency marker
+
       var result = workflowServices.getUnitOfWorkFactory()
         .create(stepName, customize -> customize.workScheduler(workflowServices.getExecutor())) // FIXME -> define a new thread pool for execution customer code
         .executeWithResult(processingContext -> {
           // FIXME - this procContext should be given to the user's input in the DSL so that they can get resource or add lifecycle phase shit
           var procContext = ContextUtils.copyResources(workflowState.getStep(stepName).context(), processingContext);
           var payload = parameterMapping.apply(workflowContext.getPayload(), local);
-          return CompletableFuture.completedFuture(action.apply(payload));
+          return CompletableFuture.completedFuture(action.apply(procContext, payload));
         });
+
+
       if (remainingTimeout.isNegative()) {
         workflowState.appendTask(i -> {
           // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
@@ -112,9 +114,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
       }
     }
 
-    return new StateBasedStepExecutionResult(stepName, () -> {
-      workflowState.awaitStateChange(s -> true); // FIXME -> can we do better and provide conditions direct from the result then?
-      return null;
-    }, this.workflowState);
+    return WorkflowStepResults.stateBased(stepName, workflowState);
   }
 }

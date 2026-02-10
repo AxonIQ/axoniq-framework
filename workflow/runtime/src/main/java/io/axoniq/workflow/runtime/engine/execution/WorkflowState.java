@@ -3,14 +3,11 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.step.StepExecution;
-import jakarta.annotation.Nullable;
-import org.axonframework.messaging.core.Context;
+import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
-import java.beans.PropertyEditor;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -28,11 +25,11 @@ public interface WorkflowState {
 
   void awaitStateChange(Predicate<WorkflowState> condition) throws InterruptedException;
 
-  StepExecution getStep(String stepName);
+  WorkflowStep getStep(String stepName);
 
   void onEvent(EventMessage eventMessage, ProcessingContext processingContext);
 
-  void addStep(StepExecution stepExecution);
+  void addStep(WorkflowStep workflowStep);
 
   boolean containsStep(String stepName);
 

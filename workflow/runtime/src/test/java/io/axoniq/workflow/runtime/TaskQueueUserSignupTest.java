@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.taskqueue;
+package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple2.OtherDefinition;
 import io.axoniq.workflow.dsl.simple2.OtherWorkflowContext;
@@ -7,6 +7,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -34,7 +35,7 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
       return true;
     }
 
-    static Map<String, Object> activateUser(Map<String, Object> payload) {
+    static Map<String, Object> activateUser(ProcessingContext pc, Map<String, Object> payload) {
       Instant now = Instant.now();
       logger.info("Activating user with id: {}", payload.get("id"));
       waitWithProgress(1_000);

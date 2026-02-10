@@ -1,0 +1,115 @@
+package io.axoniq.workflow.runtime.engine.result;
+
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Utility containing {@link WorkflowStepResult} factory methods.
+ */
+public class WorkflowStepResults {
+
+  public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowState workflowState) {
+    return new StateBasedWorkflowStepResult(stepName, () -> {
+      workflowState.awaitStateChange(s -> true);
+      return null;
+    }, workflowState);
+  }
+
+  /**
+   * Constructs completed result.
+   *
+   * @param payload payload of the result, might be null.
+   * @return completed step result.
+   */
+  public static WorkflowStepResult completed(@Nullable Object payload) {
+    return new CompletedWorkflowStepResult(payload, null, null, false);
+  }
+
+  /**
+   * Constructs failed result.
+   *
+   * @param error failure causing error.
+   * @return failed result.
+   */
+  public static WorkflowStepResult failed(@Nonnull Throwable error) {
+    return new CompletedWorkflowStepResult(null, Objects.requireNonNull(error, "Error must be provided"), null, false);
+  }
+
+  /**
+   * Constructs cancelled result.
+   *
+   * @return cancelled result.
+   */
+  public static WorkflowStepResult cancelled() {
+    return new CompletedWorkflowStepResult(null, null, null, true);
+  }
+
+  /**
+   * Constructs timed out result.
+   *
+   * @param timeout timeout duration.
+   * @return timed out result.
+   */
+  public static WorkflowStepResult timeout(@Nonnull Duration timeout) {
+    return new CompletedWorkflowStepResult(null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
+  }
+
+
+  public static WorkflowStepResult all(WorkflowStepResult... results) {
+    return new WorkflowStepResult() {
+
+      @Override
+      public String getStepName() {
+        return "all(" + String.join(", ", Arrays.stream(results).map(WorkflowStepResult::getStepName).toList()) + ")";
+      }
+
+      @Override
+      public boolean isCompleted() {
+        return Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted);
+      }
+
+      @Override
+      public <T> Optional<T> payload() {
+        return Optional.empty();
+      }
+
+      @Override
+      public Optional<StepFailedException> error() {
+        return Arrays.stream(results).filter(WorkflowStepResult::isFailure).findFirst().flatMap(WorkflowStepResult::error);
+      }
+
+      @Override
+      public boolean isSuccess() {
+        return Arrays.stream(results).allMatch(WorkflowStepResult::isSuccess);
+      }
+
+      @Override
+      public boolean isFailure() {
+        return Arrays.stream(results).anyMatch(WorkflowStepResult::isFailure);
+      }
+
+      @Override
+      public boolean isCanceled() {
+        return Arrays.stream(results).anyMatch(WorkflowStepResult::isCanceled);
+      }
+
+      @Override
+      public boolean isTimeout() {
+        return Arrays.stream(results).anyMatch(WorkflowStepResult::isCompleted);
+      }
+    };
+  }
+
+
+  private WorkflowStepResults() {
+    // util class
+  }
+}

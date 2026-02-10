@@ -1,16 +1,16 @@
 package io.axoniq.workflow.runtime.engine.result;
 
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-public class FutureStepExecutionResult implements StepExecutionResult {
+public class FutureWorkflowStepResult implements WorkflowStepResult {
 
-  private final CompletableFuture<StepExecutionResult> futureResult;
+  private final CompletableFuture<WorkflowStepResult> futureResult;
 
-  FutureStepExecutionResult(CompletableFuture<StepExecutionResult> futureResult) {
+  FutureWorkflowStepResult(CompletableFuture<WorkflowStepResult> futureResult) {
     this.futureResult = futureResult;
   }
 

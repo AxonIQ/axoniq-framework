@@ -19,7 +19,7 @@ public interface WaitForPrimitive {
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
-  StepExecutionResult waitFor(
+  WorkflowStepResult waitFor(
     @Nonnull String stepName,
     @Nonnull QualifiedName qualifiedName,
     @Nonnull Predicate<EventMessage> predicate,

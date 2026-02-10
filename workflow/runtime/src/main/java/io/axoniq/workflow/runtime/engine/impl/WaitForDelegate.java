@@ -1,13 +1,13 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.result.StateBasedStepExecutionResult;
-import io.axoniq.workflow.runtime.engine.result.StepExecutionResults;
+import io.axoniq.workflow.runtime.engine.result.StateBasedWorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
@@ -21,7 +21,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {
@@ -37,7 +36,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
-  public StepExecutionResult waitFor(
+  public WorkflowStepResult waitFor(
     @NotNull String stepName,
     @NotNull QualifiedName qualifiedName,
     @NotNull Predicate<EventMessage> predicate,
@@ -55,7 +54,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       try {
         workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
-        return StepExecutionResults.failed(e);
+        return WorkflowStepResults.failed(e);
       }
     }
 
@@ -112,9 +111,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       }
     }
 
-    return new StateBasedStepExecutionResult(stepName, () -> {
-      workflowState.awaitStateChange(s -> true);
-      return null;
-    }, workflowState);
+    return WorkflowStepResults.stateBased(stepName, workflowState);
   }
 }

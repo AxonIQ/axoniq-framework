@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.engine.result;
 
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nullable;
 
@@ -10,14 +10,14 @@ import java.util.Optional;
 /**
  * A step execution result that already has completed.
  */
-public class CompletedStepExecutionResult implements StepExecutionResult {
+public class CompletedWorkflowStepResult implements WorkflowStepResult {
 
   private final Object payload;
   private final StepFailedException error;
   private final Duration timeout;
   private final boolean cancelled;
 
-  CompletedStepExecutionResult(@Nullable Object payload, @Nullable Throwable error, @Nullable Duration timeout, boolean cancelled) {
+  CompletedWorkflowStepResult(@Nullable Object payload, @Nullable Throwable error, @Nullable Duration timeout, boolean cancelled) {
     this.payload = payload;
     if (error != null) {
       if (error instanceof StepFailedException) {

@@ -3,8 +3,8 @@ package io.axoniq.workflow.dsl.simple2;
 import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
 import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
@@ -74,7 +74,7 @@ public class OtherWorkflowContext extends WorkflowInstance
     wait(stepName, timeout, eventName());
   }
 
-  public StepExecutionResult executeWithResult(String stepName, Map<String, Object> payload, PayloadProcessor action, Duration duration) {
+  public WorkflowStepResult executeWithResult(String stepName, Map<String, Object> payload, PayloadProcessor action, Duration duration) {
     return execute(stepName, payload, action, local(), all(), duration, eventName());
   }
 
@@ -93,8 +93,8 @@ public class OtherWorkflowContext extends WorkflowInstance
     var result = execute(
       stepName,
       payload,
-      p -> {
-        var stepResult = action.apply(payload);
+      (c, p) -> {
+        var stepResult = action.apply(p);
         if (stepResult != null) {
           return Map.of(stepSpecificName, stepResult);
         } else {
@@ -117,11 +117,11 @@ public class OtherWorkflowContext extends WorkflowInstance
   }
 
   public Payload execute(String stepName, Payload payload, Function<Payload, Payload> action, EventNameCustomizer eventNameCustomizer) {
-    return payload(this.execute(stepName, payload.getValues(), p -> action.apply(payload(p)).getValues(), eventNameCustomizer));
+    return payload(this.execute(stepName, payload.getValues(), (c, p) -> action.apply(payload(p)).getValues(), eventNameCustomizer));
   }
 
   public Payload execute(String stepName, Payload payload, Function<Payload, Payload> action) {
-    return payload(this.execute(stepName, payload.getValues(), p -> action.apply(payload(p)).getValues()));
+    return payload(this.execute(stepName, payload.getValues(), (c, p) -> action.apply(payload(p)).getValues()));
   }
 
   public <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action) {
@@ -169,7 +169,7 @@ public class OtherWorkflowContext extends WorkflowInstance
   }
 
 
-  <T> T fromResult(StepExecutionResult result, Class<T> eventType) {
+  <T> T fromResult(WorkflowStepResult result, Class<T> eventType) {
     if (result.isSuccess() && result.payload().isPresent()) {
       return super.processingContext().component(Converter.class)
         .convert(result.payload().get(), eventType);
@@ -178,7 +178,7 @@ public class OtherWorkflowContext extends WorkflowInstance
     }
   }
 
-  Map<String, Object> fromResult(StepExecutionResult result) {
+  Map<String, Object> fromResult(WorkflowStepResult result) {
     if (result.isSuccess() && result.<Map<String, Object>>payload().isPresent()) {
       return result.<Map<String, Object>>payload().get();
     } else {

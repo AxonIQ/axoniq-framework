@@ -2,6 +2,7 @@ package io.axoniq.workflow.runtime.engine.util;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
@@ -11,11 +12,14 @@ import java.util.function.Function;
 public class ContextUtils {
 
   public static <R> CompletableFuture<R> executeWithResult(
-    @Nonnull String id,
+    @Nullable String id,
     @Nonnull WorkflowServices workflowServices,
-    @Nonnull ProcessingContext parentContext,
+    @Nonnull Context parentContext,
     @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
-    var uow = workflowServices.getUnitOfWorkFactory()
+    var uow = (id == null)
+      ? workflowServices.getUnitOfWorkFactory()
+      .create(customize -> customize.workScheduler(workflowServices.getExecutor()))
+      : workflowServices.getUnitOfWorkFactory()
       .create(id, customize -> customize.workScheduler(workflowServices.getExecutor()));
     return uow.executeWithResult(c -> {
       var ctx = ContextUtils.copyResources(parentContext, c);

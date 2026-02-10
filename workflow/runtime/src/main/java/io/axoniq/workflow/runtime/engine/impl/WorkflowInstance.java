@@ -2,12 +2,12 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.workflow.*;
 import io.axoniq.workflow.runtime.engine.execution.ExecutionSuspended;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.step.StepExecution;
+import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
@@ -46,12 +45,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
   // State variables
-  private final Map<String, StepExecution> steps = new ConcurrentHashMap<>();
+  private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
   private final Map<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
   private WorkflowStatus status = WorkflowStatus.NONE;
   private final ProcessingContext processingContext;
   private boolean executable = false;
-  private boolean suspended = false;
   private final String workflowId;
   private final Instant startTime;
   private Map<String, Object> payload;
@@ -139,16 +137,16 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
       var stepName = getStepName(metadata);
       switch (stepStatus) {
         case STARTED:
-          addStep(StepExecution.started(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
+          addStep(WorkflowStep.started(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         case FAILED:
-          addStep(StepExecution.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
+          addStep(WorkflowStep.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         case TIMED_OUT:
-          addStep(StepExecution.timedOut(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
+          addStep(WorkflowStep.timedOut(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         case COMPLETED:
-          addStep(StepExecution.completed(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
+          addStep(WorkflowStep.completed(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
           break;
         default:
           break;
@@ -161,7 +159,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void applyPayloadModification(PayloadProcessor payloadModification) {
+  public void applyPayloadModification(PayloadModification payloadModification) {
     this.payload = Objects.requireNonNull(payloadModification.apply(payload), "Payload must not be null");
   }
 
@@ -172,9 +170,61 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     } while (!predicate.test(this));
   }
 
+  @Override
+  public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
+    logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
+    for (var entry : waitConditions.entrySet()) {
+      // synchronized ?
+      var condition = entry.getValue();
+      if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
+        String stepName = entry.getKey();
+        waitConditions.remove(stepName);
+        Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
+        }, processingContext.component(Converter.class));
+        appendTask(state ->
+          ContextUtils.executeWithResult(
+            stepName,
+            workflowServices,
+            state.getStep(stepName).context(),
+            ctx ->
+              workflowServices.getEventSink().publish(
+                ctx,
+                completedStep(this, stepName, resultMap, condition.eventNameCustomizer())
+              )
+          ).join()
+        );
+      }
+    }
+    appendTask(i -> i.applyStateChange(eventMessage, processingContext));
+  }
+
+
+  // delegation
+  @Override
+  public WorkflowStepResult execute(@NotNull String stepName, @Nullable Map<String, Object> local, @NotNull PayloadProcessor action, @NotNull PayloadReducer parameterMapping, @NotNull PayloadReducer resultMapping, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
+    return executeDelegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
+  }
 
   @Override
-  public StepExecution getStep(String stepName) {
+  public WorkflowStepResult waitFor(@NotNull String stepName, @NotNull QualifiedName qualifiedName, @NotNull Predicate<EventMessage> predicate, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
+    return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
+  }
+
+  @Override
+  public Consumer<WorkflowState> getNextTask() {
+    return this.taskQueue.poll(); // FIXME: forever?
+  }
+
+  @Override
+  public void appendTask(Consumer<WorkflowState> task) {
+    if (!this.taskQueue.offer(task)) {
+      // whoops, we're overloading this workflow with events. STOP!!!
+      throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
+    }
+  }
+
+  @Override
+  public WorkflowStep getStep(String stepName) {
     return steps.get(stepName);
   }
 
@@ -184,35 +234,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void addStep(StepExecution stepExecution) {
-    this.steps.put(stepExecution.stepName(), stepExecution);
-  }
-
-  @Override
-  public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
-    logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
-    for (var entry : waitConditions.entrySet()) {
-      // synchronized ?
-      var condition = entry.getValue();
-      if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
-
-        String stepName = entry.getKey();
-        waitConditions.remove(stepName);
-        Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
-        }, processingContext.component(Converter.class));
-        appendTask(state ->
-          workflowServices.getUnitOfWorkFactory()
-            .create(stepName, customize -> customize.workScheduler(workflowServices.getExecutor()))
-            .executeWithResult(
-              processingContext1 -> workflowServices.getEventSink().publish(
-                ContextUtils.copyResources(state.getStep(stepName).context(), processingContext1),
-                completedStep(this, stepName, resultMap, condition.eventNameCustomizer())
-              ))
-            .join()
-        );
-      }
-    }
-    appendTask(i -> i.applyStateChange(eventMessage, processingContext));
+  public void addStep(WorkflowStep workflowStep) {
+    this.steps.put(workflowStep.stepName(), workflowStep);
   }
 
   @Override
@@ -240,30 +263,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     return startTime;
   }
 
-  // delegation
-  @Override
-  public StepExecutionResult execute(@NotNull String stepName, @Nullable Map<String, Object> local, @NotNull PayloadProcessor action, @NotNull PayloadReducer parameterMapping, @NotNull PayloadReducer resultMapping, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
-    return executeDelegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
-  }
-
-  @Override
-  public StepExecutionResult waitFor(@NotNull String stepName, @NotNull QualifiedName qualifiedName, @NotNull Predicate<EventMessage> predicate, @NotNull Duration timeout, @NotNull EventNameCustomizer eventNameCustomizer) {
-    return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
-  }
-
-  @Override
-  public Consumer<WorkflowState> getNextTask() {
-    return this.taskQueue.poll();
-  }
-
-  @Override
-  public void appendTask(Consumer<WorkflowState> task) {
-    if (!this.taskQueue.offer(task)) {
-      // whoops, we're overloading this workflow with events. STOP!!!
-      throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
-    }
-  }
-
   @Override
   public boolean hasTasks() {
     return this.taskQueue.isEmpty();
@@ -274,14 +273,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     return executable;
   }
 
-  public void suspend() {
-    suspended = true;
-  }
-
-  public boolean isSuspended() {
-    return suspended;
-  }
-
   public void switchToExecutable() {
     executable = true;
   }
@@ -289,8 +280,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage, ProcessingContext processingContext) {
     // TODO: make sure the consistency marker is used
-    return workflowServices.getEventSink()
-      .publish(processingContext, eventMessage);
+    return workflowServices.getEventSink().publish(processingContext, eventMessage);
   }
 
   record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate,

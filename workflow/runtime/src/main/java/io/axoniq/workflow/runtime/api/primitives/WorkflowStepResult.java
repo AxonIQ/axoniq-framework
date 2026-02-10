@@ -7,7 +7,7 @@ import java.util.Optional;
 /**
  * Represents a typed result of a step execution.
  */
-public interface StepExecutionResult {
+public interface WorkflowStepResult {
 
   String getStepName();
 

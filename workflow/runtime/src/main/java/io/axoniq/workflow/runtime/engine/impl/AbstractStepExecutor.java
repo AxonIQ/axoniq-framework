@@ -77,11 +77,12 @@ public abstract class AbstractStepExecutor {
 
   private CompletableFuture<Void> sendStepEvent(EventMessage eventMessage, Context context) {
     logger.trace("Appending event {}", eventMessage.type());
-    return workflowServices.getUnitOfWorkFactory().create().executeWithResult(
-      processingContext -> workflowServices.getEventSink().publish(
-        ContextUtils.copyResources(context, processingContext),
-        eventMessage
-      ));
+    return ContextUtils.executeWithResult(
+      null,
+      workflowServices,
+      context,
+      ctx -> workflowServices.getEventSink().publish(ctx, eventMessage)
+    );
   }
 
   private Map<String, Object> sanitize(Map<String, Object> payload) {

@@ -1,19 +1,19 @@
 package io.axoniq.workflow.runtime.engine.result;
 
-import io.axoniq.workflow.runtime.api.primitives.StepExecutionResult;
+import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
-public class StateBasedStepExecutionResult implements StepExecutionResult {
+public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
   private final String stepName;
   private final Callable<Void> stateChangeTrigger;
   private final WorkflowState workflowState;
 
-  public StateBasedStepExecutionResult(String stepName, Callable<Void> stateChangeTrigger, WorkflowState state) {
+  public StateBasedWorkflowStepResult(String stepName, Callable<Void> stateChangeTrigger, WorkflowState state) {
     this.stepName = stepName;
     this.stateChangeTrigger = stateChangeTrigger;
     this.workflowState = state;

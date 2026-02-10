@@ -6,7 +6,6 @@ import jakarta.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 
 public interface ExecutePrimitive {
@@ -22,7 +21,7 @@ public interface ExecutePrimitive {
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
-  StepExecutionResult execute(
+  WorkflowStepResult execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,
     @Nonnull PayloadProcessor action,
