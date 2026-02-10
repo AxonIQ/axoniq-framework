@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package io.axoniq.platform.framework.client
 
-import io.axoniq.platform.framework.api.ConsoleClientAuthentication
+import io.axoniq.platform.framework.api.PlatformClientAuthentication
 import io.netty.buffer.ByteBufAllocator
 import io.netty.buffer.CompositeByteBuf
 import io.rsocket.metadata.CompositeMetadataCodec
@@ -34,7 +34,7 @@ fun CompositeByteBuf.addRouteMetadata(route: String) {
     )
 }
 
-fun CompositeByteBuf.addAuthMetadata(auth: ConsoleClientAuthentication) {
+fun CompositeByteBuf.addAuthMetadata(auth: PlatformClientAuthentication) {
     val authMetadata = ByteBufAllocator.DEFAULT.compositeBuffer()
     authMetadata.writeBytes(auth.toBearerToken().toByteArray())
     CompositeMetadataCodec.encodeAndAddMetadata(

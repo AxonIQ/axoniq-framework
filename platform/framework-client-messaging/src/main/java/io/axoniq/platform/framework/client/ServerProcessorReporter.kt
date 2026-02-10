@@ -19,8 +19,10 @@ package io.axoniq.platform.framework.client
 import io.axoniq.platform.framework.api.ClientSettingsV2
 import io.axoniq.platform.framework.api.Routes
 import io.axoniq.platform.framework.AxoniqPlatformConfiguration
+import io.axoniq.platform.framework.api.ClientStatus
 import io.axoniq.platform.framework.eventprocessor.ProcessorReportCreator
 import io.github.oshai.kotlinlogging.KotlinLogging
+import reactor.core.Disposable
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
@@ -38,7 +40,10 @@ class ServerProcessorReporter(
         clientSettingsService.subscribeToSettings(this)
     }
 
-    override fun onConnectedWithSettings(settings: ClientSettingsV2) {
+    override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+        if (!clientStatus.enabled || reportTask != null) {
+            return
+        }
         logger.info { "Sending processor information every ${settings.processorReportInterval}ms to Axoniq Platform" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {

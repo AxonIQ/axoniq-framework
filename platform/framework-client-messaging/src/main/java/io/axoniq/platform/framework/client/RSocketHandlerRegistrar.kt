@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.axoniq.platform.framework.client
 
+import io.axoniq.platform.framework.api.Routes
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy
 import io.rsocket.Payload
 import io.rsocket.RSocket
@@ -30,6 +31,13 @@ class RSocketHandlerRegistrar(
 ) : RSocket {
     private val logger = LoggerFactory.getLogger(this::class.java)
     private val handlers: MutableList<RegisteredRsocketMessageHandler> = mutableListOf()
+
+    companion object {
+        /** Routes that contain sensitive information and should not have their payloads logged. */
+        private val SENSITIVE_ROUTES = setOf(
+            Routes.License.LICENSE,
+        )
+    }
 
     fun registerHandlerWithoutPayload(route: String, handler: () -> Any) {
         logger.debug("Registered Axoniq Platform handler for route {}", route)
@@ -79,7 +87,8 @@ class RSocketHandlerRegistrar(
         route: String,
     ): Any {
         val decodedPayload = encodingStrategy.decode(payload, matchingHandler.payloadType)
-        logger.debug("Received Axoniq Platform message for route [$route] with payload: [{}]", decodedPayload)
+        val payloadLog = if (route in SENSITIVE_ROUTES) "[REDACTED]" else decodedPayload
+        logger.debug("Received Axoniq Platform message for route [$route] with payload: [{}]", payloadLog)
         return matchingHandler.handler.invoke(decodedPayload)
     }
 

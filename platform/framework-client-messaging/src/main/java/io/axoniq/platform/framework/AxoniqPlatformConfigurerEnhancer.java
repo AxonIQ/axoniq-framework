@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.axoniq.platform.framework;
 
+import io.axoniq.license.entitlement.LicenseSource;
 import io.axoniq.platform.framework.application.ApplicationMetricRegistry;
 import io.axoniq.platform.framework.application.ApplicationMetricReporter;
 import io.axoniq.platform.framework.application.ApplicationReportCreator;
@@ -28,6 +29,7 @@ import io.axoniq.platform.framework.client.ClientSettingsService;
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.platform.framework.client.ServerProcessorReporter;
 import io.axoniq.platform.framework.client.SetupPayloadCreator;
+import io.axoniq.platform.framework.client.license.PlatformLicenseSource;
 import io.axoniq.platform.framework.client.strategy.CborEncodingStrategy;
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy;
 import io.axoniq.platform.framework.eventprocessor.AxoniqPlatformEventHandlingComponent;
@@ -62,6 +64,16 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
             return;
         }
         registry
+                .registerComponent(ComponentDefinition.ofTypeAndName(LicenseSource.class, "AxoniqPlatformLicenseSource")
+                                                      .withBuilder(c -> new PlatformLicenseSource(
+                                                              c.getComponent(AxoniqConsoleRSocketClient.class),
+                                                              c.getComponent(RSocketHandlerRegistrar.class),
+                                                              c.getComponent(ClientSettingsService.class)
+                                                      )).onShutdown(Phase.EXTERNAL_CONNECTIONS, (licenseSource) -> {
+                            if (licenseSource instanceof PlatformLicenseSource platformLicenseSource) {
+                                platformLicenseSource.shutdown();
+                            }
+                        }))
                 .registerComponent(ComponentDefinition
                                            .ofType(ClientSettingsService.class)
                                            .withBuilder(c -> new ClientSettingsService()))
