@@ -110,7 +110,7 @@ public class WorkflowStepResults {
 
       @Override
       public boolean isTimeout() {
-        return Arrays.stream(results).anyMatch(WorkflowStepResult::isCompleted);
+        return Arrays.stream(results).anyMatch(WorkflowStepResult::isTimeout);
       }
     };
   }
