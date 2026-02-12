@@ -5,7 +5,7 @@ import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;

@@ -13,7 +13,6 @@ import java.util.Optional;
 
 public interface OtherDefinition extends
   WorkflowDefinition<OtherWorkflowContext>,
-  AssociationProvider,
   WorkflowConfiguration<OtherWorkflowContext> {
 
   String association(@NotNull Map<String, Object> payload);
@@ -48,13 +47,6 @@ public interface OtherDefinition extends
     }
   }
 
-  @NotNull
-  @Override
-  default Optional<String> associationKey(@NotNull Map<String, Object> payload) {
-    return Optional.of(association(payload));
-  }
-
-
   @Override
   @Nonnull
   default WorkflowDefinition<OtherWorkflowContext> workflowDefinition() {
@@ -64,13 +56,19 @@ public interface OtherDefinition extends
   @Override
   @Nonnull
   default AssociationProvider associationProvider() {
-    return this;
+    return new AssociationProvider() {
+      @NotNull
+      @Override
+      public Optional<String> associationKey(@NotNull Map<String, Object> payload) {
+        return Optional.of(association(payload));
+      }
+    };
   }
 
   @Override
   @Nonnull
   default WorkflowContextFactory<OtherWorkflowContext> workflowContextFactory() {
-    return new TestWorkflowContextFactory(this, eventNameCustomizer());
+    return new TestWorkflowContextFactory(associationProvider(), eventNameCustomizer());
   }
 
   @NotNull

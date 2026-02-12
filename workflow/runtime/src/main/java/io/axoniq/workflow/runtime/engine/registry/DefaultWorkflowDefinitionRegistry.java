@@ -1,6 +1,7 @@
 package io.axoniq.workflow.runtime.engine.registry;
 
 import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinitionRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;

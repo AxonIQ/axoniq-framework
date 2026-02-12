@@ -4,7 +4,7 @@ import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.impl.SingleEventHandlerComponent;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowDefinitionRegistry;
-import io.axoniq.workflow.runtime.engine.registry.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinitionRegistry;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.conversion.Converter;
