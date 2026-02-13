@@ -8,6 +8,7 @@ import java.util.function.BiFunction;
 /**
  * Action executed consuming payload and returning payload as result run in provided processing context.
  */
+@FunctionalInterface
 public interface PayloadProcessor extends BiFunction<ProcessingContext, Map<String, Object>, Map<String, Object>> {
 
 }

@@ -1,6 +1,7 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.workflow.runtime.test.utils;
 
-import org.axonframework.messaging.core.MessageType;
+import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
@@ -11,17 +12,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-import static org.axonframework.messaging.core.MessageType.DEFAULT_VERSION;
-
 public class DelayedPublisher {
 
   private final EventSink eventSink;
   private final Executor executor;
   private final List<Schedule> schedules = new ArrayList<>();
+  private final MessageTypeResolver messageTypeResolver;
 
-  public DelayedPublisher(EventSink eventSink, Executor executor) {
+  public DelayedPublisher(@Nonnull EventSink eventSink,
+                          @Nonnull Executor executor,
+                          @Nonnull MessageTypeResolver messageTypeResolver) {
     this.eventSink = eventSink;
     this.executor = executor;
+    this.messageTypeResolver = messageTypeResolver;
   }
 
   public void addSchedules(List<Schedule> schedules) {
@@ -35,7 +38,7 @@ public class DelayedPublisher {
       future = future.thenCompose(v ->
         CompletableFuture.supplyAsync(() -> {
           eventSink.publish(null, new GenericEventMessage(
-            MessageType.fromString(schedule.event.getClass().getTypeName() + "#" + DEFAULT_VERSION),
+            messageTypeResolver.resolveOrThrow(schedule.event),
             schedule.event)
           );
           return null;

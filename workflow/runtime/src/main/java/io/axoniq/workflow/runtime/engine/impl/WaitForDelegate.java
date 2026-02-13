@@ -35,12 +35,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
+  @Nonnull
   public WorkflowStepResult waitFor(
-    @NotNull String stepName,
-    @NotNull QualifiedName qualifiedName,
-    @NotNull Predicate<EventMessage> predicate,
-    @NotNull Duration timeout,
-    @NotNull EventNameCustomizer eventNameCustomizer
+    @Nonnull String stepName,
+    @Nonnull QualifiedName qualifiedName,
+    @Nonnull Predicate<EventMessage> predicate,
+    @Nonnull Duration timeout,
+    @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
     logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
@@ -53,7 +54,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       try {
         workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
-        return WorkflowStepResults.failed(e);
+        return WorkflowStepResults.failed(stepName, e);
       }
     }
 

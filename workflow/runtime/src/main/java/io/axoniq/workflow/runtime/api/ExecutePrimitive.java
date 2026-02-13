@@ -20,6 +20,7 @@ public interface ExecutePrimitive {
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
+  @Nonnull
   WorkflowStepResult execute(
     @Nonnull String stepName,
     @Nullable Map<String, Object> local,

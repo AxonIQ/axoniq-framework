@@ -185,6 +185,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         waitConditions.remove(stepName);
         Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
         }, processingContext.component(Converter.class));
+        // TODO event should be mapped back based on result mapping
         appendTask(state ->
           ContextUtils.executeWithResult(
             stepName,
@@ -207,11 +208,13 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   // delegation
   @Override
+  @Nonnull
   public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local, @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping, @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
     return executeDelegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
   }
 
   @Override
+  @Nonnull
   public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
     return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
   }
@@ -223,7 +226,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public void appendTask(Consumer<WorkflowState> task) {
+  public void appendTask(@Nonnull Consumer<WorkflowState> task) {
     if (!this.taskQueue.offer(task)) {
       // whoops, we're overloading this workflow with events. STOP!!!
       throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
@@ -231,17 +234,18 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
   }
 
   @Override
-  public WorkflowStep getStep(String stepName) {
+  @Nonnull
+  public WorkflowStep getStep(@Nonnull String stepName) {
     return steps.get(stepName);
   }
 
   @Override
-  public boolean containsStep(String stepName) {
+  public boolean containsStep(@Nonnull String stepName) {
     return steps.containsKey(stepName);
   }
 
   @Override
-  public void addStep(WorkflowStep workflowStep) {
+  public void addStep(@Nonnull WorkflowStep workflowStep) {
     this.steps.put(workflowStep.stepName(), workflowStep);
   }
 

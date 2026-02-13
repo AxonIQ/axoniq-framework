@@ -1,16 +1,18 @@
 package io.axoniq.workflow.runtime.api;
 
+import jakarta.annotation.Nonnull;
+
 public class WorkflowFailedException extends RuntimeException {
 
-  public WorkflowFailedException(String message) {
+  public WorkflowFailedException(@Nonnull String message) {
     super(message);
   }
 
-  public WorkflowFailedException(String message, Throwable cause) {
+  public WorkflowFailedException(@Nonnull String message, Throwable cause) {
     super(message, cause);
   }
 
-  public WorkflowFailedException(Throwable cause) {
+  public WorkflowFailedException(@Nonnull Throwable cause) {
     super(cause);
   }
 }

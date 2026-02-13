@@ -230,7 +230,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     @Nonnull Map<String, Object> parameters,
     @Nonnull WorkflowStatus workflowStatus
   ) {
-    String namespaceTemplate = (namespace != null ? (namespace.endsWith(".") ? namespace : namespace + ".") : "");
+    String namespaceTemplate = namespace != null ? namespace : "";
     final StringBuilder eventNameTemplate = new StringBuilder();
     if (appendToBaseName) {
       eventNameTemplate

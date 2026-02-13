@@ -1,6 +1,7 @@
 package io.axoniq.workflow.runtime.api;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
@@ -15,15 +16,20 @@ public interface WorkflowContext extends
   WaitForPrimitive,
   DescribableComponent {
 
+  @Nonnull
   String getWorkflowId();
 
+  @Nonnull
   Map<String, Object> getPayload();
 
-  void applyPayloadModification(PayloadModification payloadModification);
+  void applyPayloadModification(@Nonnull PayloadModification payloadModification);
 
+  @Nonnull
   WorkflowStatus getStatus();
 
+  @Nonnull
   List<String> getStepHistory();
 
+  @Nonnull
   ProcessingContext processingContext();
 }

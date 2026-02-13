@@ -1,12 +1,7 @@
 package io.axoniq.workflow.dsl.simple2;
 
 import io.axoniq.workflow.dsl.Payload;
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.WaitForPrimitive;
-import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
+import io.axoniq.workflow.runtime.api.*;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
 import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
@@ -28,7 +23,6 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 
 public class MyWorkflowContext extends WorkflowInstance
   implements WaitForPrimitive, ExecutePrimitive {
-
 
   public MyWorkflowContext(
     @Nonnull String workflowId,
@@ -169,6 +163,13 @@ public class MyWorkflowContext extends WorkflowInstance
     return this.execute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
   }
 
+  public void addPayload(Object object) {
+    addPayload(payload(this, object));
+  }
+
+  public void addPayload(Payload payload) {
+    applyPayloadModification(p -> payload(p).with(payload).getValues());
+  }
 
   <T> T fromResult(WorkflowStepResult result, Class<T> eventType) {
     if (result.isSuccess() && result.payload().isPresent()) {

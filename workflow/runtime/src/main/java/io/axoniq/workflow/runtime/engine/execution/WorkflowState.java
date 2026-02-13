@@ -24,6 +24,7 @@ public interface WorkflowState {
    * @param clazz class to check.
    * @return provided class.
    */
+  @Nonnull
   static <C> Class<C> requireIsWorkflowState(@Nonnull Class<C> clazz) {
     if (!WorkflowState.class.isAssignableFrom(clazz)) {
       throw new IllegalArgumentException(String.format("Provided type %s must be instance of WorkflowState, but it was not.", clazz.getName()));

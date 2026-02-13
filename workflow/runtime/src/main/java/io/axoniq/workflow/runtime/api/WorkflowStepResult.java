@@ -10,10 +10,12 @@ import java.util.Optional;
  */
 public interface WorkflowStepResult {
 
+  @Nonnull
   String getStepName();
 
   /**
    * Check (non-blocking)
+   *
    * @return
    */
   boolean isCompleted();

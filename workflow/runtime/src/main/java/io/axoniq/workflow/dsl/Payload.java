@@ -1,6 +1,8 @@
 package io.axoniq.workflow.dsl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import org.axonframework.conversion.Converter;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -9,6 +11,13 @@ import java.util.function.Function;
 public class Payload {
 
   private final Map<String, Object> payload;
+
+  public static Payload payload(WorkflowContext context, Object value) {
+    Map<String, Object> map = context.processingContext().component(Converter.class).convert(
+      value, new TypeReference<Map<String, Object>>() {
+      }.getType());
+    return payload(map);
+  }
 
   public static Payload payload(Map<String, Object> payload) {
     return new Payload(payload);
@@ -47,7 +56,7 @@ public class Payload {
     Object value = payload.get(key);
     if (value instanceof Map) {
       //noinspection unchecked
-      return (T)converter.apply((Map<String, Object>)value);
+      return (T) converter.apply((Map<String, Object>) value);
     }
     return (T) value;
   }
@@ -55,6 +64,11 @@ public class Payload {
 
   public Payload set(String key, Object value) {
     payload.put(key, value);
+    return this;
+  }
+
+  public Payload with(Payload other) {
+    payload.putAll(other.getValues());
     return this;
   }
 

@@ -1,34 +1,54 @@
 package io.axoniq.workflow.runtime.engine.configuration;
 
+import jakarta.annotation.Nonnull;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.*;
+import org.axonframework.messaging.eventhandling.EventHandler;
+import org.axonframework.messaging.eventhandling.EventHandlingComponent;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.sequencing.HierarchicalSequencingPolicy;
 import org.axonframework.messaging.eventhandling.sequencing.SequencingPolicy;
 import org.axonframework.messaging.eventhandling.sequencing.SequentialPerAggregatePolicy;
 import org.axonframework.messaging.eventhandling.sequencing.SequentialPolicy;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 
-public class SingleEventHandlerComponent implements EventHandlingComponent {
+public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
-  private static final Logger logger = LoggerFactory.getLogger(SingleEventHandlerComponent.class);
+  private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
 
   private final SequencingPolicy sequencingPolicy;
   private final EventHandler eventHandler;
 
-  public SingleEventHandlerComponent(EventHandler eventHandler) {
+  public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
+    PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
+    pcepc.eventCriteria(
+      set -> {
+        if (set.isEmpty()) {
+          return EventCriteria.havingAnyTag();
+        } else {
+          return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+        }
+      }
+    ).initialSegmentCount(1);
+
+  public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
+    this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
     this.sequencingPolicy = new HierarchicalSequencingPolicy(
       SequentialPerAggregatePolicy.instance(),
       SequentialPolicy.INSTANCE
     );
-    this.eventHandler = eventHandler;
   }
 
   @NotNull
@@ -56,6 +76,6 @@ public class SingleEventHandlerComponent implements EventHandlingComponent {
 
   @Override
   public void describeTo(@NotNull ComponentDescriptor descriptor) {
-   descriptor.describeProperty("event-handler", eventHandler.getClass());
+    descriptor.describeProperty("event-handler", eventHandler.getClass());
   }
 }

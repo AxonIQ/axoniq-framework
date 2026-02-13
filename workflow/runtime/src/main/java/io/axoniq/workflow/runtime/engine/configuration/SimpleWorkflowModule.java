@@ -2,18 +2,11 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.*;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
-import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowDefinitionRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
-import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -59,49 +52,10 @@ public class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<
   @Override
   public Configuration build(@NotNull Configuration parent, @NotNull LifecycleRegistry lifecycleRegistry) {
     Configuration configuration = super.build(parent, lifecycleRegistry);
-    registerDefinitionRepository();
-    registerWorkflowEngine();
-
     registerWorkflowDefinitions(configuration);
     return configuration;
   }
 
-  private void registerDefinitionRepository() {
-    componentRegistry(componentRegistry ->
-      componentRegistry
-        .registerComponent(WorkflowDefinitionRegistry.class, (c) -> new SimpleWorkflowDefinitionRegistry())
-    );
-  }
-
-  private void registerWorkflowEngine() {
-    componentRegistry(componentRegistry ->
-      componentRegistry
-        .registerComponent(WorkflowEngine.class, cfg ->
-          new WorkflowEngine(
-            cfg.getComponent(UnitOfWorkFactory.class),
-            cfg.getComponent(EventSink.class),
-            cfg.getComponent(WorkflowDefinitionRegistry.class),
-            cfg.getComponent(Converter.class)
-          )
-        ).registerModule(
-          EventProcessorModule
-            .pooledStreaming("workflow")
-            .eventHandlingComponents(req -> req.declarative(cfg -> new SingleEventHandlerComponent(
-              cfg.getComponent(WorkflowEngine.class)
-            )))
-            .customized((cfg, c) -> c.eventCriteria(
-                set -> {
-                  if (set.isEmpty()) {
-                    return EventCriteria.havingAnyTag();
-                  } else {
-                    return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-                  }
-                }
-              ).initialSegmentCount(1)
-            )
-        )
-    );
-  }
 
   private void registerWorkflowDefinitions(@Nonnull Configuration configuration) {
     WorkflowDefinitionRegistry<?> registry = configuration.getComponent(WorkflowDefinitionRegistry.class);
@@ -189,8 +143,6 @@ public class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<
     private final ComponentBuilder<EventNameCustomizerProvider> eventNameCustomizerProviderBuilder;
     private final ComponentBuilder<WorkflowContextFactory<C>> contextFactoryBuilder;
     private final ComponentBuilder<WorkflowStateFactory> stateFactoryBuilder;
-
-    private Configuration configuration;
 
     public WorkflowConfigurationBuilder(String workflowName,
                                         ComponentBuilder<EventCondition> startConditionBuilder,

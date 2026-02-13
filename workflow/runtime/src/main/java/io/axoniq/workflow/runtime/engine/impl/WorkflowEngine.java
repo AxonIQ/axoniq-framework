@@ -151,26 +151,31 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
   }
 
+  @Nonnull
   @Override
   public Clock getClock() {
     return clock;
   }
 
+  @Nonnull
   @Override
   public UnitOfWorkFactory getUnitOfWorkFactory() {
     return unitOfWorkFactory;
   }
 
+  @Nonnull
   @Override
   public Executor getExecutor() {
     return executor;
   }
 
+  @Nonnull
   @Override
   public EventSink getEventSink() {
     return eventSink;
   }
 
+  @Nonnull
   @Override
   public Converter getConverter() {
     return converter;

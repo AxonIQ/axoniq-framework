@@ -19,6 +19,7 @@ public interface WaitForPrimitive {
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
+  @Nonnull
   WorkflowStepResult waitFor(
     @Nonnull String stepName,
     @Nonnull QualifiedName qualifiedName,

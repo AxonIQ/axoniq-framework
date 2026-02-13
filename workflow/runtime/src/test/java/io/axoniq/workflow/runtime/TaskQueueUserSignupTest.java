@@ -1,78 +1,40 @@
 package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.dsl.simple2.MyWorkflowContext;
-import io.axoniq.workflow.dsl.simple2.MyWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.EventCondition;
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
+import io.axoniq.workflow.runtime.test.AbstractTestBase;
+import io.axoniq.workflow.runtime.test.fixture.MagicHappenedEvent;
+import io.axoniq.workflow.runtime.test.fixture.NotificationService;
+import io.axoniq.workflow.runtime.test.fixture.RegistrationReceivedEvent;
+import io.axoniq.workflow.runtime.test.fixture.UserService;
 import jakarta.annotation.Nonnull;
-import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
+import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 class TaskQueueUserSignupTest extends AbstractTestBase {
 
+  public static class UserSignupWorkflow {
 
-  record RegistrationReceivedEvent(String id, String email) {
-  }
-
-  record MagicHappenedEvent(String magician) {
-  }
-
-  static class UserService {
-    static boolean createUser() {
-      logger.info("Creating user.");
-      return true;
-    }
-
-    static Map<String, Object> activateUser(ProcessingContext pc, Map<String, Object> payload) {
-      Instant now = Instant.now();
-      logger.info("Activating user with id: {}", payload.get("id"));
-      waitWithProgress(1_000);
-      logger.info("Activation took {}.", Duration.between(Instant.now(), now));
-      return Map.of();
-    }
-  }
-
-  static class NotificationService {
-    static void sendEmail() {
-      logger.info("Sending welcome mail to user.");
-    }
-  }
-
-
-  public static class UserSignupWorkflow implements MyWorkflowDefinition {
-
-    @NotNull
-    @Override
-    public EventNameCustomizer eventNameCustomizer() {
-      return namespace("io.axoniq.dsl.wf");
-    }
-
-    @Override
-    public String association(@Nonnull Map<String, Object> trigger) {
-      return "signup-" + trigger.get("id").toString();
-    }
-
-    @Override
     public void execute(@Nonnull MyWorkflowContext ctx) {
+
+      Logger logger = LoggerFactory.getLogger(UserSignupWorkflow.class);
 
       logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
 
@@ -93,7 +55,10 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
 
       ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
       ctx.wait("waitASecond", Duration.ofSeconds(1L));
+
       var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
+      ctx.addPayload(magic);
+
       logger.info("Magic happened because of the magician {}", magic.magician());
       // -> end
 
@@ -106,22 +71,15 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
     var workflow = new UserSignupWorkflow();
     return (d) -> d.declarative("User signup workflow")
       .on(EventCondition.fromType(RegistrationReceivedEvent.class))
-      .workflowDefinition(c -> workflow.workflowDefinition())
-      .eventNameCustomizer(c -> workflow::eventNameCustomizer)
-      .workflowIdProvider(c -> workflow.associationProvider())
+      .workflowDefinition(c -> workflow::execute)
+      .eventNameCustomizer(c -> () -> namespace("io.axoniq.dsl.wf"))
+      .workflowIdProvider(c -> (trigger) -> Optional.of("signup-" + trigger.get("id").toString()))
       .notCustomized();
   }
 
 
   @Test
   void shouldExecuteAllStepsOnFirstRun() {
-
-    /*
-    workflowRegistry.register(
-      new QualifiedName(RegistrationReceivedEvent.class),
-      new UserSignupWorkflow()
-    );
-     */
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(
@@ -159,6 +117,8 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
         "sendWelcomeEmail",
         "waitASecond", "waitForMagicToHappen"
       );
+      assertThat(context.getPayload().containsKey("magic"));
+      assertThat(context.getPayload().containsKey("__createUser"));
     }
   }
 

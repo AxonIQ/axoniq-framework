@@ -21,6 +21,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
   }
 
   @Override
+  @Nonnull
   public String getStepName() {
     return stepName;
   }
@@ -34,13 +35,13 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
   @Nonnull
   public <T> Optional<T> payload() {
     //noinspection unchecked
-    return Optional.ofNullable(workflowState.getStep(stepName)).map(step -> (T) step.result());
+    return Optional.of(workflowState.getStep(stepName)).map(step -> (T) step.result());
   }
 
   @Override
   @Nonnull
   public Optional<StepFailedException> error() {
-    return Optional.ofNullable(workflowState.getStep(stepName)).map(step -> {
+    return Optional.of(workflowState.getStep(stepName)).map(step -> {
       var cause = step.error();
       if (cause instanceof StepFailedException) {
         return (StepFailedException) cause;
