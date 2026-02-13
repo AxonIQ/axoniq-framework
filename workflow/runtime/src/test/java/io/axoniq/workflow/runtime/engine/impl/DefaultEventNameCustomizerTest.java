@@ -240,11 +240,12 @@ class DefaultEventNameCustomizerTest {
         }
 
         @Test
-        void propagatesAppendToBaseName() {
+        void doesNotPropagateAppendToBaseName() {
             var parent = DefaultEventNameCustomizer.Builder.appendToBaseName(false);
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("Completed", name.localName());
+            // appendToBaseName resets to true (default), so step name is included
+            assertEquals("StepCompleted", name.localName());
         }
 
         @Test

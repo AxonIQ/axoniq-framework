@@ -218,9 +218,8 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     var inheritable = new DefaultEventNameCustomizer();
     inheritable.namespace(this.namespace);
     inheritable.capitalizeSimpleName(this.capitalizeSimpleName);
-    inheritable.appendToBaseName(this.appendToBaseName);
     inheritable.stepStatusToName.putAll(this.stepStatusToName);
-    // baseName, workflowStatusToName, payloadCustomization are NOT copied
+    // baseName, workflowBaseName, appendToBaseName, workflowStatusToName, payloadCustomization are NOT copied
     return inheritable;
   }
 
