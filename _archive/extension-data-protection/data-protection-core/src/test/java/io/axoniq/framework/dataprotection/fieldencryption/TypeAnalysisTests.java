@@ -27,6 +27,7 @@ import io.axoniq.framework.dataprotection.api.Scope;
 import io.axoniq.framework.dataprotection.api.SerializedPersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +51,7 @@ public class TypeAnalysisTests {
 
     @BeforeEach
     public void setUp() throws Exception {
-        CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 

@@ -39,7 +39,7 @@ public class PKCS11Test extends AbstractEngineTestSet {
 
     static {
         if (new File(SOFTHSM_CONFIG_FILE).exists()) {
-            cryptoEngine = new PKCS11CryptoEngine(SOFTHSM_CONFIG_FILE, TOKEN_PIN.toCharArray());
+            cryptoEngine = new PKCS11CryptoEngine(SOFTHSM_CONFIG_FILE, TOKEN_PIN.toCharArray(), mockEntitlementManager());
         } else {
             logger.warn("SoftHSM native lib not found - all PKCS#11 test will be skipped");
             cryptoEngine = null;
@@ -51,6 +51,7 @@ public class PKCS11Test extends AbstractEngineTestSet {
         Assumptions.assumeTrue(cryptoEngine != null);
     }
 
+    @Override
     protected CryptoEngine getCryptoEngine() {
         return cryptoEngine;
     }

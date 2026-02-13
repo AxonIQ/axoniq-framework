@@ -26,6 +26,7 @@ import io.axoniq.framework.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.jpa.JpaCryptoEngine;
+import io.axoniq.license.entitlement.EntitlementManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
@@ -66,11 +67,12 @@ public class DataProtectionConfiguration {
      * This is the production-ready implementation for encryption key management.
      *
      * @param entityManagerFactory JPA entity manager factory for database access
+     * @param entitlementManager the entitlement manager for license validation
      * @return a JpaCryptoEngine instance for persistent key storage
      */
     @Bean
-    public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory) {
-        return new JpaCryptoEngine(entityManagerFactory);
+    public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory, EntitlementManager entitlementManager) {
+        return new JpaCryptoEngine(entityManagerFactory, entitlementManager);
     }
 
     /**

@@ -22,6 +22,7 @@ import io.axoniq.framework.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.dataprotection.api.PersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import org.axonframework.conversion.Converter;
 import org.fluttercode.datafactory.impl.DataFactory;
 import org.jetbrains.annotations.NotNull;
@@ -57,7 +58,7 @@ public class SpecialCollectionsConversionTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         converter = defaultTestConverter();
         fieldEncrypter = new FieldEncrypter(cryptoEngine, converter);
         DataFactory dataFactory = new DataFactory();

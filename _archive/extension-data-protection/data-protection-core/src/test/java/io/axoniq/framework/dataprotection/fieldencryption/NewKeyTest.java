@@ -22,6 +22,7 @@ import io.axoniq.framework.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.dataprotection.api.PersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import lombok.Data;
 import org.junit.jupiter.api.*;
 
@@ -38,7 +39,7 @@ public class NewKeyTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 

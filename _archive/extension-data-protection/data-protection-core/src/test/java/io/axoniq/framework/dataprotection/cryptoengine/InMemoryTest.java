@@ -19,8 +19,9 @@ package io.axoniq.framework.dataprotection.cryptoengine;
 
 public class InMemoryTest extends AbstractEngineTestSet {
 
+    @Override
     protected CryptoEngine getCryptoEngine() {
-        return new InMemoryCryptoEngine();
+        return new InMemoryCryptoEngine(mockEntitlementManager());
     }
 
 }

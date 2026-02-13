@@ -22,6 +22,7 @@ import io.axoniq.framework.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.dataprotection.api.PersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import lombok.Data;
 import org.fluttercode.datafactory.impl.DataFactory;
 import org.junit.jupiter.api.*;
@@ -50,7 +51,7 @@ public class PersDataCollectionsTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());

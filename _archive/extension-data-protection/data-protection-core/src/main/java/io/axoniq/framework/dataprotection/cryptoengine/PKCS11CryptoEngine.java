@@ -18,6 +18,7 @@
 package io.axoniq.framework.dataprotection.cryptoengine;
 
 import io.axoniq.framework.dataprotection.internal.utils.ExceptionFactory;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,13 +45,14 @@ public class PKCS11CryptoEngine extends JavaKeyStoreCryptoEngine {
      *
      * @param configName the name of a file holding the config for {SunPKCS11}
      * @param password   the password to open the keystore. Will be overwritten with zeroes after successful opening
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public PKCS11CryptoEngine(String configName, char[] password) {
-        this(prepareProvider(configName), password);
+    public PKCS11CryptoEngine(String configName, char[] password, EntitlementManager entitlementManager) {
+        this(prepareProvider(configName), password, entitlementManager);
     }
 
-    private PKCS11CryptoEngine(Provider pkcs11, char[] password) {
-        super(getKeyStore(pkcs11, password));
+    private PKCS11CryptoEngine(Provider pkcs11, char[] password, EntitlementManager entitlementManager) {
+        super(getKeyStore(pkcs11, password), entitlementManager);
     }
 
     private static Provider prepareProvider(String configFile) {

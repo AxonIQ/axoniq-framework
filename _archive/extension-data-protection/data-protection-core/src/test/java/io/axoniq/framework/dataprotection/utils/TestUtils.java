@@ -17,8 +17,11 @@
  */
 package io.axoniq.framework.dataprotection.utils;
 
+import io.axoniq.license.entitlement.EnforcingEntitlementManager;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.json.JacksonConverter;
+import org.mockito.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -99,5 +102,18 @@ public abstract class TestUtils {
      */
     public static Converter defaultTestConverter() {
         return new JacksonConverter();
+    }
+
+    /**
+     * Creates a mocked EntitlementManager for testing purposes.
+     * <p>
+     * This method creates a Mockito mock of {@link EnforcingEntitlementManager}.
+     * Since {@link EntitlementManager} is a sealed interface, we mock the concrete
+     * implementation class instead.
+     *
+     * @return a mocked EntitlementManager suitable for testing
+     */
+    public static EntitlementManager mockEntitlementManager() {
+        return Mockito.mock(EnforcingEntitlementManager.class);
     }
 }

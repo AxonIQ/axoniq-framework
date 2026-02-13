@@ -29,7 +29,7 @@ public class JDBCTest extends AbstractEngineTestSet {
     static {
         JDBCDataSource jdbcDataSource = new JDBCDataSource();
         jdbcDataSource.setURL("jdbc:hsqldb:mem:mydb");
-        cryptoEngine = new JdbcCryptoEngine(jdbcDataSource);
+        cryptoEngine = new JdbcCryptoEngine(jdbcDataSource, mockEntitlementManager());
 
         try(Connection connection = jdbcDataSource.getConnection()) {
             connection.prepareStatement(cryptoEngine.getCreateTableStatement()).execute();
@@ -38,6 +38,7 @@ public class JDBCTest extends AbstractEngineTestSet {
         }
     }
 
+    @Override
     protected CryptoEngine getCryptoEngine() {
         return cryptoEngine;
     }

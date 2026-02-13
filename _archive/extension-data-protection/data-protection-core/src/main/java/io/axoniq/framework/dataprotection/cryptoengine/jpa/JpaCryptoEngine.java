@@ -20,6 +20,7 @@ package io.axoniq.framework.dataprotection.cryptoengine.jpa;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.DatabaseBackedCryptoEngine;
 import io.axoniq.framework.dataprotection.internal.utils.ExceptionFactory;
+import io.axoniq.license.entitlement.EntitlementManager;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.PersistenceException;
@@ -55,9 +56,11 @@ public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {
      * store key entities.
      *
      * @param emf the {@link EntityManagerFactory} to use.
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JpaCryptoEngine(EntityManagerFactory emf) {
-        this(emf, DefaultKeyEntity.class);
+    public JpaCryptoEngine(EntityManagerFactory emf, EntitlementManager entitlementManager) {
+        this(emf, DefaultKeyEntity.class, entitlementManager);
+
     }
 
     /**
@@ -65,8 +68,10 @@ public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {
      *
      * @param emf the {@link EntityManagerFactory} to use.
      * @param entityClass the entity used to store key information
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JpaCryptoEngine(EntityManagerFactory emf, Class<? extends KeyEntity> entityClass) {
+    public JpaCryptoEngine(EntityManagerFactory emf, Class<? extends KeyEntity> entityClass, EntitlementManager entitlementManager) {
+        super(entitlementManager);
         this.emf = emf;
         this.entityClass = entityClass;
         try {

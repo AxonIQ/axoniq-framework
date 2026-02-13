@@ -17,7 +17,9 @@
  */
 package io.axoniq.framework.dataprotection.cryptoengine;
 
+import io.axoniq.framework.dataprotection.DataProtectionAxoniqComponent;
 import io.axoniq.framework.dataprotection.internal.utils.ExceptionFactory;
+import io.axoniq.license.entitlement.EntitlementManager;
 
 import java.io.OutputStream;
 import java.security.KeyStore;
@@ -52,6 +54,7 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
     private static final String DIGEST_TRANSFORM = "AES/ECB/NoPadding";
     private static final String ALGORITHM = "AES";
     private final KeyStore keyStore;
+    private final EntitlementManager entitlementManager;
     private final Lock createKeyLock = new ReentrantLock();
     private KeyType keyType = KeyType.AES_256;
     private ThreadLocal<KeyGenerator> keyGenerator = keyGenerator();
@@ -80,18 +83,26 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
 
     /**
      * Constructs a new {@link JavaKeyStoreCryptoEngine}
+     *
      * @param keyStore the {@link KeyStore} to use
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JavaKeyStoreCryptoEngine(KeyStore keyStore) {
+    public JavaKeyStoreCryptoEngine(KeyStore keyStore, EntitlementManager entitlementManager) {
         this.keyStore = keyStore;
+        this.entitlementManager = entitlementManager;
     }
 
     /**
      * {@inheritDoc}
      * Please see the class description for a caveat on key saving.
      */
+    private void validateEntitlement() {
+        entitlementManager.useComponent(DataProtectionAxoniqComponent.IDENTIFIER);
+    }
+
     @Override
     public SecretKey getOrCreateKey(String id) {
+        validateEntitlement();
         SecretKey key = getKey(id);
         if(key == null) {
             createKeyLock.lock();
