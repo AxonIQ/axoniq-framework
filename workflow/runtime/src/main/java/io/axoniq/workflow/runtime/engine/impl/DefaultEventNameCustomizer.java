@@ -126,6 +126,12 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
           }
           return new QualifiedName(resultingNamespace, resultingName);
         }
+
+        @NotNull
+        @Override
+        public EventNameCustomizer forStepInheritance() {
+          return this;
+        }
       };
     }
   }
@@ -135,11 +141,13 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     stepCompleted("Completed");
     stepTimedOut("TimedOut");
     stepFailed("Failed");
+    stepCancelled("Cancelled");
 
     workflowStarted("Started");
     workflowCompleted("Completed");
     workflowTimedOut("TimedOut");
     workflowFailed("Failed");
+    workflowCancelled("Cancelled");
   }
 
   public DefaultEventNameCustomizer baseName(String baseName) {
@@ -187,6 +195,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     return this;
   }
 
+  public DefaultEventNameCustomizer stepCancelled(String cancelled) {
+    this.stepStatusToName.put(StepStatus.CANCELLED, cancelled);
+    return this;
+  }
+
   public DefaultEventNameCustomizer workflowCompleted(String completed) {
     this.workflowStatusToName.put(WorkflowStatus.COMPLETED, completed);
     return this;
@@ -204,6 +217,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   public DefaultEventNameCustomizer workflowFailed(String failed) {
     this.workflowStatusToName.put(WorkflowStatus.FAILED, failed);
+    return this;
+  }
+
+  public DefaultEventNameCustomizer workflowCancelled(String cancelled) {
+    this.workflowStatusToName.put(WorkflowStatus.CANCELLED, cancelled);
     return this;
   }
 

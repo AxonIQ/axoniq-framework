@@ -88,7 +88,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             logger.trace("Workflow instance has reached terminal state {}, skipping execution.", ctx.getStatus());
             return CompletableFuture.completedFuture(ctx);
           }
-          var workflowName = configuration.workflowName();
+          var configuredName = configuration.workflowName();
+          var workflowName = (configuredName != null && !configuredName.isEmpty()) ? configuredName : workflowId;
           var customizer = configuration.eventNameCustomizer();
           if (ctx.getStatus() == WorkflowStatus.NONE) {
             sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer), pc).join(); // FIXME join
