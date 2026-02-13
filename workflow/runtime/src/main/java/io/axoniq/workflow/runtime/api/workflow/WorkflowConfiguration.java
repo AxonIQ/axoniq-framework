@@ -25,6 +25,11 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
   AssociationProvider associationProvider();
 
   @Nonnull
+  default String workflowName() {
+    return this.getClass().getSimpleName();
+  }
+
+  @Nonnull
   default EventNameCustomizer eventNameCustomizer() {
     return DefaultEventNameCustomizer.Builder.eventName();
   }

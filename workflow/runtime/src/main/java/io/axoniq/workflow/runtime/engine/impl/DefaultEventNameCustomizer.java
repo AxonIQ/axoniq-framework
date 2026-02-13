@@ -19,6 +19,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
   private final Map<WorkflowStatus, String> workflowStatusToName = new HashMap<>();
   private String namespace = "io.axoniq.workflow";
   private String baseName = null;
+  private String workflowBaseName = null;
   private boolean appendToBaseName = true;
   private boolean capitalizeSimpleName = true;
   private Function<PayloadCustomization, QualifiedName> payloadCustomization = pc -> new QualifiedName(pc.namespaceTemplate, pc.localNameTemplate);
@@ -39,6 +40,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     public static DefaultEventNameCustomizer baseName(String baseName) {
       return eventName().baseName(baseName);
+    }
+
+    public static DefaultEventNameCustomizer workflowBaseName(String workflowBaseName) {
+      return eventName().workflowBaseName(workflowBaseName);
     }
 
     public static DefaultEventNameCustomizer namespace(String namespace) {
@@ -142,6 +147,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     return this;
   }
 
+  public DefaultEventNameCustomizer workflowBaseName(String workflowBaseName) {
+    this.workflowBaseName = workflowBaseName;
+    return this;
+  }
+
   public DefaultEventNameCustomizer namespace(String namespace) {
     this.namespace = namespace;
     return this;
@@ -204,6 +214,18 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
   @Override
   @Nonnull
+  public EventNameCustomizer forStepInheritance() {
+    var inheritable = new DefaultEventNameCustomizer();
+    inheritable.namespace(this.namespace);
+    inheritable.capitalizeSimpleName(this.capitalizeSimpleName);
+    inheritable.appendToBaseName(this.appendToBaseName);
+    inheritable.stepStatusToName.putAll(this.stepStatusToName);
+    // baseName, workflowStatusToName, payloadCustomization are NOT copied
+    return inheritable;
+  }
+
+  @Override
+  @Nonnull
   public QualifiedName getEventName(
     @Nonnull String stepName,
     @Nonnull Map<String, Object> parameters,
@@ -230,11 +252,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     @Nonnull Map<String, Object> parameters,
     @Nonnull WorkflowStatus workflowStatus
   ) {
-    String namespaceTemplate = (namespace != null ? (namespace.endsWith(".") ? namespace : namespace + ".") : "");
+    String namespaceTemplate = namespace != null ? namespace : "";
     final StringBuilder eventNameTemplate = new StringBuilder();
     if (appendToBaseName) {
       eventNameTemplate
-        .append(capitalize(baseName != null ? baseName : stepName));
+        .append(capitalize(workflowBaseName != null ? workflowBaseName : stepName));
     }
     eventNameTemplate
       .append(Objects.requireNonNull(workflowStatusToName.get(workflowStatus)));
