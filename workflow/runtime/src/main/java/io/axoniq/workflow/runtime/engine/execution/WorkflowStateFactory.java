@@ -5,6 +5,7 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 @Internal
+@FunctionalInterface
 public interface WorkflowStateFactory {
   /**
    * Creates state for given workflow context.

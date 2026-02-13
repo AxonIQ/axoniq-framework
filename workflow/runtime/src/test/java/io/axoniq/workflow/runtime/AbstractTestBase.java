@@ -1,7 +1,7 @@
 package io.axoniq.workflow.runtime;
 
 import io.axoniq.workflow.runtime.engine.impl.PrettyPrintingRecordingEventStore;
-import io.axoniq.workflow.runtime.engine.impl.SingleEventHandlerComponent;
+import io.axoniq.workflow.runtime.engine.impl.CatchAllEventHandlingComponent;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.DefaultWorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinitionRegistry;
@@ -55,7 +55,7 @@ public class AbstractTestBase {
     configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps.processor(
       EventProcessorModule
         .pooledStreaming("workflow")
-        .eventHandlingComponents(req -> req.declarative(cfg -> new SingleEventHandlerComponent(
+        .eventHandlingComponents(req -> req.declarative(cfg -> new CatchAllEventHandlingComponent(
           cfg.getComponent(WorkflowEngine.class)
         )))
         .customized((cfg, c) -> c.eventCriteria(
@@ -87,7 +87,7 @@ public class AbstractTestBase {
     configuration.shutdown();
   }
 
-  static void waitWithProgress(long millis) {
+  public static void waitWithProgress(long millis) {
     try {
       for (long i = 0; i < millis; i = i + 200) {
         Thread.sleep(i);

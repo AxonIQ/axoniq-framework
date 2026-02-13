@@ -5,6 +5,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.function.Predicate;
 
 public interface WaitForPrimitive {
@@ -19,6 +20,7 @@ public interface WaitForPrimitive {
    * @param eventNameCustomizer event name customizer.
    * @return result.
    */
+  @Nonnull
   WorkflowStepResult waitFor(
     @Nonnull String stepName,
     @Nonnull QualifiedName qualifiedName,
@@ -26,5 +28,37 @@ public interface WaitForPrimitive {
     @Nonnull Duration timeout,
     @Nonnull EventNameCustomizer eventNameCustomizer
   );
+
+  default <T> T waitFor(@Nonnull WaitForCommand<T> command) {
+    Objects.requireNonNull(command, "command must not be null");
+    return command.result(
+      waitFor(
+        command.stepName(),
+        command.qualifiedName(),
+        command.predicate(),
+        command.timeout(),
+        command.eventNameCustomizer()
+      )
+    );
+  }
+
+  interface WaitForCommand<T> {
+    @Nonnull
+    String stepName();
+
+    @Nonnull
+    QualifiedName qualifiedName();
+
+    @Nonnull
+    Predicate<EventMessage> predicate();
+
+    @Nonnull
+    Duration timeout();
+
+    @Nonnull
+    EventNameCustomizer eventNameCustomizer();
+
+    T result(@Nonnull WorkflowStepResult result);
+  }
 
 }

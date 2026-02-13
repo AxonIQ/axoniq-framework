@@ -210,11 +210,13 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
   // delegation
   @Override
+  @Nonnull
   public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local, @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping, @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
     return executeDelegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
   }
 
   @Override
+  @Nonnull
   public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
     return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
   }

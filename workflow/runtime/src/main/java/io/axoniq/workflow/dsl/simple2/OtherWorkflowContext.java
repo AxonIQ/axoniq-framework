@@ -9,13 +9,14 @@ import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -40,60 +41,47 @@ public class OtherWorkflowContext extends WorkflowInstance
     super(workflowId, payload, processingContext, parentCustomizer, workflowServices);
   }
 
-  public <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-    var result = waitFor(stepName, new QualifiedName(eventType), e -> predicate.test(e.payloadAs(eventType)), timeout, eventNameCustomizer);
-    return fromResult(result, eventType);
-  }
-
   public <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
-    var result = waitFor(stepName, new QualifiedName(eventType), e -> predicate.test(e.payloadAs(eventType)), timeout, eventName());
-    return fromResult(result, eventType);
-  }
-
-  public <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-    var result = waitFor(stepName, new QualifiedName(eventType), (e) -> true, timeout, eventNameCustomizer);
-    return fromResult(result, eventType);
+    return waitFor(BlockingWaitForCommand.blocking(
+      stepName,
+      super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
+      e -> predicate.test(e.payloadAs(eventType)),
+      timeout,
+      TypeReference.fromType(eventType),
+      super.processingContext().component(Converter.class)
+    ));
   }
 
   public <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout) {
-    var result = waitFor(stepName, new QualifiedName(eventType), (e) -> true, timeout, eventName());
-    return fromResult(result, eventType);
+    return this.waitForEvent(stepName, eventType, e -> true, timeout);
   }
 
   public <T> T waitForEvent(String stepName, Class<T> eventType) {
-    return this.waitForEvent(stepName, eventType, Duration.ofSeconds(5)); // TODO default
-  }
-
-  public void wait(String stepName, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-    var result = waitFor(stepName, new QualifiedName(Void.class), (e) -> false, timeout, eventNameCustomizer);
-    if (result.isFailure()) {
-      throw result.error().get();
-    }
+    return this.waitForEvent(stepName, eventType, Duration.ofSeconds(5));
   }
 
   public void wait(String stepName, Duration timeout) {
-    wait(stepName, timeout, eventName());
+    var result = waitFor(stepName, new QualifiedName(Void.class), (e) -> false, timeout, eventName());
+    if (result.isFailure() && result.error().isPresent()) {
+      throw result.error().get();
+    }
   }
 
   public WorkflowStepResult executeWithResult(String stepName, Map<String, Object> payload, PayloadProcessor action, Duration duration) {
     return execute(stepName, payload, action, local(), all(), duration, eventName());
   }
 
-  public Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action, EventNameCustomizer eventNameCustomizer) {
-    var result = execute(stepName, payload, action, local(), all(), Duration.ofSeconds(5), eventNameCustomizer);
-    return fromResult(result);
-  }
 
   public Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action, Duration timeout) {
-    var result = execute(stepName, payload, action, local(), all(), timeout, eventName());
-    return fromResult(result);
+    return execute(
+      BlockingExecuteWithResultCommand.blockingLocal(stepName, payload, action, timeout, new TypeReference<>() {
+      }, super.processingContext().component(Converter.class))
+    );
   }
 
   public <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action, EventNameCustomizer eventNameCustomizer) {
     var stepSpecificName = "__" + stepName;
-    var result = execute(
-      stepName,
-      payload,
+    var command = BlockingExecuteWithResultCommand.blockingLocal(stepName, payload,
       (c, p) -> {
         var stepResult = action.apply(p);
         if (stepResult != null) {
@@ -101,28 +89,16 @@ public class OtherWorkflowContext extends WorkflowInstance
         } else {
           return Map.of();
         }
-      },
-      local(),
-      all(),
-      Duration.ofSeconds(5),
-      eventNameCustomizer
-    );
+      }
+      , Duration.ofSeconds(5), new TypeReference<Map<String, Object>>() {
+      }, super.processingContext().component(Converter.class));
     //noinspection unchecked
-    return (T) fromResult(result).get(stepSpecificName);
-  }
+    return (T) execute(command).get(stepSpecificName);
 
-  // taskqueue overloads
+  }
 
   public Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action) {
     return this.execute(stepName, payload, action, Duration.ofSeconds(5));
-  }
-
-  public Payload execute(String stepName, Payload payload, Function<Payload, Payload> action, EventNameCustomizer eventNameCustomizer) {
-    return payload(this.execute(stepName, payload.getValues(), (c, p) -> action.apply(payload(p)).getValues(), eventNameCustomizer));
-  }
-
-  public Payload execute(String stepName, Payload payload, Function<Payload, Payload> action) {
-    return payload(this.execute(stepName, payload.getValues(), (c, p) -> action.apply(payload(p)).getValues()));
   }
 
   public <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType, Function<Map<String, Object>, T> action) {
@@ -131,31 +107,6 @@ public class OtherWorkflowContext extends WorkflowInstance
 
   public <T> T execute(String stepName, Class<T> returnType, Supplier<T> action) {
     return this.execute(stepName, Map.of(), returnType, (p) -> action.get());
-  }
-
-  public <T> T execute(String stepName, Class<T> returnType, Supplier<T> action, EventNameCustomizer eventNameCustomizer) {
-    return this.execute(stepName, Map.of(), returnType, (p) -> action.get(), eventNameCustomizer);
-  }
-
-  public void execute(String stepName, Payload payload, Consumer<Payload> action, EventNameCustomizer eventNameCustomizer) {
-    execute(stepName, payload, (p) -> {
-      action.accept(p);
-      return payload();
-    }, eventNameCustomizer);
-  }
-
-  public void execute(String stepName, Payload payload, Consumer<Payload> action) {
-    this.execute(stepName, payload, (p) -> {
-      action.accept(p);
-      return payload();
-    });
-  }
-
-  public void execute(String stepName, Runnable action, EventNameCustomizer eventNameCustomizer) {
-    this.execute(stepName, Void.class, () -> {
-      action.run();
-      return null;
-    }, eventNameCustomizer);
   }
 
   public void execute(String stepName, Runnable action) {
@@ -167,24 +118,6 @@ public class OtherWorkflowContext extends WorkflowInstance
 
   public <T> T execute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
     return this.execute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
-  }
-
-
-  <T> T fromResult(WorkflowStepResult result, Class<T> eventType) {
-    if (result.isSuccess() && result.payload().isPresent()) {
-      return super.processingContext().component(Converter.class)
-        .convert(result.payload().get(), eventType);
-    } else {
-      throw result.error().orElseThrow();
-    }
-  }
-
-  Map<String, Object> fromResult(WorkflowStepResult result) {
-    if (result.isSuccess() && result.<Map<String, Object>>payload().isPresent()) {
-      return result.<Map<String, Object>>payload().get();
-    } else {
-      throw result.error().orElseThrow();
-    }
   }
 
 }

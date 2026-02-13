@@ -36,6 +36,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     super(context, workflowState, workflowServices, parentEventNameCustomizer);
   }
 
+  @Nonnull
   @Override
   public WorkflowStepResult execute(
     @NotNull String stepName,

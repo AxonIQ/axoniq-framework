@@ -16,14 +16,14 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 
-public class SingleEventHandlerComponent implements EventHandlingComponent {
+public class CatchAllEventHandlingComponent implements EventHandlingComponent {
 
-  private static final Logger logger = LoggerFactory.getLogger(SingleEventHandlerComponent.class);
+  private static final Logger logger = LoggerFactory.getLogger(CatchAllEventHandlingComponent.class);
 
   private final SequencingPolicy sequencingPolicy;
   private final EventHandler eventHandler;
 
-  public SingleEventHandlerComponent(EventHandler eventHandler) {
+  public CatchAllEventHandlingComponent(EventHandler eventHandler) {
     this.sequencingPolicy = new HierarchicalSequencingPolicy(
       SequentialPerAggregatePolicy.instance(),
       SequentialPolicy.INSTANCE

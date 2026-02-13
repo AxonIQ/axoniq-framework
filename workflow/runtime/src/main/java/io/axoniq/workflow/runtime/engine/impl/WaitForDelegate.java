@@ -35,6 +35,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
+  @Nonnull
   public WorkflowStepResult waitFor(
     @NotNull String stepName,
     @NotNull QualifiedName qualifiedName,
