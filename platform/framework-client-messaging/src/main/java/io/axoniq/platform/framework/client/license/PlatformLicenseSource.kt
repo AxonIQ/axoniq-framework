@@ -36,7 +36,7 @@ class PlatformLicenseSource(
         private val rSocket: AxoniqConsoleRSocketClient,
         private val registrar: RSocketHandlerRegistrar,
         private val clientSettingsService: ClientSettingsService,
-       private val executorService: ScheduledExecutorService,
+        private val executorService: ScheduledExecutorService,
 ) : LicenseSource, ClientSettingsObserver {
 
     private var listener: LicenseSource.Listener? = null
@@ -50,7 +50,7 @@ class PlatformLicenseSource(
 
         registrar.registerHandlerWithPayload(Routes.License.LICENSE, String::class.java) { payload ->
             logger.debug { "Received license update via request-response: $payload" }
-            if(currentStatus.get().enabled) {
+            if (currentStatus.get().enabled) {
                 currentLicense = payload
                 lastLicenseReceivedTime = Instant.now()
                 listener?.onLicenseAvailable(payload)
@@ -67,12 +67,10 @@ class PlatformLicenseSource(
         return 70
     }
 
-    override fun register(newListener: LicenseSource.Listener?) {
+    override fun register(newListener: LicenseSource.Listener) {
         check(listener == null) { "Already has a listener" }
         this.listener = newListener
-        if (currentLicense != null) {
-            this.listener!!.onLicenseAvailable(currentLicense)
-        }
+        currentLicense?.let { this.listener!!.onLicenseAvailable(it) }
     }
 
     override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
@@ -83,9 +81,7 @@ class PlatformLicenseSource(
             this.lastLicenseReceivedTime = null
             subscription?.dispose()
             subscription = null
-            if (this.listener != null) {
-                this.listener!!.onLicenseUnavailable()
-            }
+            this.listener?.onLicenseUnavailable(LicenseSource.LicenseUnavailableReason.LICENSE_APPLICATION_LIMIT_EXCEEDED)
         } else
             if (!this.currentStatus.get().enabled && clientStatus.enabled) {
                 retrieveLicense()
@@ -103,14 +99,14 @@ class PlatformLicenseSource(
                 .subscribeOn(Schedulers.boundedElastic())
                 .publishOn(Schedulers.boundedElastic())
                 .doOnNext { response ->
-                    logger.debug { "Received license via request-response: $response" }
+                    logger.debug { "Received license via request-response" }
                     currentLicense = response
                     lastLicenseReceivedTime = Instant.now()
                     listener?.onLicenseAvailable(response)
                 }
                 .doOnError { error ->
                     logger.debug { "Failed to retrieve license via request-response: ${error.message}" }
-                    if(attempt == 3) {
+                    if (attempt == 3) {
                         logger.warn { "Was unable to retrieve License from Axoniq Platform" }
                         listener?.onLicenseSourceUnreachable()
                     }

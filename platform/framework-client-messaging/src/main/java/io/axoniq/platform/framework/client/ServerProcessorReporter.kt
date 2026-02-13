@@ -44,7 +44,7 @@ class ServerProcessorReporter(
         if (!clientStatus.enabled || reportTask != null) {
             return
         }
-        logger.info { "Sending processor information every ${settings.processorReportInterval}ms to Axoniq Platform" }
+        logger.debug { "Sending processor information every ${settings.processorReportInterval}ms to Axoniq Platform" }
         this.reportTask = executor.scheduleWithFixedDelay({
             try {
                 this.report()

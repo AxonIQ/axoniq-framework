@@ -56,7 +56,7 @@ class ClientSettingsService {
 
     fun updateSettings(settings: ClientSettingsV2) {
         clearSettings()
-        logger.info { "Client settings changed to $settings" }
+        logger.debug { "Client settings changed to $settings" }
         this.settings = settings
         observers.forEach { it.onConnectionUpdate(clientStatus, settings) }
     }
