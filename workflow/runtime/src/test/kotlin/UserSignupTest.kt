@@ -1,5 +1,6 @@
 package io.axoniq.workflow.runtime.kotlin
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.axoniq.workflow.dsl.Kontext
 import io.axoniq.workflow.dsl.WorkflowKontextDefinition
 import io.axoniq.workflow.runtime.AbstractTestBase
@@ -19,7 +20,6 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.function.Predicate
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.toJavaDuration
 
 class UserSignupTest : AbstractTestBase() {
 
@@ -27,7 +27,10 @@ class UserSignupTest : AbstractTestBase() {
   data class RegistrationReceivedEvent(val id: String, val email: String)
 
   @JvmRecord
-  data class MagicHappenedEvent(val magician: String)
+  data class MagicHappenedEvent(
+    @field: JsonProperty("magician")
+    val magician: String
+  )
 
   object UserService {
     fun createUser(): Boolean {
@@ -63,32 +66,31 @@ class UserSignupTest : AbstractTestBase() {
     override fun Kontext.onExecute() {
       logger.info("User signup workflow started at {} for {}", Instant.now(), payload)
 
-      val result: Boolean = awaitExecute("createUser", {
+      val success = awaitExecute("createUser", {
         UserService.createUser()
       })
 
-      if (!result) {
+      if (!success) {
         return
       }
 
-      await<Unit> {
+      block {
         execute(
           "activateUser",
           { pc, p -> UserService.activateUser(pc, p) },
-          timeout = 10.seconds.toJavaDuration()
+          timeout = 10.seconds
         )
       }
 
-      wait("waitASecond", Duration.ofSeconds(1L))
+      block("waitASecond", 1.seconds)
 
-      await<Unit> {
+      block {
         execute("sendWelcomeEmail", { pc, p -> NotificationService.sendEmail(); mapOf() })
       }
 
-      await<Unit> {
-        waitFor("waitForMagicToHappen", MagicHappenedEvent::class)
-      }
+      val magic = awaitEvent("waitForMagicToHappen", MagicHappenedEvent::class)
 
+      logger.info("Magic happened because of the magician {}", magic.magician)
       logger.info("User signup workflow ended at {} for {}", Instant.now(), payload)
     }
 
