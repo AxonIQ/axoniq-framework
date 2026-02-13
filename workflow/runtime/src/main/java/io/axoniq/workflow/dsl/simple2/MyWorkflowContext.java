@@ -1,12 +1,12 @@
 package io.axoniq.workflow.dsl.simple2;
 
 import io.axoniq.workflow.dsl.Payload;
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
-import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
 import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
@@ -21,16 +21,16 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.all;
-import static io.axoniq.workflow.runtime.api.primitives.PayloadReducer.local;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.all;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
 
-public class OtherWorkflowContext extends WorkflowInstance
+public class MyWorkflowContext extends WorkflowInstance
   implements WaitForPrimitive, ExecutePrimitive {
 
 
-  public OtherWorkflowContext(
+  public MyWorkflowContext(
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
     @Nonnull ProcessingContext processingContext,

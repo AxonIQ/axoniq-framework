@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api.workflow;
+package io.axoniq.workflow.runtime.api;
 
 public class WorkflowFailedException extends RuntimeException {
 

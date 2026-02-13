@@ -1,6 +1,6 @@
 package io.axoniq.workflow.dsl;
 
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

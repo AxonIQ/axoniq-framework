@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api.workflow;
+package io.axoniq.workflow.runtime.api;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
@@ -16,14 +16,13 @@ public interface WorkflowDefinitionRegistry<W extends WorkflowDefinitionRegistry
     @Nonnull QualifiedName name,
     @Nonnull WorkflowConfiguration<?> workflowConfiguration
   ) {
-    return register(Set.of(name), workflowConfiguration, (e) -> true);
+    return register(new EventCondition(name, (e) -> true), workflowConfiguration);
   }
 
   @Nonnull
   W register(
-    @Nonnull Set<QualifiedName> names,
-    @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-    @Nonnull Predicate<EventMessage> startPredicate
+    @Nonnull EventCondition eventCondition,
+    @Nonnull WorkflowConfiguration<?> workflowConfiguration
   );
 
   @Nonnull
@@ -36,6 +35,7 @@ public interface WorkflowDefinitionRegistry<W extends WorkflowDefinitionRegistry
   record PredicatedWorkflowConfiguration(
     Predicate<EventMessage> predicate,
     WorkflowConfiguration<?> configuration
-  ) {}
+  ) {
+  }
 
 }

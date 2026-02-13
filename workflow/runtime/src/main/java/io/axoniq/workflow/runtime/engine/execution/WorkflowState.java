@@ -1,8 +1,8 @@
 package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -17,6 +17,20 @@ import java.util.function.Predicate;
  * Internal looking API for the execution.
  */
 public interface WorkflowState {
+
+  /**
+   * Checks if provided class is a subtype of {@link WorkflowState} and throws an exception if this checks fails.
+   *
+   * @param clazz class to check.
+   * @return provided class.
+   */
+  static <C> Class<C> requireIsWorkflowState(@Nonnull Class<C> clazz) {
+    if (!WorkflowState.class.isAssignableFrom(clazz)) {
+      throw new IllegalArgumentException(String.format("Provided type %s must be instance of WorkflowState, but it was not.", clazz.getName()));
+    }
+    return clazz;
+  }
+
 
   @Nonnull
   <T extends WorkflowContext> T execute(@Nonnull WorkflowConfiguration<T> workflowConfiguration, @Nonnull WorkflowContext workflowContext) throws ExecutionSuspended;

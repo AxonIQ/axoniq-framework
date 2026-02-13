@@ -1,11 +1,11 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.workflow.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -94,13 +94,13 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
       try {
         handle.workflowState.execute(handle.workflowConfiguration, handle.workflowContext);
       } catch (Throwable t) {
-        throw new RuntimeException(t);
+        throw new RuntimeException("Error during workflow execution", t);
       }
     }
   }
 
-  private void checkAndCreateNewWorkflow(EventMessage eventMessage,
-                                         ProcessingContext processingContext) {
+  private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
+                                         @Nonnull ProcessingContext processingContext) {
     var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
     definitions.forEach(predicatedWorkflowConfiguration -> {
 
@@ -113,10 +113,13 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
             },
             processingContext.component(Converter.class)
           ), "Error converting initial payload");
+          var workflowId = workflowConfiguration.associationProvider().apply(payload)
+            .orElseThrow(() -> new IllegalArgumentException(
+              "Could not extract workflow id from payload " + payload + " for workflow definition " + workflowConfiguration.workflowDefinition())
+            );
 
           var workflowContext = workflowConfiguration.workflowContextFactory()
-            .createContext(payload, processingContext, this);
-          var workflowId = workflowContext.getWorkflowId();
+            .createContext(payload, workflowId, processingContext, this);
 
           // avoid multiple workflows for the same workflow id.
           executionHandles.computeIfAbsent(workflowId, (id) -> {

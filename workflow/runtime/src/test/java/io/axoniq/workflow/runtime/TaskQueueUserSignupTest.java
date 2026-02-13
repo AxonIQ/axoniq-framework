@@ -1,11 +1,13 @@
 package io.axoniq.workflow.runtime;
 
-import io.axoniq.workflow.dsl.simple2.OtherDefinition;
-import io.axoniq.workflow.dsl.simple2.OtherWorkflowContext;
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.dsl.simple2.MyWorkflowContext;
+import io.axoniq.workflow.dsl.simple2.MyWorkflowDefinition;
+import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
@@ -18,12 +20,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 class TaskQueueUserSignupTest extends AbstractTestBase {
+
 
   record RegistrationReceivedEvent(String id, String email) {
   }
@@ -53,13 +58,12 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
   }
 
 
-  public static class UserSignupWorkflow implements OtherDefinition {
-
+  public static class UserSignupWorkflow implements MyWorkflowDefinition {
 
     @NotNull
     @Override
     public EventNameCustomizer eventNameCustomizer() {
-      return DefaultEventNameCustomizer.Builder.namespace("io.axoniq.dsl.wf");
+      return namespace("io.axoniq.dsl.wf");
     }
 
     @Override
@@ -68,7 +72,7 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
     }
 
     @Override
-    public void execute(@Nonnull OtherWorkflowContext ctx) {
+    public void execute(@Nonnull MyWorkflowContext ctx) {
 
       logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
 
@@ -97,13 +101,27 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
     }
   }
 
+  @Override
+  protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<MyWorkflowContext>> getDefinitions() {
+    var workflow = new UserSignupWorkflow();
+    return (d) -> d.declarative("User signup workflow")
+      .on(EventCondition.fromType(RegistrationReceivedEvent.class))
+      .workflowDefinition(c -> workflow.workflowDefinition())
+      .eventNameCustomizer(c -> workflow::eventNameCustomizer)
+      .workflowIdProvider(c -> workflow.associationProvider())
+      .notCustomized();
+  }
+
+
   @Test
   void shouldExecuteAllStepsOnFirstRun() {
 
+    /*
     workflowRegistry.register(
       new QualifiedName(RegistrationReceivedEvent.class),
       new UserSignupWorkflow()
     );
+     */
 
     delayedPublisher.addSchedules(List.of(
       ofMillis(

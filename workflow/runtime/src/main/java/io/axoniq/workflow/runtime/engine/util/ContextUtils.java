@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.engine.util;
 
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.api.WorkflowServices;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.Context;

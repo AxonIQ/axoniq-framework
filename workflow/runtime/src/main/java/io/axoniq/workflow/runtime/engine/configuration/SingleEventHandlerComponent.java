@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.engine.impl;
+package io.axoniq.workflow.runtime.engine.configuration;
 
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;

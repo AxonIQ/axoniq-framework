@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api.primitives;
+package io.axoniq.workflow.runtime.api;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;

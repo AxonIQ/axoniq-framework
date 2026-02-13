@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api.workflow;
+package io.axoniq.workflow.runtime.api;
 
 import java.util.Map;
 import java.util.function.Function;

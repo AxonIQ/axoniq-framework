@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api.primitives;
+package io.axoniq.workflow.runtime.api;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -1,9 +1,6 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.workflow.*;
+import io.axoniq.workflow.runtime.api.*;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
@@ -93,7 +90,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
           try {
             logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
-            configuration.workflowDefinition().execute(ctx);
+            configuration.workflowDefinition().accept(ctx);
             logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
 
             sendWorkflowEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).get(5, TimeUnit.SECONDS); // FIXME constant

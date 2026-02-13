@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.api.workflow;
+package io.axoniq.workflow.runtime.api;
 
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
