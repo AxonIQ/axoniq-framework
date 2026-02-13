@@ -17,6 +17,7 @@
  */
 package io.axoniq.framework.dataprotection.cryptoengine.vault;
 
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import okhttp3.OkHttpClient;
 import org.jetbrains.annotations.Nullable;
 
@@ -61,7 +62,7 @@ public abstract class Utils {
          * Both engines can coexist in the same Vault instance on different mount paths.
          */
         String prefix = (engineVersion != null && engineVersion == 2) ? "secret/data/" : "secret-v1/";
-        return new VaultCryptoEngine(okHttpClient, vaultAddress, rootToken, prefix);
+        return new VaultCryptoEngine(okHttpClient, vaultAddress, rootToken, prefix, TestUtils.mockEntitlementManager());
     }
 
     private Utils() {

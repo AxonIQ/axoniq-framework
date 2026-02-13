@@ -18,7 +18,9 @@
 
 package io.axoniq.framework.dataprotection.cryptoengine;
 
+import io.axoniq.framework.dataprotection.DataProtectionAxoniqComponent;
 import io.axoniq.framework.dataprotection.internal.utils.ExceptionFactory;
+import io.axoniq.license.entitlement.EntitlementManager;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -50,12 +52,32 @@ public abstract class DatabaseBackedCryptoEngine implements CryptoEngine {
     private static final String ALGORITHM = "AES";
     private KeyType keyType = KeyType.AES_256;
 
+    private final EntitlementManager entitlementManager;
+
     private ThreadLocal<SecureRandom> secureRandom = new ThreadLocal<SecureRandom>() {
         @Override
         protected SecureRandom initialValue() {
             return new SecureRandom();
         }
     };
+
+    /**
+     * Creates a new DatabaseBackedCryptoEngine with the given EntitlementManager.
+     *
+     * @param entitlementManager the EntitlementManager for license validation
+     */
+    protected DatabaseBackedCryptoEngine(EntitlementManager entitlementManager) {
+        this.entitlementManager = entitlementManager;
+    }
+
+    /**
+     * Validates that the data protection component is enabled in the license.
+     * This is called on every cryptographic operation to ensure the license is valid.
+     * If the component is not enabled, an exception will be thrown on each attempt.
+     */
+    protected void validateEntitlement() {
+        entitlementManager.useComponent(DataProtectionAxoniqComponent.IDENTIFIER);
+    }
 
     private SecretKeySpec generateKey() {
         int keyLengthBits;
@@ -72,6 +94,7 @@ public abstract class DatabaseBackedCryptoEngine implements CryptoEngine {
 
     @Override
     public SecretKey getOrCreateKey(String id) {
+        validateEntitlement();
         SecretKey secretKey = getKey(id);
         if(secretKey == null) {
             secretKey = putKeyIfAbsent(id, generateKey());

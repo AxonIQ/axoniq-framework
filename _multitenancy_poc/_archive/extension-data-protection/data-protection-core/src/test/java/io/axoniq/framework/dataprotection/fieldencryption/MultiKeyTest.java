@@ -49,7 +49,7 @@ public class MultiKeyTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 

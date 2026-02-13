@@ -24,6 +24,7 @@ import io.axoniq.framework.dataprotection.api.PersonalData;
 import io.axoniq.framework.dataprotection.api.SerializedPersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import lombok.Data;
 import org.axonframework.conversion.Converter;
 import org.fluttercode.datafactory.impl.DataFactory;
@@ -55,7 +56,7 @@ public class MultiLevelRecursionConversionTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         converter = defaultTestConverter();
         fieldEncrypter = new FieldEncrypter(cryptoEngine, converter);
         dataFactory = new DataFactory();

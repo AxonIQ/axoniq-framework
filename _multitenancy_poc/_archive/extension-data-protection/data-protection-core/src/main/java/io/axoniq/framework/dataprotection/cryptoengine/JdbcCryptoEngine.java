@@ -18,6 +18,7 @@
 package io.axoniq.framework.dataprotection.cryptoengine;
 
 import io.axoniq.framework.dataprotection.internal.utils.ExceptionFactory;
+import io.axoniq.license.entitlement.EntitlementManager;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -50,8 +51,10 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
      * @param tableName the SQL name table in which keys will be stored
      * @param keyIdColumnName the SQL name of the column in which the key id will be stored
      * @param keyDataColumnName the SQL name of the column in which the key data will be stored
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JdbcCryptoEngine(DataSource dataSource, String tableName, String keyIdColumnName, String keyDataColumnName) {
+    public JdbcCryptoEngine(DataSource dataSource, String tableName, String keyIdColumnName, String keyDataColumnName, EntitlementManager entitlementManager) {
+        super(entitlementManager);
         this.dataSource = dataSource;
         this.tableName = tableName;
         this.keyIdColumnName = keyIdColumnName;
@@ -64,9 +67,10 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
      *
      * @param dataSource the DataSource
      * @param tableName the SQL name table in which keys will be stored
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JdbcCryptoEngine(DataSource dataSource, String tableName) {
-        this(dataSource, tableName, "id", "secret_key");
+    public JdbcCryptoEngine(DataSource dataSource, String tableName, EntitlementManager entitlementManager) {
+        this(dataSource, tableName, "id", "secret_key", entitlementManager);
     }
 
     /**
@@ -74,9 +78,10 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
      * of the key data column, and "data_protection_keys" as the SQL name of the table.
      *
      * @param dataSource the DataSource
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JdbcCryptoEngine(DataSource dataSource) {
-        this(dataSource, "data_protection_keys");
+    public JdbcCryptoEngine(DataSource dataSource, EntitlementManager entitlementManager) {
+        this(dataSource, "data_protection_keys", entitlementManager);
     }
 
     /**

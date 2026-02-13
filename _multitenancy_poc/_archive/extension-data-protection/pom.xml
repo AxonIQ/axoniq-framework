@@ -59,7 +59,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.0.0</axon-framework.version>
+        <axon-framework.version>5.0.2</axon-framework.version>
         <!-- Conversion -->
         <jackson.version>2.18.2</jackson.version>
         <!-- Persistence -->

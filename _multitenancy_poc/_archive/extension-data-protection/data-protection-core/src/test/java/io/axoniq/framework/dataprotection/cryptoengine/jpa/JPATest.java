@@ -26,8 +26,9 @@ public class JPATest extends AbstractEngineTestSet {
 
     private static EntityManagerFactory emf = Persistence.createEntityManagerFactory("myPersistenceUnit");
 
+    @Override
     protected CryptoEngine getCryptoEngine() {
-        return new JpaCryptoEngine(emf);
+        return new JpaCryptoEngine(emf, mockEntitlementManager());
     }
 
 }

@@ -22,6 +22,7 @@ import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.dataprotection.api.PersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.dataprotection.utils.TestUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -51,7 +52,7 @@ public class BasicConversionTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        final CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        final CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         Converter delegateConverter = defaultTestConverter();
         converter = new FieldEncryptingConverter(cryptoEngine, delegateConverter);
         dataFactory = new DataFactory();

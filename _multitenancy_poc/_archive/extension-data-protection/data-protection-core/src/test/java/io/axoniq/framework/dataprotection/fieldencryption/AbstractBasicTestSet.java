@@ -55,7 +55,7 @@ public abstract class AbstractBasicTestSet<T> {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());

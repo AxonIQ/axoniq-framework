@@ -21,6 +21,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.DatabaseBackedCryptoEngine;
+import io.axoniq.license.entitlement.EntitlementManager;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -59,9 +60,10 @@ public class VaultCryptoEngine extends DatabaseBackedCryptoEngine {
      * @param token the token to be used initially
      * @param prefix the prefix to use in the Vault namespace; could be "secret/" in a simple
      *               test, but probably something more specific in a real-life scenario
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public VaultCryptoEngine(OkHttpClient okHttpClient, String address, String token, String prefix) {
-        this(okHttpClient, address, token, prefix, "key");
+    public VaultCryptoEngine(OkHttpClient okHttpClient, String address, String token, String prefix, EntitlementManager entitlementManager) {
+        this(okHttpClient, address, token, prefix, "key", entitlementManager);
     }
 
     /**
@@ -73,8 +75,10 @@ public class VaultCryptoEngine extends DatabaseBackedCryptoEngine {
      * @param prefix the prefix to use in the Vault namespace; could be "secret/" in a simple
      *               test, but probably something more specific in a real-life scenario
      * @param propertyName the property to be used to store the AES key.
+     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public VaultCryptoEngine(OkHttpClient okHttpClient, String address, String token, String prefix, String propertyName) {
+    public VaultCryptoEngine(OkHttpClient okHttpClient, String address, String token, String prefix, String propertyName, EntitlementManager entitlementManager) {
+        super(entitlementManager);
         this.okHttpClient = okHttpClient;
         this.address = address;
         this.token = token;
