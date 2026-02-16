@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.workflow.dsl.simple2;
+package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.*;
@@ -38,10 +38,10 @@ import static io.axoniq.workflow.runtime.api.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
 
-public class MyWorkflowContext extends WorkflowInstance
+public class SimpleWorkflowContext extends WorkflowInstance
   implements WaitForPrimitive, ExecutePrimitive {
 
-  public MyWorkflowContext(
+  public SimpleWorkflowContext(
     @Nonnull String workflowId,
     @Nonnull Map<String, Object> payload,
     @Nonnull ProcessingContext processingContext,

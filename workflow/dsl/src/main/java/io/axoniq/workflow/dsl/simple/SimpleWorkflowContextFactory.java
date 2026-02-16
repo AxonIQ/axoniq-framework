@@ -1,3 +1,4 @@
+package io.axoniq.workflow.dsl.simple;
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
@@ -26,11 +27,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 
-public class MyWorkflowContextFactory implements WorkflowContextFactory<MyWorkflowContext> {
+public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
   private final EventNameCustomizer parentCustomizer;
 
-  public MyWorkflowContextFactory(
+  public SimpleWorkflowContextFactory(
     @Nonnull EventNameCustomizer parentCustomizer
   ) {
     this.parentCustomizer = parentCustomizer;
@@ -38,12 +39,12 @@ public class MyWorkflowContextFactory implements WorkflowContextFactory<MyWorkfl
 
   @NotNull
   @Override
-  public MyWorkflowContext createContext(
+  public SimpleWorkflowContext createContext(
     @NotNull Map<String, Object> initialPayload,
     @Nonnull String workflowId,
     @Nonnull ProcessingContext processingContext,
     @Nonnull WorkflowServices workflowServices) {
-    return new MyWorkflowContext(
+    return new SimpleWorkflowContext(
       workflowId,
       initialPayload,
       processingContext,

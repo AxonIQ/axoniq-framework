@@ -20,7 +20,7 @@ package io.axoniq.example.workflow.usersignup;
 import io.axoniq.example.workflow.MagicHappenedEvent;
 import io.axoniq.example.workflow.NotificationService;
 import io.axoniq.example.workflow.UserService;
-import io.axoniq.workflow.dsl.simple2.MyWorkflowContext;
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +30,7 @@ import java.time.Instant;
 
 public class UserSignupWorkflow {
 
-  public void execute(@Nonnull MyWorkflowContext ctx) {
+  public void execute(@Nonnull SimpleWorkflowContext ctx) {
 
     Logger logger = LoggerFactory.getLogger(UserSignupWorkflow.class);
 
