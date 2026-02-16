@@ -215,8 +215,66 @@ class DefaultEventNameCustomizerTest {
             var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
 
             var name = merged.getEventName("step", Map.of(), WorkflowStatus.COMPLETED);
-            assertEquals("parent.ns.", name.namespace());
+            assertEquals("parent.ns", name.namespace());
             assertEquals("StepChildDone", name.localName());
+        }
+    }
+
+    @Nested
+    class ForStepInheritanceTests {
+
+        @Test
+        void propagatesNamespace() {
+            var parent = DefaultEventNameCustomizer.Builder.namespace("my.ns");
+            var inherited = parent.forStepInheritance();
+            var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            assertEquals("my.ns", name.namespace());
+        }
+
+        @Test
+        void propagatesCapitalizeSimpleName() {
+            var parent = DefaultEventNameCustomizer.Builder.capitalizeSimpleName(false);
+            var inherited = parent.forStepInheritance();
+            var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            assertEquals("stepCompleted", name.localName());
+        }
+
+        @Test
+        void doesNotPropagateAppendToBaseName() {
+            var parent = DefaultEventNameCustomizer.Builder.appendToBaseName(false);
+            var inherited = parent.forStepInheritance();
+            var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            // appendToBaseName resets to true (default), so step name is included
+            assertEquals("StepCompleted", name.localName());
+        }
+
+        @Test
+        void propagatesStepStatusNames() {
+            var parent = DefaultEventNameCustomizer.Builder.stepCompleted("Done");
+            var inherited = parent.forStepInheritance();
+            var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            assertEquals("StepDone", name.localName());
+        }
+
+        @Test
+        void doesNotPropagateBaseName() {
+            var parent = DefaultEventNameCustomizer.Builder.baseName("Order");
+            var inherited = parent.forStepInheritance();
+            var name = inherited.getEventName("myStep", Map.of(), StepStatus.COMPLETED);
+            // Should use the step name "myStep" instead of parent's baseName "Order"
+            assertEquals("MyStepCompleted", name.localName());
+        }
+
+        @Test
+        void doesNotPropagatePayloadCustomization() {
+            var parent = DefaultEventNameCustomizer.Builder.payloadCustomization(
+                pc -> new QualifiedName("custom.ns", "CustomName")
+            );
+            var inherited = parent.forStepInheritance();
+            var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            // Should use default behavior, not the custom payload function
+            assertEquals("io.axoniq.workflow", name.namespace());
+            assertEquals("StepCompleted", name.localName());
         }
     }
 

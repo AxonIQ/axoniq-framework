@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
@@ -19,6 +19,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
   private final Map<WorkflowStatus, String> workflowStatusToName = new HashMap<>();
   private String namespace = "io.axoniq.workflow";
   private String baseName = null;
+  private String workflowBaseName = null;
   private boolean appendToBaseName = true;
   private boolean capitalizeSimpleName = true;
   private Function<PayloadCustomization, QualifiedName> payloadCustomization = pc -> new QualifiedName(pc.namespaceTemplate, pc.localNameTemplate);
@@ -39,6 +40,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     public static DefaultEventNameCustomizer baseName(String baseName) {
       return eventName().baseName(baseName);
+    }
+
+    public static DefaultEventNameCustomizer workflowBaseName(String workflowBaseName) {
+      return eventName().workflowBaseName(workflowBaseName);
     }
 
     public static DefaultEventNameCustomizer namespace(String namespace) {
@@ -121,6 +126,12 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
           }
           return new QualifiedName(resultingNamespace, resultingName);
         }
+
+        @NotNull
+        @Override
+        public EventNameCustomizer forStepInheritance() {
+          return this;
+        }
       };
     }
   }
@@ -130,15 +141,22 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     stepCompleted("Completed");
     stepTimedOut("TimedOut");
     stepFailed("Failed");
+    stepCancelled("Cancelled");
 
     workflowStarted("Started");
     workflowCompleted("Completed");
     workflowTimedOut("TimedOut");
     workflowFailed("Failed");
+    workflowCancelled("Cancelled");
   }
 
   public DefaultEventNameCustomizer baseName(String baseName) {
     this.baseName = baseName;
+    return this;
+  }
+
+  public DefaultEventNameCustomizer workflowBaseName(String workflowBaseName) {
+    this.workflowBaseName = workflowBaseName;
     return this;
   }
 
@@ -177,6 +195,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     return this;
   }
 
+  public DefaultEventNameCustomizer stepCancelled(String cancelled) {
+    this.stepStatusToName.put(StepStatus.CANCELLED, cancelled);
+    return this;
+  }
+
   public DefaultEventNameCustomizer workflowCompleted(String completed) {
     this.workflowStatusToName.put(WorkflowStatus.COMPLETED, completed);
     return this;
@@ -197,9 +220,25 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     return this;
   }
 
+  public DefaultEventNameCustomizer workflowCancelled(String cancelled) {
+    this.workflowStatusToName.put(WorkflowStatus.CANCELLED, cancelled);
+    return this;
+  }
+
   public DefaultEventNameCustomizer payloadCustomization(Function<PayloadCustomization, QualifiedName> payloadCustomization) {
     this.payloadCustomization = payloadCustomization;
     return this;
+  }
+
+  @Override
+  @Nonnull
+  public EventNameCustomizer forStepInheritance() {
+    var inheritable = new DefaultEventNameCustomizer();
+    inheritable.namespace(this.namespace);
+    inheritable.capitalizeSimpleName(this.capitalizeSimpleName);
+    inheritable.stepStatusToName.putAll(this.stepStatusToName);
+    // baseName, workflowBaseName, appendToBaseName, workflowStatusToName, payloadCustomization are NOT copied
+    return inheritable;
   }
 
   @Override
@@ -230,11 +269,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     @Nonnull Map<String, Object> parameters,
     @Nonnull WorkflowStatus workflowStatus
   ) {
-    String namespaceTemplate = (namespace != null ? (namespace.endsWith(".") ? namespace : namespace + ".") : "");
+    String namespaceTemplate = namespace != null ? namespace : "";
     final StringBuilder eventNameTemplate = new StringBuilder();
     if (appendToBaseName) {
       eventNameTemplate
-        .append(capitalize(baseName != null ? baseName : stepName));
+        .append(capitalize(workflowBaseName != null ? workflowBaseName : stepName));
     }
     eventNameTemplate
       .append(Objects.requireNonNull(workflowStatusToName.get(workflowStatus)));

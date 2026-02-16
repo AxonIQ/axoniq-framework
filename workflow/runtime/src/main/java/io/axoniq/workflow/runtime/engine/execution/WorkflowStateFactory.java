@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 

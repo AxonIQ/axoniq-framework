@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.engine.result;
 
-import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
@@ -30,8 +30,8 @@ public class WorkflowStepResults {
    * @return completed step result.
    */
   @Nonnull
-  public static WorkflowStepResult completed(@Nullable Object payload) {
-    return new CompletedWorkflowStepResult(payload, null, null, false);
+  public static WorkflowStepResult completed(@Nonnull String stepName, @Nullable Object payload) {
+    return new CompletedWorkflowStepResult(stepName, payload, null, null, false);
   }
 
   /**
@@ -41,8 +41,8 @@ public class WorkflowStepResults {
    * @return failed result.
    */
   @Nonnull
-  public static WorkflowStepResult failed(@Nonnull Throwable error) {
-    return new CompletedWorkflowStepResult(null, Objects.requireNonNull(error, "Error must be provided"), null, false);
+  public static WorkflowStepResult failed(@Nonnull String stepName, @Nonnull Throwable error) {
+    return new CompletedWorkflowStepResult(stepName, null, Objects.requireNonNull(error, "Error must be provided"), null, false);
   }
 
   /**
@@ -51,8 +51,8 @@ public class WorkflowStepResults {
    * @return cancelled result.
    */
   @Nonnull
-  public static WorkflowStepResult cancelled() {
-    return new CompletedWorkflowStepResult(null, null, null, true);
+  public static WorkflowStepResult cancelled(@Nonnull String stepName) {
+    return new CompletedWorkflowStepResult(stepName, null, null, null, true);
   }
 
   /**
@@ -62,8 +62,8 @@ public class WorkflowStepResults {
    * @return timed out result.
    */
   @Nonnull
-  public static WorkflowStepResult timeout(@Nonnull Duration timeout) {
-    return new CompletedWorkflowStepResult(null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
+  public static WorkflowStepResult timeout(@Nonnull String stepName, @Nonnull Duration timeout) {
+    return new CompletedWorkflowStepResult(stepName, null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
   }
 
 
@@ -72,6 +72,7 @@ public class WorkflowStepResults {
     return new WorkflowStepResult() {
 
       @Override
+      @Nonnull
       public String getStepName() {
         return "all(" + String.join(", ", Arrays.stream(results).map(WorkflowStepResult::getStepName).toList()) + ")";
       }

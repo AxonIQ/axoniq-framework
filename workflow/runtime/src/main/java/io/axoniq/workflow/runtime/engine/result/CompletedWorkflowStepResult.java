@@ -1,6 +1,6 @@
 package io.axoniq.workflow.runtime.engine.result;
 
-import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -17,8 +17,9 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
   private final StepFailedException error;
   private final Duration timeout;
   private final boolean cancelled;
+  private final String stepName;
 
-  CompletedWorkflowStepResult(@Nullable Object payload, @Nullable Throwable error, @Nullable Duration timeout, boolean cancelled) {
+  CompletedWorkflowStepResult(@Nonnull String stepName, @Nullable Object payload, @Nullable Throwable error, @Nullable Duration timeout, boolean cancelled) {
     this.payload = payload;
     if (error != null) {
       if (error instanceof StepFailedException) {
@@ -31,11 +32,13 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
     }
     this.timeout = timeout;
     this.cancelled = cancelled;
+    this.stepName = stepName;
   }
 
   @Override
+  @Nonnull
   public String getStepName() {
-    return null;
+    return stepName;
   }
 
   @Override

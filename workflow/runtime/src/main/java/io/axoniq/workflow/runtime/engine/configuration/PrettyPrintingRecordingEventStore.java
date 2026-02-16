@@ -1,0 +1,72 @@
+package io.axoniq.workflow.runtime.engine.configuration;
+
+import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
+import jakarta.annotation.Nonnull;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.test.fixture.RecordingEventStore;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+
+import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
+
+public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
+
+  private final List<EventMessage> publishedEvents = new CopyOnWriteArrayList<>();
+
+  @Nonnull
+  public static EventStore eventStore(@Nonnull EventStore delegate) {
+    if (delegate instanceof PrettyPrintingRecordingEventStore) {
+      return delegate;
+    } else {
+      return new PrettyPrintingRecordingEventStore(delegate);
+    }
+  }
+
+  public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
+    super(delegate);
+  }
+
+  @Override
+  public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @NotNull List<EventMessage> events) {
+    publishedEvents.addAll(events);
+    return super.publish(context, events);
+  }
+
+  @Override
+  public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    // descriptor.describeWrapperOf(this.delegate);
+    var eventsByWorkflowId = publishedEvents.stream()
+      .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
+      .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(METADATA_KEY_WORKFLOW_ID, "none")));
+    var events = eventsByWorkflowId.entrySet().stream()
+      .filter(entry -> !entry.getKey().equals("none"))
+      .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))
+      .toList();
+    descriptor.describeProperty("workflowEvents", events);
+  }
+
+  record WorkflowEventDescriptor(
+    String workflowId,
+    List<EventMessage> events
+  ) implements DescribableComponent {
+
+    @Override
+    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+      descriptor.describeProperty(workflowId, events.stream().map(event -> {
+        var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
+        var name = event.type().qualifiedName().toString();
+        return String.format("%s (%s): %s", name, status, event.payload());
+      }).toList());
+    }
+  }
+
+}

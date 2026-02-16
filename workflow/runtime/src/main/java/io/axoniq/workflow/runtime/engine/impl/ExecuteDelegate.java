@@ -1,19 +1,12 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.ExecutePrimitive;
-import io.axoniq.workflow.runtime.api.primitives.PayloadReducer;
-import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.workflow.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.api.*;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.util.ContextUtils;
 import jakarta.annotation.Nonnull;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,13 +32,13 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
   @Nonnull
   @Override
   public WorkflowStepResult execute(
-    @NotNull String stepName,
+    @Nonnull String stepName,
     @Nullable Map<String, Object> local,
-    @NotNull PayloadProcessor action,
-    @NotNull PayloadReducer parameterMapping,
-    @NotNull PayloadReducer resultMapping,
-    @NotNull Duration timeout,
-    @NotNull EventNameCustomizer eventNameCustomizer
+    @Nonnull PayloadProcessor action,
+    @Nonnull PayloadReducer parameterMapping,
+    @Nonnull PayloadReducer resultMapping,
+    @Nonnull Duration timeout,
+    @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
     logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
@@ -53,12 +46,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
     if (!workflowState.containsStep(stepName)) {
       workflowState.appendTask(i ->
-        started(stepName, local, eventNameCustomizer)
+        started(stepName, sanitize(local), eventNameCustomizer)
       );
       try {
         workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
-        return WorkflowStepResults.failed(e);
+        return WorkflowStepResults.failed(stepName, e);
       }
     }
 
