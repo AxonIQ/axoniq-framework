@@ -1,0 +1,78 @@
+package io.axoniq.workflow.runtime.engine.registry;
+
+import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import jakarta.annotation.Nonnull;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.QualifiedName;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+public class SimpleWorkflowDefinitionRegistry implements WorkflowDefinitionRegistry<SimpleWorkflowDefinitionRegistry> {
+
+  private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> workflowsConfigurations = new ConcurrentHashMap<>();
+
+  @Override
+  @Nonnull
+  public SimpleWorkflowDefinitionRegistry register(
+    @Nonnull EventCondition eventCondition,
+    @Nonnull WorkflowConfiguration<?> workflowConfiguration
+  ) {
+    Objects.requireNonNull(workflowConfiguration, "The given workflow configuration cannot be null.");
+    Objects.requireNonNull(eventCondition, "The given event condition cannot be null.");
+
+    workflowsConfigurations.compute(eventCondition.qualifiedName(), (q, workflowConfigurations) -> {
+      if (workflowConfigurations == null) {
+        workflowConfigurations = new CopyOnWriteArrayList<>();
+      }
+      workflowConfigurations.add(new PredicatedWorkflowConfiguration(eventCondition.payloadPredicate(), workflowConfiguration));
+      return workflowConfigurations;
+    });
+
+    return this;
+
+  }
+
+  @Override
+  @Nonnull
+  public Set<QualifiedName> supportedEvents() {
+    return Set.copyOf(workflowsConfigurations.keySet());
+  }
+
+
+  @Nonnull
+  @Override
+  public List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(@Nonnull QualifiedName qualifiedName) {
+    return workflowsConfigurations.getOrDefault(qualifiedName, List.of());
+  }
+
+  @Override
+  public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    var qualifiedNamesToDefinitions = this.workflowsConfigurations.entrySet().stream()
+      .map((e) -> new WorkflowDefinitionDescriptor(e.getKey(), e.getValue())).toList();
+    descriptor.describeProperty("workflowDefinitions", qualifiedNamesToDefinitions);
+  }
+
+  record WorkflowDefinitionDescriptor(
+    QualifiedName qualifiedName,
+    List<PredicatedWorkflowConfiguration> configurations
+  ) implements DescribableComponent {
+
+    @Override
+    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+      descriptor.describeProperty(qualifiedName.toString(), configurations.stream().map(configuration -> {
+        var definitionClass = configuration.configuration().workflowDefinition().getClass();
+        return String.format("%s", definitionClass.getName());
+      }).toList());
+    }
+  }
+
+
+}

@@ -1,7 +1,7 @@
 package io.axoniq.workflow.runtime.engine.util;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import org.axonframework.messaging.core.MessageType;

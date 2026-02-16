@@ -1,10 +1,10 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.primitives.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.primitives.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.primitives.WaitForPrimitive;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowContext;
-import io.axoniq.workflow.runtime.api.workflow.WorkflowServices;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
@@ -35,12 +35,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
   }
 
   @Override
+  @Nonnull
   public WorkflowStepResult waitFor(
-    @NotNull String stepName,
-    @NotNull QualifiedName qualifiedName,
-    @NotNull Predicate<EventMessage> predicate,
-    @NotNull Duration timeout,
-    @NotNull EventNameCustomizer eventNameCustomizer
+    @Nonnull String stepName,
+    @Nonnull QualifiedName qualifiedName,
+    @Nonnull Predicate<EventMessage> predicate,
+    @Nonnull Duration timeout,
+    @Nonnull EventNameCustomizer eventNameCustomizer
   ) {
     logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
@@ -53,7 +54,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
       try {
         workflowState.awaitStateChange(s -> s.containsStep(stepName) && s.getStep(stepName).status() == StepStatus.STARTED);
       } catch (InterruptedException e) {
-        return WorkflowStepResults.failed(e);
+        return WorkflowStepResults.failed(stepName, e);
       }
     }
 
