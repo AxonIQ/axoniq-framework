@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-public class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleWorkflowModule<C>>
+class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleWorkflowModule<C>>
   implements WorkflowModule<C>,
   WorkflowModule.LanguagePhase.WorkflowContextFactoryPhase<C>,
   WorkflowModule.LanguagePhase.WorkflowStateFactoryPhase<C>,
