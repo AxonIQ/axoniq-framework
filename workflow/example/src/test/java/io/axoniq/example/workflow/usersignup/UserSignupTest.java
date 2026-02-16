@@ -1,5 +1,7 @@
-package io.axoniq.workflow.runtime;
+package io.axoniq.example.workflow.usersignup;
 
+import io.axoniq.example.workflow.MagicHappenedEvent;
+import io.axoniq.example.workflow.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple2.MyWorkflowContext;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -7,17 +9,8 @@ import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractTestBase;
-import io.axoniq.workflow.runtime.test.fixture.MagicHappenedEvent;
-import io.axoniq.workflow.runtime.test.fixture.NotificationService;
-import io.axoniq.workflow.runtime.test.fixture.RegistrationReceivedEvent;
-import io.axoniq.workflow.runtime.test.fixture.UserService;
-import jakarta.annotation.Nonnull;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -28,43 +21,8 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-class TaskQueueUserSignupTest extends AbstractTestBase {
+class UserSignupTest extends AbstractTestBase {
 
-  public static class UserSignupWorkflow {
-
-    public void execute(@Nonnull MyWorkflowContext ctx) {
-
-      Logger logger = LoggerFactory.getLogger(UserSignupWorkflow.class);
-
-      logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
-
-      // -> start
-      var success = ctx.execute("createUser", Boolean.class, UserService::createUser);
-      if (!success) {
-        return;
-      }
-
-      ctx.execute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
-
-      /**
-       var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-       var a2 = ctx.executeWithResult("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-       all(a1, a2).isSuccess();
-       */
-
-
-      ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
-      ctx.wait("waitASecond", Duration.ofSeconds(1L));
-
-      var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
-      ctx.addPayload(magic);
-
-      logger.info("Magic happened because of the magician {}", magic.magician());
-      // -> end
-
-      logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.getPayload());
-    }
-  }
 
   @Override
   protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<MyWorkflowContext>> getDefinitions() {

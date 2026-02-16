@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.test.fixture;
+package io.axoniq.example.workflow;
 
 import org.axonframework.messaging.eventhandling.annotation.Event;
 

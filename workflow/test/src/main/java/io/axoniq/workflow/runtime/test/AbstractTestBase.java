@@ -3,7 +3,9 @@ package io.axoniq.workflow.runtime.test;
 import io.axoniq.workflow.dsl.simple2.MyWorkflowContext;
 import io.axoniq.workflow.dsl.simple2.MyWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.engine.configuration.SimpleWorkflowModule;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.ContextToStateAdoptingStateFactory;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
@@ -20,6 +22,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.function.Consumer;
 
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
+
 public abstract class AbstractTestBase {
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected AxonConfiguration configuration;
@@ -32,6 +36,7 @@ public abstract class AbstractTestBase {
   void setUp() {
 
     var configurer = MessagingConfigurer.create();
+
     configurer.componentRegistry(r -> r.registerEnhancer(registry ->
         registry.registerModule(
           WorkflowModule

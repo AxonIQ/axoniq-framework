@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.test.fixture;
+package io.axoniq.example.workflow;
 
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.slf4j.Logger;
@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.test.utils.Waiter.waitWithProgress;
+import static io.axoniq.example.workflow.Waiter.waitWithProgress;
 
 public class UserService {
 

@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.test.utils;
+package io.axoniq.example.workflow;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

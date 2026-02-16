@@ -1,4 +1,4 @@
-package io.axoniq.workflow.runtime.test.fixture;
+package io.axoniq.example.workflow;
 
 public record MagicHappenedEvent(String magician) {
 }
