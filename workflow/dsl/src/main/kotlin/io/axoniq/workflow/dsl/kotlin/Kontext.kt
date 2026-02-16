@@ -1,7 +1,6 @@
 package io.axoniq.workflow.dsl.kotlin
 
 import io.axoniq.workflow.runtime.api.*
-import io.axoniq.workflow.runtime.api.PayloadProcessor
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver

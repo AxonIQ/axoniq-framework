@@ -1,7 +1,7 @@
 package io.axoniq.workflow.runtime.engine.util;
 
-import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import org.axonframework.messaging.core.Metadata;
 
 import java.util.Optional;

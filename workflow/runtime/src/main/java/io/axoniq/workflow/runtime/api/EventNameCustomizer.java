@@ -1,7 +1,7 @@
 package io.axoniq.workflow.runtime.api;
 
-import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 
