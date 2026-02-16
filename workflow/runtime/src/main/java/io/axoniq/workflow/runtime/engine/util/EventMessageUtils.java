@@ -18,36 +18,36 @@ public class EventMessageUtils {
     return m -> MetadataUtils.workflowIdFilter(workflowId).test(m.metadata());
   }
 
-  public static EventMessage startedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.STARTED);
+  public static EventMessage startedWorkflow(WorkflowContext context, String workflowName, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.STARTED);
     return new GenericEventMessage(new MessageType(name), Map.of(),
       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.STARTED)
     );
   }
 
-  public static EventMessage completedWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.COMPLETED);
+  public static EventMessage completedWorkflow(WorkflowContext context, String workflowName, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.COMPLETED);
     return new GenericEventMessage(new MessageType(name), Map.of(),
       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.COMPLETED)
     );
   }
 
-  public static EventMessage failedWorkflow(WorkflowContext context, Exception exception, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.FAILED);
+  public static EventMessage failedWorkflow(WorkflowContext context, String workflowName, Exception exception, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.FAILED);
     return new GenericEventMessage(new MessageType(name), exception,
       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.FAILED)
     );
   }
 
-  public static EventMessage timeoutWorkflow(WorkflowContext context, Instant time, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.TIMED_OUT);
+  public static EventMessage timeoutWorkflow(WorkflowContext context, String workflowName, Instant time, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.TIMED_OUT);
     return new GenericEventMessage(new MessageType(name), time,
       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.TIMED_OUT)
     );
   }
 
-  public static EventMessage cancelledWorkflow(WorkflowContext context, EventNameCustomizer customizer) {
-    var name = customizer.getEventName(context.getWorkflowId(), context.getPayload(), WorkflowStatus.CANCELLED);
+  public static EventMessage cancelledWorkflow(WorkflowContext context, String workflowName, EventNameCustomizer customizer) {
+    var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.CANCELLED);
     return new GenericEventMessage(new MessageType(name), null,
       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.CANCELLED)
     );

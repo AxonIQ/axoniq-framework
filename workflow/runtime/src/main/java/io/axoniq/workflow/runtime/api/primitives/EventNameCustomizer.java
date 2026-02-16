@@ -15,4 +15,7 @@ public interface EventNameCustomizer {
   QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters, @Nonnull StepStatus stepStatus);
   @Nonnull
   QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters, @Nonnull WorkflowStatus stepStatus);
+
+  @Nonnull
+  EventNameCustomizer forStepInheritance();
 }

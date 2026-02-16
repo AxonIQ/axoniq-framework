@@ -55,7 +55,6 @@ class TaskQueueUserSignupTest extends AbstractTestBase {
 
   public static class UserSignupWorkflow implements OtherDefinition {
 
-
     @NotNull
     @Override
     public EventNameCustomizer eventNameCustomizer() {
