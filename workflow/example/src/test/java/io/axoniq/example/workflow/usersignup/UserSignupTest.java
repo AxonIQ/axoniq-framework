@@ -2,7 +2,7 @@ package io.axoniq.example.workflow.usersignup;
 
 import io.axoniq.example.workflow.MagicHappenedEvent;
 import io.axoniq.example.workflow.RegistrationReceivedEvent;
-import io.axoniq.workflow.dsl.simple2.MyWorkflowContext;
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
@@ -25,7 +25,7 @@ class UserSignupTest extends AbstractTestBase {
 
 
   @Override
-  protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<MyWorkflowContext>> getDefinitions() {
+  protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<SimpleWorkflowContext>> getDefinitions() {
     var workflow = new UserSignupWorkflow();
     return (d) -> d.declarative("User signup workflow")
       .on(EventCondition.fromType(RegistrationReceivedEvent.class))
