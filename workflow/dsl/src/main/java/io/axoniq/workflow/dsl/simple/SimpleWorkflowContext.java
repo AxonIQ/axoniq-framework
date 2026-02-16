@@ -15,6 +15,7 @@
  *
  *
  */
+
 package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.dsl.Payload;

@@ -1,4 +1,3 @@
-package io.axoniq.workflow.dsl.simple;
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
@@ -16,7 +15,8 @@ package io.axoniq.workflow.dsl.simple;
  *
  *
  */
-package io.axoniq.workflow.dsl.simple2;
+
+package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
