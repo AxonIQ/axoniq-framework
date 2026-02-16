@@ -58,8 +58,9 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     this.payload = Objects.requireNonNull(initial, "Payload must not be null");
     this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
     this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow service aare mandatory");
-    this.executeDelegate = new ExecuteDelegate(this, this, workflowServices, parentCustomizer);
-    this.waitForDelegate = new WaitForDelegate(this, this, workflowServices, parentCustomizer);
+    var stepParent = parentCustomizer.forStepInheritance();
+    this.executeDelegate = new ExecuteDelegate(this, this, workflowServices, stepParent);
+    this.waitForDelegate = new WaitForDelegate(this, this, workflowServices, stepParent);
   }
 
 
@@ -84,8 +85,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             logger.trace("Workflow instance has reached terminal state {}, skipping execution.", ctx.getStatus());
             return CompletableFuture.completedFuture(ctx);
           }
+          var configuredName = configuration.workflowName();
+          var workflowName = (configuredName != null && !configuredName.isEmpty()) ? configuredName : workflowId;
+          var customizer = configuration.eventNameCustomizer();
           if (ctx.getStatus() == WorkflowStatus.NONE) {
-            sendWorkflowEvent(startedWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).join(); // FIXME join
+            sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer), pc).join(); // FIXME join
           }
 
           try {
@@ -93,15 +97,15 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             configuration.workflowDefinition().accept(ctx);
             logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
 
-            sendWorkflowEvent(completedWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).get(5, TimeUnit.SECONDS); // FIXME constant
+            sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(5, TimeUnit.SECONDS); // FIXME constant
 
           } catch (WorkflowFailedException wfe) {
-            sendWorkflowEvent(failedWorkflow(workflowContext, wfe, configuration.eventNameCustomizer()), pc).join(); // FIXME join;
+            sendWorkflowEvent(failedWorkflow(workflowContext, workflowName, wfe, customizer), pc).join(); // FIXME join;
           } catch (Exception e) {
             if (e instanceof TimeoutException) {
-              sendWorkflowEvent(timeoutWorkflow(workflowContext, workflowServices.getClock().instant(), configuration.eventNameCustomizer()), processingContext()).join(); // FIXME join
+              sendWorkflowEvent(timeoutWorkflow(workflowContext, workflowName, workflowServices.getClock().instant(), customizer), processingContext()).join(); // FIXME join
             } else if (e instanceof InterruptedException) {
-              sendWorkflowEvent(cancelledWorkflow(workflowContext, configuration.eventNameCustomizer()), pc).join(); // FIXME join;
+              sendWorkflowEvent(cancelledWorkflow(workflowContext, workflowName, customizer), pc).join(); // FIXME join;
             } else {
               logger.error("Error occurred in workflow {}", workflowId, e);
             }
