@@ -17,10 +17,8 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.DelegatingWaitForCommand;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.WorkflowStepResultWaitForCommand;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
@@ -31,13 +29,13 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.function.Predicate;
 
-public class BlockingWaitForCommand<T> extends DelegatingWaitForCommand<T> {
+public class BlockingWaitForCommand<T> extends PrimitiveCommands.DelegatingWaitForCommand<T> {
 
     private final Converter converter;
     private final TypeReference<T> type;
 
     public BlockingWaitForCommand(
-            WorkflowStepResultWaitForCommand command,
+            PrimitiveCommands.WorkflowStepResultWaitForCommand command,
             Converter converter,
             TypeReference<T> type
     ) {
@@ -59,8 +57,8 @@ public class BlockingWaitForCommand<T> extends DelegatingWaitForCommand<T> {
 
     @Override
     public T result(@NotNull WorkflowStepResult result) {
-        if (result.isSuccess() && result.<Map<String, Object>>payload().isPresent()) {
-            Map<String, Object> resultPayload = result.<Map<String, Object>>payload().get();
+        if (result.isSuccess() && result.<Map<String, Object>>result().isPresent()) {
+            Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
             return converter.convert(resultPayload, type.getType());
         } else {
             throw result.error().orElseThrow();

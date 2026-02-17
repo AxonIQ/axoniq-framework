@@ -23,7 +23,7 @@ import jakarta.annotation.Nonnull;
 import java.util.Optional;
 
 /**
- * Represents a typed result of a step execution.
+ * Represents a result of a step execution.
  */
 public interface WorkflowStepResult {
 
@@ -31,43 +31,61 @@ public interface WorkflowStepResult {
     String getStepName();
 
     /**
-     * Check (non-blocking)
+     * Check (non-blocking) if the step has finished (reached a terminal state).
      *
-     * @return
+     * @return true, if the state is terminal.
      */
     boolean isCompleted();
 
+    /**
+     * Retrieves optional result.
+     *
+     * @param <T> type of result.
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished.
+     */
     @Nonnull
-    <T> Optional<T> payload();
+    <T> Optional<T> result();
 
+    /**
+     * Retrieves an optional error.
+     *
+     * @return error if the step has finished with an error. Will return empty optional, if the step is not finished.
+     */
     @Nonnull
     Optional<StepFailedException> error();
 
     /**
-     * Blocks until step execution is finished.
+     * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation completed successfully.
      */
     boolean isSuccess();
 
     /**
-     * Blocks until step execution is finished.
+     * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation completed with an exception.
      */
     boolean isFailure();
 
     /**
-     * Blocks until step execution is finished.
+     * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation was interrupted by external party.
      */
     boolean isCanceled();
 
     /**
-     * Blocks until step execution is finished.
+     * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation was interrupted by timeout specified on start.
      */
     boolean isTimeout();
+
+    /**
+     * Blocks until step execution reaches a terminal state.
+     *
+     * @return true, if finished without errors.
+     */
+    boolean await();
 }

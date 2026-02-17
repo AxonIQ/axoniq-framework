@@ -113,7 +113,7 @@ public class WorkflowStepResults {
 
             @Override
             @Nonnull
-            public <T> Optional<T> payload() {
+            public <T> Optional<T> result() {
                 return Optional.empty();
             }
 
@@ -142,6 +142,11 @@ public class WorkflowStepResults {
             @Override
             public boolean isTimeout() {
                 return Arrays.stream(results).anyMatch(WorkflowStepResult::isTimeout);
+            }
+
+            @Override
+            public boolean await() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::await);
             }
         };
     }

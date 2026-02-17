@@ -38,13 +38,13 @@ class Kontext(
 
     class MapPropertyExtractingExecuteCommand<T>(
         val resultPropertyName: String,
-        command: WorkflowStepResultExecuteCommand
+        command: PrimitiveCommands.WorkflowStepResultExecuteCommand
     ) :
-        DelegatingExecuteCommand<T>(command) {
+        PrimitiveCommands.DelegatingExecuteCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
-            if (result.isSuccess && result.payload<Any>().isPresent) {
+            if (result.isSuccess && result.result<Any>().isPresent) {
                 @Suppress("UNCHECKED_CAST")
-                return (result.payload<Map<String, Any?>>().get())[resultPropertyName] as T
+                return (result.result<Map<String, Any?>>().get())[resultPropertyName] as T
             } else {
                 throw result.error().get()
             }
@@ -52,15 +52,15 @@ class Kontext(
     }
 
     class TypeConvertingWaitForCommand<T>(
-        command: WorkflowStepResultWaitForCommand,
+        command: PrimitiveCommands.WorkflowStepResultWaitForCommand,
         val type: Class<T>,
         val converter: Converter
     ) :
-        DelegatingWaitForCommand<T>(command) {
+        PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
-            if (result.isSuccess && result.payload<Any>().isPresent) {
+            if (result.isSuccess && result.result<Any>().isPresent) {
                 @Suppress("UNCHECKED_CAST")
-                return converter.convert(result.payload<Map<String, Any?>>().get(), type) as T
+                return converter.convert(result.result<Map<String, Any?>>().get(), type) as T
             } else {
                 throw result.error().get()
             }
@@ -80,7 +80,7 @@ class Kontext(
         return workflowKontext.execute(
             MapPropertyExtractingExecuteCommand<T>(
                 stepSpecificName,
-                WorkflowStepResultExecuteCommand(
+                PrimitiveCommands.WorkflowStepResultExecuteCommand(
                     stepName,
                     local,
                     { pc, payload ->
@@ -104,7 +104,7 @@ class Kontext(
     ): T {
         return workflowKontext.waitFor(
             TypeConvertingWaitForCommand(
-                WorkflowStepResultWaitForCommand(
+                PrimitiveCommands.WorkflowStepResultWaitForCommand(
                     stepName,
                     workflowKontext.processingContext().component(MessageTypeResolver::class.java).resolve(type.java)
                         .orElseThrow().qualifiedName,
@@ -128,7 +128,7 @@ class Kontext(
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = eventName()
     ): WorkflowStepResult = workflowKontext.execute(
-        WorkflowStepResultExecuteCommand(
+        PrimitiveCommands.WorkflowStepResultExecuteCommand(
             stepName,
             local,
             action,
@@ -146,7 +146,7 @@ class Kontext(
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = eventName()
     ): WorkflowStepResult = workflowKontext.waitFor(
-        WorkflowStepResultWaitForCommand(
+        PrimitiveCommands.WorkflowStepResultWaitForCommand(
             stepName,
             qualifiedName,
             predicate,

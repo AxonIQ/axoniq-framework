@@ -69,7 +69,7 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     @Nonnull
-    public <T> Optional<T> payload() {
+    public <T> Optional<T> result() {
         //noinspection unchecked
         return Optional.ofNullable((T) payload);
     }
@@ -98,5 +98,10 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
     @Override
     public boolean isTimeout() {
         return timeout != null;
+    }
+
+    @Override
+    public boolean await() {
+        return true;
     }
 }

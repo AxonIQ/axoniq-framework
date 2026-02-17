@@ -50,7 +50,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     @Nonnull
-    public <T> Optional<T> payload() {
+    public <T> Optional<T> result() {
         //noinspection unchecked
         return Optional.of(workflowState.getStep(stepName)).map(step -> (T) step.result());
     }
@@ -70,63 +70,61 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public boolean isSuccess() {
-        do {
+        if (await()) {
             switch (workflowState.getStep(stepName).status()) {
                 case COMPLETED:
                     return true;
                 case FAILED, TIMED_OUT, CANCELLED:
                     return false;
             }
-            try {
-                stateChangeTrigger.call();
-            } catch (Exception e) {
-                return false;
-            }
-        } while (true /* FIXME workflow is not suspended */);
+        }
+        return false;
     }
 
     @Override
     public boolean isFailure() {
-        do {
+        if (await()) {
             switch (workflowState.getStep(stepName).status()) {
                 case FAILED:
                     return true;
                 case COMPLETED, TIMED_OUT, CANCELLED:
                     return false;
             }
-            try {
-                stateChangeTrigger.call();
-            } catch (Exception e) {
-                return false;
-            }
-        } while (true /* FIXME workflow is not suspended */);
+        }
+        return false;
     }
 
     @Override
     public boolean isCanceled() {
-        do {
+        if (await()) {
             switch (workflowState.getStep(stepName).status()) {
                 case CANCELLED:
                     return true;
                 case COMPLETED, TIMED_OUT, FAILED:
                     return false;
             }
-            try {
-                stateChangeTrigger.call();
-            } catch (Exception e) {
-                return false;
-            }
-        } while (true /* FIXME workflow is not suspended */);
+        }
+        return false;
     }
 
     @Override
     public boolean isTimeout() {
-        do {
+        if (await()) {
             switch (workflowState.getStep(stepName).status()) {
                 case TIMED_OUT:
                     return true;
                 case COMPLETED, FAILED, CANCELLED:
                     return false;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean await() {
+        do {
+            if (workflowState.getStep(stepName).status().isTerminal()) {
+                return true;
             }
             try {
                 stateChangeTrigger.call();

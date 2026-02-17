@@ -18,11 +18,9 @@
 
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.DelegatingExecuteCommand;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.api.WorkflowStepResultExecuteCommand;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.jetbrains.annotations.NotNull;
@@ -30,13 +28,13 @@ import org.jetbrains.annotations.NotNull;
 import java.time.Duration;
 import java.util.Map;
 
-public class BlockingExecuteWithResultCommand<T> extends DelegatingExecuteCommand<T> {
+public class BlockingExecuteWithResultCommand<T> extends PrimitiveCommands.DelegatingExecuteCommand<T> {
 
     private final Converter converter;
     private final TypeReference<T> type;
 
     public BlockingExecuteWithResultCommand(
-            WorkflowStepResultExecuteCommand command,
+            PrimitiveCommands.WorkflowStepResultExecuteCommand command,
             Converter converter,
             TypeReference<T> type
     ) {
@@ -58,8 +56,8 @@ public class BlockingExecuteWithResultCommand<T> extends DelegatingExecuteComman
 
     @Override
     public T result(@NotNull WorkflowStepResult result) {
-        if (result.isSuccess() && result.<Map<String, Object>>payload().isPresent()) {
-            Map<String, Object> resultPayload = result.<Map<String, Object>>payload().get();
+        if (result.isSuccess() && result.<Map<String, Object>>result().isPresent()) {
+            Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
             return converter.convert(resultPayload, type.getType());
         } else {
             throw result.error().orElseThrow();
