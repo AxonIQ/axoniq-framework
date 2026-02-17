@@ -28,6 +28,7 @@ import org.axonframework.test.fixture.RecordingEventStore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -53,8 +54,8 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
   }
 
   @Override
-  public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @NotNull List<EventMessage> events) {
-    publishedEvents.addAll(events);
+  public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @NotNull EventMessage... events) {
+    publishedEvents.addAll(Arrays.asList(events));
     return super.publish(context, events);
   }
 
