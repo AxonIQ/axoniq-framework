@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *
+ *
+ */
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -13,6 +30,7 @@ class DefaultEventNameCustomizerTest {
 
     @Nested
     class BuilderTests {
+
         @Test
         void testEventName() {
             assertNotNull(DefaultEventNameCustomizer.Builder.eventName());
@@ -76,7 +94,8 @@ class DefaultEventNameCustomizerTest {
 
         @Test
         void testPayloadCustomization() {
-            var customizer = DefaultEventNameCustomizer.Builder.payloadCustomization(pc -> new QualifiedName("custom", "name"));
+            var customizer = DefaultEventNameCustomizer.Builder.payloadCustomization(pc -> new QualifiedName("custom",
+                                                                                                             "name"));
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
             assertEquals("custom", name.namespace());
             assertEquals("name", name.localName());
@@ -85,7 +104,8 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testWorkflowCompleted() {
             var customizer = DefaultEventNameCustomizer.Builder.eventName().workflowCompleted("Finished");
-            assertEquals("StepFinished", customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
+            assertEquals("StepFinished",
+                         customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
         }
 
         @Test
@@ -97,7 +117,8 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testWorkflowTimedOut() {
             var customizer = DefaultEventNameCustomizer.Builder.eventName().workflowTimedOut("Timeout");
-            assertEquals("StepTimeout", customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
+            assertEquals("StepTimeout",
+                         customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
         }
 
         @Test
@@ -109,6 +130,7 @@ class DefaultEventNameCustomizerTest {
 
     @Nested
     class NonStaticMethodsTests {
+
         private final DefaultEventNameCustomizer customizer = new DefaultEventNameCustomizer();
 
         @Test
@@ -162,7 +184,8 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testWorkflowCompleted() {
             customizer.workflowCompleted("Finished");
-            assertEquals("StepFinished", customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
+            assertEquals("StepFinished",
+                         customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
         }
 
         @Test
@@ -174,7 +197,8 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testWorkflowTimedOut() {
             customizer.workflowTimedOut("Timeout");
-            assertEquals("StepTimeout", customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
+            assertEquals("StepTimeout",
+                         customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
         }
 
         @Test
@@ -194,6 +218,7 @@ class DefaultEventNameCustomizerTest {
 
     @Nested
     class MergeTests {
+
         @Test
         void testMergeStepStatus() {
             var parent = DefaultEventNameCustomizer.Builder.namespace("parent.ns").baseName("Parent");
@@ -208,7 +233,8 @@ class DefaultEventNameCustomizerTest {
 
         @Test
         void testMergeWorkflowStatus() {
-            var parent = DefaultEventNameCustomizer.Builder.eventName().namespace("parent.ns").workflowCompleted("ParentDone");
+            var parent = DefaultEventNameCustomizer.Builder.eventName().namespace("parent.ns").workflowCompleted(
+                    "ParentDone");
             var child = DefaultEventNameCustomizer.Builder.eventName().workflowCompleted("ChildDone");
             var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
 
@@ -266,7 +292,7 @@ class DefaultEventNameCustomizerTest {
         @Test
         void doesNotPropagatePayloadCustomization() {
             var parent = DefaultEventNameCustomizer.Builder.payloadCustomization(
-                pc -> new QualifiedName("custom.ns", "CustomName")
+                    pc -> new QualifiedName("custom.ns", "CustomName")
             );
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
@@ -278,6 +304,7 @@ class DefaultEventNameCustomizerTest {
 
     @Nested
     class PayloadApplicationTests {
+
         @Test
         void testCustomizationBasedOnPayload() {
             var customizer = DefaultEventNameCustomizer.Builder.payloadCustomization(pc -> {

@@ -12,6 +12,10 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 
 public class PrimitiveCommands {
 
+    private PrimitiveCommands() {
+
+    }
+
     public static WorkflowStepResultExecuteCommand localExecute(
             @Nonnull String stepName,
             @Nonnull Map<String, Object> local,
@@ -45,10 +49,5 @@ public class PrimitiveCommands {
                                                     e -> false,
                                                     timeout,
                                                     eventName());
-    }
-
-
-    private PrimitiveCommands() {
-
     }
 }

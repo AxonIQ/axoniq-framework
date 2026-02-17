@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *
+ *
+ */
+package io.axoniq.example.workflow.fixture;
+
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+
+import static io.axoniq.example.workflow.fixture.Waiter.waitWithProgress;
+
+public class UserService {
+
+    static Logger logger = LoggerFactory.getLogger(UserService.class);
+
+    public static boolean createUser() {
+        logger.info("Creating user.");
+        return true;
+    }
+
+    public static Map<String, Object> activateUser(ProcessingContext pc, Map<String, Object> payload) {
+        Instant now = Instant.now();
+        logger.info("Activating user with id: {}", payload.get("id"));
+        waitWithProgress(1_000);
+        logger.info("Activation took {}.", Duration.between(Instant.now(), now));
+        return Map.of();
+    }
+}
