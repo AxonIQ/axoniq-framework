@@ -54,7 +54,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     }
 
     @Override
-    public CompletableFuture<Void> publish(@Nullable ProcessingContext context, EventMessage... events) {
+    public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @Nonnull EventMessage... events) {
         publishedEvents.addAll(Arrays.asList(events));
         return super.publish(context, events);
     }
