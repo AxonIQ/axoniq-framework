@@ -15,7 +15,6 @@
  *
  *
  */
-package io.axoniq.workflow.dsl.simple2;
 package io.axoniq.workflow.dsl.simple;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
