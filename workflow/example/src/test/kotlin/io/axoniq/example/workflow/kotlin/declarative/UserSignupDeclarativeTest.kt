@@ -49,7 +49,7 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         return Consumer { d ->
             d.declarative("User signup workflow in Kotlin")
                 .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
-                .workflowDefinition { workflow }
+                .workflowDefinition { WorkflowKontext.from(workflow::execute) }
                 .eventNameCustomizer { EventNameCustomizerProvider { namespace("io.axoniq.dsl.wf") } }
                 .workflowIdProvider {
                     AssociationProvider { trigger: MutableMap<String, Any?> ->
@@ -60,7 +60,6 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
                 }
                 .notCustomized()
         }
-
     }
 
 

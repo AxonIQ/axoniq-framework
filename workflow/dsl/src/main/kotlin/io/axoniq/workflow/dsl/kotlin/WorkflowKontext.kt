@@ -18,6 +18,7 @@
 package io.axoniq.workflow.dsl.kotlin
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer
+import io.axoniq.workflow.runtime.api.WorkflowDefinition
 import io.axoniq.workflow.runtime.api.WorkflowServices
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
@@ -39,5 +40,12 @@ class WorkflowKontext(
 
     fun runWorkflow(block: Kontext.() -> Unit) {
         Kontext(this).apply(block)
+    }
+
+    companion object {
+        @JvmStatic
+        fun from(block: Kontext.() -> Unit): WorkflowDefinition<WorkflowKontext> {
+            return WorkflowDefinition { it.runWorkflow(block) }
+        }
     }
 }

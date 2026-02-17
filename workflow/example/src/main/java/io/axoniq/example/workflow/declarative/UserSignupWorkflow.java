@@ -37,12 +37,12 @@ public class UserSignupWorkflow {
         logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
 
         // -> start
-        var success = ctx.execute("createUser", Boolean.class, UserService::createUser);
+        var success = ctx.awaitExecute("createUser", Boolean.class, UserService::createUser);
         if (!success) {
             return;
         }
 
-        ctx.execute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
+        ctx.awaitExecute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
 
         /**
          var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
@@ -51,10 +51,10 @@ public class UserSignupWorkflow {
          */
 
 
-        ctx.execute("sendWelcomeEmail", NotificationService::sendEmail);
-        ctx.wait("waitASecond", Duration.ofSeconds(1L));
+        ctx.awaitExecute("sendWelcomeEmail", NotificationService::sendEmail);
+        ctx.block("waitASecond", Duration.ofSeconds(1L));
 
-        var magic = ctx.waitForEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
+        var magic = ctx.awaitEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
         ctx.addPayload(magic);
 
         logger.info("Magic happened because of the magician {}", magic.magician());

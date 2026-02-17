@@ -57,7 +57,7 @@ public class SimpleWorkflowContext extends WorkflowInstance
         super(workflowId, payload, processingContext, parentCustomizer, workflowServices);
     }
 
-    public <T> T waitForEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
+    public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
         return waitFor(BlockingWaitForCommand.blocking(
                 stepName,
                 super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
@@ -69,29 +69,29 @@ public class SimpleWorkflowContext extends WorkflowInstance
         ));
     }
 
-    public <T> T waitForEvent(String stepName, Class<T> eventType, Duration timeout) {
-        return this.waitForEvent(stepName, eventType, e -> true, timeout);
+    public <T> T awaitEvent(String stepName, Class<T> eventType, Duration timeout) {
+        return this.awaitEvent(stepName, eventType, e -> true, timeout);
     }
 
-    public <T> T waitForEvent(String stepName, Class<T> eventType) {
-        return this.waitForEvent(stepName, eventType, Duration.ofSeconds(5));
+    public <T> T awaitEvent(String stepName, Class<T> eventType) {
+        return this.awaitEvent(stepName, eventType, Duration.ofSeconds(5));
     }
 
-    public void wait(String stepName, Duration timeout) {
+    public void block(String stepName, Duration timeout) {
         var result = waitFor(stepName, new QualifiedName(Void.class), (e) -> false, timeout, eventName());
         if (result.isFailure() && result.error().isPresent()) {
             throw result.error().get();
         }
     }
 
-    public WorkflowStepResult executeWithResult(String stepName, Map<String, Object> payload, PayloadProcessor action,
-                                                Duration duration) {
+    public WorkflowStepResult execute(String stepName, Map<String, Object> payload, PayloadProcessor action,
+                                      Duration duration) {
         return execute(stepName, payload, action, local(), all(), duration, eventName());
     }
 
 
-    public Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action,
-                                       Duration timeout) {
+    public Map<String, Object> awaitExecute(String stepName, Map<String, Object> payload, PayloadProcessor action,
+                                            Duration timeout) {
         return execute(
                 BlockingExecuteWithResultCommand.blockingLocal(stepName,
                                                                payload,
@@ -103,8 +103,8 @@ public class SimpleWorkflowContext extends WorkflowInstance
         );
     }
 
-    public <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType,
-                         Function<Map<String, Object>, T> action, EventNameCustomizer eventNameCustomizer) {
+    public <T> T awaitExecute(String stepName, Map<String, Object> payload, Class<T> returnType,
+                              Function<Map<String, Object>, T> action, EventNameCustomizer eventNameCustomizer) {
         var stepSpecificName = "__" + stepName;
         var command = BlockingExecuteWithResultCommand.blockingLocal(stepName, payload,
                                                                      (c, p) -> {
@@ -122,28 +122,28 @@ public class SimpleWorkflowContext extends WorkflowInstance
         return (T) execute(command).get(stepSpecificName);
     }
 
-    public Map<String, Object> execute(String stepName, Map<String, Object> payload, PayloadProcessor action) {
-        return this.execute(stepName, payload, action, Duration.ofSeconds(5));
+    public Map<String, Object> awaitExecute(String stepName, Map<String, Object> payload, PayloadProcessor action) {
+        return this.awaitExecute(stepName, payload, action, Duration.ofSeconds(5));
     }
 
-    public <T> T execute(String stepName, Map<String, Object> payload, Class<T> returnType,
-                         Function<Map<String, Object>, T> action) {
-        return this.execute(stepName, payload, returnType, action, eventName());
+    public <T> T awaitExecute(String stepName, Map<String, Object> payload, Class<T> returnType,
+                              Function<Map<String, Object>, T> action) {
+        return this.awaitExecute(stepName, payload, returnType, action, eventName());
     }
 
-    public <T> T execute(String stepName, Class<T> returnType, Supplier<T> action) {
-        return this.execute(stepName, Map.of(), returnType, (p) -> action.get());
+    public <T> T awaitExecute(String stepName, Class<T> returnType, Supplier<T> action) {
+        return this.awaitExecute(stepName, Map.of(), returnType, (p) -> action.get());
     }
 
-    public void execute(String stepName, Runnable action) {
-        this.execute(stepName, Void.class, () -> {
+    public void awaitExecute(String stepName, Runnable action) {
+        this.awaitExecute(stepName, Void.class, () -> {
             action.run();
             return null;
         });
     }
 
-    public <T> T execute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
-        return this.execute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
+    public <T> T awaitExecute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
+        return this.awaitExecute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
     }
 
     public void addPayload(Object object) {
@@ -152,22 +152,5 @@ public class SimpleWorkflowContext extends WorkflowInstance
 
     public void addPayload(Payload payload) {
         applyPayloadModification(p -> payload(p).with(payload).getValues());
-    }
-
-    <T> T fromResult(WorkflowStepResult result, Class<T> eventType) {
-        if (result.isSuccess() && result.payload().isPresent()) {
-            return super.processingContext().component(Converter.class)
-                        .convert(result.payload().get(), eventType);
-        } else {
-            throw result.error().orElseThrow();
-        }
-    }
-
-    Map<String, Object> fromResult(WorkflowStepResult result) {
-        if (result.isSuccess() && result.<Map<String, Object>>payload().isPresent()) {
-            return result.<Map<String, Object>>payload().get();
-        } else {
-            throw result.error().orElseThrow();
-        }
     }
 }

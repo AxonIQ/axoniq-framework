@@ -33,9 +33,7 @@ class WorkflowKontextFactory : WorkflowContextFactory<WorkflowKontext> {
         initialPayload = initialPayload,
         workflowId = workflowId,
         processingContext = processingContext,
-        parentCustomizer = processingContext.component(
-            EventNameCustomizer::class.java
-        ),
+        parentCustomizer = processingContext.component(EventNameCustomizer::class.java),
         workflowServices = workFlowServices,
     )
 }
