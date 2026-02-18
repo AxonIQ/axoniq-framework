@@ -29,11 +29,12 @@ import java.util.Map;
  */
 @FunctionalInterface
 public interface WorkflowContextFactory<T extends WorkflowContext> {
-  @Nonnull
-  T createContext(
-    @Nonnull Map<String, Object> initialPayload,
-    @Nonnull String workflowId,
-    @Nonnull ProcessingContext processingContext,
-    @Nonnull WorkflowServices workFlowServices
-  );
+
+    @Nonnull
+    T createContext(
+            @Nonnull Map<String, Object> initialPayload,
+            @Nonnull String workflowId,
+            @Nonnull ProcessingContext processingContext,
+            @Nonnull WorkflowServices workFlowServices
+    );
 }

@@ -15,16 +15,16 @@
  *
  *
  */
-package io.axoniq.example.workflow;
+package io.axoniq.example.workflow.fixture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NotificationService {
 
-  static Logger logger = LoggerFactory.getLogger(NotificationService.class);
+    static Logger logger = LoggerFactory.getLogger(NotificationService.class);
 
-  public static void sendEmail() {
-    logger.info("Sending welcome mail to user.");
-  }
+    public static void sendEmail() {
+        logger.info("Sending welcome mail to user.");
+    }
 }

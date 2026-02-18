@@ -15,23 +15,14 @@
  *
  *
  */
-package io.axoniq.example.workflow;
+package io.axoniq.example.workflow.kotlin.fixture
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.github.oshai.kotlinlogging.KotlinLogging
 
-public class Waiter {
-  static Logger logger = LoggerFactory.getLogger(Waiter.class);
+private val logger = KotlinLogging.logger {}
 
-  public static void waitWithProgress(long millis) {
-    try {
-      for (long i = 0; i < millis; i = i + 200) {
-        Thread.sleep(i);
-        logger.info("Waiting for {} / {} millis.", i, millis);
-      }
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+object NotificationService {
+    fun sendEmail() {
+        logger.info { "Sending welcome mail to user." }
     }
-  }
-
 }

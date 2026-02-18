@@ -11,7 +11,7 @@ type: 'Bug'
 
 * Axon Framework - Workflow Module version:
 * Axon Framework version:
-* JDK version:  
+* JDK version:
 * Complete executable reproducer if available (e.g. GitHub Repo):
 
 ### Steps to reproduce

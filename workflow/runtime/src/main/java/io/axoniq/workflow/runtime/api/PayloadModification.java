@@ -22,4 +22,5 @@ import java.util.function.Function;
 
 @FunctionalInterface
 public interface PayloadModification extends Function<Map<String, Object>, Map<String, Object>> {
+
 }

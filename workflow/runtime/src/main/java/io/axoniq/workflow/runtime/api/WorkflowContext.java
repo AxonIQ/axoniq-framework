@@ -29,24 +29,24 @@ import java.util.Map;
  * Public API facing class to access the execution from workflow definition.
  */
 public interface WorkflowContext extends
-  ExecutePrimitive,
-  WaitForPrimitive,
-  DescribableComponent {
+        ExecutePrimitive,
+        WaitForPrimitive,
+        DescribableComponent {
 
-  @Nonnull
-  String getWorkflowId();
+    @Nonnull
+    String getWorkflowId();
 
-  @Nonnull
-  Map<String, Object> getPayload();
+    @Nonnull
+    Map<String, Object> getPayload();
 
-  void applyPayloadModification(@Nonnull PayloadModification payloadModification);
+    void applyPayloadModification(@Nonnull PayloadModification payloadModification);
 
-  @Nonnull
-  WorkflowStatus getStatus();
+    @Nonnull
+    WorkflowStatus getStatus();
 
-  @Nonnull
-  List<String> getStepHistory();
+    @Nonnull
+    List<String> getStepHistory();
 
-  @Nonnull
-  ProcessingContext processingContext();
+    @Nonnull
+    ProcessingContext processingContext();
 }

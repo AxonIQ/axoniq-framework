@@ -1,4 +1,4 @@
-# Axon Framework - Workflow Extension 
+# Axon Framework - Workflow Extension
 
 Repository for a Workflow (Flow) Engine built on Axon Framework 5.
 
@@ -31,9 +31,6 @@ loanWorkflow = workflow {
 
 // Engine handles: events, retries, timeouts, state persistence, crash recovery
 ```
-
-
-
 
 ## Licensing
 

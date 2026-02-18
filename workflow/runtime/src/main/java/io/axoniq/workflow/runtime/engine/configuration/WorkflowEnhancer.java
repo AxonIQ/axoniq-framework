@@ -17,12 +17,13 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowDefinitionRegistry;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -35,29 +36,31 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
  */
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 
-  @Override
-  public void enhance(@NotNull ComponentRegistry componentRegistry) {
+    @Override
+    public void enhance(@NotNull ComponentRegistry componentRegistry) {
 
-    componentRegistry
-      .registerComponent(WorkflowDefinitionRegistry.class, cfg -> new SimpleWorkflowDefinitionRegistry());
+        componentRegistry
+                .registerComponent(WorkflowDefinitionRegistry.class, cfg -> new SimpleWorkflowDefinitionRegistry());
 
-    componentRegistry
-      .registerComponent(WorkflowEngine.class, cfg ->
-        new WorkflowEngine(
-          cfg.getComponent(UnitOfWorkFactory.class),
-          cfg.getComponent(EventSink.class),
-          cfg.getComponent(WorkflowDefinitionRegistry.class),
-          cfg.getComponent(Converter.class)
-        )
-      );
-    componentRegistry.registerModule(
-      EventProcessorModule
-        .pooledStreaming("WorkflowEngine")
-        .eventHandlingComponents(req -> req.declarative(cfg -> new AllEventEventHandlingComponent(
-          cfg.getComponent(WorkflowEngine.class)
-        )))
-        .customized(ANY_EVENT_IN_ONE_SEGMENT)
-        .build()
-    );
-  }
+        componentRegistry
+                .registerComponent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.eventName());
+
+        componentRegistry
+                .registerComponent(WorkflowEngine.class, cfg ->
+                        new WorkflowEngine(
+                                cfg.getComponent(UnitOfWorkFactory.class),
+                                cfg.getComponent(EventSink.class),
+                                cfg.getComponent(WorkflowDefinitionRegistry.class)
+                        )
+                );
+        componentRegistry.registerModule(
+                EventProcessorModule
+                        .pooledStreaming("WorkflowEngine")
+                        .eventHandlingComponents(req -> req.declarative(cfg -> new AllEventEventHandlingComponent(
+                                cfg.getComponent(WorkflowEngine.class)
+                        )))
+                        .customized(ANY_EVENT_IN_ONE_SEGMENT)
+                        .build()
+        );
+    }
 }

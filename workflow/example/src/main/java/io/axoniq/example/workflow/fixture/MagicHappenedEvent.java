@@ -15,10 +15,8 @@
  *
  *
  */
-package io.axoniq.example.workflow;
+package io.axoniq.example.workflow.fixture;
 
-import org.axonframework.messaging.eventhandling.annotation.Event;
+public record MagicHappenedEvent(String magician) {
 
-@Event(namespace = "my.custom", name = "RegistrationReceived")
-public record RegistrationReceivedEvent(String id, String email) {
 }

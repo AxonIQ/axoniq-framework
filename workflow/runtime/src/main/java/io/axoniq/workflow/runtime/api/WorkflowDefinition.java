@@ -26,4 +26,5 @@ import java.util.function.Consumer;
  */
 @FunctionalInterface
 public interface WorkflowDefinition<T extends WorkflowContext> extends Consumer<T> {
+
 }

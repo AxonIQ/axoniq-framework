@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.runtime.api;
 
-import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
+import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import jakarta.annotation.Nonnull;
 
 /**
@@ -28,26 +28,25 @@ import jakarta.annotation.Nonnull;
  */
 public interface WorkflowConfiguration<T extends WorkflowContext> {
 
-  @Nonnull
-  WorkflowDefinition<T> workflowDefinition();
+    @Nonnull
+    WorkflowDefinition<T> workflowDefinition();
 
-  @Nonnull
-  AssociationProvider associationProvider();
+    @Nonnull
+    AssociationProvider associationProvider();
 
-  @Nonnull
-  default String workflowName() {
-    return this.getClass().getSimpleName();
-  }
+    @Nonnull
+    default String workflowName() {
+        return this.getClass().getSimpleName();
+    }
 
-  @Nonnull
-  default EventNameCustomizer eventNameCustomizer() {
-    return DefaultEventNameCustomizer.Builder.eventName();
-  }
+    @Nonnull
+    default EventNameCustomizer eventNameCustomizer() {
+        return DefaultEventNameCustomizer.Builder.eventName();
+    }
 
-  @Nonnull
-  WorkflowContextFactory<T> workflowContextFactory();
+    @Nonnull
+    WorkflowContextFactory<T> workflowContextFactory();
 
-  @Nonnull
-  WorkflowStateFactory workflowStateFactory();
-
+    @Nonnull
+    WorkflowStateFactory workflowStateFactory();
 }

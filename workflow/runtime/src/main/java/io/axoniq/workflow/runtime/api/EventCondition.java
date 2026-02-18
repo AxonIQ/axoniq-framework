@@ -27,19 +27,19 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import java.util.function.Predicate;
 
 public record EventCondition(
-  @Nonnull QualifiedName qualifiedName,
-  @Nonnull Predicate<EventMessage> payloadPredicate
+        @Nonnull QualifiedName qualifiedName,
+        @Nonnull Predicate<EventMessage> payloadPredicate
 ) implements Predicate<EventMessage> {
 
-  public static ComponentBuilder<EventCondition> fromType(Class<?> clazz) {
-    return (c) -> new EventCondition(c.getComponent(MessageTypeResolver.class).resolve(clazz)
-      .orElse(new MessageType(clazz))
-      .qualifiedName(), (e) -> true);
-  }
+    public static ComponentBuilder<EventCondition> fromType(Class<?> clazz) {
+        return (c) -> new EventCondition(c.getComponent(MessageTypeResolver.class).resolve(clazz)
+                                          .orElse(new MessageType(clazz))
+                                          .qualifiedName(), (e) -> true);
+    }
 
-  @Override
-  public boolean test(EventMessage eventMessage) {
-    return eventMessage.type().qualifiedName().equals(this.qualifiedName) &&
-      payloadPredicate.test(eventMessage);
-  }
+    @Override
+    public boolean test(EventMessage eventMessage) {
+        return eventMessage.type().qualifiedName().equals(this.qualifiedName) &&
+                payloadPredicate.test(eventMessage);
+    }
 }

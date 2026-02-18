@@ -30,17 +30,19 @@ import org.jetbrains.annotations.NotNull;
 
 public class WorkflowTestEnhancer implements ConfigurationEnhancer {
 
-  @Override
-  public void enhance(@NotNull ComponentRegistry registry) {
-    registry
-      .registerComponent(DelayedPublisher.class, cfg ->
-        new DelayedPublisher(
-          cfg.getComponent(EventSink.class),
-          cfg.getComponent(WorkflowEngine.class).getExecutor(),
-          cfg.getComponent(MessageTypeResolver.class)
-        )
-      ).registerDecorator(EventStore.class, InterceptingEventStore.DECORATION_ORDER - 1, (configuration, name, delegate) ->
-        PrettyPrintingRecordingEventStore.eventStore(delegate)
-      );
-  }
+    @Override
+    public void enhance(@NotNull ComponentRegistry registry) {
+        registry
+                .registerComponent(DelayedPublisher.class, cfg ->
+                        new DelayedPublisher(
+                                cfg.getComponent(EventSink.class),
+                                cfg.getComponent(WorkflowEngine.class).getExecutor(),
+                                cfg.getComponent(MessageTypeResolver.class)
+                        )
+                ).registerDecorator(EventStore.class,
+                                    InterceptingEventStore.DECORATION_ORDER - 1,
+                                    (configuration, name, delegate) ->
+                                            PrettyPrintingRecordingEventStore.eventStore(delegate)
+                );
+    }
 }

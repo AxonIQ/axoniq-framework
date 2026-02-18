@@ -43,56 +43,54 @@ import java.util.function.BiFunction;
 
 public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
-  private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
+    private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
+    public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
+            PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
+            pcepc.eventCriteria(
+                    set -> {
+                        if (set.isEmpty()) {
+                            return EventCriteria.havingAnyTag();
+                        } else {
+                            return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+                        }
+                    }
+            ).initialSegmentCount(1);
+    private final SequencingPolicy sequencingPolicy;
+    private final EventHandler eventHandler;
 
-  private final SequencingPolicy sequencingPolicy;
-  private final EventHandler eventHandler;
+    public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
+        this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
+        this.sequencingPolicy = new HierarchicalSequencingPolicy(
+                SequentialPerAggregatePolicy.instance(),
+                SequentialPolicy.INSTANCE
+        );
+    }
 
-  public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
-    PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
-    pcepc.eventCriteria(
-      set -> {
-        if (set.isEmpty()) {
-          return EventCriteria.havingAnyTag();
-        } else {
-          return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-        }
-      }
-    ).initialSegmentCount(1);
+    @NotNull
+    @Override
+    public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+        logger.debug("Handling event {}", event);
+        return eventHandler.handle(event, context);
+    }
 
-  public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
-    this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
-    this.sequencingPolicy = new HierarchicalSequencingPolicy(
-      SequentialPerAggregatePolicy.instance(),
-      SequentialPolicy.INSTANCE
-    );
-  }
+    @Override
+    public Set<QualifiedName> supportedEvents() {
+        return Set.of();
+    }
 
-  @NotNull
-  @Override
-  public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
-    logger.debug("Handling event {}", event);
-    return eventHandler.handle(event, context);
-  }
+    @Override
+    public boolean supports(@NotNull QualifiedName eventName) {
+        return true;
+    }
 
-  @Override
-  public Set<QualifiedName> supportedEvents() {
-    return Set.of();
-  }
+    @NotNull
+    @Override
+    public Object sequenceIdentifierFor(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+        return sequencingPolicy.getSequenceIdentifierFor(event, context);
+    }
 
-  @Override
-  public boolean supports(@NotNull QualifiedName eventName) {
-    return true;
-  }
-
-  @NotNull
-  @Override
-  public Object sequenceIdentifierFor(@NotNull EventMessage event, @NotNull ProcessingContext context) {
-    return sequencingPolicy.getSequenceIdentifierFor(event, context);
-  }
-
-  @Override
-  public void describeTo(@NotNull ComponentDescriptor descriptor) {
-    descriptor.describeProperty("event-handler", eventHandler.getClass());
-  }
+    @Override
+    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+        descriptor.describeProperty("event-handler", eventHandler.getClass());
+    }
 }

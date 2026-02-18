@@ -38,53 +38,55 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_
 
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
-  private final List<EventMessage> publishedEvents = new CopyOnWriteArrayList<>();
+    private final List<EventMessage> publishedEvents = new CopyOnWriteArrayList<>();
 
-  @Nonnull
-  public static EventStore eventStore(@Nonnull EventStore delegate) {
-    if (delegate instanceof PrettyPrintingRecordingEventStore) {
-      return delegate;
-    } else {
-      return new PrettyPrintingRecordingEventStore(delegate);
+    public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
+        super(delegate);
     }
-  }
 
-  public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
-    super(delegate);
-  }
+    @Nonnull
+    public static EventStore eventStore(@Nonnull EventStore delegate) {
+        if (delegate instanceof PrettyPrintingRecordingEventStore) {
+            return delegate;
+        } else {
+            return new PrettyPrintingRecordingEventStore(delegate);
+        }
+    }
 
-  @Override
-  public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @NotNull EventMessage... events) {
-    publishedEvents.addAll(Arrays.asList(events));
-    return super.publish(context, events);
-  }
+    @Override
+    public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @Nonnull EventMessage... events) {
+        publishedEvents.addAll(Arrays.asList(events));
+        return super.publish(context, events);
+    }
 
-  @Override
-  public void describeTo(@NotNull ComponentDescriptor descriptor) {
-    // descriptor.describeWrapperOf(this.delegate);
-    var eventsByWorkflowId = publishedEvents.stream()
-      .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
-      .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(METADATA_KEY_WORKFLOW_ID, "none")));
-    var events = eventsByWorkflowId.entrySet().stream()
-      .filter(entry -> !entry.getKey().equals("none"))
-      .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))
-      .toList();
-    descriptor.describeProperty("workflowEvents", events);
-  }
-
-  record WorkflowEventDescriptor(
-    String workflowId,
-    List<EventMessage> events
-  ) implements DescribableComponent {
 
     @Override
     public void describeTo(@NotNull ComponentDescriptor descriptor) {
-      descriptor.describeProperty(workflowId, events.stream().map(event -> {
-        var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
-        var name = event.type().qualifiedName().toString();
-        return String.format("%s (%s): %s", name, status, event.payload());
-      }).toList());
+        // descriptor.describeWrapperOf(this.delegate);
+        var eventsByWorkflowId = publishedEvents.stream()
+                                                .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
+                                                .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(
+                                                        METADATA_KEY_WORKFLOW_ID,
+                                                        "none")));
+        var events = eventsByWorkflowId.entrySet().stream()
+                                       .filter(entry -> !entry.getKey().equals("none"))
+                                       .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))
+                                       .toList();
+        descriptor.describeProperty("workflowEvents", events);
     }
-  }
 
+    record WorkflowEventDescriptor(
+            String workflowId,
+            List<EventMessage> events
+    ) implements DescribableComponent {
+
+        @Override
+        public void describeTo(@NotNull ComponentDescriptor descriptor) {
+            descriptor.describeProperty(workflowId, events.stream().map(event -> {
+                var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
+                var name = event.type().qualifiedName().toString();
+                return String.format("%s (%s): %s", name, status, event.payload());
+            }).toList());
+        }
+    }
 }

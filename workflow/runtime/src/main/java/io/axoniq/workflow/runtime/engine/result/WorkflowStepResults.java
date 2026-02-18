@@ -33,108 +33,121 @@ import java.util.Optional;
  */
 public class WorkflowStepResults {
 
-  public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowState workflowState) {
-    return new StateBasedWorkflowStepResult(stepName, () -> {
-      workflowState.awaitStateChange(s -> true);
-      return null;
-    }, workflowState);
-  }
+    private WorkflowStepResults() {
+        // util class
+    }
 
-  /**
-   * Constructs completed result.
-   *
-   * @param payload payload of the result, might be null.
-   * @return completed step result.
-   */
-  @Nonnull
-  public static WorkflowStepResult completed(@Nonnull String stepName, @Nullable Object payload) {
-    return new CompletedWorkflowStepResult(stepName, payload, null, null, false);
-  }
+    public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowState workflowState) {
+        return new StateBasedWorkflowStepResult(stepName, () -> {
+            workflowState.awaitStateChange(s -> true);
+            return null;
+        }, workflowState);
+    }
 
-  /**
-   * Constructs failed result.
-   *
-   * @param error failure causing error.
-   * @return failed result.
-   */
-  @Nonnull
-  public static WorkflowStepResult failed(@Nonnull String stepName, @Nonnull Throwable error) {
-    return new CompletedWorkflowStepResult(stepName, null, Objects.requireNonNull(error, "Error must be provided"), null, false);
-  }
+    /**
+     * Constructs completed result.
+     *
+     * @param payload payload of the result, might be null.
+     * @return completed step result.
+     */
+    @Nonnull
+    public static WorkflowStepResult completed(@Nonnull String stepName, @Nullable Object payload) {
+        return new CompletedWorkflowStepResult(stepName, payload, null, null, false);
+    }
 
-  /**
-   * Constructs cancelled result.
-   *
-   * @return cancelled result.
-   */
-  @Nonnull
-  public static WorkflowStepResult cancelled(@Nonnull String stepName) {
-    return new CompletedWorkflowStepResult(stepName, null, null, null, true);
-  }
+    /**
+     * Constructs failed result.
+     *
+     * @param error failure causing error.
+     * @return failed result.
+     */
+    @Nonnull
+    public static WorkflowStepResult failed(@Nonnull String stepName, @Nonnull Throwable error) {
+        return new CompletedWorkflowStepResult(stepName,
+                                               null,
+                                               Objects.requireNonNull(error, "Error must be provided"),
+                                               null,
+                                               false);
+    }
 
-  /**
-   * Constructs timed out result.
-   *
-   * @param timeout timeout duration.
-   * @return timed out result.
-   */
-  @Nonnull
-  public static WorkflowStepResult timeout(@Nonnull String stepName, @Nonnull Duration timeout) {
-    return new CompletedWorkflowStepResult(stepName, null, null, Objects.requireNonNull(timeout, "Timeout must be provided"), false);
-  }
+    /**
+     * Constructs cancelled result.
+     *
+     * @return cancelled result.
+     */
+    @Nonnull
+    public static WorkflowStepResult cancelled(@Nonnull String stepName) {
+        return new CompletedWorkflowStepResult(stepName, null, null, null, true);
+    }
 
+    /**
+     * Constructs timed out result.
+     *
+     * @param timeout timeout duration.
+     * @return timed out result.
+     */
+    @Nonnull
+    public static WorkflowStepResult timeout(@Nonnull String stepName, @Nonnull Duration timeout) {
+        return new CompletedWorkflowStepResult(stepName,
+                                               null,
+                                               null,
+                                               Objects.requireNonNull(timeout, "Timeout must be provided"),
+                                               false);
+    }
 
-  @Nonnull
-  public static WorkflowStepResult all(WorkflowStepResult... results) {
-    return new WorkflowStepResult() {
+    @Nonnull
+    public static WorkflowStepResult all(WorkflowStepResult... results) {
+        return new WorkflowStepResult() {
 
-      @Override
-      @Nonnull
-      public String getStepName() {
-        return "all(" + String.join(", ", Arrays.stream(results).map(WorkflowStepResult::getStepName).toList()) + ")";
-      }
+            @Override
+            @Nonnull
+            public String getStepName() {
+                return "all(" + String.join(", ", Arrays.stream(results).map(WorkflowStepResult::getStepName).toList())
+                        + ")";
+            }
 
-      @Override
-      public boolean isCompleted() {
-        return Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted);
-      }
+            @Override
+            public boolean isCompleted() {
+                return Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted);
+            }
 
-      @Override
-      @Nonnull
-      public <T> Optional<T> payload() {
-        return Optional.empty();
-      }
+            @Override
+            @Nonnull
+            public <T> Optional<T> result() {
+                return Optional.empty();
+            }
 
-      @Override
-      @Nonnull
-      public Optional<StepFailedException> error() {
-        return Arrays.stream(results).filter(WorkflowStepResult::isFailure).findFirst().flatMap(WorkflowStepResult::error);
-      }
+            @Override
+            @Nonnull
+            public Optional<StepFailedException> error() {
+                return Arrays.stream(results).filter(WorkflowStepResult::isFailure).findFirst().flatMap(
+                        WorkflowStepResult::error);
+            }
 
-      @Override
-      public boolean isSuccess() {
-        return Arrays.stream(results).allMatch(WorkflowStepResult::isSuccess);
-      }
+            @Override
+            public boolean isSuccess() {
+                return Arrays.stream(results).allMatch(WorkflowStepResult::isSuccess);
+            }
 
-      @Override
-      public boolean isFailure() {
-        return Arrays.stream(results).anyMatch(WorkflowStepResult::isFailure);
-      }
+            @Override
+            public boolean isFailure() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::isFailure);
+            }
 
-      @Override
-      public boolean isCanceled() {
-        return Arrays.stream(results).anyMatch(WorkflowStepResult::isCanceled);
-      }
+            @Override
+            public boolean isCanceled() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::isCanceled);
+            }
 
-      @Override
-      public boolean isTimeout() {
-        return Arrays.stream(results).anyMatch(WorkflowStepResult::isTimeout);
-      }
-    };
-  }
+            @Override
+            public boolean isTimeout() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::isTimeout);
+            }
 
-
-  private WorkflowStepResults() {
-    // util class
-  }
+            @Override
+            public boolean await() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::await);
+            }
+        };
+    }
 }

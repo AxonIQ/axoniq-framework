@@ -24,4 +24,5 @@ import java.util.function.Supplier;
  */
 @FunctionalInterface
 public interface EventNameCustomizerProvider extends Supplier<EventNameCustomizer> {
+
 }

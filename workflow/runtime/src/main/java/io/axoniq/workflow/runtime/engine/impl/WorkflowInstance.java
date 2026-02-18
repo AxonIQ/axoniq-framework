@@ -17,7 +17,15 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.*;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadModification;
+import io.axoniq.workflow.runtime.api.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.WorkflowServices;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
@@ -39,7 +47,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -49,295 +62,332 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
-  private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
 
-  private final WorkflowServices workflowServices;
-  // primitive implementations
-  private final ExecuteDelegate executeDelegate;
-  private final WaitForDelegate waitForDelegate;
+    private final WorkflowServices workflowServices;
+    // primitive implementations
+    private final ExecuteDelegate executeDelegate;
+    private final WaitForDelegate waitForDelegate;
 
-  private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
-  // State variables
-  private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
-  private final Map<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
-  private WorkflowStatus status = WorkflowStatus.NONE;
-  private final ProcessingContext processingContext;
-  private boolean executable = false;
-  private final String workflowId;
-  private Map<String, Object> payload;
+    private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
+    // State variables
+    private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
+    private final Map<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
+    private final ProcessingContext processingContext;
+    private final String workflowId;
+    private WorkflowStatus status = WorkflowStatus.NONE;
+    private boolean executable = false;
+    private Map<String, Object> payload;
 
-  public WorkflowInstance(@Nonnull String workflowId,
-                          @Nonnull Map<String, Object> initial,
-                          @Nonnull ProcessingContext processingContext,
-                          @Nonnull EventNameCustomizer parentCustomizer,
-                          @Nonnull WorkflowServices workflowServices) {
-    this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
-    this.payload = Objects.requireNonNull(initial, "Payload must not be null");
-    this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
-    this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow service aare mandatory");
-    var stepParent = parentCustomizer.forStepInheritance();
-    this.executeDelegate = new ExecuteDelegate(this, this, workflowServices, stepParent);
-    this.waitForDelegate = new WaitForDelegate(this, this, workflowServices, stepParent);
-  }
+    public WorkflowInstance(@Nonnull String workflowId,
+                            @Nonnull Map<String, Object> initial,
+                            @Nonnull ProcessingContext processingContext,
+                            @Nonnull EventNameCustomizer parentCustomizer,
+                            @Nonnull WorkflowServices workflowServices) {
+        this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
+        this.payload = Objects.requireNonNull(initial, "Payload must not be null");
+        this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
+        this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow service aare mandatory");
+        var stepParent = parentCustomizer.forStepInheritance();
+        this.executeDelegate = new ExecuteDelegate(this, this, workflowServices, stepParent);
+        this.waitForDelegate = new WaitForDelegate(this, this, workflowServices, stepParent);
+    }
 
 
-  @Override
-  @Nonnull
-  public <T extends WorkflowContext> T execute(
-    @Nonnull WorkflowConfiguration<T> configuration,
-    @Nonnull WorkflowContext workflowContext
-  ) {
-    // TODO: discuss when we switch to the executable
-    switchToExecutable();
+    @Override
+    @Nonnull
+    public <T extends WorkflowContext> T execute(
+            @Nonnull WorkflowConfiguration<T> configuration,
+            @Nonnull WorkflowContext workflowContext
+    ) {
+        // TODO: discuss when we switch to the executable
+        switchToExecutable();
 
-    return ContextUtils.executeWithResult(
-        workflowId,
-        workflowServices,
-        workflowContext.processingContext(),
-        pc -> {
+        return ContextUtils.executeWithResult(
+                                   workflowId,
+                                   workflowServices,
+                                   workflowContext.processingContext(),
+                                   pc -> {
 
-          @SuppressWarnings("unchecked")
-          var ctx = (T) workflowContext;
-          if (ctx.getStatus().isTerminal()) {
-            logger.trace("Workflow instance has reached terminal state {}, skipping execution.", ctx.getStatus());
-            return CompletableFuture.completedFuture(ctx);
-          }
-          var configuredName = configuration.workflowName();
-          var workflowName = (configuredName != null && !configuredName.isEmpty()) ? configuredName : workflowId;
-          var customizer = configuration.eventNameCustomizer();
-          if (ctx.getStatus() == WorkflowStatus.NONE) {
-            sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer), pc).join(); // FIXME join
-          }
+                                       @SuppressWarnings("unchecked")
+                                       var ctx = (T) workflowContext;
+                                       if (ctx.getStatus().isTerminal()) {
+                                           logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
+                                                        ctx.getStatus());
+                                           return CompletableFuture.completedFuture(ctx);
+                                       }
+                                       var configuredName = configuration.workflowName();
+                                       var workflowName = (configuredName != null
+                                               && !configuredName.isEmpty()) ? configuredName : workflowId;
+                                       var customizer = configuration.eventNameCustomizer();
+                                       if (ctx.getStatus() == WorkflowStatus.NONE) {
+                                           sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer),
+                                                             pc).join(); // FIXME join
+                                       }
 
-          try {
-            logger.trace("Executing workflow with initial payload {} from thread {}", workflowContext.getPayload(), Thread.currentThread());
-            configuration.workflowDefinition().accept(ctx);
-            logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
+                                       try {
+                                           logger.trace("Executing workflow with initial payload {} from thread {}",
+                                                        workflowContext.getPayload(),
+                                                        Thread.currentThread());
+                                           configuration.workflowDefinition().accept(ctx);
+                                           logger.trace("Workflow executed. Resulting workflow payload {}.", workflowContext.getPayload());
 
-            sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(5, TimeUnit.SECONDS); // FIXME constant
+                                           sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(5,
+                                                                                                                                   TimeUnit.SECONDS); // FIXME constant
+                                       } catch (WorkflowFailedException wfe) {
+                                           sendWorkflowEvent(failedWorkflow(workflowContext, workflowName, wfe, customizer),
+                                                             pc).join(); // FIXME join;
+                                       } catch (Exception e) {
+                                           if (e instanceof TimeoutException) {
+                                               sendWorkflowEvent(timeoutWorkflow(workflowContext,
+                                                                                 workflowName,
+                                                                                 workflowServices.getClock().instant(),
+                                                                                 customizer), processingContext()).join(); // FIXME join
+                                           } else if (e instanceof InterruptedException) {
+                                               sendWorkflowEvent(cancelledWorkflow(workflowContext, workflowName, customizer),
+                                                                 pc).join(); // FIXME join;
+                                           } else {
+                                               logger.error("Error occurred in workflow {}", workflowId, e);
+                                           }
+                                       }
 
-          } catch (WorkflowFailedException wfe) {
-            sendWorkflowEvent(failedWorkflow(workflowContext, workflowName, wfe, customizer), pc).join(); // FIXME join;
-          } catch (Exception e) {
-            if (e instanceof TimeoutException) {
-              sendWorkflowEvent(timeoutWorkflow(workflowContext, workflowName, workflowServices.getClock().instant(), customizer), processingContext()).join(); // FIXME join
-            } else if (e instanceof InterruptedException) {
-              sendWorkflowEvent(cancelledWorkflow(workflowContext, workflowName, customizer), pc).join(); // FIXME join;
-            } else {
-              logger.error("Error occurred in workflow {}", workflowId, e);
+                                       return CompletableFuture.completedFuture(ctx);
+                                   }
+                           ).thenApply(wc -> {
+                               try {
+                                   // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
+                                   awaitStateChange(s -> s.getStatus().isTerminal());
+                               } catch (Exception te) {
+                                   logger.error("Error waiting for workflow instance termination", te);
+                               }
+                               return wc;
+                           })
+                           .join();
+    }
+
+    @Override
+    public void applyStateChange(
+            @Nonnull EventMessage eventMessage,
+            @Nonnull ProcessingContext processingContext
+    ) {
+        logger.trace("Applying event {}", eventMessage.type());
+        Object eventPayload = eventMessage.payloadAs(Object.class);
+        var metadata = eventMessage.metadata();
+        // Apply step-level state changes
+        MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
+            var stepName = getStepName(metadata);
+            switch (stepStatus) {
+                case STARTED:
+                    addStep(WorkflowStep.started(stepName,
+                                                 eventPayload,
+                                                 eventMessage.timestamp(),
+                                                 processingContext)); // TODO copy resources of the context
+                    break;
+                case FAILED:
+                    addStep(WorkflowStep.failed(stepName,
+                                                (Throwable) eventPayload,
+                                                eventMessage.timestamp(),
+                                                processingContext)); // TODO copy resources of the context
+                    break;
+                case TIMED_OUT:
+                    addStep(WorkflowStep.timedOut(stepName,
+                                                  eventPayload,
+                                                  eventMessage.timestamp(),
+                                                  processingContext)); // TODO copy resources of the context
+                    break;
+                case COMPLETED:
+                    addStep(WorkflowStep.completed(stepName,
+                                                   eventPayload,
+                                                   eventMessage.timestamp(),
+                                                   processingContext)); // TODO copy resources of the context
+                    break;
+                default:
+                    break;
             }
-          }
-
-          return CompletableFuture.completedFuture(ctx);
-        }
-      ).thenApply(wc -> {
-        try {
-          // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
-          awaitStateChange(s -> s.getStatus().isTerminal());
-        } catch (Exception te) {
-          logger.error("Error waiting for workflow instance termination", te);
-        }
-        return wc;
-      })
-      .join();
-  }
-
-  @Override
-  public void applyStateChange(
-    @Nonnull EventMessage eventMessage,
-    @Nonnull ProcessingContext processingContext
-  ) {
-    logger.trace("Applying event {}", eventMessage.type());
-    Object eventPayload = eventMessage.payloadAs(Object.class);
-    var metadata = eventMessage.metadata();
-    // Apply step-level state changes
-    MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
-      var stepName = getStepName(metadata);
-      switch (stepStatus) {
-        case STARTED:
-          addStep(WorkflowStep.started(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
-          break;
-        case FAILED:
-          addStep(WorkflowStep.failed(stepName, (Throwable) eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
-          break;
-        case TIMED_OUT:
-          addStep(WorkflowStep.timedOut(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
-          break;
-        case COMPLETED:
-          addStep(WorkflowStep.completed(stepName, eventPayload, eventMessage.timestamp(), processingContext)); // TODO copy resources of the context
-          break;
-        default:
-          break;
-      }
-    });
-    // Apply workflow-level state changes
-    MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
-      this.status = status
-    );
-  }
-
-  @Override
-  public void applyPayloadModification(
-    @Nonnull PayloadModification payloadModification
-  ) {
-    this.payload = Objects.requireNonNull(
-      payloadModification.apply(payload),
-      "Payload must not be null"
-    );
-  }
-
-  @Override
-  public void awaitStateChange(
-    @Nonnull Predicate<WorkflowState> predicate
-  ) throws InterruptedException {
-    do {
-      taskQueue.take().accept(this);
-    } while (!predicate.test(this));
-  }
-
-  @Override
-  public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-    logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
-    for (var entry : waitConditions.entrySet()) {
-      // TODO synchronized ?
-      var condition = entry.getValue();
-      if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
-        String stepName = entry.getKey();
-        waitConditions.remove(stepName);
-        Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
-        }, processingContext.component(Converter.class));
-        // TODO event should be mapped back based on result mapping
-        appendTask(state ->
-          ContextUtils.executeWithResult(
-            stepName,
-            workflowServices,
-            state.getStep(stepName).context(),
-            ctx ->
-              workflowServices.getEventSink().publish(
-                ctx,
-                completedStep(this, stepName, resultMap,
-                  merge(waitForDelegate.parentEventNameCustomizer, condition.eventNameCustomizer())
-                )
-              )
-          ).join()
+        });
+        // Apply workflow-level state changes
+        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
+                                                                    this.status = status
         );
-      }
     }
-    appendTask(i -> i.applyStateChange(eventMessage, processingContext));
-  }
 
-
-  // delegation
-  @Override
-  @Nonnull
-  public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local, @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping, @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return executeDelegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
-  }
-
-  @Override
-  @Nonnull
-  public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
-  }
-
-  @Override
-  @Nullable
-  public Consumer<WorkflowState> getNextTask() {
-    return this.taskQueue.poll(); // FIXME: forever?
-  }
-
-  @Override
-  public void appendTask(@Nonnull Consumer<WorkflowState> task) {
-    if (!this.taskQueue.offer(task)) {
-      // whoops, we're overloading this workflow with events. STOP!!!
-      throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
+    @Override
+    public void applyPayloadModification(
+            @Nonnull PayloadModification payloadModification
+    ) {
+        this.payload = Objects.requireNonNull(
+                payloadModification.apply(payload),
+                "Payload must not be null"
+        );
     }
-  }
 
-  @Override
-  @Nonnull
-  public WorkflowStep getStep(@Nonnull String stepName) {
-    return steps.get(stepName);
-  }
+    @Override
+    public void awaitStateChange(
+            @Nonnull Predicate<WorkflowState> predicate
+    ) throws InterruptedException {
+        do {
+            taskQueue.take().accept(this);
+        } while (!predicate.test(this));
+    }
 
-  @Override
-  public boolean containsStep(@Nonnull String stepName) {
-    return steps.containsKey(stepName);
-  }
-
-  @Override
-  public void addStep(@Nonnull WorkflowStep workflowStep) {
-    this.steps.put(workflowStep.stepName(), workflowStep);
-  }
-
-  @Override
-  public void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName, @Nonnull Predicate<EventMessage> predicate, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate, eventNameCustomizer));
-  }
-
-  @Override
-  public void removeWaitCondition(@Nonnull String stepName) {
-    waitConditions.remove(stepName);
-  }
-
-
-  @Override
-  @Nonnull
-  public String getWorkflowId() {
-    return this.workflowId;
-  }
-
-  @Override
-  @Nonnull
-  public Map<String, Object> getPayload() {
-    return this.payload;
-  }
-
-  @Override
-  @Nonnull
-  public WorkflowStatus getStatus() {
-    return this.status;
-  }
-
-  @Override
-  @Nonnull
-  public List<String> getStepHistory() {
-    return new ArrayList<>(steps.keySet());
-  }
-
-  @Override
-  public boolean hasTasks() {
-    return this.taskQueue.isEmpty();
-  }
-
-  @Override
-  public boolean isExecutable() {
-    return executable;
-  }
-
-  public void switchToExecutable() {
-    executable = true;
-  }
+    @Override
+    public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+        logger.trace("On event {}, wait condition size is {}", eventMessage.type(), waitConditions.size());
+        for (var entry : waitConditions.entrySet()) {
+            // TODO synchronized ?
+            var condition = entry.getValue();
+            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(
+                    eventMessage)) {
+                String stepName = entry.getKey();
+                waitConditions.remove(stepName);
+                Map<String, Object> resultMap = eventMessage.payloadAs(new TypeReference<>() {
+                }, processingContext.component(Converter.class));
+                // TODO event should be mapped back based on result mapping
+                appendTask(state ->
+                                   ContextUtils.executeWithResult(
+                                           stepName,
+                                           workflowServices,
+                                           state.getStep(stepName).context(),
+                                           ctx ->
+                                                   workflowServices.getEventSink().publish(
+                                                           ctx,
+                                                           completedStep(this, stepName, resultMap,
+                                                                         merge(waitForDelegate.parentEventNameCustomizer,
+                                                                               condition.eventNameCustomizer())
+                                                           )
+                                                   )
+                                   ).join()
+                );
+            }
+        }
+        appendTask(i -> i.applyStateChange(eventMessage, processingContext));
+    }
 
 
-  private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage, ProcessingContext processingContext) {
-    // TODO: make sure the consistency marker is used
-    return workflowServices.getEventSink().publish(processingContext, eventMessage);
-  }
+    // delegation
+    @Override
+    @Nonnull
+    public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
+                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return executeDelegate.execute(stepName,
+                                       local,
+                                       action,
+                                       parameterMapping,
+                                       resultMapping,
+                                       timeout,
+                                       eventNameCustomizer);
+    }
 
-  record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate,
-                            EventNameCustomizer eventNameCustomizer) {
-  }
+    @Override
+    @Nonnull
+    public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
+                                      @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
+    }
+
+    @Override
+    @Nullable
+    public Consumer<WorkflowState> getNextTask() {
+        return this.taskQueue.poll(); // FIXME: forever?
+    }
+
+    @Override
+    public void appendTask(@Nonnull Consumer<WorkflowState> task) {
+        if (!this.taskQueue.offer(task)) {
+            // whoops, we're overloading this workflow with events. STOP!!!
+            throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
+        }
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStep getStep(@Nonnull String stepName) {
+        return steps.get(stepName);
+    }
+
+    @Override
+    public boolean containsStep(@Nonnull String stepName) {
+        return steps.containsKey(stepName);
+    }
+
+    @Override
+    public void addStep(@Nonnull WorkflowStep workflowStep) {
+        this.steps.put(workflowStep.stepName(), workflowStep);
+    }
+
+    @Override
+    public void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
+                                      @Nonnull Predicate<EventMessage> predicate,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
+        waitConditions.put(stepName, new EventWaitCondition(qualifiedName, predicate, eventNameCustomizer));
+    }
+
+    @Override
+    public void removeWaitCondition(@Nonnull String stepName) {
+        waitConditions.remove(stepName);
+    }
 
 
-  @Override
-  @Nonnull
-  public ProcessingContext processingContext() {
-    return processingContext;
-  }
+    @Override
+    @Nonnull
+    public String getWorkflowId() {
+        return this.workflowId;
+    }
 
-  @Override
-  public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-    // FIXME
-  }
+    @Override
+    @Nonnull
+    public Map<String, Object> getPayload() {
+        return this.payload;
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStatus getStatus() {
+        return this.status;
+    }
+
+    @Override
+    @Nonnull
+    public List<String> getStepHistory() {
+        return new ArrayList<>(steps.keySet());
+    }
+
+    @Override
+    public boolean hasTasks() {
+        return this.taskQueue.isEmpty();
+    }
+
+    @Override
+    public boolean isExecutable() {
+        return executable;
+    }
+
+    public void switchToExecutable() {
+        executable = true;
+    }
+
+
+    private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage, ProcessingContext processingContext) {
+        // TODO: make sure the consistency marker is used
+        return workflowServices.getEventSink().publish(processingContext, eventMessage);
+    }
+
+    @Override
+    @Nonnull
+    public ProcessingContext processingContext() {
+        return processingContext;
+    }
+
+    @Override
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        // FIXME
+    }
+
+    record EventWaitCondition(QualifiedName qualifiedName, Predicate<EventMessage> predicate,
+                              EventNameCustomizer eventNameCustomizer) {
+
+    }
 }

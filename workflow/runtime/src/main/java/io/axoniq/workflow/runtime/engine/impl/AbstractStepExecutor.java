@@ -40,97 +40,104 @@ import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 
 public abstract class AbstractStepExecutor {
 
-  private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
-  protected final WorkflowContext workflowContext;
-  protected final WorkflowState workflowState;
-  protected final WorkflowServices workflowServices;
-  protected final EventNameCustomizer parentEventNameCustomizer;
+    private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
+    protected final WorkflowContext workflowContext;
+    protected final WorkflowState workflowState;
+    protected final WorkflowServices workflowServices;
+    protected final EventNameCustomizer parentEventNameCustomizer;
 
-  public AbstractStepExecutor(
-    @Nonnull WorkflowContext workflowContext,
-    @Nonnull WorkflowState workflowState,
-    @Nonnull WorkflowServices workflowServices,
-    @Nonnull EventNameCustomizer parentEventNameCustomizer
-  ) {
-    this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
-    this.workflowState = Objects.requireNonNull(workflowState, "Workflow state is mandatory");
-    this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow services are mandatory");
-    this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer, "Event name customizer is mandatory");
-  }
-
-  protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
-    while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
-      var poll = workflowState.getNextTask();
-      if (poll != null) { // FIXME forever?
-        poll.accept(this.workflowState);
-      }
+    public AbstractStepExecutor(
+            @Nonnull WorkflowContext workflowContext,
+            @Nonnull WorkflowState workflowState,
+            @Nonnull WorkflowServices workflowServices,
+            @Nonnull EventNameCustomizer parentEventNameCustomizer
+    ) {
+        this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
+        this.workflowState = Objects.requireNonNull(workflowState, "Workflow state is mandatory");
+        this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow services are mandatory");
+        this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
+                                                                "Event name customizer is mandatory");
     }
-  }
 
-  @Nonnull
-  protected Context getContext(@Nonnull String stepName) {
-    return workflowState.containsStep(stepName)
-      ? workflowState.getStep(stepName).context()
-      : workflowState.processingContext();
-  }
-
-  @Nonnull
-  protected CompletableFuture<Void> started(@Nonnull String stepName, @Nonnull Map<String, Object> payload, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return sendStepEvent(startedStep(workflowContext, stepName, sanitize(payload),
-      merge(parentEventNameCustomizer, eventNameCustomizer)
-    ), getContext(stepName));
-  }
-
-  @Nonnull
-  protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return sendStepEvent(completedStep(workflowContext, stepName, sanitize(payload),
-      merge(parentEventNameCustomizer, eventNameCustomizer)
-    ), getContext(stepName));
-  }
-
-  @Nonnull
-  protected CompletableFuture<Void> cancelled(@Nonnull String stepName, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return sendStepEvent(cancelledStep(workflowContext, stepName,
-      merge(parentEventNameCustomizer, eventNameCustomizer)
-    ), getContext(stepName));
-  }
-
-  @Nonnull
-  protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    LoggerFactory.getLogger(AbstractStepExecutor.class).error("Error", ex);
-    return sendStepEvent(failStep(workflowContext, stepName, ex,
-      merge(parentEventNameCustomizer, eventNameCustomizer)
-    ), getContext(stepName));
-  }
-
-  @Nonnull
-  protected CompletableFuture<Void> timedOut(@Nonnull String stepName, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return timedOut(stepName, Instant.now(workflowServices.getClock()), eventNameCustomizer);
-  }
-
-  @Nonnull
-  protected CompletableFuture<Void> timedOut(@Nonnull String stepName, @Nonnull Instant timeoutTimestamp, @Nonnull EventNameCustomizer eventNameCustomizer) {
-    return sendStepEvent(timeoutStep(workflowContext, stepName, timeoutTimestamp,
-      merge(parentEventNameCustomizer, eventNameCustomizer)
-    ), getContext(stepName));
-  }
-
-  @Nonnull
-  private CompletableFuture<Void> sendStepEvent(@Nonnull EventMessage eventMessage, @Nonnull Context context) {
-    logger.trace("Appending event {}", eventMessage.type());
-    return ContextUtils.executeWithResult(
-      null,
-      workflowServices,
-      context,
-      ctx -> workflowServices.getEventSink().publish(ctx, eventMessage)
-    );
-  }
-
-  @Nonnull
-  protected Map<String, Object> sanitize(@Nullable Map<String, Object> payload) {
-    if (payload == null) {
-      return new LinkedHashMap<>();
+    protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
+        while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
+            var poll = workflowState.getNextTask();
+            if (poll != null) { // FIXME forever?
+                poll.accept(this.workflowState);
+            }
+        }
     }
-    return payload;
-  }
+
+    @Nonnull
+    protected Context getContext(@Nonnull String stepName) {
+        return workflowState.containsStep(stepName)
+                ? workflowState.getStep(stepName).context()
+                : workflowState.processingContext();
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> started(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
+                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(startedStep(workflowContext, stepName, sanitize(payload),
+                                         merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(completedStep(workflowContext, stepName, sanitize(payload),
+                                           merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> cancelled(@Nonnull String stepName,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(cancelledStep(workflowContext, stepName,
+                                           merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
+                                             @Nonnull EventNameCustomizer eventNameCustomizer) {
+        LoggerFactory.getLogger(AbstractStepExecutor.class).error("Error", ex);
+        return sendStepEvent(failStep(workflowContext, stepName, ex,
+                                      merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> timedOut(@Nonnull String stepName,
+                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return timedOut(stepName, Instant.now(workflowServices.getClock()), eventNameCustomizer);
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> timedOut(@Nonnull String stepName, @Nonnull Instant timeoutTimestamp,
+                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(timeoutStep(workflowContext, stepName, timeoutTimestamp,
+                                         merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    private CompletableFuture<Void> sendStepEvent(@Nonnull EventMessage eventMessage, @Nonnull Context context) {
+        logger.trace("Appending event {}", eventMessage.type());
+        return ContextUtils.executeWithResult(
+                null,
+                workflowServices,
+                context,
+                ctx -> workflowServices.getEventSink().publish(ctx, eventMessage)
+        );
+    }
+
+    @Nonnull
+    protected Map<String, Object> sanitize(@Nullable Map<String, Object> payload) {
+        if (payload == null) {
+            return new LinkedHashMap<>();
+        }
+        return payload;
+    }
 }

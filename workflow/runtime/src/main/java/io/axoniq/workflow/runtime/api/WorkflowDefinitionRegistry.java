@@ -28,31 +28,31 @@ import java.util.function.Predicate;
 
 public interface WorkflowDefinitionRegistry<W extends WorkflowDefinitionRegistry<W>> extends DescribableComponent {
 
-  @Nonnull
-  default W register(
-    @Nonnull QualifiedName name,
-    @Nonnull WorkflowConfiguration<?> workflowConfiguration
-  ) {
-    return register(new EventCondition(name, (e) -> true), workflowConfiguration);
-  }
+    @Nonnull
+    default W register(
+            @Nonnull QualifiedName name,
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+    ) {
+        return register(new EventCondition(name, (e) -> true), workflowConfiguration);
+    }
 
-  @Nonnull
-  W register(
-    @Nonnull EventCondition eventCondition,
-    @Nonnull WorkflowConfiguration<?> workflowConfiguration
-  );
+    @Nonnull
+    W register(
+            @Nonnull EventCondition eventCondition,
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+    );
 
-  @Nonnull
-  Set<QualifiedName> supportedEvents();
+    @Nonnull
+    Set<QualifiedName> supportedEvents();
 
-  @Nonnull
-  List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(@Nonnull QualifiedName qualifiedName);
+    @Nonnull
+    List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(@Nonnull QualifiedName qualifiedName);
 
 
-  record PredicatedWorkflowConfiguration(
-    Predicate<EventMessage> predicate,
-    WorkflowConfiguration<?> configuration
-  ) {
-  }
+    record PredicatedWorkflowConfiguration(
+            Predicate<EventMessage> predicate,
+            WorkflowConfiguration<?> configuration
+    ) {
 
+    }
 }

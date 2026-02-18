@@ -25,19 +25,18 @@ import static io.axoniq.workflow.runtime.engine.execution.WorkflowState.requireI
 
 public class ContextToStateAdoptingStateFactory<C extends WorkflowContext> implements WorkflowStateFactory {
 
-  private final Class<C> workflowContextType;
+    private final Class<C> workflowContextType;
 
-  public ContextToStateAdoptingStateFactory(@Nonnull Class<C> workflowContextType) {
-    this.workflowContextType = requireIsWorkflowState(workflowContextType);
-  }
-
-  @Override
-  @Nonnull
-  public WorkflowState create(@NotNull WorkflowContext context) {
-    if (workflowContextType.isAssignableFrom(context.getClass())) {
-      return (WorkflowState) context;
+    public ContextToStateAdoptingStateFactory(@Nonnull Class<C> workflowContextType) {
+        this.workflowContextType = requireIsWorkflowState(workflowContextType);
     }
-    throw new IllegalStateException("Unsupported context type " + context.getClass().getName());
-  }
 
+    @Override
+    @Nonnull
+    public WorkflowState create(@NotNull WorkflowContext context) {
+        if (workflowContextType.isAssignableFrom(context.getClass())) {
+            return (WorkflowState) context;
+        }
+        throw new IllegalStateException("Unsupported context type " + context.getClass().getName());
+    }
 }
