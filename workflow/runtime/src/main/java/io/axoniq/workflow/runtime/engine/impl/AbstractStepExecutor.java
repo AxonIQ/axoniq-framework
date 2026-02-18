@@ -21,9 +21,11 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.util.ContextUtils;
+import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
@@ -125,9 +127,10 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     private CompletableFuture<Void> sendStepEvent(@Nonnull EventMessage eventMessage, @Nonnull Context context) {
         logger.trace("Appending event {}", eventMessage.type());
-        return ContextUtils.executeWithResult(
+        return ProcessingContextUtils.executeWithResult(
                 null,
-                workflowServices,
+                workflowServices.getUnitOfWorkFactory(),
+                workflowServices.getExecutor(),
                 context,
                 ctx -> workflowServices.getEventSink().publish(ctx, eventMessage)
         );
@@ -139,5 +142,12 @@ public abstract class AbstractStepExecutor {
             return new LinkedHashMap<>();
         }
         return payload;
+    }
+
+    @Nonnull
+    protected Map<String, Object> eventMessagePayload(@Nonnull EventMessage eventMessage) {
+        return sanitize(eventMessage.payloadAs(new TypeReference<>() {
+                        }, workflowContext.processingContext().component(Converter.class))
+        );
     }
 }

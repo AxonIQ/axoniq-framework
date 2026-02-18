@@ -24,6 +24,12 @@ import org.axonframework.messaging.core.Metadata;
 import java.util.Optional;
 import java.util.function.Predicate;
 
+/**
+ * Utility to work on metadata of workflow events.
+ *
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ */
 public class MetadataUtils {
 
     public static final String METADATA_KEY_WORKFLOW_ID = "workflowId";

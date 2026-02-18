@@ -27,7 +27,7 @@ import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
-import io.axoniq.workflow.runtime.engine.util.ContextUtils;
+import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.slf4j.Logger;
@@ -91,7 +91,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                  customize -> customize.workScheduler(workflowServices.getExecutor())) // FIXME -> define a new thread pool for execution customer code
                                          .executeWithResult(processingContext -> {
                                              // FIXME - this procContext should be given to the user's input in the DSL so that they can get resource or add lifecycle phase shit
-                                             var procContext = ContextUtils.copyResources(workflowState.getStep(stepName)
+                                             var procContext = ProcessingContextUtils.copyResources(workflowState.getStep(stepName)
                                                                                                        .context(),
                                                                                           processingContext);
                                              var payload = parameterMapping.apply(workflowContext.getPayload(), local);
