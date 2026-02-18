@@ -18,17 +18,19 @@
 
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.apache.commons.lang3.function.TriConsumer;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiConsumer;
-import java.util.function.Predicate;
+
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
 /**
  * Holds wait for event conditions for a single workflow instance.
@@ -38,11 +40,17 @@ import java.util.function.Predicate;
  */
 public class EventWaitConditions implements DescribableComponent {
 
-    private final ConcurrentHashMap<String, EventWaitCondition> waitConditions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, EventConditionWithStepNameCustomizer> waitConditions = new ConcurrentHashMap<>();
 
-    public record EventWaitCondition(
-            @Nonnull QualifiedName qualifiedName,
-            @Nonnull Predicate<EventMessage> predicate,
+    /**
+     * Internal representation.
+     *
+     * @param eventCondition      condition to match.
+     * @param eventNameCustomizer customizer.
+     */
+    @Internal
+    record EventConditionWithStepNameCustomizer(
+            @Nonnull EventCondition eventCondition,
             @Nonnull EventNameCustomizer eventNameCustomizer) {
 
     }
@@ -53,8 +61,12 @@ public class EventWaitConditions implements DescribableComponent {
      * @param stepName       step waiting for event.
      * @param eventCondition await condition
      */
-    public void add(@Nonnull String stepName, @Nonnull EventWaitCondition eventCondition) {
-        waitConditions.put(stepName, eventCondition);
+    public void add(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
+                    @Nullable EventNameCustomizer eventNameCustomizer) {
+        waitConditions.put(stepName,
+                           new EventConditionWithStepNameCustomizer(eventCondition,
+                                                                    eventNameCustomizer
+                                                                            != null ? eventNameCustomizer : eventName()));
     }
 
     /**
@@ -81,13 +93,11 @@ public class EventWaitConditions implements DescribableComponent {
                                  @Nonnull TriConsumer<EventMessage, String, EventNameCustomizer> action) {
         // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
-            var condition = entry.getValue();
+            var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
-            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(
-                    eventMessage)
-            ) {
+            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.test(eventMessage)) {
                 remove(stepName);
-                action.accept(eventMessage, stepName, condition.eventNameCustomizer);
+                action.accept(eventMessage, stepName, entry.getValue().eventNameCustomizer());
             }
         }
     }
@@ -96,13 +106,15 @@ public class EventWaitConditions implements DescribableComponent {
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         var conditions = waitConditions.entrySet().stream()
-                                       .map(e -> new EventWaitConditionDescriptor(e.getKey(), e.getValue()))
+                                       .map(e -> new EventWaitConditionDescriptor(e.getKey(),
+                                                                                  e.getValue().eventCondition))
                                        .toList();
         descriptor.describeProperty("waitConditions", conditions);
     }
 
     private record EventWaitConditionDescriptor(String stepName,
-                                                EventWaitCondition condition) implements DescribableComponent {
+                                                EventCondition condition)
+            implements DescribableComponent {
 
         @Override
         public void describeTo(@Nonnull ComponentDescriptor descriptor) {

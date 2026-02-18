@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
@@ -321,10 +322,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     public void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
                                       @Nonnull Predicate<EventMessage> predicate,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        eventWaitConditions.add(stepName,
-                                new EventWaitConditions.EventWaitCondition(qualifiedName,
-                                                                           predicate,
-                                                                           eventNameCustomizer));
+        eventWaitConditions.add(stepName, new EventCondition(qualifiedName, predicate), eventNameCustomizer);
     }
 
     @Override

@@ -18,6 +18,7 @@
 
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.EventCondition;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
@@ -33,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-class EventWaitConditionsTest {
+class EventConditionsTestWithStepNameCustomizer {
 
     private EventWaitConditions eventWaitConditions;
 
@@ -45,13 +46,8 @@ class EventWaitConditionsTest {
     @Test
     void testAddAndRemove() {
         QualifiedName qName = new QualifiedName("ns", "Event");
-        EventWaitConditions.EventWaitCondition condition = new EventWaitConditions.EventWaitCondition(
-                qName,
-                m -> true,
-                new DefaultEventNameCustomizer()
-        );
-
-        eventWaitConditions.add("step1", condition);
+        EventCondition condition = new EventCondition(qName, m -> true);
+        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
         eventWaitConditions.describeTo(descriptor);
@@ -65,13 +61,8 @@ class EventWaitConditionsTest {
     @Test
     void testEvaluateAndApplyMatches() {
         QualifiedName qName = new QualifiedName("ns", "Event");
-        EventWaitConditions.EventWaitCondition condition = new EventWaitConditions.EventWaitCondition(
-                qName,
-                m -> true,
-                new DefaultEventNameCustomizer()
-        );
-
-        eventWaitConditions.add("step1", condition);
+        EventCondition condition = new EventCondition(qName, m -> true);
+        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         EventMessage message = mock(EventMessage.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
@@ -88,13 +79,8 @@ class EventWaitConditionsTest {
     @Test
     void testEvaluateAndApplyNoMatch() {
         QualifiedName qName = new QualifiedName("ns", "Event");
-        EventWaitConditions.EventWaitCondition condition = new EventWaitConditions.EventWaitCondition(
-                qName,
-                m -> false, // Never matches
-                new DefaultEventNameCustomizer()
-        );
-
-        eventWaitConditions.add("step1", condition);
+        EventCondition condition = new EventCondition(qName, m -> false);
+        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         EventMessage message = mock(EventMessage.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
@@ -111,16 +97,12 @@ class EventWaitConditionsTest {
     @Test
     void testDescribeTo() {
         QualifiedName qName1 = new QualifiedName("ns", "Event1");
-        eventWaitConditions.add("step1",
-                                new EventWaitConditions.EventWaitCondition(qName1,
-                                                                           m -> true,
-                                                                           new DefaultEventNameCustomizer()));
+        EventCondition condition = new EventCondition(qName1, m -> true);
+        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         QualifiedName qName2 = new QualifiedName("ns", "Event2");
-        eventWaitConditions.add("step2",
-                                new EventWaitConditions.EventWaitCondition(qName2,
-                                                                           m -> true,
-                                                                           new DefaultEventNameCustomizer()));
+        EventCondition condition2 = new EventCondition(qName2, m -> true);
+        eventWaitConditions.add("step2", condition2, new DefaultEventNameCustomizer());
 
 
         Collection<?> list = getDescribedConditions();
