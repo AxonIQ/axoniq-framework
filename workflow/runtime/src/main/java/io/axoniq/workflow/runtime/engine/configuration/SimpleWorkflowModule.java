@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
-import io.axoniq.workflow.runtime.api.AssociationProvider;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
@@ -25,6 +24,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -59,7 +59,6 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.OnPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.DeclarativeDefinitionPhase<C>,
-        WorkflowModule.WorkflowDefinitionPhase.AssociationPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase.WorkflowCustomizationPhase<C> {
 
     private final Class<C> workflowContextType;
@@ -67,7 +66,6 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
     private ComponentBuilder<WorkflowStateFactory> workflowStateFactory;
     private ComponentBuilder<WorkflowDefinition<C>> currentWorkflowDefinition;
-    private ComponentBuilder<AssociationProvider> currentWorkflowAssociationProvider;
     private ComponentBuilder<EventCondition> currentStartCondition;
     private String currentWorkflowName;
 
@@ -151,18 +149,10 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     @Override
-    public AssociationPhase<C> workflowDefinition(
+    public WorkflowCustomizationPhase<C> workflowDefinition(
             @NotNull ComponentBuilder<WorkflowDefinition<C>> workflowDefinition) {
         this.currentWorkflowDefinition = Objects.requireNonNull(workflowDefinition,
                                                                 "Workflow definition must not be null");
-        return this;
-    }
-
-    @Override
-    public WorkflowCustomizationPhase<C> workflowIdProvider(
-            @NotNull ComponentBuilder<AssociationProvider> workflowAssociationProvider) {
-        this.currentWorkflowAssociationProvider = Objects.requireNonNull(workflowAssociationProvider,
-                                                                         "Association provider must not be null");
         return this;
     }
 
@@ -180,7 +170,6 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                         // Workflow
                         this.currentStartCondition,
                         this.currentWorkflowDefinition,
-                        this.currentWorkflowAssociationProvider,
                         instanceCustomization
                 )
         );
@@ -188,7 +177,6 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         this.currentWorkflowName = null;
         this.currentStartCondition = null;
         this.currentWorkflowDefinition = null;
-        this.currentWorkflowAssociationProvider = null;
 
         return this;
     }
@@ -201,7 +189,6 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
             // workflow level
             ComponentBuilder<EventCondition> startConditionBuilder,
             ComponentBuilder<WorkflowDefinition<C>> definitionBuilder,
-            ComponentBuilder<AssociationProvider> associationProviderBuilder,
             BiFunction<Configuration, WorkflowModuleConfiguration, WorkflowModuleConfiguration> instanceCustomization) {
 
         @Nonnull
@@ -215,16 +202,17 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                                                           defaultConfiguration(workflowName,
                                                                                                configuration));
             return new WorkflowConfiguration<>() {
-                @NotNull
+
+                @Nonnull
                 @Override
-                public WorkflowDefinition<C> workflowDefinition() {
-                    return definitionBuilder.build(configuration);
+                public String workflowName() {
+                    return workflowName;
                 }
 
                 @NotNull
                 @Override
-                public AssociationProvider associationProvider() {
-                    return associationProviderBuilder.build(configuration);
+                public WorkflowDefinition<C> workflowDefinition() {
+                    return definitionBuilder.build(configuration);
                 }
 
                 @NotNull
@@ -237,6 +225,12 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                 @Override
                 public WorkflowStateFactory workflowStateFactory() {
                     return stateFactoryBuilder.build(configuration);
+                }
+
+                @NotNull
+                @Override
+                public WorkflowIdProvider workflowIdProvider() {
+                    return workflowModuleConfiguration.workflowIdProvider;
                 }
 
                 @NotNull

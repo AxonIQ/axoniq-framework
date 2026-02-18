@@ -25,12 +25,13 @@ import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
+import org.axonframework.conversion.Converter;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -52,8 +53,13 @@ class UserSignupDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkfl
         return (d) -> d.declarative("User signup workflow")
                        .on(EventCondition.fromType(RegistrationReceivedEvent.class))
                        .workflowDefinition(c -> workflow::execute)
-                       .workflowIdProvider(c -> (trigger) -> Optional.of("signup-" + trigger.get("id").toString()))
-                       .customized((c, w) -> w.eventNameCustomizer(namespace("io.axoniq.dsl.wf.declarative")));
+
+                       .customized((c, w) -> w.eventNameCustomizer(namespace("io.axoniq.dsl.wf.declarative"))
+                                              .workflowIdProvider(new PayloadPropertyWorkflowIdProvider(c.getComponent(Converter.class),
+                                                                                                        "id",
+                                                                                                id -> "signup-" + id)
+                                              )
+                       );
     }
 
 

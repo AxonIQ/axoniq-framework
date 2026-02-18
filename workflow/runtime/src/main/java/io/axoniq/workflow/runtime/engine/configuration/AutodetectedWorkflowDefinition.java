@@ -17,18 +17,20 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
-import io.axoniq.workflow.runtime.api.AssociationProvider;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.Workflow;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
+import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
@@ -65,7 +67,7 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
         @Nonnull String name,
         @Nonnull ComponentBuilder<EventCondition> startCondition,
         @Nonnull ComponentBuilder<WorkflowDefinition<C>> workflowDefinition,
-        @Nonnull ComponentBuilder<AssociationProvider> workflowIdProvider,
+        @Nonnull ComponentBuilder<WorkflowIdProvider> workflowIdProvider,
         @Nonnull EventNameCustomizer eventNameCustomizer
 ) {
 
@@ -118,24 +120,23 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
 
                     ComponentBuilder<EventCondition> eventConditionBuilder = c ->
                             new EventCondition(
-                                    getAttributeIfNotDefault(attributes, ATTR_START_ON, Void.class)
-                                            .flatMap(triggerType -> {
-                                                         var messageType = c.getComponent(MessageTypeResolver.class)
-                                                                            .resolve(triggerType);
-                                                         return messageType.map(MessageType::qualifiedName);
-                                                     }
-                                            ).orElseGet(() -> {
-                                                return new QualifiedName((String) attributes.get(ATTR_START_ON_QUALIFIED_NAME));
-                                            }),
-                                    (e) -> true); // FIXME enrich with associations as soon as available, see #5
+                                    getIfNotDefault(attributes, ATTR_START_ON, Void.class)
+                                            .flatMap(triggerType -> c.getComponent(MessageTypeResolver.class)
+                                                                     .resolve(triggerType)
+                                                                     .map(MessageType::qualifiedName)
+                                            ).orElseGet(() -> new QualifiedName((String) attributes.get(
+                                                    ATTR_START_ON_QUALIFIED_NAME))
+                                            ),
+                                    (e) -> true
+                            ); // FIXME enrich with associations as soon as available, see #5
 
 
-                    ComponentBuilder<AssociationProvider> associationProviderComponentBuilder = c ->
-                            getAttributeIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, AssociationProvider.class)
+                    ComponentBuilder<WorkflowIdProvider> associationProviderComponentBuilder = c ->
+                            getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
                                     .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
-                                    .orElseGet(() -> initialPayload -> Optional
-                                            .ofNullable(initialPayload.get((String) attributes.get(ATTR_ID_PROPERTY)))
-                                            .map(Object::toString)
+                                    .orElseGet(() -> new PayloadPropertyWorkflowIdProvider(c.getComponent(Converter.class),
+                                                                                           (String) attributes.get(
+                                                                                           ATTR_ID_PROPERTY))
                                     );
 
 
@@ -208,7 +209,7 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
                                 + method.getName());
             }
         }
-        if (!attributes.containsKey(ATTR_ID_PROPERTY_PROVIDER) || AssociationProvider.class.equals(attributes.get(
+        if (!attributes.containsKey(ATTR_ID_PROPERTY_PROVIDER) || WorkflowIdProvider.class.equals(attributes.get(
                 ATTR_ID_PROPERTY_PROVIDER))) {
             if (!attributes.containsKey(ATTR_ID_PROPERTY)
                     || "".equals(attributes.get(ATTR_ID_PROPERTY))) {
@@ -229,7 +230,7 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
      * @param <T>           value type.
      * @return optional with value if present and not equals to given, empty otherwise.
      */
-    public static <T> Optional<T> getAttributeIfNotDefault(
+    public static <T> Optional<T> getIfNotDefault(
             @Nonnull Map<String, Object> attributes,
             @Nonnull String attributeName,
             @Nonnull T defaultValue) {

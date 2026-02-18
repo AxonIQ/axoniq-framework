@@ -17,6 +17,8 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -86,5 +88,5 @@ public @interface Workflow {
      *
      * @return id property provider type.
      */
-    Class<AssociationProvider> idPropertyProvider() default AssociationProvider.class;
+    Class<? extends WorkflowIdProvider> idPropertyProvider() default PayloadPropertyWorkflowIdProvider.class;
 }

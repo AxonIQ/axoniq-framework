@@ -19,34 +19,70 @@ package io.axoniq.workflow.runtime.api;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
 import jakarta.annotation.Nonnull;
 
 /**
  * Configures definition, context factory and correlation provider.
  *
  * @param <T> workflow context type.
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 public interface WorkflowConfiguration<T extends WorkflowContext> {
 
+    /**
+     * Returns workflow definition.
+     *
+     * @return workflow definition method expressed using workflow context.
+     */
     @Nonnull
     WorkflowDefinition<T> workflowDefinition();
 
+    /**
+     * Returns workflow context factory.
+     *
+     * @return factory for workflow context.
+     */
     @Nonnull
-    AssociationProvider associationProvider();
+    WorkflowContextFactory<T> workflowContextFactory();
 
+    /**
+     * Returns workflow state factory.
+     *
+     * @return factory for workflow state.
+     */
+    @Nonnull
+    WorkflowStateFactory workflowStateFactory();
+
+    /**
+     * Returns workflow id provider.
+     *
+     * @return provider responsible for creation of workflow id out of initial event message.
+     */
+    @Nonnull
+    default WorkflowIdProvider workflowIdProvider() {
+        return new MessageWorkflowIdProvider();
+    }
+
+    /**
+     * Returns workflow name.
+     *
+     * @return name of the workflow.
+     */
     @Nonnull
     default String workflowName() {
         return this.getClass().getSimpleName();
     }
 
+    /**
+     * Default event name customizer applied on workflow level.
+     *
+     * @return default customizer.
+     */
     @Nonnull
     default EventNameCustomizer eventNameCustomizer() {
         return DefaultEventNameCustomizer.Builder.eventName();
     }
-
-    @Nonnull
-    WorkflowContextFactory<T> workflowContextFactory();
-
-    @Nonnull
-    WorkflowStateFactory workflowStateFactory();
 }

@@ -24,8 +24,6 @@ import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowDefinitionRegistry;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.jetbrains.annotations.NotNull;
 
@@ -66,8 +64,6 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
         componentRegistry
                 .registerComponent(WorkflowEngine.class, cfg ->
                         new WorkflowEngine(
-                                cfg.getComponent(UnitOfWorkFactory.class),
-                                cfg.getComponent(EventSink.class),
                                 cfg.getComponent(WorkflowDefinitionRegistry.class)
                         )
                 );

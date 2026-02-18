@@ -62,6 +62,15 @@ import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.W
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
+/**
+ * Workflow instance implementation.
+ *
+ * @author Allard Buijze
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @author Steven van Beelen
+ * @since 1.0.0
+ */
 public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
@@ -76,14 +85,24 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final ProcessingContext processingContext;
     private final String workflowId;
-    private final UnitOfWorkFactory unitOfWorkFactory;
-    private final Clock clock;
-    private final Executor executor;
-    private final EventSink eventSink;
     private WorkflowStatus status = WorkflowStatus.NONE;
     private boolean executable = false;
     private Map<String, Object> payload;
 
+    // Services
+    private final UnitOfWorkFactory unitOfWorkFactory;
+    private final Clock clock;
+    private final Executor executor;
+    private final EventSink eventSink;
+
+    /**
+     * Constructs new instance.
+     *
+     * @param workflowId        workflow id.
+     * @param initial           initial payload of workflow instance.
+     * @param processingContext processing context.
+     * @param parentCustomizer  event name customizer.
+     */
     public WorkflowInstance(@Nonnull String workflowId,
                             @Nonnull Map<String, Object> initial,
                             @Nonnull ProcessingContext processingContext,
@@ -91,7 +110,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
         this.payload = Objects.requireNonNull(initial, "Payload must not be null");
         this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
-        var stepParent = parentCustomizer.forStepInheritance();
         this.unitOfWorkFactory = Objects.requireNonNull(processingContext.component(UnitOfWorkFactory.class),
                                                         "Could not retrieve UoW factory");
         this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
@@ -99,6 +117,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                                "Could not retrieve EventSink");
         this.eventSink = Objects.requireNonNull(processingContext.component(EventSink.class),
                                                 "Could not retrieve EventSink");
+        var stepParent = parentCustomizer.forStepInheritance();
         this.executeDelegate = new ExecuteDelegate(this,
                                                    this,
                                                    stepParent,
@@ -140,13 +159,13 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                              ctx.getStatus());
                                 return CompletableFuture.completedFuture(ctx);
                             }
-                            var configuredName = configuration.workflowName();
-                            var workflowName = (configuredName != null
-                                    && !configuredName.isEmpty()) ? configuredName : workflowId;
+                            var configuredName = Objects.requireNonNull(configuration.workflowName(),
+                                                                        "Workflow name must not be null");
+                            var workflowName = configuredName.isEmpty() ? workflowId : configuredName;
                             var customizer = configuration.eventNameCustomizer();
                             if (ctx.getStatus() == WorkflowStatus.NONE) {
                                 sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer),
-                                                  pc).join(); // FIXME join
+                                                  pc).join(); // FIXME join without timeout?
                             }
 
                             try {
@@ -159,20 +178,20 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
                                 sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
                                         5,
-                                        TimeUnit.SECONDS); // FIXME constant
+                                        TimeUnit.SECONDS); // FIXME constant?
                             } catch (WorkflowFailedException wfe) {
                                 sendWorkflowEvent(failedWorkflow(workflowContext, workflowName, wfe, customizer),
-                                                  pc).join(); // FIXME join;
+                                                  pc).join(); // FIXME join without timeout?
                             } catch (Exception e) {
                                 if (e instanceof TimeoutException) {
                                     sendWorkflowEvent(timeoutWorkflow(workflowContext,
                                                                       workflowName,
                                                                       clock.instant(),
                                                                       customizer),
-                                                      processingContext()).join(); // FIXME join
+                                                      processingContext()).join(); // FIXME join without timeout
                                 } else if (e instanceof InterruptedException) {
                                     sendWorkflowEvent(cancelledWorkflow(workflowContext, workflowName, customizer),
-                                                      pc).join(); // FIXME join;
+                                                      pc).join(); // FIXME join without timeout
                                 } else {
                                     logger.error("Error occurred in workflow {}", workflowId, e);
                                 }
@@ -233,8 +252,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             }
         });
         // Apply workflow-level state changes
-        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status ->
-                                                                    this.status = status
+        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> this.status = status
         );
     }
 
@@ -368,7 +386,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     public void switchToExecutable() {
         executable = true;
     }
-
 
     private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage, ProcessingContext processingContext) {
         // TODO: make sure the consistency marker is used

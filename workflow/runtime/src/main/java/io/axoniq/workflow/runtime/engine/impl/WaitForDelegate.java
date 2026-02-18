@@ -44,10 +44,28 @@ import java.util.function.Predicate;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.completedStep;
 
+/**
+ * Delegate implementing {@link WaitForPrimitive}.
+ *
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(WaitForDelegate.class);
 
+    /**
+     * Constructs the delegate.
+     *
+     * @param workflowContext           workflow context.
+     * @param workflowState             workflow state.
+     * @param parentEventNameCustomizer parent event name customizer.
+     * @param clock                     clock for time calculations.
+     * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
+     * @param eventSink                 event sink to publish events.
+     * @param executor                  executor to offload threads from main thread.
+     */
     public WaitForDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowState workflowState,
@@ -130,6 +148,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         return WorkflowStepResults.stateBased(stepName, workflowState);
     }
 
+    /**
+     * Receive event message (because of wait condition) to trigger the wait for continuation.
+     *
+     * @param eventMessage        message to deliver the event.
+     * @param stepName            step name waiting for event.
+     * @param eventNameCustomizer customizer for the step name.
+     */
     void eventReceived(@Nonnull EventMessage eventMessage, @Nonnull String stepName,
                        @Nonnull EventNameCustomizer eventNameCustomizer) {
         // TODO event should be mapped back based on result mapping

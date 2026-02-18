@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
-import io.axoniq.workflow.runtime.api.AssociationProvider;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
@@ -28,7 +27,6 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
 
-import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
@@ -117,8 +115,10 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
                     result = this.declarative(autodetected.name())
                                  .on(autodetected.startCondition())
                                  .workflowDefinition(autodetected.workflowDefinition())
-                                 .workflowIdProvider(autodetected.workflowIdProvider())
-                                 .customized((c, wc) -> wc.eventNameCustomizer(autodetected.eventNameCustomizer()));
+                                 .customized((c, wc) ->
+                                                     wc.eventNameCustomizer(autodetected.eventNameCustomizer())
+                                                       .workflowIdProvider(autodetected.workflowIdProvider().build(c))
+                                 );
                 }
                 return result;
             }
@@ -143,20 +143,8 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * @param workflowDefinition builder for workflow definition.
              * @return builder for association phase.
              */
-            AssociationPhase<C> workflowDefinition(
+            WorkflowCustomizationPhase<C> workflowDefinition(
                     @Nonnull ComponentBuilder<WorkflowDefinition<C>> workflowDefinition);
-        }
-
-        interface AssociationPhase<C extends WorkflowContext> {
-
-            /**
-             * Delivers workflow id provider.
-             *
-             * @param workflowAssociationProvider builder for workflow id provider.
-             * @return builder of customization phase.
-             */
-            WorkflowCustomizationPhase<C> workflowIdProvider(
-                    @Nonnull ComponentBuilder<AssociationProvider> workflowAssociationProvider);
         }
 
         interface WorkflowCustomizationPhase<C extends WorkflowContext> {

@@ -21,19 +21,19 @@ import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.api.AssociationProvider
 import io.axoniq.workflow.runtime.api.EventCondition
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions
 import org.awaitility.Awaitility
 import org.awaitility.core.ThrowingRunnable
+import org.axonframework.conversion.Converter
 import org.junit.jupiter.api.Test
-import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
 import java.util.function.Predicate
@@ -49,14 +49,15 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
             d.declarative("User signup workflow in Kotlin")
                 .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
                 .workflowDefinition { WorkflowKontext.from(workflow::execute) }
-                .workflowIdProvider {
-                    AssociationProvider { trigger: MutableMap<String, Any?> ->
-                        Optional.of(
-                            "signup-" + trigger["id"].toString()
+                .customized { c, wc ->
+                    wc.eventNameCustomizer(namespace("io.axoniq.dsl.wf"))
+                        .workflowIdProvider(
+                            PayloadPropertyWorkflowIdProvider(
+                                c.getComponent(Converter::class.java),
+                                "id"
+                            ) { id -> "signup-$id" }
                         )
-                    }
                 }
-                .customized { _, c -> c.eventNameCustomizer(namespace("io.axoniq.dsl.wf")) }
         }
     }
 
