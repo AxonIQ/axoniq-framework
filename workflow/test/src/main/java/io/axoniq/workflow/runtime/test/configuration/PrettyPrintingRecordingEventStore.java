@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.engine.configuration;
+package io.axoniq.workflow.runtime.test.configuration;
 
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -36,6 +36,12 @@ import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
 
+/**
+ * Pretty printing event store used for testing.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
     private final List<EventMessage> publishedEvents = new CopyOnWriteArrayList<>();

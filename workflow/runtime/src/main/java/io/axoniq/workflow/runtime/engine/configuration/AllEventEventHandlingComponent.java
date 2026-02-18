@@ -41,6 +41,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
 
+/**
+ * Event handling component handling all events.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);

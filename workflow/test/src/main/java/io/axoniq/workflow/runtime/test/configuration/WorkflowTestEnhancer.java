@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.runtime.test.configuration;
 
-import io.axoniq.workflow.runtime.engine.configuration.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;

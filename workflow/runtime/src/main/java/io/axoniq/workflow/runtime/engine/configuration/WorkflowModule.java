@@ -19,27 +19,40 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.AssociationProvider;
 import io.axoniq.workflow.runtime.api.EventCondition;
-import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
 
+import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 /**
  * Workflow module encapsulates configuration for one workflow definition.
  *
  * @param <C> workflow context type.
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
-    static <C extends WorkflowContext> LanguagePhase.WorkflowContextFactoryPhase<C> declarative(Class<C> contextType) {
-        return new SimpleWorkflowModule<C>(contextType.getSimpleName(), contextType);
+    /**
+     * Creates a new workflow module using the specified workflow context.
+     *
+     * @param contextType context class.
+     * @param <C>         type of the workflow context.
+     * @return module builder.
+     */
+    static <C extends WorkflowContext> LanguagePhase.WorkflowContextFactoryPhase<C> usingContext(
+            @Nonnull Class<C> contextType) {
+        return new SimpleWorkflowModule<>(contextType);
     }
+
 
     /**
      * Retrieves workflow context type.
@@ -48,16 +61,31 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      */
     Class<C> getContextType();
 
+    /**
+     * Defines the DSL part of the workflow definition.
+     */
     interface LanguagePhase {
 
         interface WorkflowContextFactoryPhase<C extends WorkflowContext> {
 
+            /**
+             * Provide workflow context factory.
+             *
+             * @param workflowContextFactory factory to create a new workflow context.
+             * @return builder for the state factory.
+             */
             WorkflowStateFactoryPhase<C> workflowContextFactory(
                     @Nonnull ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory);
         }
 
         interface WorkflowStateFactoryPhase<C extends WorkflowContext> {
 
+            /**
+             * Provide a workflow state factory.
+             *
+             * @param workflowStateFactory factory to create a new workflow state from given context.
+             * @return builder for workflow definition.
+             */
             WorkflowDefinitionPhase<C> workflowStateFactory(
                     @Nonnull ComponentBuilder<WorkflowStateFactory> workflowStateFactory);
         }
@@ -65,39 +93,92 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {
 
-        WorkflowModule<C> definitions(@Nonnull Consumer<DefinitionPhase<C>> definitions);
+        WorkflowModule<C> definitions(@Nonnull Consumer<DetectionPhase<C>> definitions);
 
-        interface DefinitionPhase<C extends WorkflowContext> {
+        interface DetectionPhase<C extends WorkflowContext> {
 
+            /**
+             * Names the workflow.
+             *
+             * @param name workflow name.
+             * @return builder for the trigger definition phase.
+             */
             OnPhase<C> declarative(@Nonnull String name);
+
+            /**
+             * Auto-detects workflows on the given component.
+             *
+             * @return builder of customization phase.
+             */
+            default DetectionPhase<C> autodetected(@Nonnull Class<?> type, @Nonnull Class<C> workflowContextType) {
+                var annotatedDefinitions = AutodetectedWorkflowDefinition.fromClass(type, workflowContextType);
+                DetectionPhase<C> result = this;
+                for (AutodetectedWorkflowDefinition<C> autodetected : annotatedDefinitions) {
+                    result = this.declarative(autodetected.name())
+                                 .on(autodetected.startCondition())
+                                 .workflowDefinition(autodetected.workflowDefinition())
+                                 .workflowIdProvider(autodetected.workflowIdProvider())
+                                 .customized((c, wc) -> wc.eventNameCustomizer(autodetected.eventNameCustomizer()));
+                }
+                return result;
+            }
         }
 
         interface OnPhase<C extends WorkflowContext> {
 
-            NamingPhase<C> on(@Nonnull ComponentBuilder<EventCondition> startCondition);
+            /**
+             * Specifies trigger condition for the workflow.
+             *
+             * @param startCondition start condition builder.
+             * @return builder for declarative definition phase.
+             */
+            DeclarativeDefinitionPhase<C> on(@Nonnull ComponentBuilder<EventCondition> startCondition);
         }
 
-        interface NamingPhase<C extends WorkflowContext> {
+        interface DeclarativeDefinitionPhase<C extends WorkflowContext> {
 
-            WorkflowDefinitionPhaseForWorkflow<C> workflowDefinition(
+            /**
+             * Provides workflow definition.
+             *
+             * @param workflowDefinition builder for workflow definition.
+             * @return builder for association phase.
+             */
+            AssociationPhase<C> workflowDefinition(
                     @Nonnull ComponentBuilder<WorkflowDefinition<C>> workflowDefinition);
-        }
-
-        interface WorkflowDefinitionPhaseForWorkflow<C extends WorkflowContext> {
-
-            AssociationPhase<C> eventNameCustomizer(
-                    @Nonnull ComponentBuilder<EventNameCustomizerProvider> eventNameCustomizerProviderComponentBuilder);
         }
 
         interface AssociationPhase<C extends WorkflowContext> {
 
+            /**
+             * Delivers workflow id provider.
+             *
+             * @param workflowAssociationProvider builder for workflow id provider.
+             * @return builder of customization phase.
+             */
             WorkflowCustomizationPhase<C> workflowIdProvider(
                     @Nonnull ComponentBuilder<AssociationProvider> workflowAssociationProvider);
         }
 
         interface WorkflowCustomizationPhase<C extends WorkflowContext> {
 
-            DefinitionPhase<C> notCustomized();
+            /**
+             * Applies customizations to workflow definition.
+             *
+             * @param instanceCustomization customization function.
+             * @return definitions phase for the next workflow.
+             */
+            DetectionPhase<C> customized(
+                    @Nonnull BiFunction<Configuration, WorkflowModuleConfiguration, WorkflowModuleConfiguration> instanceCustomization
+            );
+
+            /**
+             * Don't apply any customizations and use defaults.
+             *
+             * @return definitions phase for the next workflow.
+             */
+            default DetectionPhase<C> notCustomized() {
+                return customized((c, wc) -> wc);
+            }
         }
     }
 }

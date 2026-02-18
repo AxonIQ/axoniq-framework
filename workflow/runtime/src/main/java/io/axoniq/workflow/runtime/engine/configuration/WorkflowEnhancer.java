@@ -37,6 +37,9 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
 
 /**
  * Enhancer for registration of the workflow engine, the registry and sets up the eventing.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 

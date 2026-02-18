@@ -23,7 +23,6 @@ import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.api.AssociationProvider
 import io.axoniq.workflow.runtime.api.EventCondition
-import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
@@ -44,13 +43,12 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<WorkflowKontext>> {
+    override fun getDeclaredDefinitions(): Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
         val workflow = UserSignupWorkflow()
         return Consumer { d ->
             d.declarative("User signup workflow in Kotlin")
                 .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
                 .workflowDefinition { WorkflowKontext.from(workflow::execute) }
-                .eventNameCustomizer { EventNameCustomizerProvider { namespace("io.axoniq.dsl.wf") } }
                 .workflowIdProvider {
                     AssociationProvider { trigger: MutableMap<String, Any?> ->
                         Optional.of(
@@ -58,7 +56,7 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
                         )
                     }
                 }
-                .notCustomized()
+                .customized { _, c -> c.eventNameCustomizer(namespace("io.axoniq.dsl.wf")) }
         }
     }
 

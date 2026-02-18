@@ -47,14 +47,13 @@ class UserSignupDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkfl
     }
 
     @Override
-    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
         var workflow = new UserSignupWorkflow();
         return (d) -> d.declarative("User signup workflow")
                        .on(EventCondition.fromType(RegistrationReceivedEvent.class))
                        .workflowDefinition(c -> workflow::execute)
-                       .eventNameCustomizer(c -> () -> namespace("io.axoniq.dsl.wf"))
                        .workflowIdProvider(c -> (trigger) -> Optional.of("signup-" + trigger.get("id").toString()))
-                       .notCustomized();
+                       .customized((c, w) -> w.eventNameCustomizer(namespace("io.axoniq.dsl.wf.declarative")));
     }
 
 
