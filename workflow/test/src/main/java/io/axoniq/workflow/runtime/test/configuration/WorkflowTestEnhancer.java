@@ -18,7 +18,6 @@
 package io.axoniq.workflow.runtime.test.configuration;
 
 import io.axoniq.workflow.runtime.engine.configuration.PrettyPrintingRecordingEventStore;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -28,6 +27,10 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.concurrent.Executor;
+
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
+
 public class WorkflowTestEnhancer implements ConfigurationEnhancer {
 
     @Override
@@ -36,7 +39,7 @@ public class WorkflowTestEnhancer implements ConfigurationEnhancer {
                 .registerComponent(DelayedPublisher.class, cfg ->
                         new DelayedPublisher(
                                 cfg.getComponent(EventSink.class),
-                                cfg.getComponent(WorkflowEngine.class).getExecutor(),
+                                cfg.getComponent(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
                                 cfg.getComponent(MessageTypeResolver.class)
                         )
                 ).registerDecorator(EventStore.class,

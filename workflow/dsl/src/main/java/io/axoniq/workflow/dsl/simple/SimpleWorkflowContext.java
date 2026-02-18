@@ -22,7 +22,6 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
 import jakarta.annotation.Nonnull;
@@ -51,10 +50,9 @@ public class SimpleWorkflowContext extends WorkflowInstance
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
             @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer parentCustomizer,
-            @Nonnull WorkflowServices workflowServices
+            @Nonnull EventNameCustomizer parentCustomizer
     ) {
-        super(workflowId, payload, processingContext, parentCustomizer, workflowServices);
+        super(workflowId, payload, processingContext, parentCustomizer);
     }
 
     public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {

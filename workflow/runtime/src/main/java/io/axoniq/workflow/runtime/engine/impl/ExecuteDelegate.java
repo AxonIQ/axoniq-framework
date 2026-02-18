@@ -22,21 +22,24 @@ import io.axoniq.workflow.runtime.api.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
-import io.axoniq.workflow.runtime.engine.util.ContextUtils;
+import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -46,10 +49,13 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
     public ExecuteDelegate(@Nonnull WorkflowContext context,
                            @Nonnull WorkflowState workflowState,
-                           @Nonnull WorkflowServices workflowServices,
-                           @Nonnull EventNameCustomizer parentEventNameCustomizer
+                           @Nonnull EventNameCustomizer parentEventNameCustomizer,
+                           @Nonnull Clock clock,
+                           @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+                           @Nonnull EventSink eventSink,
+                           @Nonnull Executor executor
     ) {
-        super(context, workflowState, workflowServices, parentEventNameCustomizer);
+        super(context, workflowState, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor);
     }
 
     @Nonnull
@@ -82,29 +88,29 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         // FIXME -> consider to use QOS (at least once/at most once)
         if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
             var actualStartTime = workflowState.getStep(stepName).timestamp();
-            var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()),
+            var remainingTimeout = Duration.between(Instant.now(clock),
                                                     actualStartTime.plus(timeout));
             // FIXME - This is where we capture our current consistency marker
 
-            var result = workflowServices.getUnitOfWorkFactory()
-                                         .create(stepName,
-                                                 customize -> customize.workScheduler(workflowServices.getExecutor())) // FIXME -> define a new thread pool for execution customer code
-                                         .executeWithResult(processingContext -> {
-                                             // FIXME - this procContext should be given to the user's input in the DSL so that they can get resource or add lifecycle phase shit
-                                             var procContext = ContextUtils.copyResources(workflowState.getStep(stepName)
-                                                                                                       .context(),
-                                                                                          processingContext);
-                                             var payload = parameterMapping.apply(workflowContext.getPayload(), local);
-                                             return CompletableFuture.completedFuture(action.apply(procContext,
-                                                                                                   payload));
-                                         });
+            var result = unitOfWorkFactory
+                    .create(stepName,
+                            customize -> customize.workScheduler(executor)) // FIXME -> define a new thread pool for execution customer code
+                    .executeWithResult(processingContext -> {
+                        // FIXME - this procContext should be given to the user's input in the DSL so that they can get resource or add lifecycle phase shit
+                        var procContext = ProcessingContextUtils.copyResources(workflowState.getStep(stepName)
+                                                                                            .context(),
+                                                                               processingContext);
+                        var payload = parameterMapping.apply(workflowContext.getPayload(), local);
+                        return CompletableFuture.completedFuture(action.apply(procContext,
+                                                                              payload));
+                    });
 
 
             if (remainingTimeout.isNegative()) {
                 workflowState.appendTask(i -> {
                     // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
                     // FIXME - This is where we should publish using an append condition
-                    timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
+                    timedOut(stepName, clock.instant(), eventNameCustomizer);
                 });
             } else {
                 result
@@ -121,7 +127,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                 if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                                     // FIXME - This is where we should publish using an append condition
                                     workflowState.appendTask(i -> {
-                                        timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
+                                        timedOut(stepName, clock.instant(), eventNameCustomizer);
                                     });
                                 } else if (e instanceof InterruptedException) {
                                     // FIXME - This is where we should publish using an append condition

@@ -17,37 +17,63 @@
  */
 package io.axoniq.workflow.runtime.engine.util;
 
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.Function;
 
-public class ContextUtils {
+/**
+ * Processing context utility functions.
+ *
+ * @author Simon Zambrovski
+ * @author Steven van Beelen
+ * @since 1.0.0
+ */
+public class ProcessingContextUtils {
 
-    private ContextUtils() {
+    private ProcessingContextUtils() {
         // avoid instantiation
     }
 
+    /**
+     * Executes supplied action in a new processing context created via unit of work factory as a child of provided
+     * processing context.
+     *
+     * @param id                id of the unit of work.
+     * @param unitOfWorkFactory unit of work factory to use.
+     * @param executor          executor to offload the action to.
+     * @param parentContext     parent processing context.
+     * @param action            action to execute.
+     * @param <R>               type of action result.
+     * @return result of the action encapsulated in completable future.
+     */
     public static <R> CompletableFuture<R> executeWithResult(
             @Nullable String id,
-            @Nonnull WorkflowServices workflowServices,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull Executor executor,
             @Nonnull Context parentContext,
             @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
         var uow = (id == null)
-                ? workflowServices.getUnitOfWorkFactory()
-                                  .create(customize -> customize.workScheduler(workflowServices.getExecutor()))
-                : workflowServices.getUnitOfWorkFactory()
-                                  .create(id, customize -> customize.workScheduler(workflowServices.getExecutor()));
+                ? unitOfWorkFactory.create(customize -> customize.workScheduler(executor))
+                : unitOfWorkFactory.create(id, customize -> customize.workScheduler(executor));
         return uow.executeWithResult(c -> {
-            var ctx = ContextUtils.copyResources(parentContext, c);
+            var ctx = ProcessingContextUtils.copyResources(parentContext, c);
             return action.apply(ctx);
         });
     }
 
+    /**
+     * Copies resources from given context to the target processing context.
+     *
+     * @param from source containing resources.
+     * @param to   target processing context.
+     * @return resulting processing context.
+     */
     public static ProcessingContext copyResources(Context from,
                                                   ProcessingContext to) {
         var fromResource = from.resources();

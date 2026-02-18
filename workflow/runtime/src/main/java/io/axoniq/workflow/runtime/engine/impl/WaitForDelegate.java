@@ -20,23 +20,29 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
+import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
+import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.completedStep;
 
 public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {
 
@@ -45,9 +51,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     public WaitForDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowState workflowState,
-            @Nonnull WorkflowServices workflowServices,
-            @Nonnull EventNameCustomizer parentCustomizer) {
-        super(workflowContext, workflowState, workflowServices, parentCustomizer);
+            @Nonnull EventNameCustomizer parentEventNameCustomizer,
+            @Nonnull Clock clock,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull EventSink eventSink,
+            @Nonnull Executor executor
+    ) {
+        super(workflowContext, workflowState, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor);
     }
 
     @Override
@@ -66,7 +76,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         if (!workflowState.containsStep(stepName)) {
             workflowState.appendTask(i ->
                                              started(stepName,
-                                                     Map.of("startTime", workflowServices.getClock().instant()),
+                                                     Map.of("startTime", clock.instant()),
                                                      eventNameCustomizer)
             );
             try {
@@ -78,27 +88,15 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         }
 
         if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
-            // Start time of wait will be last completed timestamp of any step or start time of workflow if no steps
-/*
-      var actualStartTime = workflowContext // TODO: discuss if we use it if no started event is there
-        .getStepHistory()
-        .stream()
-        .map(workflowState::getStep)
-        .map(StepExecution::timestamp)
-        .max(Instant::compareTo)
-        .orElse(workflowContext.getStartTime());
-
- */
             var actualStartTime = workflowState.getStep(stepName).timestamp();
-            var remainingTimeout = Duration.between(Instant.now(workflowServices.getClock()),
+            var remainingTimeout = Duration.between(clock.instant(),
                                                     actualStartTime.plus(timeout));
 
             if (remainingTimeout.isNegative()) {
                 workflowState.appendTask(i -> {
                     if (!i.getStep(stepName).status().isTerminal()) {
-                        // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
                         // FIXME - This is where we should publish using an append condition
-                        timedOut(stepName, workflowServices.getClock().instant(), eventNameCustomizer);
+                        timedOut(stepName, clock.instant(), eventNameCustomizer);
                     }
                 });
             } else {
@@ -118,7 +116,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                     if (e instanceof InterruptedException) {
                         workflowState.removeWaitCondition(stepName);
                         workflowState.appendTask(i -> {
-                            // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
                             // FIXME - This is where we should publish using an append condition
                             if (!i.getStep(stepName).status().isTerminal()) {
                                 cancelled(stepName, eventNameCustomizer);
@@ -131,5 +128,27 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         }
 
         return WorkflowStepResults.stateBased(stepName, workflowState);
+    }
+
+    void eventReceived(@Nonnull EventMessage eventMessage, @Nonnull String stepName,
+                       @Nonnull EventNameCustomizer eventNameCustomizer) {
+        // TODO event should be mapped back based on result mapping
+        var payload = eventMessagePayload(eventMessage);
+        workflowState.appendTask(state ->
+                                         ProcessingContextUtils.executeWithResult(
+                                                 stepName,
+                                                 unitOfWorkFactory,
+                                                 executor,
+                                                 state.getStep(stepName).context(),
+                                                 ctx ->
+                                                         eventSink.publish(
+                                                                 ctx,
+                                                                 completedStep(workflowContext, stepName, payload,
+                                                                               merge(parentEventNameCustomizer,
+                                                                                     eventNameCustomizer)
+                                                                 )
+                                                         )
+                                         ).join()
+        );
     }
 }

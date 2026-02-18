@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
@@ -34,27 +33,19 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Clock;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
-public class WorkflowEngine implements EventHandler, WorkflowServices {
+public class WorkflowEngine implements EventHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final WorkflowDefinitionRegistry<?> workflowDefinitionRegistry;
-    private final EventSink eventSink;
-    private final Clock clock;
-    private final Executor executor;
-    private final UnitOfWorkFactory unitOfWorkFactory;
 
     // FIXME -> offload it from here to some kind of a "store"
     // key => workflowId
@@ -68,11 +59,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
             @Nonnull EventSink eventSink,
             @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry
     ) {
-        this.eventSink = eventSink;
         this.workflowDefinitionRegistry = workflowDefinitionRegistry;
-        this.clock = GenericEventMessage.clock;
-        this.executor = Executors.newVirtualThreadPerTaskExecutor();
-        this.unitOfWorkFactory = unitOfWorkFactory;
     }
 
     @NotNull
@@ -135,7 +122,7 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
                                                                           );
 
                                     var workflowContext = workflowConfiguration.workflowContextFactory()
-                                                                               .createContext(payload, workflowId, processingContext, this);
+                                                                               .createContext(payload, workflowId, processingContext);
 
                                     // avoid multiple workflows for the same workflow id.
                                     executionHandles.computeIfAbsent(workflowId, (id) -> {
@@ -154,30 +141,6 @@ public class WorkflowEngine implements EventHandler, WorkflowServices {
 
     public void shutdown() {
         this.workflowInstances().clear();
-    }
-
-    @Nonnull
-    @Override
-    public Clock getClock() {
-        return clock;
-    }
-
-    @Nonnull
-    @Override
-    public UnitOfWorkFactory getUnitOfWorkFactory() {
-        return unitOfWorkFactory;
-    }
-
-    @Nonnull
-    @Override
-    public Executor getExecutor() {
-        return executor;
-    }
-
-    @Nonnull
-    @Override
-    public EventSink getEventSink() {
-        return eventSink;
     }
 
     public record ExecutionHandle(
