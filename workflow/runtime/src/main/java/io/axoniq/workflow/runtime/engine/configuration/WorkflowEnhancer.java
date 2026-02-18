@@ -29,12 +29,19 @@ import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Clock;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
 import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
 
 /**
  * Enhancer for registration of the workflow engine, the registry and sets up the eventing.
  */
 public class WorkflowEnhancer implements ConfigurationEnhancer {
+
+    public static final String WORKFLOW_ENGINE_EVENT_MODULE = "WorkflowEngine";
+    public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngine";
 
     @Override
     public void enhance(@NotNull ComponentRegistry componentRegistry) {
@@ -46,6 +53,14 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.eventName());
 
         componentRegistry
+                .registerComponent(Clock.class, cfg -> Clock.systemUTC());
+
+        componentRegistry
+                .registerComponent(Executor.class,
+                                   WORKFLOW_ENGINE_EXECUTOR,
+                                   cfg -> Executors.newVirtualThreadPerTaskExecutor());
+
+        componentRegistry
                 .registerComponent(WorkflowEngine.class, cfg ->
                         new WorkflowEngine(
                                 cfg.getComponent(UnitOfWorkFactory.class),
@@ -55,7 +70,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 );
         componentRegistry.registerModule(
                 EventProcessorModule
-                        .pooledStreaming("WorkflowEngine")
+                        .pooledStreaming(WORKFLOW_ENGINE_EVENT_MODULE)
                         .eventHandlingComponents(req -> req.declarative(cfg -> new AllEventEventHandlingComponent(
                                 cfg.getComponent(WorkflowEngine.class)
                         )))

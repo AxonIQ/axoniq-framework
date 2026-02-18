@@ -24,7 +24,6 @@ import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -35,11 +34,14 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,11 +51,13 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
@@ -61,7 +65,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
 
-    private final WorkflowServices workflowServices;
     // primitive implementations
     private final ExecuteDelegate executeDelegate;
     private final WaitForDelegate waitForDelegate;
@@ -72,6 +75,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final ProcessingContext processingContext;
     private final String workflowId;
+    private final UnitOfWorkFactory unitOfWorkFactory;
+    private final Clock clock;
+    private final Executor executor;
+    private final EventSink eventSink;
     private WorkflowStatus status = WorkflowStatus.NONE;
     private boolean executable = false;
     private Map<String, Object> payload;
@@ -79,15 +86,32 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     public WorkflowInstance(@Nonnull String workflowId,
                             @Nonnull Map<String, Object> initial,
                             @Nonnull ProcessingContext processingContext,
-                            @Nonnull EventNameCustomizer parentCustomizer,
-                            @Nonnull WorkflowServices workflowServices) {
+                            @Nonnull EventNameCustomizer parentCustomizer) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
         this.payload = Objects.requireNonNull(initial, "Payload must not be null");
         this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
-        this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow service aare mandatory");
         var stepParent = parentCustomizer.forStepInheritance();
-        this.executeDelegate = new ExecuteDelegate(this, this, workflowServices, stepParent);
-        this.waitForDelegate = new WaitForDelegate(this, this, workflowServices, stepParent);
+        this.unitOfWorkFactory = Objects.requireNonNull(processingContext.component(UnitOfWorkFactory.class),
+                                                        "Could not retrieve UoW factory");
+        this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
+        this.executor = Objects.requireNonNull(processingContext.component(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
+                                               "Could not retrieve EventSink");
+        this.eventSink = Objects.requireNonNull(processingContext.component(EventSink.class),
+                                                "Could not retrieve EventSink");
+        this.executeDelegate = new ExecuteDelegate(this,
+                                                   this,
+                                                   stepParent,
+                                                   clock,
+                                                   unitOfWorkFactory,
+                                                   eventSink,
+                                                   executor);
+        this.waitForDelegate = new WaitForDelegate(this,
+                                                   this,
+                                                   stepParent,
+                                                   clock,
+                                                   unitOfWorkFactory,
+                                                   eventSink,
+                                                   executor);
     }
 
 
@@ -103,8 +127,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         return ProcessingContextUtils
                 .executeWithResult(
                         workflowId,
-                        workflowServices.getUnitOfWorkFactory(),
-                        workflowServices.getExecutor(),
+                        unitOfWorkFactory,
+                        executor,
                         workflowContext.processingContext(),
                         pc -> {
 
@@ -142,7 +166,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                 if (e instanceof TimeoutException) {
                                     sendWorkflowEvent(timeoutWorkflow(workflowContext,
                                                                       workflowName,
-                                                                      workflowServices.getClock().instant(),
+                                                                      clock.instant(),
                                                                       customizer),
                                                       processingContext()).join(); // FIXME join
                                 } else if (e instanceof InterruptedException) {
@@ -350,7 +374,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage, ProcessingContext processingContext) {
         // TODO: make sure the consistency marker is used
-        return workflowServices.getEventSink().publish(processingContext, eventMessage);
+        return eventSink.publish(processingContext, eventMessage);
     }
 
     @Override

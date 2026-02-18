@@ -19,7 +19,6 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowServices;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
@@ -27,15 +26,19 @@ import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
@@ -45,20 +48,29 @@ public abstract class AbstractStepExecutor {
     private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
     protected final WorkflowContext workflowContext;
     protected final WorkflowState workflowState;
-    protected final WorkflowServices workflowServices;
+    protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
+    protected final UnitOfWorkFactory unitOfWorkFactory;
+    protected final EventSink eventSink;
+    protected final Executor executor;
 
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowState workflowState,
-            @Nonnull WorkflowServices workflowServices,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer
+            @Nonnull EventNameCustomizer parentEventNameCustomizer,
+            @Nonnull Clock clock,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull EventSink eventSink,
+            @Nonnull Executor executor
     ) {
+        this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowState = Objects.requireNonNull(workflowState, "Workflow state is mandatory");
-        this.workflowServices = Objects.requireNonNull(workflowServices, "Workflow services are mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
+        this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
+        this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
+        this.executor = executor;
     }
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
@@ -113,7 +125,7 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected CompletableFuture<Void> timedOut(@Nonnull String stepName,
                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return timedOut(stepName, Instant.now(workflowServices.getClock()), eventNameCustomizer);
+        return timedOut(stepName, Instant.now(clock), eventNameCustomizer);
     }
 
     @Nonnull
@@ -129,10 +141,10 @@ public abstract class AbstractStepExecutor {
         logger.trace("Appending event {}", eventMessage.type());
         return ProcessingContextUtils.executeWithResult(
                 null,
-                workflowServices.getUnitOfWorkFactory(),
-                workflowServices.getExecutor(),
+                unitOfWorkFactory,
+                executor,
                 context,
-                ctx -> workflowServices.getEventSink().publish(ctx, eventMessage)
+                ctx -> eventSink.publish(ctx, eventMessage)
         );
     }
 
