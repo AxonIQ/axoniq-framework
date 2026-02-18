@@ -34,6 +34,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link WorkflowModuleConfiguration}.
+ *
+ * @author Simon Zambrovski
  */
 class WorkflowModuleConfigurationTest {
 
