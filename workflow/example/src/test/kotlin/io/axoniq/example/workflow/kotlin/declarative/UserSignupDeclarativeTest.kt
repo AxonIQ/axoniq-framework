@@ -27,7 +27,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine
+import io.axoniq.workflow.runtime.api.WorkflowHandle
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions
@@ -96,13 +96,13 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         // run to the end
         Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
             Assertions.assertThat(workflowEngine.workflowInstances().values)
-                .allMatch(Predicate { h: WorkflowEngine.ExecutionHandle? -> h!!.status.isTerminal })
+                .allMatch(Predicate { h: WorkflowHandle? -> h!!.status.isTerminal })
         })
 
 
         // Verify that both workflows executed all steps
         for (context in workflowEngine.workflowInstances().values.stream()
-            .map(WorkflowEngine.ExecutionHandle::workflowContext).toList()) {
+            .map(WorkflowHandle::workflowContext).toList()) {
             Assertions.assertThat(context.getStatus().isTerminal).isTrue()
             Assertions.assertThat(context.getStatus()).isEqualTo(WorkflowStatus.COMPLETED)
             Assertions.assertThat(context.getStepHistory()).containsExactlyInAnyOrder(

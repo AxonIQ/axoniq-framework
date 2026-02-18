@@ -22,10 +22,10 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.WorkflowHandle;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
@@ -90,7 +90,7 @@ class UserSignupDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkfl
 
         // Verify that both workflows executed all steps
         for (WorkflowContext context : workflowEngine.workflowInstances().values().stream()
-                                                     .map(WorkflowEngine.ExecutionHandle::workflowContext).toList()) {
+                                                     .map(WorkflowHandle::workflowContext).toList()) {
             assertThat(context.getStatus().isTerminal()).isTrue();
             assertThat(context.getStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser",
