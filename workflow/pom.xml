@@ -86,6 +86,7 @@
                     <extensions>true</extensions>
 
                     <configuration>
+                        <jvmTarget>21</jvmTarget>
                         <compilerPlugins>
                             <plugin>no-arg</plugin>
                             <plugin>all-open</plugin>
