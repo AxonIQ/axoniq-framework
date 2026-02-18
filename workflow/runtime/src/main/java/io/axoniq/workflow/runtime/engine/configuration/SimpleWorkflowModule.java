@@ -105,7 +105,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         return configuration;
     }
 
-    private void registerWorkflowDefinitions(@Nonnull Configuration configuration) {
+    protected void registerWorkflowDefinitions(@Nonnull Configuration configuration) {
         WorkflowDefinitionRegistry<?> registry = configuration.getComponent(WorkflowDefinitionRegistry.class);
         workflowConfigurations
                 .forEach(b -> registry.register(
