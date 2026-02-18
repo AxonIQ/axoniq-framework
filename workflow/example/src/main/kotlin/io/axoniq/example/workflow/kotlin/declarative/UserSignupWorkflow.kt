@@ -33,32 +33,32 @@ class UserSignupWorkflow {
     fun Kontext.onExecute() {
         logger.info { "User signup workflow started at ${Instant.now()} for $payload" }
 
-            val success = awaitExecute("createUser", {
-                UserService.createUser()
-            })
+        val success = awaitExecute("createUser", {
+            UserService.createUser()
+        })
 
-            if (!success) {
-                return
-            }
+        if (!success) {
+            return
+        }
 
-            block {
-                execute(
-                    "activateUser",
-                    { pc, p -> UserService.activateUser(pc, p) },
-                    timeout = 10.seconds
-                )
-            }
+        block {
+            execute(
+                "activateUser",
+                { pc, p -> UserService.activateUser(pc, p) },
+                timeout = 10.seconds
+            )
+        }
 
-            block("waitASecond", 1.seconds)
+        block("waitASecond", 1.seconds)
 
-            block {
-                execute("sendWelcomeEmail", { pc, p -> NotificationService.sendEmail(); mapOf() })
-            }
+        block {
+            execute("sendWelcomeEmail", { pc, p -> NotificationService.sendEmail(); mapOf() })
+        }
 
-            val magic = awaitEvent("waitForMagicToHappen", MagicHappenedEvent::class)
+        val magic = awaitEvent("waitForMagicToHappen", MagicHappenedEvent::class)
 
-            logger.info { "Magic happened because of the magician $magic.magician" }
-            logger.info { "User signup workflow ended at ${Instant.now()} for $payload" }
+        logger.info { "Magic happened because of the magician $magic.magician" }
+        logger.info { "User signup workflow ended at ${Instant.now()} for $payload" }
     }
 }
 

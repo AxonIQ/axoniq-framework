@@ -145,7 +145,8 @@ public class PrimitiveCommands {
     /**
      * Default execute command implementation.
      */
-    public static class WorkflowStepResultExecuteCommand implements ExecutePrimitive.ExecuteCommand<WorkflowStepResult> {
+    public static class WorkflowStepResultExecuteCommand
+            implements ExecutePrimitive.ExecuteCommand<WorkflowStepResult> {
 
         private final String stepName;
         private final Map<String, Object> local;
@@ -221,7 +222,8 @@ public class PrimitiveCommands {
         }
     }
 
-    public static class WorkflowStepResultWaitForCommand implements WaitForPrimitive.WaitForCommand<WorkflowStepResult> {
+    public static class WorkflowStepResultWaitForCommand
+            implements WaitForPrimitive.WaitForCommand<WorkflowStepResult> {
 
         private final String stepName;
         private final Duration timeout;

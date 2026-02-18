@@ -18,7 +18,6 @@
 package io.axoniq.workflow.runtime.api;
 
 import jakarta.annotation.Nonnull;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 

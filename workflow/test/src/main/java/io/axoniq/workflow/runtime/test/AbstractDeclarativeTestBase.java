@@ -46,7 +46,8 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     protected DelayedPublisher delayedPublisher;
     protected WorkflowDefinitionRegistry<?> workflowRegistry;
 
-    public AbstractDeclarativeTestBase(@Nonnull Class<T> dslType, @Nonnull ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
+    public AbstractDeclarativeTestBase(@Nonnull Class<T> dslType,
+                                       @Nonnull ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
         this.dslType = dslType;
         this.builder = contextFactoryBuilder;
     }
