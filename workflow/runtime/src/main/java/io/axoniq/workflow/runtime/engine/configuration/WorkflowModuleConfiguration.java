@@ -49,8 +49,7 @@ public class WorkflowModuleConfiguration {
         if (configuration != null) {
             this.eventNameCustomizer = configuration.getComponent(EventNameCustomizer.class,
                                                                   DefaultEventNameCustomizer.Builder::eventName);
-            this.workflowIdProvider = configuration.getComponent(MessageWorkflowIdProvider.class,
-                                                                 MessageWorkflowIdProvider::new);
+            this.workflowIdProvider = configuration.getComponent(WorkflowIdProvider.class, MessageWorkflowIdProvider::new);
         } else {
             this.eventNameCustomizer = DefaultEventNameCustomizer.Builder.eventName();
             this.workflowIdProvider = new MessageWorkflowIdProvider();
