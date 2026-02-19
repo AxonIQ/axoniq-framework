@@ -23,7 +23,6 @@ import org.axonframework.common.infra.DescribableComponent;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Predicate;
 
 /**
  * Repository for retrieving workflow handles.
@@ -57,25 +56,4 @@ public interface WorkflowRepository extends DescribableComponent {
      */
     @Nonnull
     Map<String, WorkflowHandle> findAllAsMap();
-
-    /**
-     * Cancels the workflow instance with the given identifier.
-     * The workflow must be in a non-terminal state.
-     *
-     * @param workflowId the workflow identifier to cancel
-     * @throws UnsupportedOperationException until implemented
-     */
-    default void cancel(@Nonnull String workflowId) {
-        throw new UnsupportedOperationException("cancel(workflowId) is not yet implemented");
-    }
-
-    /**
-     * Cancels all workflow instances matching the given predicate.
-     *
-     * @param predicate the condition to match workflow instances for cancellation
-     * @throws UnsupportedOperationException until implemented
-     */
-    default void cancelIf(@Nonnull Predicate<WorkflowHandle> predicate) {
-        throw new UnsupportedOperationException("cancelIf(predicate) is not yet implemented");
-    }
 }

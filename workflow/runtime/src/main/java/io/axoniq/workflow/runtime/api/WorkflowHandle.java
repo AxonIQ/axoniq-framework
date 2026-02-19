@@ -19,7 +19,6 @@ package io.axoniq.workflow.runtime.api;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 
 /**
  * Represents a running or completed workflow instance, bundling its configuration,
@@ -36,15 +35,5 @@ public record WorkflowHandle(
 
     public WorkflowStatus getStatus() {
         return workflowContext.getStatus();
-    }
-
-    /**
-     * Cancels a specific active step within this workflow instance.
-     *
-     * @param stepName the name of the active step to cancel
-     * @throws UnsupportedOperationException until implemented
-     */
-    public void cancelStep(@Nonnull String stepName) {
-        throw new UnsupportedOperationException("cancelStep is not yet implemented");
     }
 }
