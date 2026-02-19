@@ -72,7 +72,7 @@ public class WorkflowEngine implements EventHandler {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
-            for (var handle : workflowExecutionRepository.findAll()) {
+            for (var workflowExecution : workflowExecutionRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
                 workflowExecution.workflowState().onEvent(eventMessage, processingContext);
@@ -87,7 +87,7 @@ public class WorkflowEngine implements EventHandler {
      */
     public void runWorkflows() {
         logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
-        for (var handle : workflowExecutionRepository.findAll()) {
+        for (var workflowExecution : workflowExecutionRepository.findAll()) {
             try {
                 workflowExecution.workflowState().execute(workflowExecution.workflowConfiguration(), workflowExecution.workflowContext());
             } catch (Throwable t) {
