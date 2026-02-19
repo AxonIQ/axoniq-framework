@@ -45,6 +45,15 @@ public record WorkflowExecution(
     public WorkflowStatus getStatus() {
         return workflowContext.getStatus();
     }
-    //todo entity
-    //todo implement equals by workflow id
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof WorkflowExecution that)) return false;
+        return workflowId.equals(that.workflowId);
+    }
+
+    @Override
+    public int hashCode() {
+        return workflowId.hashCode();
+    }
 }
