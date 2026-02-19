@@ -75,7 +75,7 @@ public class WorkflowEngine implements EventHandler {
             for (var handle : workflowExecutionRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
-                handle.workflowState().onEvent(eventMessage, processingContext);
+                workflowExecution.workflowState().onEvent(eventMessage, processingContext);
             }
         }
 
@@ -89,7 +89,7 @@ public class WorkflowEngine implements EventHandler {
         logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
         for (var handle : workflowExecutionRepository.findAll()) {
             try {
-                handle.workflowState().execute(handle.workflowConfiguration(), handle.workflowContext());
+                workflowExecution.workflowState().execute(workflowExecution.workflowConfiguration(), workflowExecution.workflowContext());
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }
