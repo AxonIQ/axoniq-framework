@@ -44,16 +44,16 @@ public class WorkflowEngine implements EventHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final WorkflowDefinitionRegistry<?> workflowDefinitionRegistry;
-    private final WorkflowExecutionRepository workflowRepository;
+    private final WorkflowExecutionRepository workflowExecutionRepository;
 
     public WorkflowEngine(
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
             @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry,
-            @Nonnull WorkflowExecutionRepository workflowRepository
+            @Nonnull WorkflowExecutionRepository workflowExecutionRepository
     ) {
         this.workflowDefinitionRegistry = workflowDefinitionRegistry;
-        this.workflowRepository = workflowRepository;
+        this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
     @NotNull
@@ -65,14 +65,14 @@ public class WorkflowEngine implements EventHandler {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            workflowRepository.findById(workflowId)
-                              .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId))
-                              .workflowState().onEvent(eventMessage, processingContext);
+            workflowExecutionRepository.findById(workflowId)
+                                       .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId))
+                                       .workflowState().onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
-            for (var handle : workflowRepository.findAll()) {
+            for (var handle : workflowExecutionRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
                 handle.workflowState().onEvent(eventMessage, processingContext);
@@ -86,8 +86,8 @@ public class WorkflowEngine implements EventHandler {
      * This is a place to be called from Event Processor
      */
     public void runWorkflows() {
-        logger.debug("Executing {} workflows.", workflowRepository.findAll().size());
-        for (var handle : workflowRepository.findAll()) {
+        logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
+        for (var handle : workflowExecutionRepository.findAll()) {
             try {
                 handle.workflowState().execute(handle.workflowConfiguration(), handle.workflowContext());
             } catch (Throwable t) {
@@ -121,7 +121,7 @@ public class WorkflowEngine implements EventHandler {
                                                                                .createContext(payload, workflowId, processingContext);
 
                                     // avoid multiple workflows for the same workflow id.
-                                    workflowRepository.save(() -> {
+                                    workflowExecutionRepository.save(() -> {
                                         logger.info("Starting new workflow with '{}'", eventMessage.payload());
                                         var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
                                         return new WorkflowExecution(workflowId, workflowConfiguration, workflowContext, workflowState);
@@ -132,10 +132,10 @@ public class WorkflowEngine implements EventHandler {
     }
 
     public Set<WorkflowExecution> workflowInstances() {
-        return workflowRepository.findAll();
+        return workflowExecutionRepository.findAll();
     }
 
     public void shutdown() {
-        workflowRepository.clear();
+        workflowExecutionRepository.clear();
     }
 }
