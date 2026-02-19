@@ -33,12 +33,11 @@ public class UserSignupWorkflow {
 
         ctx.awaitExecute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
 
-        /**
-         var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-         var a2 = ctx.executeWithResult("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
+        /*
+         var a1 = ctx.execute("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
+         var a2 = ctx.execute("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
          all(a1, a2).isSuccess();
          */
-
 
         ctx.awaitExecute("sendWelcomeEmail", NotificationService::sendEmail);
         ctx.block("waitASecond", Duration.ofSeconds(1L));

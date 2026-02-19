@@ -28,7 +28,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
 
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 /**
  * Workflow module encapsulates configuration for one workflow definition.
@@ -50,7 +50,6 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             @Nonnull Class<C> contextType) {
         return new SimpleWorkflowModule<>(contextType);
     }
-
 
     /**
      * Retrieves workflow context type.
@@ -91,37 +90,31 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {
 
-        WorkflowModule<C> definitions(@Nonnull Consumer<DetectionPhase<C>> definitions);
+        WorkflowModule<C> definitions(@Nonnull UnaryOperator<DetectionPhase<C>> definitions);
+
 
         interface DetectionPhase<C extends WorkflowContext> {
 
             /**
              * Names the workflow.
              *
-             * @param name workflow name.
+             * @param componentBuilder builder for the workflow component.
              * @return builder for the trigger definition phase.
              */
-            OnPhase<C> declarative(@Nonnull String name);
+            NamingPhase<C> declarative(@Nonnull ComponentBuilder<WorkflowDefinition<C>> componentBuilder);
 
             /**
              * Auto-detects workflows on the given component.
              *
              * @return builder of customization phase.
              */
-            default DetectionPhase<C> autodetected(@Nonnull Class<?> type, @Nonnull Class<C> workflowContextType) {
-                var annotatedDefinitions = AutodetectedWorkflowDefinition.fromClass(type, workflowContextType);
-                DetectionPhase<C> result = this;
-                for (AutodetectedWorkflowDefinition<C> autodetected : annotatedDefinitions) {
-                    result = this.declarative(autodetected.name())
-                                 .on(autodetected.startCondition())
-                                 .workflowDefinition(autodetected.workflowDefinition())
-                                 .customized((c, wc) ->
-                                                     wc.eventNameCustomizer(autodetected.eventNameCustomizer())
-                                                       .workflowIdProvider(autodetected.workflowIdProvider().build(c))
-                                 );
-                }
-                return result;
-            }
+            DetectionPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder,
+                                           @Nonnull Class<C> workflowContextType);
+        }
+
+        interface NamingPhase<C extends WorkflowContext> {
+
+            OnPhase<C> workflowName(@Nonnull String workflowName);
         }
 
         interface OnPhase<C extends WorkflowContext> {
@@ -132,19 +125,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * @param startCondition start condition builder.
              * @return builder for declarative definition phase.
              */
-            DeclarativeDefinitionPhase<C> on(@Nonnull ComponentBuilder<EventCondition> startCondition);
-        }
-
-        interface DeclarativeDefinitionPhase<C extends WorkflowContext> {
-
-            /**
-             * Provides workflow definition.
-             *
-             * @param workflowDefinition builder for workflow definition.
-             * @return builder for association phase.
-             */
-            WorkflowCustomizationPhase<C> workflowDefinition(
-                    @Nonnull ComponentBuilder<WorkflowDefinition<C>> workflowDefinition);
+            WorkflowCustomizationPhase<C> on(@Nonnull ComponentBuilder<EventCondition> startCondition);
         }
 
         interface WorkflowCustomizationPhase<C extends WorkflowContext> {
@@ -156,7 +137,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * @return definitions phase for the next workflow.
              */
             DetectionPhase<C> customized(
-                    @Nonnull BiFunction<Configuration, WorkflowModuleConfiguration, WorkflowModuleConfiguration> instanceCustomization
+                    @Nonnull BiFunction<Configuration, WorkflowCustomization, WorkflowCustomization> instanceCustomization
             );
 
             /**

@@ -26,36 +26,33 @@ import io.axoniq.workflow.runtime.api.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions
 import org.awaitility.Awaitility
 import org.awaitility.core.ThrowingRunnable
-import org.axonframework.conversion.Converter
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
-import java.util.function.Consumer
 import java.util.function.Predicate
+import java.util.function.UnaryOperator
 
 class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
-        val workflow = UserSignupWorkflow()
-        return Consumer { d ->
-            d.declarative("User signup workflow in Kotlin")
+    override fun getDeclaredDefinitions(): UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
+        return UnaryOperator { d ->
+            d.declarative({ c -> WorkflowKontext.from(UserSignupWorkflow()::execute) })
+                .workflowName("User signup workflow in Kotlin")
                 .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
-                .workflowDefinition { WorkflowKontext.from(workflow::execute) }
                 .customized { c, wc ->
                     wc.eventNameCustomizer(namespace("io.axoniq.dsl.wf"))
                         .workflowIdProvider(
-                            PayloadPropertyWorkflowIdProvider(
-                                c.getComponent(Converter::class.java),
-                                "id"
-                            ) { id -> "signup-$id" }
+                            fromPayloadAttribute(
+                                c, "id",
+                                UnaryOperator { id: String? -> "signup-$id" })
                         )
                 }
         }

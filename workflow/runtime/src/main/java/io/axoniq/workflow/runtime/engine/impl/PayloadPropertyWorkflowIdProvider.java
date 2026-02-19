@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * Workflow id provider accessing event message property.
@@ -40,6 +42,17 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     private final String attributeName;
     private final Function<String, String> idProcessor;
 
+    public static PayloadPropertyWorkflowIdProvider fromPayloadAttribute(
+            @Nonnull Configuration configuration,
+            @Nonnull String attributeName,
+            @Nonnull UnaryOperator<String> customizer) {
+        return new PayloadPropertyWorkflowIdProvider(
+                configuration.getComponent(Converter.class),
+                attributeName,
+                customizer
+        );
+    }
+
     /**
      * Constructs id provider.
      *
@@ -49,7 +62,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     public PayloadPropertyWorkflowIdProvider(
             @Nonnull Converter converter,
             @Nonnull String attributeName) {
-        this(converter, attributeName, Function.identity());
+        this(converter, attributeName, UnaryOperator.identity());
     }
 
     /**
@@ -62,7 +75,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     public PayloadPropertyWorkflowIdProvider(
             @Nonnull Converter converter,
             @Nonnull String attributeName,
-            @Nonnull Function<String, String> idProcessor
+            @Nonnull UnaryOperator<String> idProcessor
     ) {
         this.converter = Objects.requireNonNull(converter, "Converter must not be null");
         this.attributeName = Objects.requireNonNull(attributeName, "Attribute name must not be null");

@@ -19,32 +19,41 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.Workflow;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
-import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
+import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.QualifiedName;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
+
+import static io.axoniq.workflow.runtime.api.Workflow.*;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -61,19 +70,12 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         WorkflowModule.LanguagePhase.WorkflowContextFactoryPhase<C>,
         WorkflowModule.LanguagePhase.WorkflowStateFactoryPhase<C>,
         WorkflowModule.WorkflowDefinitionPhase<C>,
-        WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C>,
-        WorkflowModule.WorkflowDefinitionPhase.OnPhase<C>,
-        WorkflowModule.WorkflowDefinitionPhase.DeclarativeDefinitionPhase<C>,
-        WorkflowModule.WorkflowDefinitionPhase.WorkflowCustomizationPhase<C> {
+        WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C> {
 
     private final Class<C> workflowContextType;
-    private final List<WorkflowConfigurationBuilder<?>> workflowConfigurations = new ArrayList<>();
+    private final List<ComponentBuilder<ConditionedWorkflowConfiguration<?>>> workflowConfigurations;
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
     private ComponentBuilder<WorkflowStateFactory> workflowStateFactory;
-    private ComponentBuilder<WorkflowDefinition<C>> currentWorkflowDefinition;
-    private ComponentBuilder<EventCondition> currentStartCondition;
-    private String currentWorkflowName;
-
 
     /**
      * Constructs new workflow module.
@@ -95,6 +97,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     SimpleWorkflowModule(@NotNull String name, @Nonnull Class<C> workflowContextType) {
         super(name);
         this.workflowContextType = workflowContextType;
+        this.workflowConfigurations = new ArrayList<>();
     }
 
     @Override
@@ -110,12 +113,32 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         return configuration;
     }
 
+    @Override
+    public NamingPhase<C> declarative(@Nonnull ComponentBuilder<WorkflowDefinition<C>> componentBuilder) {
+        return new DeclarativeComponentBuilder().declarative(componentBuilder);
+    }
+
+    @Override
+    public DetectionPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder,
+                                          @Nonnull Class<C> workflowContextType) {
+        return new AutoDetectingBuilder(componentBuilder);
+    }
+
     protected void registerWorkflowDefinitions(@Nonnull Configuration configuration) {
         WorkflowDefinitionRegistry<?> registry = configuration.getComponent(WorkflowDefinitionRegistry.class);
+        if (workflowConfigurations.isEmpty()) {
+            // sanity
+            throw new IllegalStateException(
+                    "A module must define at least one workflow configuration, but none were registered.");
+        }
         workflowConfigurations
-                .forEach(b -> registry.register(
-                        b.buildStartCondition(configuration),
-                        b.buildWorkflowConfiguration(configuration))
+                .forEach(b -> {
+                             var x = b.build(configuration);
+                             registry.register(
+                                     x.eventCondition(),
+                                     x.workflowConfiguration()
+                             );
+                         }
                 );
     }
 
@@ -136,138 +159,189 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     @Override
-    public WorkflowModule<C> definitions(@NotNull Consumer<DetectionPhase<C>> definitions) {
-        definitions.accept(this);
+    public WorkflowModule<C> definitions(@NotNull UnaryOperator<DetectionPhase<C>> definitions) {
+        definitions.apply(this);
         return this;
     }
 
-    @Override
-    public OnPhase<C> declarative(@NotNull String name) {
-        this.currentWorkflowName = Objects.requireNonNull(name, "Workflow name must not be null");
-        return this;
-    }
+    class DeclarativeComponentBuilder implements
+            WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C>,
+            WorkflowModule.WorkflowDefinitionPhase.NamingPhase<C>,
+            WorkflowModule.WorkflowDefinitionPhase.OnPhase<C>,
+            WorkflowModule.WorkflowDefinitionPhase.WorkflowCustomizationPhase<C> {
 
-    @Override
-    public DeclarativeDefinitionPhase<C> on(@NotNull ComponentBuilder<EventCondition> startCondition) {
-        this.currentStartCondition = Objects.requireNonNull(startCondition, "Start condition must not be null");
-        return this;
-    }
+        private ComponentBuilder<WorkflowDefinition<C>> currentWorkflowDefinition;
+        private ComponentBuilder<EventCondition> currentStartCondition;
+        private String currentWorkflowName;
 
-    @Override
-    public WorkflowCustomizationPhase<C> workflowDefinition(
-            @NotNull ComponentBuilder<WorkflowDefinition<C>> workflowDefinition) {
-        this.currentWorkflowDefinition = Objects.requireNonNull(workflowDefinition,
-                                                                "Workflow definition must not be null");
-        return this;
-    }
-
-    @Override
-    public DetectionPhase<C> customized(
-            @Nonnull BiFunction<Configuration, WorkflowModuleConfiguration, WorkflowModuleConfiguration> instanceCustomization
-    ) {
-        Objects.requireNonNull(instanceCustomization, "Customizations must not be null");
-        this.workflowConfigurations.add(
-                new WorkflowConfigurationBuilder<>(
-                        this.currentWorkflowName,
-                        // DSL
-                        this.workflowContextFactory,
-                        this.workflowStateFactory,
-                        // Workflow
-                        this.currentStartCondition,
-                        this.currentWorkflowDefinition,
-                        instanceCustomization
-                )
-        );
-
-        this.currentWorkflowName = null;
-        this.currentStartCondition = null;
-        this.currentWorkflowDefinition = null;
-
-        return this;
-    }
-
-    private record WorkflowConfigurationBuilder<C extends WorkflowContext>(
-            String workflowName,
-            // DSL level
-            ComponentBuilder<WorkflowContextFactory<C>> contextFactoryBuilder,
-            ComponentBuilder<WorkflowStateFactory> stateFactoryBuilder,
-            // workflow level
-            ComponentBuilder<EventCondition> startConditionBuilder,
-            ComponentBuilder<WorkflowDefinition<C>> definitionBuilder,
-            BiFunction<Configuration, WorkflowModuleConfiguration, WorkflowModuleConfiguration> instanceCustomization) {
-
-        @Nonnull
-        public EventCondition buildStartCondition(@Nonnull Configuration configuration) {
-            return startConditionBuilder.build(configuration);
+        @Override
+        public DetectionPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder,
+                                              @Nonnull Class<C> workflowContextType) {
+            return SimpleWorkflowModule.this.autodetected(componentBuilder, workflowContextType);
         }
 
-        @Nonnull
-        public WorkflowConfiguration<C> buildWorkflowConfiguration(@Nonnull Configuration configuration) {
-            var workflowModuleConfiguration = instanceCustomization.apply(configuration,
-                                                                          defaultConfiguration(workflowName,
-                                                                                               configuration));
-            return new WorkflowConfiguration<>() {
+        @Override
+        public WorkflowModule.WorkflowDefinitionPhase.NamingPhase<C> declarative(
+                @Nonnull ComponentBuilder<WorkflowDefinition<C>> componentBuilder) {
+            this.currentWorkflowDefinition = Objects.requireNonNull(componentBuilder,
+                                                                    "Workflow definition builder must not be null");
+            return this;
+        }
 
-                @Nonnull
-                @Override
-                public String workflowName() {
-                    return workflowName;
-                }
+        @Override
+        public WorkflowModule.WorkflowDefinitionPhase.OnPhase<C> workflowName(@Nonnull String workflowName) {
+            this.currentWorkflowName = Objects.requireNonNull(workflowName, "Workflow name must not be null");
+            return this;
+        }
 
-                @NotNull
-                @Override
-                public WorkflowDefinition<C> workflowDefinition() {
-                    return definitionBuilder.build(configuration);
-                }
+        @Override
+        public WorkflowModule.WorkflowDefinitionPhase.WorkflowCustomizationPhase<C> on(
+                @Nonnull ComponentBuilder<EventCondition> startCondition) {
+            this.currentStartCondition = Objects.requireNonNull(startCondition, "Start condition must not be null");
+            return this;
+        }
 
-                @NotNull
-                @Override
-                public WorkflowContextFactory<C> workflowContextFactory() {
-                    return contextFactoryBuilder.build(configuration);
-                }
-
-                @NotNull
-                @Override
-                public WorkflowStateFactory workflowStateFactory() {
-                    return stateFactoryBuilder.build(configuration);
-                }
-
-                @NotNull
-                @Override
-                public WorkflowIdProvider workflowIdProvider() {
-                    return workflowModuleConfiguration.workflowIdProvider;
-                }
-
-                @NotNull
-                @Override
-                public EventNameCustomizer eventNameCustomizer() {
-                    return workflowModuleConfiguration.eventNameCustomizer;
-                }
-
-                @Nonnull
-                @Override
-                public Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
-                    var result = new HashMap<WorkflowStatus, WorkflowStatusChangeListener>();
-                    workflowModuleConfiguration.workflowStatusListeners.forEach((k, v) -> {
-                        if (!v.isEmpty()) {
-                            result.put(k, v);
-                        }
-                    });
-                    return Collections.unmodifiableMap(result);
-                }
-            };
+        @Override
+        public WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C> customized(
+                @Nonnull BiFunction<Configuration, WorkflowCustomization, WorkflowCustomization> instanceCustomization
+        ) {
+            Objects.requireNonNull(instanceCustomization, "Customizations must not be null");
+            workflowConfigurations.add(
+                    new WorkflowConfigurationAdapter<>(
+                            // DSL
+                            workflowContextFactory,
+                            workflowStateFactory,
+                            // Workflow
+                            this.currentWorkflowName,
+                            this.currentStartCondition,
+                            this.currentWorkflowDefinition,
+                            instanceCustomization
+                    )
+            );
+            this.currentWorkflowName = null;
+            this.currentStartCondition = null;
+            this.currentWorkflowDefinition = null;
+            return this;
         }
     }
 
-    /**
-     * Create default module configuration.
-     *
-     * @param workflowName  name of the workflow.
-     * @param configuration configuration to use.
-     * @return workflow module configuration.
-     */
-    private static WorkflowModuleConfiguration defaultConfiguration(@Nonnull String workflowName,
-                                                                    @Nullable Configuration configuration) {
-        return new WorkflowModuleConfiguration(workflowName, configuration);
+    class AutoDetectingBuilder implements DetectionPhase<C>,
+            ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>> {
+
+        private final ComponentBuilder<Object> instanceBuilder;
+
+        public AutoDetectingBuilder(ComponentBuilder<Object> instanceBuilder) {
+            this.instanceBuilder = instanceBuilder;
+        }
+
+        @Override
+        public List<ConditionedWorkflowConfiguration<C>> build(@Nonnull Configuration config) {
+            var instance = instanceBuilder.build(config);
+            var autodetectionType = instance.getClass();
+            var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(autodetectionType));
+            return methodCandidates
+                    .stream()
+                    .filter(AutodetectionUtils.firstParameterOfType(workflowContextType))
+                    .map(AutodetectionUtils.extractAnnotatedMethods(Workflow.class))
+                    .filter(Objects::nonNull)
+                    .map(t -> {
+
+                        Map<String, Object> attributes = t._2();
+                        Method method = t._1();
+
+                        AutodetectionUtils.validateAttributes(attributes, autodetectionType, method);
+
+                        var workflowName = AutodetectionUtils.getWorkflowName(autodetectionType, attributes, method);
+                        var namespaceCustomizer = AutodetectionUtils.getNamespace(autodetectionType, attributes);
+
+                        ComponentBuilder<WorkflowDefinition<C>> workflowDefinitionComponentBuilder = c -> workflowContext -> {
+                            try {
+                                method.invoke(instance, workflowContext);
+                            } catch (InvocationTargetException | IllegalAccessException e) {
+                                // FIXME -> this will catch any exception ?! Steven -> any ideas
+                                LoggerFactory.getLogger("Auto detected").error("Error 0", e);
+                                throw new RuntimeException(e.getCause());
+                            }
+                        };
+
+                        ComponentBuilder<EventCondition> eventConditionBuilder = c ->
+                                new EventCondition(
+                                        AutodetectionUtils.getIfNotDefault(attributes, ATTR_START_ON, Void.class)
+                                                          .flatMap(triggerType -> c.getComponent(MessageTypeResolver.class)
+                                                                                   .resolve(triggerType)
+                                                                                   .map(MessageType::qualifiedName)
+                                                          ).orElseGet(() -> new QualifiedName((String) attributes.get(
+                                                                  ATTR_START_ON_QUALIFIED_NAME))
+                                                          ),
+                                        (e) -> true
+                                ); // FIXME enrich with associations as soon as available, see #5
+
+
+                        ComponentBuilder<WorkflowIdProvider> associationProviderComponentBuilder = c ->
+                                AutodetectionUtils.getIfNotDefault(attributes,
+                                                                   ATTR_ID_PROPERTY_PROVIDER,
+                                                                   PayloadPropertyWorkflowIdProvider.class)
+                                                  .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
+                                                  .orElseGet(() -> new PayloadPropertyWorkflowIdProvider(c.getComponent(
+                                                          Converter.class),
+                                                                                                         (String) attributes.get(
+                                                                                                                 ATTR_ID_PROPERTY))
+                                                  );
+
+
+                        return new ConditionedWorkflowConfiguration<>(
+                                eventConditionBuilder.build(config),
+                                new WorkflowConfiguration<C>() {
+                                    @Nonnull
+                                    @Override
+                                    public WorkflowDefinition<C> workflowDefinition() {
+                                        return workflowDefinitionComponentBuilder.build(config);
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public WorkflowContextFactory<C> workflowContextFactory() {
+                                        return workflowContextFactory.build(config);
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public WorkflowStateFactory workflowStateFactory() {
+                                        return workflowStateFactory.build(config);
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public String workflowName() {
+                                        return workflowName;
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public EventNameCustomizer eventNameCustomizer() {
+                                        return namespaceCustomizer;
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public WorkflowIdProvider workflowIdProvider() {
+                                        return associationProviderComponentBuilder.build(config);
+                                    }
+                                }
+                        );
+                    })
+                    .toList();
+        }
+
+        @Override
+        public NamingPhase<C> declarative(@Nonnull ComponentBuilder<WorkflowDefinition<C>> componentBuilder) {
+            return SimpleWorkflowModule.this.declarative(componentBuilder);
+        }
+
+        @Override
+        public DetectionPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder,
+                                              @Nonnull Class<C> workflowContextType) {
+            return SimpleWorkflowModule.this.autodetected(componentBuilder, workflowContextType);
+        }
     }
 }

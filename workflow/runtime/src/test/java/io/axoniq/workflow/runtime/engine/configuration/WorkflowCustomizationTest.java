@@ -35,17 +35,17 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link WorkflowModuleConfiguration}.
+ * Tests for {@link WorkflowCustomization}.
  *
  * @author Simon Zambrovski
  */
-class WorkflowModuleConfigurationTest {
+class WorkflowCustomizationTest {
 
     private static final String WORKFLOW_NAME = "test-workflow";
 
     @Test
     void testConstructorWithNullConfiguration() {
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
 
         assertThat(config.eventNameCustomizer).isInstanceOf(DefaultEventNameCustomizer.class);
         assertThat(config.workflowIdProvider).isInstanceOf(MessageWorkflowIdProvider.class);
@@ -60,7 +60,7 @@ class WorkflowModuleConfigurationTest {
         when(configuration.getComponent(eq(WorkflowIdProvider.class),
                                         any(Supplier.class))).thenReturn(new MessageWorkflowIdProvider());
 
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, configuration);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, configuration);
 
         assertThat(config.eventNameCustomizer).isSameAs(customizer);
         assertThat(config.workflowIdProvider).isInstanceOf(MessageWorkflowIdProvider.class);
@@ -68,12 +68,12 @@ class WorkflowModuleConfigurationTest {
 
     @Test
     void testCopyConstructor() {
-        WorkflowModuleConfiguration base = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization base = new WorkflowCustomization(WORKFLOW_NAME, null);
         EventNameCustomizer customizer = mock(EventNameCustomizer.class);
         WorkflowIdProvider provider = mock(WorkflowIdProvider.class);
         base.eventNameCustomizer(customizer).workflowIdProvider(provider);
 
-        WorkflowModuleConfiguration copy = new WorkflowModuleConfiguration(base);
+        WorkflowCustomization copy = new WorkflowCustomization(base);
 
         assertThat(copy.eventNameCustomizer).isSameAs(customizer);
         assertThat(copy.workflowIdProvider).isSameAs(provider);
@@ -81,7 +81,7 @@ class WorkflowModuleConfigurationTest {
 
     @Test
     void testSetters() {
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
         EventNameCustomizer customizer = mock(EventNameCustomizer.class);
         WorkflowIdProvider provider = mock(WorkflowIdProvider.class);
 
@@ -94,14 +94,14 @@ class WorkflowModuleConfigurationTest {
 
     @Test
     void testConstructorThrowsOnNullWorkflowName() {
-        assertThatThrownBy(() -> new WorkflowModuleConfiguration(null, null))
+        assertThatThrownBy(() -> new WorkflowCustomization(null, null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("Workflow name must be provided");
     }
 
     @Test
     void testSettersThrowOnNull() {
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
 
         assertThatThrownBy(() -> config.eventNameCustomizer(null))
                 .isInstanceOf(NullPointerException.class)
@@ -114,7 +114,7 @@ class WorkflowModuleConfigurationTest {
 
     @Test
     void testRegisterWorkflowStatusChangeListener() {
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
         WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
 
         config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
@@ -124,7 +124,7 @@ class WorkflowModuleConfigurationTest {
 
     @Test
     void testUnregisterWorkflowStatusChangeListener() {
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
         WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
 
         config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
@@ -136,7 +136,7 @@ class WorkflowModuleConfigurationTest {
 
     @Test
     void testRegisterWorkflowStatusChangeListenerThrowsOnNull() {
-        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
 
         assertThatThrownBy(() -> config.registerWorkflowStatusChangeListener(null, mock(WorkflowStatusChangeListener.class)))
                 .isInstanceOf(NullPointerException.class)

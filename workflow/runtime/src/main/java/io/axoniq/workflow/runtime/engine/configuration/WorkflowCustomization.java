@@ -39,15 +39,28 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class WorkflowModuleConfiguration {
+public class WorkflowCustomization {
 
     private final String workflowName;
     protected final Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> workflowStatusListeners;
     protected EventNameCustomizer eventNameCustomizer;
     protected WorkflowIdProvider workflowIdProvider;
 
+    /**
+     * Create default module configuration.
+     *
+     * @param workflowName  name of the workflow.
+     * @param configuration configuration to use.
+     * @return workflow module configuration.
+     */
+    public static WorkflowCustomization defaultConfiguration(@Nonnull String workflowName,
+                                                             @Nullable Configuration configuration) {
+        return new WorkflowCustomization(workflowName, configuration);
+    }
+
+
     @Internal
-    WorkflowModuleConfiguration(
+    WorkflowCustomization(
             @Nonnull String workflowName,
             @Nullable Configuration configuration
     ) {
@@ -68,7 +81,7 @@ public class WorkflowModuleConfiguration {
     }
 
     @Internal
-    WorkflowModuleConfiguration(@Nonnull WorkflowModuleConfiguration base) {
+    WorkflowCustomization(@Nonnull WorkflowCustomization base) {
         Objects.requireNonNull(base, "Base configuration must not be null");
         this.workflowName = base.workflowName;
         this.eventNameCustomizer = base.eventNameCustomizer;
@@ -82,7 +95,7 @@ public class WorkflowModuleConfiguration {
      * @param eventNameCustomizer event name customizer to set.
      * @return module configuration instance.
      */
-    public WorkflowModuleConfiguration eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public WorkflowCustomization eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
         Objects.requireNonNull(eventNameCustomizer, "Event name customizer must not be null.");
         this.eventNameCustomizer = eventNameCustomizer;
         return this;
@@ -94,7 +107,7 @@ public class WorkflowModuleConfiguration {
      * @param workflowIdProvider workflow id provider to set.
      * @return module configuration instance.
      */
-    public WorkflowModuleConfiguration workflowIdProvider(@Nonnull WorkflowIdProvider workflowIdProvider) {
+    public WorkflowCustomization workflowIdProvider(@Nonnull WorkflowIdProvider workflowIdProvider) {
         Objects.requireNonNull(workflowIdProvider, "Workflow id provider must not be null.");
         this.workflowIdProvider = workflowIdProvider;
         return this;
@@ -107,8 +120,8 @@ public class WorkflowModuleConfiguration {
      * @param workflowStatusChangeListener workflow status change listener to register.
      * @return module configuration instance.
      */
-    public WorkflowModuleConfiguration registerWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus,
-                                                                            @Nonnull WorkflowStatusChangeListener workflowStatusChangeListener) {
+    public WorkflowCustomization registerWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus,
+                                                                      @Nonnull WorkflowStatusChangeListener workflowStatusChangeListener) {
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         Objects.requireNonNull(workflowStatusChangeListener, "Workflow status change listener must not be null");
         this.workflowStatusListeners.get(workflowStatus).addListener(workflowStatusChangeListener);
@@ -122,8 +135,8 @@ public class WorkflowModuleConfiguration {
      * @param workflowStatusChangeListener workflow status change listener to register.
      * @return module configuration instance.
      */
-    public WorkflowModuleConfiguration unregisterWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus,
-                                                                              @Nonnull WorkflowStatusChangeListener workflowStatusChangeListener) {
+    public WorkflowCustomization unregisterWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus,
+                                                                        @Nonnull WorkflowStatusChangeListener workflowStatusChangeListener) {
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         Objects.requireNonNull(workflowStatusChangeListener, "Workflow status change listener must not be null");
         this.workflowStatusListeners.get(workflowStatus).removeListener(workflowStatusChangeListener);
