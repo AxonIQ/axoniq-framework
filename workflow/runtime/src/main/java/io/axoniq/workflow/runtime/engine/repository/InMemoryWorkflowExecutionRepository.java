@@ -17,52 +17,50 @@
  */
 package io.axoniq.workflow.runtime.engine.repository;
 
-import io.axoniq.workflow.runtime.api.WorkflowHandle;
+import io.axoniq.workflow.runtime.api.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
- * In-memory implementation of {@link MutableWorkflowRepository} backed by a {@link ConcurrentHashMap}.
+ * In-memory implementation of {@link WorkflowExecutionRepository} backed by a {@link ConcurrentHashMap}.
  */
-public class InMemoryWorkflowRepository implements MutableWorkflowRepository {
+public class InMemoryWorkflowExecutionRepository implements
+        WorkflowExecutionRepository {
 
-    private final ConcurrentHashMap<String, WorkflowHandle> workflowHandles = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, WorkflowExecution> workflowHandles = new ConcurrentHashMap<>();
 
     @Nonnull
     @Override
-    public Optional<WorkflowHandle> findById(@Nonnull String workflowId) {
+    public Optional<WorkflowExecution> findById(@Nonnull String workflowId) {
         Objects.requireNonNull(workflowId, "workflowId must not be null");
         return Optional.ofNullable(workflowHandles.get(workflowId));
     }
 
     @Nonnull
     @Override
-    public Collection<WorkflowHandle> findAll() {
-        return Collections.unmodifiableCollection(workflowHandles.values());
+    public Set<WorkflowExecution> findAll() {
+        return Set.copyOf(workflowHandles.values());
     }
 
     @Nonnull
     @Override
-    public WorkflowHandle storeIfAbsent(@Nonnull String workflowId,
-                                         @Nonnull Function<String, WorkflowHandle> factory) {
-        Objects.requireNonNull(workflowId, "workflowId must not be null");
+    public WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory) {
         Objects.requireNonNull(factory, "factory must not be null");
-        return workflowHandles.computeIfAbsent(workflowId, factory);
+        WorkflowExecution workflowInstance = factory.get();
+        return workflowHandles.computeIfAbsent(workflowInstance.workflowId(), s->workflowInstance);
     }
 
-    @Nonnull
     @Override
-    public Map<String, WorkflowHandle> findAllAsMap() {
-        return Collections.unmodifiableMap(workflowHandles);
+    public WorkflowExecution remove(@NotNull String workflowId) {
+        return null;
     }
 
     @Override

@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.api;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import jakarta.annotation.Nonnull;
 
 /**
  * Represents a running or completed workflow instance, bundling its configuration,
@@ -28,12 +29,15 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
  * @param workflowContext       the context holding workflow data and status
  * @param workflowState         the execution state machine for this workflow
  */
-public record WorkflowHandle(
-        WorkflowConfiguration<?> workflowConfiguration,
-        WorkflowContext workflowContext,
-        WorkflowState workflowState) {
+public record WorkflowExecution(
+        @Nonnull String workflowId,
+        @Nonnull WorkflowConfiguration<?> workflowConfiguration,
+        @Nonnull  WorkflowContext workflowContext,
+        @Nonnull WorkflowState workflowState) {
 
     public WorkflowStatus getStatus() {
         return workflowContext.getStatus();
     }
+    //todo entity
+    //todo implement equals by workflow id
 }

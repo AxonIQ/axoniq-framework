@@ -17,10 +17,9 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowHandle;
-import io.axoniq.workflow.runtime.engine.repository.MutableWorkflowRepository;
+import io.axoniq.workflow.runtime.api.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -38,19 +37,20 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class WorkflowEngine implements EventHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final WorkflowDefinitionRegistry<?> workflowDefinitionRegistry;
-    private final MutableWorkflowRepository workflowRepository;
+    private final WorkflowExecutionRepository workflowRepository;
 
     public WorkflowEngine(
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
             @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry,
-            @Nonnull MutableWorkflowRepository workflowRepository
+            @Nonnull WorkflowExecutionRepository workflowRepository
     ) {
         this.workflowDefinitionRegistry = workflowDefinitionRegistry;
         this.workflowRepository = workflowRepository;
@@ -121,18 +121,18 @@ public class WorkflowEngine implements EventHandler {
                                                                                .createContext(payload, workflowId, processingContext);
 
                                     // avoid multiple workflows for the same workflow id.
-                                    workflowRepository.storeIfAbsent(workflowId, (id) -> {
+                                    workflowRepository.save(() -> {
                                         logger.info("Starting new workflow with '{}'", eventMessage.payload());
                                         var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
-                                        return new WorkflowHandle(workflowConfiguration, workflowContext, workflowState);
+                                        return new WorkflowExecution(workflowId, workflowConfiguration, workflowContext, workflowState);
                                     });
                                 }
                             }
         );
     }
 
-    public Map<String, WorkflowHandle> workflowInstances() {
-        return workflowRepository.findAllAsMap();
+    public Set<WorkflowExecution> workflowInstances() {
+        return workflowRepository.findAll();
     }
 
     public void shutdown() {

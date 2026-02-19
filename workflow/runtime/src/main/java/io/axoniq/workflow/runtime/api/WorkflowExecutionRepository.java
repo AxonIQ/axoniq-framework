@@ -23,14 +23,16 @@ import org.axonframework.common.infra.DescribableComponent;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Repository for retrieving workflow handles.
  * <p>
  * Each workflow instance is identified by a unique workflow identifier and is represented
- * as a {@link WorkflowHandle} bundling configuration, context, and execution state.
+ * as a {@link WorkflowExecution} bundling configuration, context, and execution state.
  */
-public interface WorkflowRepository extends DescribableComponent {
+public interface WorkflowExecutionRepository extends DescribableComponent {
 
     /**
      * Finds a workflow handle by its identifier.
@@ -39,7 +41,7 @@ public interface WorkflowRepository extends DescribableComponent {
      * @return an {@link Optional} containing the workflow handle, or empty if not found
      */
     @Nonnull
-    Optional<WorkflowHandle> findById(@Nonnull String workflowId);
+    Optional<WorkflowExecution> findById(@Nonnull String workflowId);
 
     /**
      * Returns all stored workflow handles.
@@ -47,13 +49,25 @@ public interface WorkflowRepository extends DescribableComponent {
      * @return an unmodifiable collection of all workflow handles
      */
     @Nonnull
-    Collection<WorkflowHandle> findAll();
+    Set<WorkflowExecution> findAll();
 
     /**
-     * Returns all stored workflow handles as an unmodifiable map keyed by workflow identifier.
+     * Atomically stores a new workflow handle if no handle exists for the given workflow identifier.
+     * If a handle already exists, returns the existing one without invoking the factory.
      *
-     * @return an unmodifiable map of workflow identifiers to workflow handles
+     * @param factory    the factory to create a new workflow handle if absent
+     * @return the existing or newly created workflow handle
      */
     @Nonnull
-    Map<String, WorkflowHandle> findAllAsMap();
+    WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory);
+
+    /**
+     * Remove workflow stored workflow handle.
+     */
+    WorkflowExecution remove(@Nonnull String workflowId);
+
+    /**
+     * Removes all stored workflow handles.
+     */
+    void clear();
 }

@@ -22,7 +22,7 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventCondition;
-import io.axoniq.workflow.runtime.api.WorkflowHandle;
+import io.axoniq.workflow.runtime.api.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -85,12 +85,12 @@ class UserSignupDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkfl
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances().values()).allMatch(h -> h.getStatus().isTerminal());
+            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.getStatus().isTerminal());
         });
 
         // Verify that both workflows executed all steps
-        for (WorkflowContext context : workflowEngine.workflowInstances().values().stream()
-                                                     .map(WorkflowHandle::workflowContext).toList()) {
+        for (WorkflowContext context : workflowEngine.workflowInstances().stream()
+                                                     .map(WorkflowExecution::workflowContext).toList()) {
             assertThat(context.getStatus().isTerminal()).isTrue();
             assertThat(context.getStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             assertThat(context.getStepHistory()).containsExactlyInAnyOrder("createUser", "activateUser",
