@@ -235,6 +235,30 @@ class DefaultEventNameCustomizerTest {
         }
 
         @Test
+        void testMergeStepStatusWithDefaultChild() {
+            var parent = DefaultEventNameCustomizer.Builder.namespace("parent.ns").baseName("Parent");
+            var child = DefaultEventNameCustomizer.Builder.eventName(); // Default namespace "io.axoniq.workflow"
+            var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
+
+            var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            // Child is default, so Parent namespace should win
+            assertEquals("parent.ns", name.namespace());
+            assertEquals("ParentCompleted", name.localName());
+        }
+
+        @Test
+        void testMergeWithOnlyNamespaceOnParent() {
+            var parent = DefaultEventNameCustomizer.Builder.namespace("parent.ns");
+            var child = DefaultEventNameCustomizer.Builder.eventName();
+            var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
+
+            var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
+            // Parent namespace should win
+            assertEquals("parent.ns", name.namespace());
+            assertEquals("StepCompleted", name.localName());
+        }
+
+        @Test
         void testMergeWorkflowStatus() {
             var parent = DefaultEventNameCustomizer.Builder.eventName().namespace("parent.ns").workflowCompleted(
                     "ParentDone");
