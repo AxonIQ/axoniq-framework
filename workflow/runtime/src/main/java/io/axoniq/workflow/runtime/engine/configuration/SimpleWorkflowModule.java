@@ -25,7 +25,9 @@ import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -36,7 +38,10 @@ import org.axonframework.common.configuration.LifecycleRegistry;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -237,6 +242,18 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                 @Override
                 public EventNameCustomizer eventNameCustomizer() {
                     return workflowModuleConfiguration.eventNameCustomizer;
+                }
+
+                @Nonnull
+                @Override
+                public Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+                    var result = new HashMap<WorkflowStatus, WorkflowStatusChangeListener>();
+                    workflowModuleConfiguration.workflowStatusListeners.forEach((k, v) -> {
+                        if (!v.isEmpty()) {
+                            result.put(k, v);
+                        }
+                    });
+                    return Collections.unmodifiableMap(result);
                 }
             };
         }

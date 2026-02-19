@@ -27,6 +27,8 @@ import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
@@ -193,6 +195,34 @@ class WorkflowModuleTest {
         assertThat(config.workflowName()).isEqualTo("autodetectedWorkflow");
         assertThat(config.eventNameCustomizer()).isInstanceOf(DefaultEventNameCustomizer.class);
         assertThat(config.workflowIdProvider()).isInstanceOf(PayloadPropertyWorkflowIdProvider.class);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testWorkflowStatusChangeListenerRegistration() {
+        EventCondition startCondition = new EventCondition(new QualifiedName("startEvent"), e -> true);
+        WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
+        WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
+
+        module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
+              .workflowStateFactory(c -> mock(WorkflowStateFactory.class))
+              .definitions(dsl -> ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
+                                     .declarative("testWorkflow")
+                                     .on(c -> startCondition)
+                                     .workflowDefinition(c -> definition)
+                                     .customized((c, config) -> config.registerWorkflowStatusChangeListener(
+                                             WorkflowStatus.STARTED,
+                                             listener)));
+
+        module.registerWorkflowDefinitions(configuration);
+
+        ArgumentCaptor<WorkflowConfiguration<TestWorkflowContext>> configCaptor = ArgumentCaptor.forClass(
+                WorkflowConfiguration.class);
+        verify(registry).register(any(EventCondition.class), configCaptor.capture());
+
+        WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
+        assertThat(config.workflowStatusChangeListeners()).containsKey(WorkflowStatus.STARTED);
+        assertThat(config.workflowStatusChangeListeners().get(WorkflowStatus.STARTED)).isInstanceOf(CompositeWorkflowStatusChangeListener.class);
     }
 
     interface TestWorkflowContext extends WorkflowContext {

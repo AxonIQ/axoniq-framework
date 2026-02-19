@@ -20,6 +20,8 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
 import org.axonframework.common.configuration.Configuration;
@@ -108,5 +110,40 @@ class WorkflowModuleConfigurationTest {
         assertThatThrownBy(() -> config.workflowIdProvider(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("Workflow id provider must not be null.");
+    }
+
+    @Test
+    void testRegisterWorkflowStatusChangeListener() {
+        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
+
+        config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
+
+        assertThat(config.workflowStatusListeners.get(WorkflowStatus.STARTED).isEmpty()).isFalse();
+    }
+
+    @Test
+    void testUnregisterWorkflowStatusChangeListener() {
+        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+        WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
+
+        config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
+        assertThat(config.workflowStatusListeners.get(WorkflowStatus.STARTED).isEmpty()).isFalse();
+
+        config.unregisterWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
+        assertThat(config.workflowStatusListeners.get(WorkflowStatus.STARTED).isEmpty()).isTrue();
+    }
+
+    @Test
+    void testRegisterWorkflowStatusChangeListenerThrowsOnNull() {
+        WorkflowModuleConfiguration config = new WorkflowModuleConfiguration(WORKFLOW_NAME, null);
+
+        assertThatThrownBy(() -> config.registerWorkflowStatusChangeListener(null, mock(WorkflowStatusChangeListener.class)))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("Workflow status must not be null");
+
+        assertThatThrownBy(() -> config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("Workflow status change listener must not be null");
     }
 }

@@ -18,9 +18,13 @@
 package io.axoniq.workflow.runtime.api;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
 import jakarta.annotation.Nonnull;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * Configures definition, context factory and correlation provider.
@@ -84,5 +88,15 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     @Nonnull
     default EventNameCustomizer eventNameCustomizer() {
         return DefaultEventNameCustomizer.Builder.eventName();
+    }
+
+    /**
+     * List of workflow status listeners registered to this workflow.
+     *
+     * @return map of workflow status change listeners.
+     */
+    @Nonnull
+    default Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+        return Map.of();
     }
 }
