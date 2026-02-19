@@ -40,19 +40,19 @@ import java.util.function.Supplier;
 public class InMemoryWorkflowExecutionRepository implements
         WorkflowExecutionRepository {
 
-    private final ConcurrentHashMap<String, WorkflowExecution> workflowHandles = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
 
     @Nonnull
     @Override
     public Optional<WorkflowExecution> findById(@Nonnull String workflowId) {
         Objects.requireNonNull(workflowId, "workflowId must not be null");
-        return Optional.ofNullable(workflowHandles.get(workflowId));
+        return Optional.ofNullable(workflowExecutions.get(workflowId));
     }
 
     @Nonnull
     @Override
     public Set<WorkflowExecution> findAll() {
-        return Set.copyOf(workflowHandles.values());
+        return Set.copyOf(workflowExecutions.values());
     }
 
     @Nonnull
@@ -60,7 +60,7 @@ public class InMemoryWorkflowExecutionRepository implements
     public WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory) {
         Objects.requireNonNull(factory, "factory must not be null");
         WorkflowExecution workflowInstance = factory.get();
-        return workflowHandles.computeIfAbsent(workflowInstance.workflowId(), s->workflowInstance);
+        return workflowExecutions.computeIfAbsent(workflowInstance.workflowId(), s->workflowInstance);
     }
 
     @Override
@@ -70,12 +70,12 @@ public class InMemoryWorkflowExecutionRepository implements
 
     @Override
     public void clear() {
-        workflowHandles.clear();
+        workflowExecutions.clear();
     }
 
     @Override
     public void describeTo(@NotNull ComponentDescriptor descriptor) {
-        descriptor.describeProperty("size", workflowHandles.size());
-        descriptor.describeProperty("workflowIds", workflowHandles.keySet().stream().toList());
+        descriptor.describeProperty("size", workflowExecutions.size());
+        descriptor.describeProperty("workflowIds", workflowExecutions.keySet().stream().toList());
     }
 }
