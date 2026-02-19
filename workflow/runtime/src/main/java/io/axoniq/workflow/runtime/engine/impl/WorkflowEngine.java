@@ -113,7 +113,8 @@ public class WorkflowEngine implements EventHandler {
                                     var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
 
                                     var workflowContext = workflowConfiguration.workflowContextFactory()
-                                                                               .createContext(payload, workflowId, processingContext);
+                                                                               .createContext(payload, workflowId, processingContext,
+                                                                                              workflowConfiguration.eventNameCustomizer());
 
                                     // avoid multiple workflows for the same workflow id.
                                     executionHandles.computeIfAbsent(workflowId, (id) -> {

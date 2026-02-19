@@ -266,22 +266,23 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                 public QualifiedName getEventName(@NotNull String stepName, @NotNull Map<String, Object> parameters,
                                                   @NotNull StepStatus stepStatus) {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
-                    String resultingNamespace = defaultName.namespace();
-                    String resultingName = defaultName.localName();
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
-                    if (parentName.namespace() != null && !parentName.namespace().equals(defaultName.namespace())) {
-                        resultingNamespace = parentName.namespace();
-                    }
-                    if (!parentName.localName().equals(defaultName.localName())) {
-                        resultingName = parentName.localName();
-                    }
                     var childName = child.getEventName(stepName, parameters, stepStatus);
+
+                    String resultingNamespace = defaultName.namespace();
                     if (childName.namespace() != null && !childName.namespace().equals(defaultName.namespace())) {
                         resultingNamespace = childName.namespace();
+                    } else if (parentName.namespace() != null && !parentName.namespace().equals(defaultName.namespace())) {
+                        resultingNamespace = parentName.namespace();
                     }
+
+                    String resultingName = defaultName.localName();
                     if (!childName.localName().equals(defaultName.localName())) {
                         resultingName = childName.localName();
+                    } else if (!parentName.localName().equals(defaultName.localName())) {
+                        resultingName = parentName.localName();
                     }
+
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 
@@ -290,22 +291,23 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                 public QualifiedName getEventName(@NotNull String stepName, @NotNull Map<String, Object> parameters,
                                                   @NotNull WorkflowStatus stepStatus) {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
-                    String resultingNamespace = defaultName.namespace();
-                    String resultingName = defaultName.localName();
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
-                    if (parentName.namespace() != null && !parentName.namespace().equals(defaultName.namespace())) {
-                        resultingNamespace = parentName.namespace();
-                    }
-                    if (!parentName.localName().equals(defaultName.localName())) {
-                        resultingName = parentName.localName();
-                    }
                     var childName = child.getEventName(stepName, parameters, stepStatus);
+
+                    String resultingNamespace = defaultName.namespace();
                     if (childName.namespace() != null && !childName.namespace().equals(defaultName.namespace())) {
                         resultingNamespace = childName.namespace();
+                    } else if (parentName.namespace() != null && !parentName.namespace().equals(defaultName.namespace())) {
+                        resultingNamespace = parentName.namespace();
                     }
+
+                    String resultingName = defaultName.localName();
                     if (!childName.localName().equals(defaultName.localName())) {
                         resultingName = childName.localName();
+                    } else if (!parentName.localName().equals(defaultName.localName())) {
+                        resultingName = parentName.localName();
                     }
+
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 

@@ -32,12 +32,13 @@ public class SimpleWorkflowContextFactory implements WorkflowContextFactory<Simp
     public SimpleWorkflowContext createContext(
             @NotNull Map<String, Object> initialPayload,
             @Nonnull String workflowId,
-            @Nonnull ProcessingContext processingContext) {
+            @Nonnull ProcessingContext processingContext,
+            @Nonnull EventNameCustomizer eventNameCustomizer) {
         return new SimpleWorkflowContext(
                 workflowId,
                 initialPayload,
                 processingContext,
-                processingContext.component(EventNameCustomizer.class)
+                eventNameCustomizer
         );
     }
 }
