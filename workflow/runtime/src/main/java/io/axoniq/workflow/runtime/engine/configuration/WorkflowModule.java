@@ -90,6 +90,12 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {
 
+        /**
+         * Defines workflow definitions.
+         *
+         * @param definitions definitions phase.
+         * @return workflow module.
+         */
         WorkflowModule<C> definitions(@Nonnull UnaryOperator<DetectionPhase<C>> definitions);
 
 
@@ -114,6 +120,12 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
         interface NamingPhase<C extends WorkflowContext> {
 
+            /**
+             * Sets workflow name.
+             *
+             * @param workflowName name of the workflow.
+             * @return on phase.
+             */
             OnPhase<C> workflowName(@Nonnull String workflowName);
         }
 
