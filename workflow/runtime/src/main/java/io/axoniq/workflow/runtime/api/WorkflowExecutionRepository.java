@@ -20,8 +20,6 @@ package io.axoniq.workflow.runtime.api;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
 
-import java.util.Collection;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
