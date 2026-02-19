@@ -29,6 +29,9 @@ import java.util.function.Supplier;
  * <p>
  * Each workflow instance is identified by a unique workflow identifier and is represented
  * as a {@link WorkflowExecution} bundling configuration, context, and execution state.
+ *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 public interface WorkflowExecutionRepository extends DescribableComponent {
 
@@ -60,7 +63,10 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory);
 
     /**
-     * Remove workflow stored workflow handle.
+     * Removes the workflow handle associated with the given identifier.
+     *
+     * @param workflowId the identifier of the workflow to remove
+     * @return the removed {@link WorkflowExecution}, or {@code null} if no handle was found
      */
     WorkflowExecution remove(@Nonnull String workflowId);
 

@@ -31,6 +31,9 @@ import java.util.function.Supplier;
 
 /**
  * In-memory implementation of {@link WorkflowExecutionRepository} backed by a {@link ConcurrentHashMap}.
+ *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 public class InMemoryWorkflowExecutionRepository implements
         WorkflowExecutionRepository {

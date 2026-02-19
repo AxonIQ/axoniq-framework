@@ -28,6 +28,8 @@ import jakarta.annotation.Nonnull;
  * @param workflowConfiguration the workflow configuration that created this instance
  * @param workflowContext       the context holding workflow data and status
  * @param workflowState         the execution state machine for this workflow
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 public record WorkflowExecution(
         @Nonnull String workflowId,
@@ -35,6 +37,11 @@ public record WorkflowExecution(
         @Nonnull  WorkflowContext workflowContext,
         @Nonnull WorkflowState workflowState) {
 
+    /**
+     * Returns the current execution status of this workflow instance.
+     *
+     * @return the current {@link WorkflowStatus}
+     */
     public WorkflowStatus getStatus() {
         return workflowContext.getStatus();
     }
