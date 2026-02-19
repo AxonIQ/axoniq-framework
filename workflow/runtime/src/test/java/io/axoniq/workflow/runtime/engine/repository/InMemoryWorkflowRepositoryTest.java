@@ -35,8 +35,8 @@ class InMemoryWorkflowRepositoryTest {
     }
 
     @Test
-    void findByIdReturnsNullWhenNotFound() {
-        assertThat(repository.findById("non-existent")).isNull();
+    void findByIdReturnsEmptyWhenNotFound() {
+        assertThat(repository.findById("non-existent")).isEmpty();
     }
 
     @Test
@@ -44,7 +44,7 @@ class InMemoryWorkflowRepositoryTest {
         var handle = createHandle();
         repository.storeIfAbsent("wf-1", id -> handle);
 
-        assertThat(repository.findById("wf-1")).isSameAs(handle);
+        assertThat(repository.findById("wf-1")).isPresent().containsSame(handle);
     }
 
     @Test
@@ -60,7 +60,7 @@ class InMemoryWorkflowRepositoryTest {
         var result = repository.storeIfAbsent("wf-1", id -> handle);
 
         assertThat(result).isSameAs(handle);
-        assertThat(repository.findById("wf-1")).isSameAs(handle);
+        assertThat(repository.findById("wf-1")).containsSame(handle);
     }
 
     @Test
@@ -161,8 +161,8 @@ class InMemoryWorkflowRepositoryTest {
         repository.clear();
 
         assertThat(repository.findAll()).isEmpty();
-        assertThat(repository.findById("wf-1")).isNull();
-        assertThat(repository.findById("wf-2")).isNull();
+        assertThat(repository.findById("wf-1")).isEmpty();
+        assertThat(repository.findById("wf-2")).isEmpty();
     }
 
     private static WorkflowHandle createHandle() {

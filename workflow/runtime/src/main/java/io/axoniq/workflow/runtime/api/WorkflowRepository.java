@@ -22,6 +22,7 @@ import org.axonframework.common.infra.DescribableComponent;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 /**
@@ -36,9 +37,10 @@ public interface WorkflowRepository extends DescribableComponent {
      * Finds a workflow handle by its identifier.
      *
      * @param workflowId the workflow identifier
-     * @return the workflow handle, or {@code null} if not found
+     * @return an {@link Optional} containing the workflow handle, or empty if not found
      */
-    WorkflowHandle findById(@Nonnull String workflowId);
+    @Nonnull
+    Optional<WorkflowHandle> findById(@Nonnull String workflowId);
 
     /**
      * Returns all stored workflow handles.

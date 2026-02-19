@@ -65,7 +65,9 @@ public class WorkflowEngine implements EventHandler {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            workflowRepository.findById(workflowId).workflowState().onEvent(eventMessage, processingContext);
+            workflowRepository.findById(workflowId)
+                              .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId))
+                              .workflowState().onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);

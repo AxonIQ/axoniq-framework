@@ -26,6 +26,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -36,10 +37,11 @@ public class InMemoryWorkflowRepository implements MutableWorkflowRepository {
 
     private final ConcurrentHashMap<String, WorkflowHandle> workflowHandles = new ConcurrentHashMap<>();
 
+    @Nonnull
     @Override
-    public WorkflowHandle findById(@Nonnull String workflowId) {
+    public Optional<WorkflowHandle> findById(@Nonnull String workflowId) {
         Objects.requireNonNull(workflowId, "workflowId must not be null");
-        return workflowHandles.get(workflowId);
+        return Optional.ofNullable(workflowHandles.get(workflowId));
     }
 
     @Nonnull
