@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.api;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 
 import java.util.Optional;
@@ -33,6 +34,7 @@ import java.util.function.Supplier;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@Internal
 public interface WorkflowExecutionRepository extends DescribableComponent {
 
     /**

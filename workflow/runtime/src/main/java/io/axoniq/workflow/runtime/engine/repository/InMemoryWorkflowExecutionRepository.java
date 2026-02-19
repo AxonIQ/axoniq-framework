@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.engine.repository;
 import io.axoniq.workflow.runtime.api.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.jetbrains.annotations.NotNull;
 
@@ -35,6 +36,7 @@ import java.util.function.Supplier;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@Internal
 public class InMemoryWorkflowExecutionRepository implements
         WorkflowExecutionRepository {
 

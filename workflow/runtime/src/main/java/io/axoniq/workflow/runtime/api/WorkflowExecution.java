@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.api;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 
 /**
  * Represents a running or completed workflow instance, bundling its configuration,
@@ -31,6 +32,7 @@ import jakarta.annotation.Nonnull;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@Internal
 public record WorkflowExecution(
         @Nonnull String workflowId,
         @Nonnull WorkflowConfiguration<?> workflowConfiguration,
