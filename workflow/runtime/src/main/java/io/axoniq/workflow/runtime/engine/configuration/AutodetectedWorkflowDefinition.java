@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.ReflectionUtils;
+import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.conversion.Converter;
@@ -132,11 +133,13 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
 
 
                     ComponentBuilder<WorkflowIdProvider> associationProviderComponentBuilder = c ->
-                            getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
+                            getIfNotDefault(attributes,
+                                            ATTR_ID_PROPERTY_PROVIDER,
+                                            PayloadPropertyWorkflowIdProvider.class)
                                     .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
                                     .orElseGet(() -> new PayloadPropertyWorkflowIdProvider(c.getComponent(Converter.class),
                                                                                            (String) attributes.get(
-                                                                                           ATTR_ID_PROPERTY))
+                                                                                                   ATTR_ID_PROPERTY))
                                     );
 
 
@@ -151,14 +154,17 @@ import static org.axonframework.common.annotation.AnnotationUtils.findAnnotation
     }
 
     static <T> DefaultEventNameCustomizer getNamespace(Class<T> autodetectionType, Map<String, Object> attributes) {
-        return DefaultEventNameCustomizer.Builder.namespace((String) attributes.getOrDefault(
-                ATTR_WORKFLOW_NAMESPACE,
-                autodetectionType.getPackageName()));
+        return DefaultEventNameCustomizer.Builder.namespace(
+                getIfNotDefault(attributes, ATTR_WORKFLOW_NAMESPACE, "").orElse(
+                        autodetectionType.getPackageName()
+                )
+        );
     }
 
     static <T> String getWorkflowName(Class<T> autodetectionType, Map<String, Object> attributes, Method method) {
-        return (String) attributes.getOrDefault(ATTR_WORKFLOW_NAME,
-                                                autodetectionType.getName() + "." + method.getName());
+        return getIfNotDefault(attributes, ATTR_WORKFLOW_NAME, "").orElse(
+                autodetectionType.getSimpleName() + "#" + StringUtils.capitalize(method.getName())
+        );
     }
 
     /**

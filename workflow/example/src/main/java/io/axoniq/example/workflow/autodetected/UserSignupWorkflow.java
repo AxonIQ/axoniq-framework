@@ -16,11 +16,8 @@ import java.time.Instant;
 public class UserSignupWorkflow {
 
     @Workflow(
-            workflowName = "UserSignup",
             idProperty = "id",
-            startOn = RegistrationReceivedEvent.class,
-            workflowNamespace = "io.axoniq.dsl.wf.autodetected"
-
+            startOn = RegistrationReceivedEvent.class
     )
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
 
