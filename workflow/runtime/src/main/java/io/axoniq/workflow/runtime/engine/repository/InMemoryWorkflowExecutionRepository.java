@@ -65,7 +65,7 @@ public class InMemoryWorkflowExecutionRepository implements
 
     @Override
     public WorkflowExecution remove(@NotNull String workflowId) {
-        return null;
+        return workflowExecutions.remove(workflowId);
     }
 
     @Override
