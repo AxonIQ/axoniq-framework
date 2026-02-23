@@ -28,10 +28,10 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
-import org.axonframework.messaging.eventhandling.sequencing.HierarchicalSequencingPolicy;
-import org.axonframework.messaging.eventhandling.sequencing.SequencingPolicy;
-import org.axonframework.messaging.eventhandling.sequencing.SequentialPerAggregatePolicy;
-import org.axonframework.messaging.eventhandling.sequencing.SequentialPolicy;
+import org.axonframework.messaging.core.sequencing.HierarchicalSequencingPolicy;
+import org.axonframework.messaging.core.sequencing.SequencingPolicy;
+import org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy;
+import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -61,7 +61,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy(
-                SequentialPerAggregatePolicy.instance(),
+                SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
     }
@@ -86,7 +86,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     @NotNull
     @Override
     public Object sequenceIdentifierFor(@NotNull EventMessage event, @NotNull ProcessingContext context) {
-        return sequencingPolicy.getSequenceIdentifierFor(event, context);
+        return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
     @Override
