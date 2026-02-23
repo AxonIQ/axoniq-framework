@@ -1,0 +1,26 @@
+= Java records support
+:navtitle: Java records
+
+Axon Data Protection Module 5.0 provides full support for Java records (introduced in Java 14 and finalized in Java 16). Records are immutable data carriers that are ideal for modeling events in event-sourced systems.
+
+When working with records, the module creates new record instances with modified (encrypted/decrypted) field values, since records are immutable and their fields cannot be modified in-place. This is handled transparently by the module.
+
+Example of a record-based event with personal data annotations:
+
+[source,java]
+----
+public record PersonRegisteredEvent(
+    @DataSubjectId UUID id,
+    @PersonalData String name,
+    @PersonalData byte[] picture,
+    String city
+) {}
+----
+
+All Axon Data Protection annotations (`@DataSubjectId`, `@PersonalData`, `@SerializedPersonalData`, `@DeepPersonalData`) work seamlessly with Java records. Nested records are also fully supported through the `@DeepPersonalData` annotation.
+
+== Next steps
+
+* xref:annotations.adoc[Learn about all available annotations]
+* xref:configuration.adoc[Configure Spring Boot and Axon Framework integration]
+* xref:advanced.adoc[Advanced encryption scenarios]
