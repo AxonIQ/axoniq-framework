@@ -17,24 +17,23 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-
-import java.util.Map;
 
 /**
- * Creates a context for workflow execution.
+ * Listener informed on status change of workflow.
  *
- * @param <T> type of the context.
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 @FunctionalInterface
-public interface WorkflowContextFactory<T extends WorkflowContext> {
+public interface WorkflowStatusChangeListener {
 
-    @Nonnull
-    T createContext(
-            @Nonnull Map<String, Object> initialPayload,
-            @Nonnull String workflowId,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    );
+    /**
+     * React on workflow status change.
+     *
+     * @param state   workflow status.
+     * @param context workflow context.
+     */
+    void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull WorkflowContext context);
 }

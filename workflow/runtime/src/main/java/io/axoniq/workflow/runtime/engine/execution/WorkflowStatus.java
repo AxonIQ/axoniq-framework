@@ -17,6 +17,13 @@
  */
 package io.axoniq.workflow.runtime.engine.execution;
 
+/**
+ * Status of the workflow execution.
+ *
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public enum WorkflowStatus {
     NONE,
     STARTED,
@@ -25,6 +32,11 @@ public enum WorkflowStatus {
     CANCELLED,
     TIMED_OUT;
 
+    /**
+     * Checks if the status a terminal.
+     *
+     * @return true, if terminal.
+     */
     public boolean isTerminal() {
         return switch (this) {
             case NONE, STARTED -> false;

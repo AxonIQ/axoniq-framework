@@ -21,44 +21,40 @@ import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.api.AssociationProvider
 import io.axoniq.workflow.runtime.api.EventCondition
-import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider
+import io.axoniq.workflow.runtime.api.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.api.WorkflowExecution
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions
 import org.awaitility.Awaitility
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
-import java.util.*
 import java.util.concurrent.TimeUnit
-import java.util.function.Consumer
 import java.util.function.Predicate
+import java.util.function.UnaryOperator
 
 class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<WorkflowKontext>> {
-        val workflow = UserSignupWorkflow()
-        return Consumer { d ->
-            d.declarative("User signup workflow in Kotlin")
+    override fun getDeclaredDefinitions(): UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
+        return UnaryOperator { d ->
+            d.declarative({ c -> WorkflowKontext.from(UserSignupWorkflow()::execute) })
+                .workflowName("User signup workflow in Kotlin")
                 .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
-                .workflowDefinition { WorkflowKontext.from(workflow::execute) }
-                .eventNameCustomizer { EventNameCustomizerProvider { namespace("io.axoniq.dsl.wf") } }
-                .workflowIdProvider {
-                    AssociationProvider { trigger: MutableMap<String, Any?> ->
-                        Optional.of(
-                            "signup-" + trigger["id"].toString()
+                .customized { c, wc ->
+                    wc.eventNameCustomizer(namespace("io.axoniq.dsl.wf"))
+                        .workflowIdProvider(
+                            fromPayloadAttribute(
+                                c, "id",
+                                UnaryOperator { id: String? -> "signup-$id" })
                         )
-                    }
                 }
-                .notCustomized()
         }
     }
 
@@ -96,7 +92,7 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         // run to the end
         Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
             Assertions.assertThat(workflowEngine.workflowInstances())
-                .allMatch(Predicate { h: WorkflowExecution? -> h!!.status.isTerminal })
+                .allMatch(Predicate { h: WorkflowExecution -> h.status.isTerminal })
         })
 
 

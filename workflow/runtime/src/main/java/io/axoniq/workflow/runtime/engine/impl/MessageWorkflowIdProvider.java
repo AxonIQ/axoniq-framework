@@ -15,28 +15,21 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.engine.execution;
+package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import jakarta.annotation.Nonnull;
-import org.axonframework.common.annotation.Internal;
+import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 /**
- * Factory to create workflow state.
+ * Workflow id provider using the message identifier as workflow id.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@Internal
-@FunctionalInterface
-public interface WorkflowStateFactory {
+public class MessageWorkflowIdProvider implements WorkflowIdProvider {
 
-    /**
-     * Creates state for given workflow context.
-     *
-     * @param context context to create the workflow state for.
-     * @return workflow state.
-     */
-    @Nonnull
-    WorkflowState create(@Nonnull WorkflowContext context);
+    @Override
+    public String apply(EventMessage eventMessage) {
+        return eventMessage.identifier();
+    }
 }

@@ -22,19 +22,19 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventCondition;
-import io.axoniq.workflow.runtime.api.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
+import static io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -47,14 +47,16 @@ class UserSignupDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkfl
     }
 
     @Override
-    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new UserSignupWorkflow();
-        return (d) -> d.declarative("User signup workflow")
-                       .on(EventCondition.fromType(RegistrationReceivedEvent.class))
-                       .workflowDefinition(c -> workflow::execute)
-                       .eventNameCustomizer(c -> () -> namespace("io.axoniq.dsl.wf"))
-                       .workflowIdProvider(c -> (trigger) -> Optional.of("signup-" + trigger.get("id").toString()))
-                       .notCustomized();
+    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+
+        return d -> d
+                .declarative(c -> new UserSignupWorkflow()::execute)
+                .workflowName("MyWorkflow")
+                .on(EventCondition.fromType(RegistrationReceivedEvent.class))
+                .customized((c, w) -> w
+                        .eventNameCustomizer(namespace("io.axoniq.dsl.wf.declarative"))
+                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "signup-" + id))
+                );
     }
 
 

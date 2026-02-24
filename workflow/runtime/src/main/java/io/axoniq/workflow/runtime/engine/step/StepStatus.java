@@ -17,6 +17,14 @@
  */
 package io.axoniq.workflow.runtime.engine.step;
 
+/**
+ * Step status.
+ *
+ * @author Allard Buijze
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public enum StepStatus {
     STARTED,
     COMPLETED,
@@ -24,6 +32,11 @@ public enum StepStatus {
     TIMED_OUT,
     CANCELLED;
 
+    /**
+     * Checks if the status is terminal.
+     *
+     * @return true, if terminal.
+     */
     public boolean isTerminal() {
         return switch (this) {
             case STARTED -> false;

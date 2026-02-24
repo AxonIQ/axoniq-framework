@@ -26,11 +26,12 @@ class WorkflowKontextFactory : WorkflowContextFactory<WorkflowKontext> {
     override fun createContext(
         initialPayload: Map<String, Any?>,
         workflowId: String,
-        processingContext: ProcessingContext
+        processingContext: ProcessingContext,
+        eventNameCustomizer: EventNameCustomizer
     ): WorkflowKontext = WorkflowKontext(
         initialPayload = initialPayload,
         workflowId = workflowId,
         processingContext = processingContext,
-        parentCustomizer = processingContext.component(EventNameCustomizer::class.java)
+        parentCustomizer = eventNameCustomizer
     )
 }

@@ -30,6 +30,9 @@ import java.util.Optional;
 
 /**
  * Utility containing {@link WorkflowStepResult} factory methods.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 public class WorkflowStepResults {
 

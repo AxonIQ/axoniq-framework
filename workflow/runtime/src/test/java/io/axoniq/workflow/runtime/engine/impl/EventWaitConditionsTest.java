@@ -34,7 +34,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-class EventConditionsTestWithStepNameCustomizer {
+/**
+ * Test for {@link EventWaitConditions}.
+ */
+class EventWaitConditionsTest {
 
     private EventWaitConditions eventWaitConditions;
 

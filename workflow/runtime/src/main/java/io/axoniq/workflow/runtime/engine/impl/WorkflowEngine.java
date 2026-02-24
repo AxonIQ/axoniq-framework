@@ -27,10 +27,8 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,8 +45,6 @@ public class WorkflowEngine implements EventHandler {
     private final WorkflowExecutionRepository workflowExecutionRepository;
 
     public WorkflowEngine(
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
             @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository
     ) {
@@ -110,15 +106,11 @@ public class WorkflowEngine implements EventHandler {
                                             },
                                             processingContext.component(Converter.class)
                                     ), "Error converting initial payload");
-                                    var workflowId = workflowConfiguration.associationProvider().apply(payload)
-                                                                          .orElseThrow(() -> new IllegalArgumentException(
-                                                                                  "Could not extract workflow id from payload " + payload
-                                                                                          + " for workflow definition "
-                                                                                          + workflowConfiguration.workflowDefinition())
-                                                                          );
+                                    var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
 
                                     var workflowContext = workflowConfiguration.workflowContextFactory()
-                                                                               .createContext(payload, workflowId, processingContext);
+                                                                               .createContext(payload, workflowId, processingContext,
+                                                                                              workflowConfiguration.eventNameCustomizer());
 
                                     // avoid multiple workflows for the same workflow id.
                                     workflowExecutionRepository.save(() -> {

@@ -43,10 +43,30 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * Execute delegate implementing {@link ExecutePrimitive}.
+ *
+ * @author Allard Buijze
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @author Steven van Beelen
+ * @since 1.0.0
+ */
 public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(ExecuteDelegate.class);
 
+    /**
+     * Constructs the delegate.
+     *
+     * @param context                   workflow context.
+     * @param workflowState             workflow state.
+     * @param parentEventNameCustomizer event name customizer.
+     * @param clock                     clock for time calculations.
+     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
+     * @param eventSink                 event sink for event publications.
+     * @param executor                  executor to offload execution tasks from workflow thread.
+     */
     public ExecuteDelegate(@Nonnull WorkflowContext context,
                            @Nonnull WorkflowState workflowState,
                            @Nonnull EventNameCustomizer parentEventNameCustomizer,
@@ -96,13 +116,11 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                     .create(stepName,
                             customize -> customize.workScheduler(executor)) // FIXME -> define a new thread pool for execution customer code
                     .executeWithResult(processingContext -> {
-                        // FIXME - this procContext should be given to the user's input in the DSL so that they can get resource or add lifecycle phase shit
                         var procContext = ProcessingContextUtils.copyResources(workflowState.getStep(stepName)
                                                                                             .context(),
                                                                                processingContext);
                         var payload = parameterMapping.apply(workflowContext.getPayload(), local);
-                        return CompletableFuture.completedFuture(action.apply(procContext,
-                                                                              payload));
+                        return CompletableFuture.completedFuture(action.apply(procContext, payload));
                     });
 
 

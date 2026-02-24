@@ -17,14 +17,17 @@
  */
 package io.axoniq.workflow.runtime.api;
 
-import java.util.Map;
-import java.util.Optional;
+import org.axonframework.messaging.eventhandling.EventMessage;
+
 import java.util.function.Function;
 
 /**
- * Responsible for delivering a workflow id from provided payload.
+ * Responsible for delivery of workflow id from provided event message.
+ *
+ * @author Simon Zambrovski.
+ * @since 1.0.0
  */
 @FunctionalInterface
-public interface AssociationProvider extends Function<Map<String, Object>, Optional<String>> {
+public interface WorkflowIdProvider extends Function<EventMessage, String> {
 
 }

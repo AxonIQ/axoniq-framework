@@ -35,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
@@ -60,10 +61,9 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         configurer.componentRegistry(r -> r.registerEnhancer(registry ->
                                                                      registry.registerModule(
                                                                              WorkflowModule
-                                                                                     .declarative(dslType)
+                                                                                     .usingContext(dslType)
                                                                                      .workflowContextFactory(builder)
-                                                                                     .workflowStateFactory(c -> new ContextToStateAdoptingStateFactory<>(
-                                                                                             dslType))
+                                                                                     .workflowStateFactory(c -> new ContextToStateAdoptingStateFactory<>(dslType))
                                                                                      .definitions(
                                                                                              getDeclaredDefinitions()
                                                                                      )
@@ -77,7 +77,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         delayedPublisher = configuration.getComponent(DelayedPublisher.class);
     }
 
-    protected abstract Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<T>> getDeclaredDefinitions();
+    protected abstract UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
 
     @AfterEach
     void shutdown() {

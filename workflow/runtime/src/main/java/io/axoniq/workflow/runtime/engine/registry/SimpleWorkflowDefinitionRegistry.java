@@ -32,6 +32,12 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * In-memory workflow definition registry implementation.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class SimpleWorkflowDefinitionRegistry implements WorkflowDefinitionRegistry<SimpleWorkflowDefinitionRegistry> {
 
     private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> workflowsConfigurations = new ConcurrentHashMap<>();
