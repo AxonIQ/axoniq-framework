@@ -23,6 +23,13 @@ import org.jetbrains.annotations.NotNull;
 
 import static io.axoniq.workflow.runtime.engine.execution.WorkflowState.requireIsWorkflowState;
 
+/**
+ * State factory adopting an instance which implements both interfaces.
+ *
+ * @param <C> type of the implementation.
+ * @author Simon Zambrovki
+ * @since 1.0.0
+ */
 public class ContextToStateAdoptingStateFactory<C extends WorkflowContext> implements WorkflowStateFactory {
 
     private final Class<C> workflowContextType;

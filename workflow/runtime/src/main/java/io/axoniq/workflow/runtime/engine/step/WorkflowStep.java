@@ -21,6 +21,21 @@ import org.axonframework.messaging.core.Context;
 
 import java.time.Instant;
 
+/**
+ * Basic step of workflow execution.
+ *
+ * @param stepName  name of the step.
+ * @param status    step status.
+ * @param result    result of execution, may be null.
+ * @param error     error of the execution, may be null.
+ * @param timestamp timestamp of step start.
+ * @param context   processing context.
+ *
+ * @author Allard Buijze
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public record WorkflowStep(
         String stepName,
         StepStatus status,

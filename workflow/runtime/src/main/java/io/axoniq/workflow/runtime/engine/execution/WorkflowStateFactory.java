@@ -21,6 +21,12 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
+/**
+ * Factory to create workflow state.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @Internal
 @FunctionalInterface
 public interface WorkflowStateFactory {

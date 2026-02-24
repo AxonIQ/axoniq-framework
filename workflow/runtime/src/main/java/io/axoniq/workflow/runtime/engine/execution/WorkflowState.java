@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -31,8 +32,13 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
- * Internal looking API for the execution.
+ * Represents the part of the execution accessed by the Workflow Engine (internal).
+ *
+ * @author Simon Zambrovski
+ * @author Allard Buize
+ * @since 1.0.0
  */
+@Internal
 public interface WorkflowState {
 
     /**

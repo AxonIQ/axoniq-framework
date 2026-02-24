@@ -27,6 +27,11 @@ import java.util.Optional;
 
 /**
  * A step execution result that already has completed.
+ *
+ * @author Allard Buijze
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 public class CompletedWorkflowStepResult implements WorkflowStepResult {
 

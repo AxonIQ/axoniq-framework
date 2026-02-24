@@ -25,6 +25,14 @@ import jakarta.annotation.Nonnull;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
+/**
+ * Workflow Step result based on the Workflow State.
+ *
+ * @author Allard Buijze
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     private final String stepName;
