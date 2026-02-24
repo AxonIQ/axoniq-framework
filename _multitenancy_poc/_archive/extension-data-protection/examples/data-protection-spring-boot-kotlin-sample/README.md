@@ -112,7 +112,7 @@ public record GiftCardIssuedEvent(
        │
        ▼
 ┌─────────────┐
-│  Aggregate  │ (Kotlin class)
+│  Entity  │ (Kotlin class)
 │  (GiftCard) │
 └──────┬──────┘
        │
