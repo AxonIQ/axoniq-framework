@@ -149,7 +149,7 @@ public record GiftCardIssuedEvent(
 
 ```
 1. Command arrives with plain text personal data
-2. GiftCard aggregate emits GiftCardIssuedEvent
+2. GiftCard entity emits GiftCardIssuedEvent
 3. FieldEncryptingConverter intercepts event before storage
 4. Personal data fields (@PersonalData) are encrypted
 5. Encrypted event stored in event store
