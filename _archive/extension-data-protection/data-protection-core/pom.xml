@@ -206,6 +206,27 @@
         </extensions>
 
         <plugins>
+            <!-- Scala compilation (for package.scala with type aliases) -->
+            <plugin>
+                <groupId>net.alchim31.maven</groupId>
+                <artifactId>scala-maven-plugin</artifactId>
+                <version>4.9.2</version>
+                <executions>
+                    <execution>
+                        <id>scala-compile-first</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <scalaVersion>2.13.15</scalaVersion>
+                    <recompileMode>incremental</recompileMode>
+                </configuration>
+            </plugin>
+
             <!-- Protobuf compilation -->
             <plugin>
                 <groupId>org.xolstice.maven.plugins</groupId>
