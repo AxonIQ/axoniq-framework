@@ -26,6 +26,7 @@ import jakarta.annotation.Nonnull;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
+@FunctionalInterface
 public interface WorkflowStatusChangeListener {
 
     /**
