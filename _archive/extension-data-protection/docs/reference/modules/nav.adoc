@@ -6,4 +6,3 @@
 * xref::crypto-engines.adoc[]
 * xref::java-records.adoc[]
 * xref::advanced.adoc[]
-* xref::licensing.adoc[]

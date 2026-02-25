@@ -23,7 +23,6 @@ import io.axoniq.framework.dataprotection.api.DataException;
 import io.axoniq.framework.dataprotection.api.Scope;
 import io.axoniq.framework.dataprotection.cryptoengine.KeyType;
 
-import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
@@ -35,7 +34,6 @@ import java.security.Provider;
 import java.security.UnrecoverableKeyException;
 import java.sql.SQLException;
 import java.text.MessageFormat;
-import java.time.LocalDate;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
@@ -50,7 +48,6 @@ public abstract class ExceptionFactory {
      *   ADPM-0000 internal exceptions (should never occur)
      *   ADPM-1000 platform exceptions (should never occur)
      *   ADPM-2000 platform warnings
-     *   ADPM-3000 license exceptions
      *   ADPM-4000 configuration exception
      *   ADPM-5000 keystore exception
      *   ADPM-6000 datastore exception
@@ -111,11 +108,6 @@ public abstract class ExceptionFactory {
                 " should never happen since padding is used.", ex);
     }
 
-    public static ConfigurationException cryptoIssueWithLicenseVerification(Exception ex) {
-        return new ConfigurationException("ADPM-1005. Unexpected cryptographic issue during license verification. This " +
-                "is likely to be caused by the platform rather than the individual license file.", ex);
-    }
-
     public static ConfigurationException forJPAEntityInstantiation(Class<?> clazz, Constructor constructor, Exception ex) {
         return new ConfigurationException(MessageFormat.format("ADPM-1101. Unable to reflectively instantiate the JPA entity" +
                 " class {0} using constructor {1}", clazz, constructor), ex);
@@ -128,28 +120,6 @@ public abstract class ExceptionFactory {
 
     public static String unableToAnalyzeWrapper(Class<?> clazz) {
         return MessageFormat.format("ADPM-2001. Unable to analyze wrapper type {0} - this type will not be supported for @PersonalData encryption.", clazz);
-    }
-
-    public static ConfigurationException licenseExpired(LocalDate expiryDate) {
-        return new ConfigurationException("ADPM-3001. License file expired on " + expiryDate.toString());
-    }
-
-    public static ConfigurationException licenseWrongProduct() {
-        return new ConfigurationException("ADPM-3002. This license does not cover Axon Data Protection Module.");
-    }
-
-    public static ConfigurationException licenseWrongSignature(String details) {
-        return new ConfigurationException("ADPM-3003. Could not verify license signature. " + details);
-    }
-
-    public static ConfigurationException licenseWrongSignature(String details, Exception ex) {
-        return new ConfigurationException("ADPM-3003. Could not verify license signature. " + details, ex);
-    }
-
-    public static ConfigurationException licenseUnableToRead(File file) {
-        return new ConfigurationException(String.format(
-                "ADPM-3004. Unable to read license file. "
-                        + "Trying to read from: '%s'", file.getAbsolutePath()));
     }
 
     public static ConfigurationException forNullKeyType() {
