@@ -197,4 +197,3 @@ After key deletion:
 
 * xref:configuration.adoc[Complete Spring Boot configuration]
 * xref:java-records.adoc[Working with Java records]
-* xref:licensing.adoc[License configuration]

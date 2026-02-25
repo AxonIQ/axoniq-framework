@@ -14,6 +14,8 @@
  *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
  *
  *
+ * @author Frans van Buul
+ * @author Stefan Mirkovic
  */
 package io.axoniq.framework.dataprotection.internal.encryption;
 
@@ -22,7 +24,6 @@ import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
 import io.axoniq.framework.dataprotection.internal.encryption.dpd.EncryptionContext;
 import io.axoniq.framework.dataprotection.internal.encryption.dpd.RoutingDPDProcessor;
-import io.axoniq.framework.dataprotection.internal.licensing.LicenseConfiguration;
 import io.axoniq.framework.dataprotection.internal.model.ModelRegistry;
 import io.axoniq.framework.dataprotection.internal.utils.ExceptionFactory;
 import org.axonframework.conversion.Converter;
@@ -51,7 +52,6 @@ public class EncryptionProcessor {
         this.modelRegistry = new ModelRegistry();
         this.routingDPDProcessor = new RoutingDPDProcessor(modelRegistry, cryptoEngine, converter, replacementValueProvider);
         this.cryptoEngine = cryptoEngine;
-        LicenseConfiguration.getInstance();
     }
 
     /**

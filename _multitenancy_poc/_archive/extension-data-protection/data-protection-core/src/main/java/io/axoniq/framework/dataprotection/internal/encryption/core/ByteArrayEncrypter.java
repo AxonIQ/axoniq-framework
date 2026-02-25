@@ -23,7 +23,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.axoniq.framework.dataprotection.api.ReplacementValueProvider;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
-import io.axoniq.framework.dataprotection.internal.licensing.LicenseConfiguration;
 import io.axoniq.framework.dataprotection.internal.messages.EncryptedFieldData;
 import io.axoniq.framework.dataprotection.internal.model.IPDField;
 import io.axoniq.framework.dataprotection.internal.model.PDField;
@@ -66,7 +65,6 @@ public class ByteArrayEncrypter implements Encrypter<byte[]> {
     public ByteArrayEncrypter(CryptoEngine cryptoEngine, ReplacementValueProvider replacementValueProvider) {
         this.cryptoEngine = cryptoEngine;
         this.replacementValueProvider = replacementValueProvider;
-        LicenseConfiguration.getInstance();
     }
 
     public byte[] process(PDField pdField, byte[] input, Optional<SecretKey> key, Operation operation) {
