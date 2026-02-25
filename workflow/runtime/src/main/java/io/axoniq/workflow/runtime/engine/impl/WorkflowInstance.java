@@ -89,6 +89,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private final RunningSteps runningFutures = new RunningSteps();
     private final ProcessingContext processingContext;
     private final String workflowId;
+    private volatile EventNameCustomizer configurationCustomizer;
+    private volatile String resolvedWorkflowName;
     private WorkflowStatus status = WorkflowStatus.NONE;
     private boolean executable = false;
     private Map<String, Object> payload;
