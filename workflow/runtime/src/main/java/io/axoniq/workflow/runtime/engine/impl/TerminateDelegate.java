@@ -20,9 +20,11 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -74,14 +76,20 @@ public class TerminateDelegate implements TerminatePrimitive {
     public void terminate(boolean error, @Nullable Throwable cause,
                           @Nonnull EventNameCustomizer eventNameCustomizer,
                           @Nonnull String workflowNameOverride) {
+        terminate(error, cause, eventNameCustomizer, workflowNameOverride, null);
+    }
 
+    public void terminate(boolean error, @Nullable Throwable cause,
+                          @Nonnull EventNameCustomizer eventNameCustomizer,
+                          @Nonnull String workflowNameOverride,
+                          @Nullable WorkflowConfiguration<?> configuration) {
 
         workflowState.cancelAllRunningSteps(cause);
 
         if (error) {
-            failed(cause, eventNameCustomizer, workflowNameOverride);
+            failed(cause, eventNameCustomizer, workflowNameOverride, configuration);
         } else {
-            cancelled(cause, eventNameCustomizer, workflowNameOverride);
+            cancelled(cause, eventNameCustomizer, workflowNameOverride, configuration);
         }
     }
 
@@ -91,6 +99,12 @@ public class TerminateDelegate implements TerminatePrimitive {
 
     protected void failed(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
                           @Nonnull String workflowNameOverride) {
+        failed(cause, eventNameCustomizer, workflowNameOverride, null);
+    }
+
+    protected void failed(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
+                          @Nonnull String workflowNameOverride,
+                          @Nullable WorkflowConfiguration<?> configuration) {
         var exception = cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
 
         ProcessingContextUtils.executeWithResult(
@@ -106,7 +120,12 @@ public class TerminateDelegate implements TerminatePrimitive {
                 workflowContext.processingContext()
         );
 
-        // TODO invoke listeners on workflow configuration HERE
+        if (configuration != null) {
+            var listener = configuration.workflowStatusChangeListeners().get(WorkflowStatus.FAILED);
+            if (listener != null) {
+                listener.onWorkflowStatus(WorkflowStatus.FAILED, workflowContext);
+            }
+        }
 
         if (cause != null) {
             throw new WorkflowFailedException(cause);
@@ -120,6 +139,12 @@ public class TerminateDelegate implements TerminatePrimitive {
 
     protected void cancelled(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
                              @Nonnull String workflowNameOverride) {
+        cancelled(cause, eventNameCustomizer, workflowNameOverride, null);
+    }
+
+    protected void cancelled(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
+                             @Nonnull String workflowNameOverride,
+                             @Nullable WorkflowConfiguration<?> configuration) {
         ProcessingContextUtils.executeWithResult(
                 null,
                 unitOfWorkFactory,
@@ -133,7 +158,12 @@ public class TerminateDelegate implements TerminatePrimitive {
                 workflowContext.processingContext()
         );
 
-        // TODO invoke listeners on workflow configuration HERE
+        if (configuration != null) {
+            var listener = configuration.workflowStatusChangeListeners().get(WorkflowStatus.CANCELLED);
+            if (listener != null) {
+                listener.onWorkflowStatus(WorkflowStatus.CANCELLED, workflowContext);
+            }
+        }
 
         if (cause != null) {
             throw new WorkflowCancelledException(cause);

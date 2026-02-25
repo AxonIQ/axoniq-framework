@@ -18,9 +18,12 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -141,5 +144,18 @@ class TerminateDelegateFailTest {
         order.verify(workflowState).cancelAllRunningSteps(any());
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         order.verify(workflowState).applyStateChange(any(EventMessage.class), eq(processingContext));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void terminateFailInvokesFailedStatusChangeListener() {
+        var listener = mock(WorkflowStatusChangeListener.class);
+        var configuration = mock(WorkflowConfiguration.class);
+        when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of(WorkflowStatus.FAILED, listener));
+
+        assertThatThrownBy(() -> delegate.terminate(true, new RuntimeException("boom"), eventNameCustomizer, "test-workflow", configuration))
+                .isInstanceOf(WorkflowFailedException.class);
+
+        verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));
     }
 }

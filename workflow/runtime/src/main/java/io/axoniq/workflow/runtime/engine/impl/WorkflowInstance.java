@@ -90,6 +90,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private final ProcessingContext processingContext;
     private final String workflowId;
     private volatile EventNameCustomizer configurationCustomizer;
+    private volatile WorkflowConfiguration<?> workflowConfiguration;
     private volatile String resolvedWorkflowName;
     private WorkflowStatus status = WorkflowStatus.NONE;
     private boolean executable = false;
@@ -176,6 +177,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                             var workflowName = configuredName.isEmpty() ? workflowId : configuredName;
                             var customizer = configuration.eventNameCustomizer();
                             this.configurationCustomizer = customizer;
+                            this.workflowConfiguration = configuration;
                             this.resolvedWorkflowName = workflowName;
                             if (ctx.getStatus() == WorkflowStatus.NONE) {
                                 sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer),
@@ -329,7 +331,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                           @Nonnull EventNameCustomizer eventNameCustomizer) {
         var name = resolvedWorkflowName != null ? resolvedWorkflowName : workflowId;
         var parent = configurationCustomizer != null ? configurationCustomizer : eventNameCustomizer;
-        terminateDelegate.terminate(error, cause, merge(parent, eventNameCustomizer), name);
+        terminateDelegate.terminate(error, cause, merge(parent, eventNameCustomizer), name, workflowConfiguration);
     }
 
     @Override
