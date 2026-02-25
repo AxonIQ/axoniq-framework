@@ -21,6 +21,7 @@ import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
@@ -44,7 +45,7 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 
 
 public class SimpleWorkflowContext extends WorkflowInstance
-        implements WaitForPrimitive, ExecutePrimitive {
+        implements WaitForPrimitive, ExecutePrimitive, TerminatePrimitive {
 
     public SimpleWorkflowContext(
             @Nonnull String workflowId,
@@ -142,6 +143,34 @@ public class SimpleWorkflowContext extends WorkflowInstance
 
     public <T> T awaitExecute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
         return this.awaitExecute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
+    }
+
+    public void fail(Throwable cause) {
+        terminate(true, cause, eventName());
+    }
+
+    public void fail(Throwable cause, EventNameCustomizer eventNameCustomizer) {
+        terminate(true, cause, eventNameCustomizer);
+    }
+
+    public void cancel() {
+        terminate(false, null, eventName());
+    }
+
+    public void cancel(EventNameCustomizer eventNameCustomizer) {
+        terminate(false, null, eventNameCustomizer);
+    }
+
+    public void cancel(String reason) {
+        terminate(false, new java.util.concurrent.CancellationException(reason), eventName());
+    }
+
+    public void cancel(Throwable cause) {
+        terminate(false, cause, eventName());
+    }
+
+    public void cancel(Throwable cause, EventNameCustomizer eventNameCustomizer) {
+        terminate(false, cause, eventNameCustomizer);
     }
 
     public void addPayload(Object object) {

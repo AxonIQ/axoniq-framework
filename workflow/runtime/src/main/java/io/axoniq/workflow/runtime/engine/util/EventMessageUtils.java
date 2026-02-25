@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -141,8 +142,17 @@ public class EventMessageUtils {
     public static EventMessage cancelledWorkflow(@Nonnull WorkflowContext context,
                                                  @Nonnull String workflowName,
                                                  @Nonnull EventNameCustomizer customizer) {
+        return cancelledWorkflow(context, workflowName, null, customizer);
+    }
+
+    @Nonnull
+    public static EventMessage cancelledWorkflow(@Nonnull WorkflowContext context,
+                                                 @Nonnull String workflowName,
+                                                 @Nullable Throwable cause,
+                                                 @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.CANCELLED);
-        return new GenericEventMessage(new MessageType(name), null,
+        Object payload = cause != null ? cause : Map.of();
+        return new GenericEventMessage(new MessageType(name), payload,
                                        MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.CANCELLED)
         );
     }
@@ -219,8 +229,26 @@ public class EventMessageUtils {
     public static EventMessage cancelledStep(@Nonnull WorkflowContext context,
                                              @Nonnull String stepName,
                                              @Nonnull EventNameCustomizer customizer) {
+        return cancelledStep(context, stepName, null, customizer);
+    }
+
+    /**
+     * Creates a new event message stating that a workflow step has been cancelled, optionally with a cause.
+     *
+     * @param context    workflow context.
+     * @param stepName   name of the step.
+     * @param cause      the cause of the cancellation, or {@code null}.
+     * @param customizer event name customizer.
+     * @return event message.
+     */
+    @Nonnull
+    public static EventMessage cancelledStep(@Nonnull WorkflowContext context,
+                                             @Nonnull String stepName,
+                                             @Nullable Throwable cause,
+                                             @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
-        return new GenericEventMessage(new MessageType(name), null,
+        Object payload = cause != null ? cause : Map.of();
+        return new GenericEventMessage(new MessageType(name), payload,
                                        MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.CANCELLED)
         );
     }

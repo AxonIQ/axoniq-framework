@@ -30,6 +30,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -38,10 +39,18 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_
 
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
+    private static volatile PrettyPrintingRecordingEventStore lastInstance;
+
     private final List<EventMessage> publishedEvents = new CopyOnWriteArrayList<>();
 
     public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
         super(delegate);
+        lastInstance = this;
+    }
+
+    @Nonnull
+    public static PrettyPrintingRecordingEventStore lastInstance() {
+        return Objects.requireNonNull(lastInstance, "No PrettyPrintingRecordingEventStore has been created yet");
     }
 
     @Nonnull
@@ -51,6 +60,11 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
         } else {
             return new PrettyPrintingRecordingEventStore(delegate);
         }
+    }
+
+    @Nonnull
+    public List<EventMessage> getPublishedEvents() {
+        return List.copyOf(publishedEvents);
     }
 
     @Override
@@ -83,7 +97,9 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
         @Override
         public void describeTo(@NotNull ComponentDescriptor descriptor) {
             descriptor.describeProperty(workflowId, events.stream().map(event -> {
-                var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name).orElse("none");
+                var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name)
+                        .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))
+                        .orElse("none");
                 var name = event.type().qualifiedName().toString();
                 return String.format("%s (%s): %s", name, status, event.payload());
             }).toList());

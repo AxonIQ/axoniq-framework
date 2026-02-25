@@ -108,7 +108,14 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected CompletableFuture<Void> cancelled(@Nonnull String stepName,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(cancelledStep(workflowContext, stepName,
+        return cancelled(stepName, null, eventNameCustomizer);
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> cancelled(@Nonnull String stepName,
+                                                @Nullable Throwable cause,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(cancelledStep(workflowContext, stepName, cause,
                                            merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }

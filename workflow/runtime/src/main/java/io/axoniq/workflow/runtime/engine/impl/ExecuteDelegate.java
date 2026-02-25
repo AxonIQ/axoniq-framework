@@ -38,7 +38,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -105,6 +107,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                                               payload));
                     });
 
+            workflowState.registerRunningFuture(stepName, result);
 
             if (remainingTimeout.isNegative()) {
                 workflowState.appendTask(i -> {
@@ -116,6 +119,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 result
                         .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                         .whenComplete((r, e) -> {
+                            workflowState.removeRunningFuture(stepName);
                             if (r != null) {
                                 workflowState.appendTask(i -> {
                                     workflowContext.applyPayloadModification(p -> resultMapping.apply(p,
@@ -129,10 +133,13 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                     workflowState.appendTask(i -> {
                                         timedOut(stepName, clock.instant(), eventNameCustomizer);
                                     });
-                                } else if (e instanceof InterruptedException) {
+                                } else if (e instanceof CancellationException
+                                        || (e instanceof CompletionException && e.getCause() instanceof CancellationException)) {
+                                    var cancellation = e instanceof CancellationException ? e : e.getCause();
+                                    var terminationCause = cancellation.getCause();
                                     // FIXME - This is where we should publish using an append condition
                                     workflowState.appendTask(i -> {
-                                        cancelled(stepName, eventNameCustomizer);
+                                        cancelled(stepName, terminationCause, eventNameCustomizer);
                                     });
                                 } else {
                                     // FIXME - This is where we should publish using an append condition
