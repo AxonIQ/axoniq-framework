@@ -42,7 +42,6 @@ import scala.beans.BeanProperty
  * @param owner deep encrypted owner person data (name + address)
  * @param dateOfBirth serialized encrypted date of birth
  * @param randomNumber serialized encrypted random number
- * @author Stefan Mirkovic
  */
 case class IssueGiftCardCommand(
   @BeanProperty

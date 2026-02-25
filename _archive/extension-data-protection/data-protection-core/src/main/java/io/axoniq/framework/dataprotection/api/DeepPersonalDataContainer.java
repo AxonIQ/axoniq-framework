@@ -27,7 +27,6 @@ import java.lang.annotation.Target;
  * same field. This annotation should never be used directly.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.ANNOTATION_TYPE, ElementType.FIELD})

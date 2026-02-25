@@ -42,7 +42,6 @@ import javax.crypto.SecretKey;
  * and a 256-bit key length.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  * @see InMemoryCryptoEngine
  * @see JavaKeyStoreCryptoEngine
  */

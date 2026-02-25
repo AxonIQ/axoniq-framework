@@ -37,7 +37,6 @@ import scala.jdk.FutureConverters._
  * - Delete encryption keys to make encrypted data unrecoverable
  * - Ensure projections reflect replacement values (e.g., "<removed>") for forgotten data
  *
- * @author Stefan Mirkovic
  */
 @RestController
 @RequestMapping(Array("/api/data-protection"))

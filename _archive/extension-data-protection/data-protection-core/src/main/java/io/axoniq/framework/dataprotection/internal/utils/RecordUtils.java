@@ -29,7 +29,6 @@ import java.util.Map;
  * new instances with modified field values.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public abstract class RecordUtils {
 

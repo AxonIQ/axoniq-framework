@@ -25,7 +25,6 @@ import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
  *
  * @param <T> the type of data to process
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public interface DPDProcessor<T> {
 

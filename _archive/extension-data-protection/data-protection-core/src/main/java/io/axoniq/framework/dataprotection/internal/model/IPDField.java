@@ -26,7 +26,6 @@ import java.lang.reflect.Field;
  * Model class representing an Indirect Personal Data field.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Value
 public class IPDField implements PDField, MapKeyField, MapValueField {

@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * Registry that caches field encryption models for classes.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class ModelRegistry {
 

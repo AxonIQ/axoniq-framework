@@ -45,7 +45,6 @@ import javax.crypto.spec.IvParameterSpec;
  * and replacement operations using AES encryption with CBC mode.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class ByteArrayEncrypter implements Encrypter<byte[]> {
 

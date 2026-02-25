@@ -45,7 +45,6 @@ import java.time.LocalDate
  * @property dateOfBirthEncrypted encrypted representation of date of birth
  * @property randomNumber random number for demonstration
  * @property randomNumberEncrypted encrypted representation of random number
- * @author Stefan Mirkovic
  */
 data class GiftCardIssuedEvent(
     @EventTag

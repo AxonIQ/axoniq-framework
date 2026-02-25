@@ -32,7 +32,6 @@ import javax.crypto.SecretKey;
  * through the routing encrypter, preserving the original collection type where possible.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class ScalaIterableIPDEncrypter implements Encrypter<scala.collection.Iterable> {
 

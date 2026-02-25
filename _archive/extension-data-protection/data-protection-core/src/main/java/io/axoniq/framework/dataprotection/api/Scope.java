@@ -24,7 +24,6 @@ package io.axoniq.framework.dataprotection.api;
  * of the {@link java.util.Map}.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public enum Scope {
 

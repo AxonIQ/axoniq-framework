@@ -26,7 +26,6 @@ import javax.crypto.spec.SecretKeySpec;
  * keeps all its data in an in-memory {@link ConcurrentHashMap}. This is useful for (unit) testing purposes.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class InMemoryCryptoEngine extends DatabaseBackedCryptoEngine {
 

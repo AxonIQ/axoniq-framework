@@ -31,7 +31,6 @@ import javax.crypto.SecretKey;
  * and the set of groups to process.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class EncryptionContext {
 

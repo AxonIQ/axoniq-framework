@@ -53,7 +53,6 @@ import java.util.function.Function;
  * immutable and wrapped collections through reflection.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public abstract class CollectionUtils {
 

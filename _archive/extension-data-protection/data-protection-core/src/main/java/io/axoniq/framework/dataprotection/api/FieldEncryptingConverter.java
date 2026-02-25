@@ -34,7 +34,6 @@ import org.axonframework.conversion.Converter;
  * in Axon Framework 5.x applications.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class FieldEncryptingConverter implements Converter {
 

@@ -21,7 +21,6 @@ package io.axoniq.framework.dataprotection.internal.model;
  * Marker interface for field types that are allowed for the key of a Map.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public interface MapKeyField {
 }

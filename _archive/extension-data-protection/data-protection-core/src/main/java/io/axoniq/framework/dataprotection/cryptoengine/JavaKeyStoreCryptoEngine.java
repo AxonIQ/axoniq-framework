@@ -44,7 +44,6 @@ import javax.crypto.SecretKey;
  * of a standard file-based key store.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class JavaKeyStoreCryptoEngine implements CryptoEngine {
 

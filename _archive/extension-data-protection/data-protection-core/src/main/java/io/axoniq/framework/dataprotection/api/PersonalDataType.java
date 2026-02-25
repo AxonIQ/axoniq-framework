@@ -31,7 +31,6 @@ import java.lang.annotation.Target;
  * in the package object of the api package.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE})

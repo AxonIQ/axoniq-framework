@@ -27,7 +27,6 @@ import java.util.Map;
  * it collects modifications and creates a new instance when needed.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class MutableObjectWrapper {
 

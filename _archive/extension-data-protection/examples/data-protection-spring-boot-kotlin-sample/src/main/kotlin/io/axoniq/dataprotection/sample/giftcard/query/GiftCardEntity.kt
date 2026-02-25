@@ -36,7 +36,6 @@ import java.time.OffsetDateTime
 /**
  * JPA entity representing a gift card in the query/read model.
  *
- * @author Stefan Mirkovic
  */
 @Entity
 @Table(name = "gift_card", schema = "dataprotection")

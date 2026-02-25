@@ -27,7 +27,6 @@ import java.util.List;
  * Model class representing a Map Personal Data field.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Value
 public class MPDField {

@@ -26,7 +26,6 @@ import java.lang.reflect.Field;
  * Model class representing a Deep Personal Data field.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Value
 public class DPDField implements MapKeyField, MapValueField {

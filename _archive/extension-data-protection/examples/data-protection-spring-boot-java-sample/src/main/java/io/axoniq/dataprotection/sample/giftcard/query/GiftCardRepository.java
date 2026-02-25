@@ -26,7 +26,6 @@ import java.util.Optional;
 /**
  * JPA Repository for GiftCardEntity persistence operations.
  *
- * @author Stefan Mirkovic
  */
 @Repository
 public interface GiftCardRepository extends JpaRepository<GiftCardEntity, String> {

@@ -21,6 +21,5 @@ package io.axoniq.dataprotection.sample.giftcard.query
  * Wrapper class for a collection of gift card summaries.
  *
  * @param giftCards the list of gift card summaries (never null, may be empty)
- * @author Stefan Mirkovic
  */
 data class GiftCardSummaryList(val giftCards: List<GiftCardSummary>)

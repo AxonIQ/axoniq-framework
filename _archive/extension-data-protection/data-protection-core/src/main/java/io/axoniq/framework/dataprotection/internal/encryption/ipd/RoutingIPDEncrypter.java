@@ -36,7 +36,6 @@ import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.is
  * Supports String, byte[], Collection, Array, and Scala types.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class RoutingIPDEncrypter implements Encrypter<Object> {
 

@@ -41,7 +41,6 @@ import java.math.BigDecimal
  * - Redemptions cannot exceed the remaining balance
  * - Gift cards maintain their remaining value after redemptions
  *
- * @author Stefan Mirkovic
  */
 @EventSourced(tagKey = "giftCardId")
 class GiftCard @EntityCreator constructor() {

@@ -27,7 +27,6 @@ import javax.crypto.SecretKey;
  *
  * @param <T> the type of data to encrypt/decrypt
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public interface Encrypter<T> {
 

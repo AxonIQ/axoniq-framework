@@ -27,7 +27,6 @@ import jakarta.persistence.Table;
  * mapping it to a table named <code>axoniq_gdpr_keys</code>
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Entity
 @Table(name = "axoniq_gdpr_keys")

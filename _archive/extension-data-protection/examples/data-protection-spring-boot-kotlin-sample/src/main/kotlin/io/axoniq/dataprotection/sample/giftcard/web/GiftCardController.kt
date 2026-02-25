@@ -71,7 +71,6 @@ import java.util.concurrent.CompletableFuture
  * - Streaming endpoints return continuous data streams with proper content types
  * - Error scenarios return appropriate 4xx/5xx status codes
  *
- * @author Stefan Mirkovic
  */
 @RestController
 @RequestMapping("/api/giftcards")
