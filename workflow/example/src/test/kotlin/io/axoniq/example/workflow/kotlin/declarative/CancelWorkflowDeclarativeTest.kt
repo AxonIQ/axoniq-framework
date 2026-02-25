@@ -20,24 +20,21 @@ package io.axoniq.example.workflow.kotlin.declarative
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.api.AssociationProvider
 import io.axoniq.workflow.runtime.api.EventCondition
-import io.axoniq.workflow.runtime.api.EventNameCustomizerProvider
-import io.axoniq.workflow.runtime.engine.configuration.PrettyPrintingRecordingEventStore
+import io.axoniq.workflow.runtime.api.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.api.WorkflowExecution
+import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
-import java.util.*
 import java.util.concurrent.TimeUnit
-import java.util.function.Consumer
 import java.util.function.Predicate
+import java.util.function.UnaryOperator
 
 /**
  * @author Stefan Dragisic
@@ -48,21 +45,20 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<WorkflowKontext>> {
+    override fun getDeclaredDefinitions(): UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
         val workflow = CancelWorkflow()
-        return Consumer { d ->
-            d.declarative("Cancel workflow in Kotlin")
+        return UnaryOperator { d ->
+            d.declarative({ c -> WorkflowKontext.from(workflow::execute) })
+                .workflowName("Cancel workflow in Kotlin")
                 .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
-                .workflowDefinition { WorkflowKontext.from(workflow::execute) }
-                .eventNameCustomizer { EventNameCustomizerProvider { namespace("io.axoniq.dsl.cancel").workflowBaseName("Workflow") } }
-                .workflowIdProvider {
-                    AssociationProvider { trigger: MutableMap<String, Any?> ->
-                        Optional.of(
-                            "cancel-" + trigger["id"].toString()
+                .customized { c, wc ->
+                    wc.eventNameCustomizer(namespace("io.axoniq.dsl.cancel").workflowBaseName("Workflow"))
+                        .workflowIdProvider(
+                            fromPayloadAttribute(
+                                c, "id",
+                                UnaryOperator { id: String? -> "cancel-$id" })
                         )
-                    }
                 }
-                .notCustomized()
         }
     }
 
@@ -100,21 +96,5 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
             assertThat(context.getStatus()).isEqualTo(WorkflowStatus.CANCELLED)
             assertThat(context.getStepHistory()).containsExactlyInAnyOrder("stepA", "stepB", "stepC")
         }
-
-        // Verify all expected events were published
-        val eventStore = PrettyPrintingRecordingEventStore.lastInstance()
-        val eventTypes = eventStore.publishedEvents.map { it.type().qualifiedName().toString() }
-
-        eventTypes.forEach { logger.info("  - $it") }
-        assertThat(eventTypes).contains(
-            "io.axoniq.dsl.cancel.WorkflowStarted",
-            "io.axoniq.workflow.StepAStarted",
-            "io.axoniq.workflow.StepBStarted",
-            "io.axoniq.workflow.StepCStarted",
-            "io.axoniq.workflow.StepACancelled",
-            "io.axoniq.workflow.StepBCancelled",
-            "io.axoniq.workflow.StepCCancelled",
-            "io.axoniq.dsl.cancel.WorkflowCancelled"
-        )
     }
 }

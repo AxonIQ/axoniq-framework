@@ -100,8 +100,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private final Clock clock;
     private final Executor executor;
     private final EventSink eventSink;
-    private volatile EventNameCustomizer configurationCustomizer;
-    private volatile String resolvedWorkflowName;
 
     /**
      * Constructs new instance.

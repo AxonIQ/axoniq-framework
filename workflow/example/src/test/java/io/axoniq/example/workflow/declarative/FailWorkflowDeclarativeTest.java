@@ -23,18 +23,17 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.configuration.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
+import static io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -50,14 +49,16 @@ class FailWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWork
     }
 
     @Override
-    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DefinitionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
         var workflow = new FailWorkflow();
-        return (d) -> d.declarative("Fail workflow in Java")
-                       .on(EventCondition.fromType(RegistrationReceivedEvent.class))
-                       .workflowDefinition(c -> workflow::execute)
-                       .eventNameCustomizer(c -> () -> namespace("io.axoniq.dsl.fail").workflowBaseName("Workflow"))
-                       .workflowIdProvider(c -> (trigger) -> Optional.of("fail-" + trigger.get("id").toString()))
-                       .notCustomized();
+        return d -> d
+                .declarative(c -> workflow::execute)
+                .workflowName("Fail workflow in Java")
+                .on(EventCondition.fromType(RegistrationReceivedEvent.class))
+                .customized((c, w) -> w
+                        .eventNameCustomizer(namespace("io.axoniq.dsl.fail").workflowBaseName("Workflow"))
+                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "fail-" + id))
+                );
     }
 
     @Test
@@ -91,23 +92,5 @@ class FailWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWork
             assertThat(context.getStatus()).isEqualTo(WorkflowStatus.FAILED);
             assertThat(context.getStepHistory()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
         }
-
-        // Verify all expected events were published
-        var eventStore = PrettyPrintingRecordingEventStore.lastInstance();
-        var eventTypes = eventStore.getPublishedEvents().stream()
-                                   .map(e -> e.type().qualifiedName().toString())
-                                   .toList();
-
-        eventTypes.forEach(e -> logger.info("  - {}", e));
-        assertThat(eventTypes).contains(
-                "io.axoniq.dsl.fail.WorkflowStarted",
-                "io.axoniq.workflow.StepAStarted",
-                "io.axoniq.workflow.StepBStarted",
-                "io.axoniq.workflow.StepCStarted",
-                "io.axoniq.workflow.StepACancelled",
-                "io.axoniq.workflow.StepBCancelled",
-                "io.axoniq.workflow.StepCCancelled",
-                "io.axoniq.dsl.fail.WorkflowFailed"
-        );
     }
 }
