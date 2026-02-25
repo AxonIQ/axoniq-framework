@@ -45,7 +45,6 @@ import scala.annotation.meta.field
  * @param dateOfBirthEncrypted encrypted representation of date of birth
  * @param randomNumber random number for demonstration
  * @param randomNumberEncrypted encrypted representation of random number
- * @author Stefan Mirkovic
  */
 case class GiftCardIssuedEvent(
   @EventTag

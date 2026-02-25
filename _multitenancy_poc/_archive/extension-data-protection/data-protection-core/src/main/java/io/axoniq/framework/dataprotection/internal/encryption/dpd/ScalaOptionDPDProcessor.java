@@ -24,7 +24,6 @@ import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
  * if present through the routing processor.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class ScalaOptionDPDProcessor implements DPDProcessor<scala.Option> {
 

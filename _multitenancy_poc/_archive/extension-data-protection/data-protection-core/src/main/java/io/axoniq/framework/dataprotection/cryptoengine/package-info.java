@@ -20,6 +20,5 @@
  * Contains the core {@link io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine} interface and various implementations.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 package io.axoniq.framework.dataprotection.cryptoengine;

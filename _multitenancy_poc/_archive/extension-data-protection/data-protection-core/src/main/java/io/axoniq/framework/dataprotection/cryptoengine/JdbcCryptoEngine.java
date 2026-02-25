@@ -34,7 +34,6 @@ import javax.sql.DataSource;
  * in a relational database but do not wish to use JPA.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
 

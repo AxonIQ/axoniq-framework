@@ -65,7 +65,6 @@ import org.springframework.web.reactive.function.server.router
  * - Efficient resource handling via Spring's ClassPathResource
  * - Minimal memory footprint for static file serving
  *
- * @author Stefan Mirkovic
  */
 @Configuration
 class WebConfig {

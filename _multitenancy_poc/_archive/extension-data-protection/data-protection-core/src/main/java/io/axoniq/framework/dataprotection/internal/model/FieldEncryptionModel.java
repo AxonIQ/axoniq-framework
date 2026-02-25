@@ -26,7 +26,6 @@ import java.util.List;
  * Model class containing all personal data field information for a class.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Getter
 public class FieldEncryptionModel {

@@ -36,7 +36,6 @@ import java.lang.reflect.Type;
  * the last 4 digits of a credit card number.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class ReplacementValueProvider {
 

@@ -32,7 +32,6 @@ import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.is
  * Supports arrays, collections, Scala types, and regular objects.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class RoutingDPDProcessor implements DPDProcessor<Object> {
 

@@ -23,7 +23,6 @@ package io.axoniq.dataprotection.sample.giftcard;
  * Defines the group name and prefix used for GDPR key management,
  * allowing selective deletion of encrypted fields.
  *
- * @author Stefan Mirkovic
  */
 public final class GiftPersonalDataGroup {
     public static final String GROUP_NAME = "gift";

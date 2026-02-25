@@ -35,7 +35,6 @@ import javax.crypto.SecretKey;
  * and uses Base64 encoding for the encrypted representation.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class StringIPDEncrypter implements Encrypter<String> {
 

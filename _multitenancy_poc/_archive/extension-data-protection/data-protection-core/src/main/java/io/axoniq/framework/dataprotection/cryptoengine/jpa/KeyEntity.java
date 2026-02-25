@@ -27,7 +27,6 @@ package io.axoniq.framework.dataprotection.cryptoengine.jpa;
  * the setters.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public interface KeyEntity {
 

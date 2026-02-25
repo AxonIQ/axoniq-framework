@@ -39,7 +39,6 @@ import javax.crypto.SecretKey;
  * Uses the {@link Converter} API for object serialization in Axon Framework 5.x.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class ConvertingEncrypter implements Encrypter<ValuePair> {
 

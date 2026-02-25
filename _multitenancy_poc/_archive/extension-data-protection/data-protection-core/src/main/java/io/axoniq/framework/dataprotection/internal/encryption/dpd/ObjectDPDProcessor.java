@@ -53,7 +53,6 @@ import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.is
  * of an object, including IPD, SPD, MPD, and nested DPD fields.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class ObjectDPDProcessor implements DPDProcessor<Object> {
 

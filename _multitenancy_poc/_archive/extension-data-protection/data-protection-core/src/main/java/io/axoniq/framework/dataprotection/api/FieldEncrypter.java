@@ -33,7 +33,6 @@ import java.util.Set;
  * To accomplish this, it needs the capabilities of a {@link CryptoEngine}.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public final class FieldEncrypter {
     private final EncryptionProcessor encryptionProcessor;

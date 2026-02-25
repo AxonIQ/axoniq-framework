@@ -26,7 +26,6 @@ import java.util.Collection;
  * through the routing processor.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class CollectionDPDProcessor implements DPDProcessor<Collection> {
 

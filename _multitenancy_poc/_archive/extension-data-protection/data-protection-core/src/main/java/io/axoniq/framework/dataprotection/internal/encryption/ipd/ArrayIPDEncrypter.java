@@ -29,7 +29,6 @@ import javax.crypto.SecretKey;
  * through the routing encrypter.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class ArrayIPDEncrypter implements Encrypter<Object[]> {
 

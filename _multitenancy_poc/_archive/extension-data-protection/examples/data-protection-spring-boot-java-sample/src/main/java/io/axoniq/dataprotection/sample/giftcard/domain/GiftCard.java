@@ -45,7 +45,6 @@ import java.math.BigDecimal;
  *   <li>Gift cards maintain their remaining value after redemptions</li>
  * </ul>
  *
- * @author Stefan Mirkovic
  */
 @EventSourced(tagKey = "giftCardId")
 public class GiftCard {

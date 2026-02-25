@@ -24,7 +24,6 @@ import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
  * through the routing processor.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class ScalaIterableDPDProcessor implements DPDProcessor<scala.collection.Iterable> {
 

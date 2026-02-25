@@ -36,7 +36,6 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
  *     <li>Cryptographic erasure (right to be forgotten)</li>
  * </ul>
  *
- * @author Stefan Mirkovic
  */
 @SpringBootApplication
 @EntityScan(basePackages = {

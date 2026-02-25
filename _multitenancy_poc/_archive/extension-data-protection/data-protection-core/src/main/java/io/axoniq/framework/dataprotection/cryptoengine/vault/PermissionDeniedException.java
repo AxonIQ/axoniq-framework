@@ -27,7 +27,6 @@ import java.io.IOException;
  * testing purposes, but shouldn't be used directly by the application.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class PermissionDeniedException extends IOException {
 

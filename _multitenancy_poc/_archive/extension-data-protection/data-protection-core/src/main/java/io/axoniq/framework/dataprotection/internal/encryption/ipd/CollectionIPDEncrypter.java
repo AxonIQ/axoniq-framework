@@ -33,7 +33,6 @@ import javax.crypto.SecretKey;
  * through the routing encrypter, handling both mutable and immutable collections.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class CollectionIPDEncrypter implements Encrypter<Collection> {
 

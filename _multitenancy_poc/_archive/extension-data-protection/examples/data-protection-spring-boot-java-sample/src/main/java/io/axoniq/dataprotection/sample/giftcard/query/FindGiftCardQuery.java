@@ -22,7 +22,6 @@ package io.axoniq.dataprotection.sample.giftcard.query;
  * Query for retrieving a specific gift card by its unique identifier.
  *
  * @param giftCardId the unique identifier of the gift card to retrieve
- * @author Stefan Mirkovic
  */
 public record FindGiftCardQuery(String giftCardId) {
 }

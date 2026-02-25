@@ -44,7 +44,6 @@ import javax.crypto.NoSuchPaddingException;
  * the Data Protection Module.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public abstract class ExceptionFactory {
 

@@ -56,7 +56,6 @@ import static java.util.stream.StreamSupport.stream;
  * field encryption models.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public class ModelInspector {
 

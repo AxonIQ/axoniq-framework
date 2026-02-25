@@ -26,7 +26,6 @@ package io.axoniq.framework.dataprotection.api;
  * or environment.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public final class ConfigurationException extends RuntimeException {
 

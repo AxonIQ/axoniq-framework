@@ -42,7 +42,6 @@ import scala.beans.BeanProperty
  *
  * @param giftCardId the unique identifier of the existing gift card to redeem from
  * @param amount the monetary amount to redeem (must be positive and not exceed remaining balance)
- * @author Stefan Mirkovic
  */
 case class RedeemGiftCardCommand(
   @BeanProperty

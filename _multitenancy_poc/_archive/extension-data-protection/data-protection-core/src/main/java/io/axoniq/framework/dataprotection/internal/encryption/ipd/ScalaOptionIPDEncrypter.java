@@ -29,7 +29,6 @@ import javax.crypto.SecretKey;
  * if present through the routing encrypter.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 class ScalaOptionIPDEncrypter implements Encrypter<scala.Option> {
 

@@ -24,7 +24,6 @@ import java.util.List;
  * Wrapper class for a collection of gift card summaries.
  *
  * @param giftCards the list of gift card summaries (never null, may be empty)
- * @author Stefan Mirkovic
  */
 public record GiftCardSummaryList(List<GiftCardSummary> giftCards) {
 }

@@ -35,7 +35,6 @@ import org.springframework.context.annotation.ComponentScan
  * - Cryptographic erasure (right to be forgotten)
  * - Integration of Kotlin with Spring Boot and Axon Framework
  *
- * @author Stefan Mirkovic
  */
 @SpringBootApplication
 @EntityScan(

@@ -33,7 +33,6 @@ import java.lang.annotation.Target;
  * used on Scala class parameters, including case classes.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.ANNOTATION_TYPE, ElementType.FIELD})

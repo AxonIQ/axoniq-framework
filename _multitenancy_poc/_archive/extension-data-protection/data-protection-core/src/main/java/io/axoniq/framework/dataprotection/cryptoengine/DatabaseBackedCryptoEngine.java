@@ -41,7 +41,6 @@ import javax.crypto.spec.SecretKeySpec;
  * 256 bits, but this may change in future versions and implementations may already take this into account.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 public abstract class DatabaseBackedCryptoEngine implements CryptoEngine {
 

@@ -21,6 +21,5 @@
  * classes.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  */
 package io.axoniq.framework.dataprotection.cryptoengine.jpa;

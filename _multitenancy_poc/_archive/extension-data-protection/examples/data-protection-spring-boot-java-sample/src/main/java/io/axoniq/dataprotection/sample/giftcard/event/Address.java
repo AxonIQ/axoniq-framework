@@ -23,7 +23,6 @@ import io.axoniq.framework.dataprotection.api.PersonalData;
 /**
  * Address record containing personal data fields.
  *
- * @author Stefan Mirkovic
  */
 public record Address(
         @PersonalData(group = GiftPersonalDataGroup.GROUP_NAME, replacement = "removed")

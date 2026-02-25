@@ -41,7 +41,6 @@ import javax.crypto.spec.SecretKeySpec;
  * second-level cache on the {@link EntityManagerFactory}.
  *
  * @author Frans van Buul
- * @author Stefan Mirkovic
  *
  */
 public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {

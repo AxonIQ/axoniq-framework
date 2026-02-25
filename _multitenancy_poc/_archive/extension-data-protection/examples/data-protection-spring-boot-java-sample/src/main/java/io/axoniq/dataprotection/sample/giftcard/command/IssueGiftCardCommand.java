@@ -43,7 +43,6 @@ import java.time.LocalDate;
  * @param owner deep encrypted owner person data (name + address)
  * @param dateOfBirth serialized encrypted date of birth
  * @param randomNumber serialized encrypted random number
- * @author Stefan Mirkovic
  */
 public record IssueGiftCardCommand(
         @TargetEntityId String giftCardId,
