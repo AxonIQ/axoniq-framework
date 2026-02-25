@@ -56,7 +56,7 @@ private int id;
 
 If the field `id` holds a value of `4`, the derived key id will be `aaa4`.
 
-This may very well be combined with the `group` attribute described earlier. The name/address segregation could be achieved like this:
+This can be combined with the `group` attribute described earlier. The name/address segregation could be achieved like this:
 
 [source,java]
 ----
@@ -89,7 +89,7 @@ In a class hierarchy, a subclass may have `@DataSubjectId` fields with the same 
 
 Although more than one `@DataSubjectId` annotation may be present on the same field assuming they have different `group` attributes, the `@DataSubjectId` annotation cannot be combined with any other Axon Data Protection annotation with the same `scope` on the same field.
 
-== The @PersonalData annotation
+== The `@PersonalData` annotation
 
 This annotation identifies fields to be wholly encrypted by Axon Data Protection. It can be applied on those fields where the module can store the encrypted value in the same Java type as the clear text value. Because of this, it doesn't need any secondary place for storage. We call this concept _type-preserving encryption_. Currently, the module supports the following types for `@PersonalData`:
 
@@ -132,7 +132,7 @@ For a field type that doesn't implement the `java.util.Map` or `scala.collection
 
 === The replacement attribute
 
-The `@PersonalData` annotation has an optional `replacement` attribute which defaults to the empty string. This attribute is intended to control the replacement value, i.e. the value that the module will put in field if it is deleted (because it notices upon decryption that the required key is no longer available).
+The `@PersonalData` annotation has an optional `replacement` attribute which defaults to the empty string. This attribute is intended to control the replacement value, that is, the value that the module will put in field if it is deleted (because it notices upon decryption that the required key is no longer available).
 
 When `@PersonalData` is used on a `String` field, the default `ReplacementValueProvider` will use the value of the `replacement` attribute in this case. On all other field types, it will be ignored by default, but it can be used in some way by a custom `ReplacementValueProvider`. See xref:advanced.adoc#replacementvalueprovider[ReplacementValueProvider] for examples.
 
@@ -200,9 +200,9 @@ The `@SerializedPersonalData` annotation has an optional `group` attribute which
 
 === The replacement attribute
 
-The `@SerializedPersonalData` annotation has an optional `replacement` attribute which defaults to the empty string. This attribute is intended to control the replacement value, i.e. the value that the module will put in field if it is deleted (because it notices upon decryption that the required key is no longer available). On a `@SerializedPersonalData` field, this attribute is ignored by the default `ReplacementValueProvider` but it can be used by a custom version. See xref:advanced.adoc#replacementvalueprovider[ReplacementValueProvider] for more details about this.
+The `@SerializedPersonalData` annotation has an optional `replacement` attribute which defaults to the empty string. This attribute is intended to control the replacement value, that is, the value that the module will put in field if it is deleted (because it notices upon decryption that the required key is no longer available). On a `@SerializedPersonalData` field, this attribute is ignored by the default `ReplacementValueProvider` but it can be used by a custom version. See xref:advanced.adoc#replacementvalueprovider[ReplacementValueProvider] for more details about this.
 
-=== The storageField attribute
+=== The `storageField` attribute
 
 The `@SerializedPersonalData` annotation has an optional `storageField` attribute which defaults to the empty string. This can be used to control the actual field it uses for storage. If this attribute is empty, the module will look for the field name suffixed by 'Encrypted' as a storage field. This can be overridden by explicitly setting a storage field name with this annotation. For instance, the following might be used:
 
@@ -213,7 +213,7 @@ LocalDate dateOfBirth;
 byte[] dobSecret;
 ----
 
-== The @DeepPersonalData annotation
+== The `@DeepPersonalData` annotation
 
 The `@DeepPersonalData` annotation is used for those cases where a field shouldn't be encrypted in its entirety, but should instead be recursively examined for Axon Data Protection annotations and processed accordingly. In this way, the the module can process more complex object graphs. An example use case would be this:
 
@@ -240,9 +240,9 @@ The `@DeepPersonalData` annotation is allowed on fields with a type that carries
 
 The `@DeepPersonalData` annotation has an optional `scope` attribute which functions exactly as for `@PersonalData`, described above.
 
-== The @PersonalDataType annotation
+== The `@PersonalDataType` annotation
 
-The `@PersonalDataType` annotation is a rarely-used class annotation (all other Axon Data Protection annotations are field annotations). It is used in those cases where we want to use `@DeepPersonalData` on a field of a particular type, in cases when that type as such doesn't carry any other Axon Data Protection annotations. The reason for still using `@DeepPersonalData` would be that we know that some or all of the subtypes do or may have such annotations. By the rules of `@DeepPersonalData`, this wouldn't be allowed. This can be fixed by annotating the supertype with the `@PersonalDataType` annotation.
+The `@PersonalDataType` annotation is a seldom used class annotation (all other Axon Data Protection annotations are field annotations). It is used in those cases where we want to use `@DeepPersonalData` on a field of a particular type, in cases when that type as such doesn't carry any other Axon Data Protection annotations. The reason for still using `@DeepPersonalData` would be that we know that some or all of the subtypes do or may have such annotations. By the rules of `@DeepPersonalData`, this wouldn't be allowed. This can be fixed by annotating the supertype with the `@PersonalDataType` annotation.
 
 For example, we could write the following to model that a `Person` has a set of relations; each `Relation` may be another `Person` or a `Pet`.
 
@@ -291,7 +291,7 @@ public class NewCustomerEvent {
 
 Although the annotations defined by the module, as described in the previous sections, can in principle be used directly in Scala applications, they suffer from two disadvantages:
 
-* When applied on a Scala class parameter (which is a very common use case, since it's natural to model events as Scala case classes), the annotation would by default only apply to the constructor parameter and not to the implied field. As a result, the annotation would not be detected by the `FieldEncrypter`. This can be fixed by applying `scala.annotation.meta.field`, but it leads to ugly code if that has to be applied every time.
+* When applied on a Scala class parameter (which is a common use case, since it's natural to model events as Scala case classes), the annotation would by default only apply to the constructor parameter and not to the implied field. As a result, the annotation would not be detected by the `FieldEncrypter`. This can be fixed by applying `scala.annotation.meta.field`, but it leads to ugly code if that has to be applied every time.
 * Conventionally, Scala prefers lower camel case annotation names rather than upper camel case.
 
 To overcome the second disadvantage (naming convention), the module includes a Scala package object for `io.axoniq.dataprotection.api` with lower camel case type aliases for all 5 annotations defined by the module.
