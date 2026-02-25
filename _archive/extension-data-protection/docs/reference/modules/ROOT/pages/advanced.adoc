@@ -89,9 +89,6 @@ platform exceptions (should never occur - indicates that the Java platform doesn
 ADPM-2000::
 platform warnings, in particular inability to reflectively modify unmodifiable collections
 
-ADPM-3000::
-license exceptions
-
 ADPM-4000::
 configuration exceptions
 

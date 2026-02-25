@@ -17,9 +17,9 @@ image::cryptoengine.png[CryptoEngine class diagram,align=center]
 
 The module has one abstract class implementing `CryptoEngine`, and 6 concrete classes shown in the diagram above.
 
-== InMemoryCryptoEngine
+== `InMemoryCryptoEngine`
 
-Keeps the keys in a local `HashMap`. This is very useful for writing unit tests, but not for using it with any production data.
+Keeps the keys in a local `HashMap`. This is useful for writing unit tests, but not for using it with any production data.
 
 [source,java]
 ----
@@ -29,7 +29,7 @@ public CryptoEngine cryptoEngine() {
 }
 ----
 
-== JpaCryptoEngine
+== `JpaCryptoEngine`
 
 Uses JPA to store keys in a relational database. As its constructor arguments, it accepts an `EntityManagerFactory` and optionally a JPA-mapped class used to store keys. This class must implement `KeyEntity`. If the class is not specified, it will use `DefaultKeyEntity`. Of course, the class provided to the constructor must be present in the persistence unit managed by the `EntityManagerFactory`. The `JpaCryptoEngine` will manage its own transactions so it doesn't need any reference to a transaction manager, and the persistence unit must have `RESOURCE_LOCAL` transaction type.
 
@@ -53,7 +53,7 @@ CREATE TABLE axoniq_gdpr_keys (
 );
 ----
 
-== JdbcCryptoEngine
+== `JdbcCryptoEngine`
 
 Like the `JpaCryptoEngine` in that it stores keys in a relational database, but it uses plain JDBC instead of JPA. It needs a `DataSource` object as a constructor parameter. It offers default table and column names, which can be overridden by optional constructor parameters.
 
@@ -77,7 +77,7 @@ CREATE TABLE axoniq_gdpr_keys (
 );
 ----
 
-== VaultCryptoEngine
+== `VaultCryptoEngine`
 
 Stores keys in HashiCorp Vault. This has a number of interesting benefits: Vault offers encryption of keys, protected by a master key which isn't stored anywhere. The master key can be provided manually on startup, but can (in the enterprise version) also be obtained through a HSM, through AWS KSM or through Google KSM. The individual keys can be stored in a wide range of configurable backends. Using HashiCorp Vault, you can achieve a high level of key security while still maintaining high performance.
 
@@ -139,11 +139,11 @@ A token must be provided when constructing a `VaultCryptoEngine`, but may also b
 The `VaultCryptoEngine` does not have any built-in mechanism to refresh the token or detect token staleness. The application must supply a new token to the `VaultCryptoEngine` in a timely manner.
 ====
 
-== JavaKeyStoreCryptoEngine
+== `JavaKeyStoreCryptoEngine`
 
 Uses a Java cryptography `KeyStore` implementation to store its keys. It will examine the given `KeyStore` for its provider, and then obtain a `KeyGenerator` and `Cipher` object from this provider as well. Please note the default Java `KeyStore` implementation used for instance to store certificates for a web server, is totally unsuitable for this particular application. The main reason why this class exists is as a stepping stone to implement the PKCS#11 implementation.
 
-== PKCS11CryptoEngine
+== `PKCS11CryptoEngine`
 
 Supports HSMs using the PKCS#11 standard through the SunPKCS11 JCE provider. It needs a PKCS#11 configuration (full file path) and a password as constructor arguments. It will then try to instantiate the PKCS#11 provider, and open the keystore using the password. (And if successful, it will delete the password for security reasons.)
 
@@ -197,4 +197,3 @@ After key deletion:
 
 * xref:configuration.adoc[Complete Spring Boot configuration]
 * xref:java-records.adoc[Working with Java records]
-* xref:licensing.adoc[License configuration]

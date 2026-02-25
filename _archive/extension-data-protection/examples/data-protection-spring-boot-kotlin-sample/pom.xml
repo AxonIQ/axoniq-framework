@@ -29,20 +29,18 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>data-protection-spring-boot-scala-sample</artifactId>
-    <name>Data Protection Extension - Spring Boot Scala Sample</name>
+    <artifactId>data-protection-spring-boot-kotlin-sample</artifactId>
+    <name>Data Protection Extension - Spring Boot Kotlin Sample</name>
     <description>
-        Sample Spring Boot application with Scala demonstrating Axon Data Protection extension usage with field-level
+        Sample Spring Boot application with Kotlin demonstrating Axon Data Protection extension usage with field-level
         encryption for GDPR compliance in event-sourced applications.
     </description>
 
     <properties>
         <spring-boot.version>3.3.5</spring-boot.version>
-        <scala.version>2.13.15</scala.version>
-        <scala.compat.version>2.13</scala.compat.version>
+        <kotlin.version>2.1.0</kotlin.version>
         <hibernate.version>6.5.2.Final</hibernate.version>
         <jakarta.persistence-api.version>3.1.0</jakarta.persistence-api.version>
-        <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -60,11 +58,22 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Scala -->
+        <!-- Kotlin -->
         <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-library</artifactId>
-            <version>${scala.version}</version>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlinx</groupId>
+            <artifactId>kotlinx-coroutines-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlinx</groupId>
+            <artifactId>kotlinx-coroutines-reactor</artifactId>
         </dependency>
 
         <!-- Spring Boot -->
@@ -77,14 +86,14 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-        <!-- Jackson for JSON and Scala support -->
+        <!-- Jackson for JSON and Kotlin support -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.module</groupId>
-            <artifactId>jackson-module-scala_${scala.compat.version}</artifactId>
+            <artifactId>jackson-module-kotlin</artifactId>
         </dependency>
 
         <!-- Database - PostgreSQL -->
@@ -126,24 +135,85 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-bom</artifactId>
+                <version>${kotlin.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
+        <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+
         <plugins>
-            <!-- Scala Maven Plugin with mixed Java/Scala compilation -->
+            <!-- Kotlin Maven Plugin -->
             <plugin>
-                <groupId>net.alchim31.maven</groupId>
-                <artifactId>scala-maven-plugin</artifactId>
-                <version>${scala-maven-plugin.version}</version>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
+                <version>${kotlin.version}</version>
                 <executions>
                     <execution>
-                        <id>scala-compile-first</id>
-                        <phase>process-resources</phase>
+                        <id>compile</id>
+                        <phase>compile</phase>
                         <goals>
-                            <goal>add-source</goal>
                             <goal>compile</goal>
                         </goals>
+                    </execution>
+                    <execution>
+                        <id>test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>test-compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <jvmTarget>21</jvmTarget>
+                    <args>
+                        <arg>-Xjsr305=strict</arg>
+                    </args>
+                    <compilerPlugins>
+                        <plugin>spring</plugin>
+                        <plugin>jpa</plugin>
+                        <plugin>all-open</plugin>
+                    </compilerPlugins>
+                    <pluginOptions>
+                        <option>all-open:annotation=jakarta.persistence.Entity</option>
+                        <option>all-open:annotation=jakarta.persistence.MappedSuperclass</option>
+                        <option>all-open:annotation=jakarta.persistence.Embeddable</option>
+                    </pluginOptions>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-allopen</artifactId>
+                        <version>${kotlin.version}</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-noarg</artifactId>
+                        <version>${kotlin.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+
+            <!-- Maven Compiler Plugin (for any potential Java files) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler.version}</version>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>none</phase>
                     </execution>
                     <execution>
                         <id>java-compile</id>
@@ -153,37 +223,11 @@
                         </goals>
                     </execution>
                     <execution>
-                        <id>scala-test-compile</id>
-                        <phase>process-test-resources</phase>
+                        <id>java-test-compile</id>
+                        <phase>test-compile</phase>
                         <goals>
                             <goal>testCompile</goal>
                         </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <scalaVersion>${scala.version}</scalaVersion>
-                    <recompileMode>incremental</recompileMode>
-                    <args>
-                        <arg>-deprecation</arg>
-                        <arg>-feature</arg>
-                        <arg>-unchecked</arg>
-                    </args>
-                    <jvmArgs>
-                        <jvmArg>-Xms64m</jvmArg>
-                        <jvmArg>-Xmx1024m</jvmArg>
-                    </jvmArgs>
-                </configuration>
-            </plugin>
-
-            <!-- Maven Compiler Plugin disabled - Scala plugin handles both -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven-compiler.version}</version>
-                <executions>
-                    <execution>
-                        <id>default-compile</id>
-                        <phase>none</phase>
                     </execution>
                 </executions>
             </plugin>

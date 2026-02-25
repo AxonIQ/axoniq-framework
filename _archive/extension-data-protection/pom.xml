@@ -48,7 +48,9 @@
 
     <modules>
         <module>data-protection-core</module>
-        <module>examples/data-protection-spring-boot-sample</module>
+        <module>examples/data-protection-spring-boot-java-sample</module>
+        <module>examples/data-protection-spring-boot-scala-sample</module>
+        <module>examples/data-protection-spring-boot-kotlin-sample</module>
     </modules>
 
     <properties>
