@@ -3,9 +3,9 @@
 
 This guide covers how to configure Axon Data Protection in your Spring Boot and Axon Framework application.
 
-== The FieldEncryptingConverter
+== The `FieldEncryptingConverter`
 
-The `FieldEncryptingConverter` is an implementation of `Converter` from Axon Framework 5.x. It takes another `Converter` as a constructor argument and wraps this one. When converting for serialization, it will perform encryption first using an encapsulated `FieldEncrypter`, and then perform conversion. It will do the reverse upon deserialization. This allows for very elegant integration into an Axon Framework application.
+The `FieldEncryptingConverter` is an implementation of `Converter` from Axon Framework 5.x. It takes another `Converter` as a constructor argument and wraps this one. When converting for serialization, it will perform encryption first using an encapsulated `FieldEncrypter`, and then perform conversion. It will do the reverse upon deserialization. This allows for elegant integration into an Axon Framework application.
 
 Assuming Axon Framework 5.x on Spring and a JPA `CryptoEngine`, configuration of Axon Data Protection could be as easy as this:
 
@@ -51,7 +51,7 @@ Axon's auto-configuration will automatically use the `converter` bean to constru
 
 The constructor may be provided with a `FieldEncrypter` for detailed control. If the constructor gets a `CryptoEngine` and optionally a `ReplacementValueProvider`, it will construct its `FieldEncrypter` itself where the `Converter` used by the `FieldEncrypter` for dealing with `@SerializedPersonalData` is the same one as the delegate converter of the `FieldEncryptingConverter` (which would be a reasonable choice in many cases).
 
-== The FieldEncrypter
+== The `FieldEncrypter`
 
 The `FieldEncrypter` class can encrypt and decrypt classes having Axon Data Protection annotations. Other objects may be processed by it, it will simply leave those unaltered. This class may be used directly by applications, but in most Axon Framework-based applications it would be used by the `FieldEncryptingConverter` instead of being used directly. In addition to having encrypt/decrypt operations, it has a `willProcess` method to determine whether or not a particular object would potentially be modified by the encrypt/decrypt operation. This allows for some performance optimizations in the `FieldEncryptingConverter`.
 

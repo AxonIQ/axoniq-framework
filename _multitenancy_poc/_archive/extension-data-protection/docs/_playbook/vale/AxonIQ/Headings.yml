@@ -46,10 +46,13 @@ exceptions:
   - CLI
   - Command-Query Responsibility Separation
   - Cosmos
+  - DCB
   - Docker
   - Docker Compose
   - Domain-Driven Design
   - Dropwizard
+  - Dynamic Consistency Boundary
+  - Dynamic Consistency Boundaries
   - EDA
   - Emmet
   - Event Sourcing
@@ -90,6 +93,7 @@ exceptions:
   - TenantEventSegmentFactory
   - TenantQuerySegmentFactory
   - TypeScript
+  - Unit of Work
   - URLs
   - VS
   - Visual
