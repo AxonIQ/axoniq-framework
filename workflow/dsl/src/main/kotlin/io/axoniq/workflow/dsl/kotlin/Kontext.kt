@@ -173,32 +173,88 @@ class Kontext(
         }
     }
 
+    /**
+     * Terminates the entire workflow with an error, publishing a failure event and
+     * cancelling all running steps.
+     *
+     * @param cause the exception that caused the failure
+     * @param eventNameCustomizer customizer for the published failure event name
+     * @throws WorkflowFailedException always, after the failure event is published
+     */
     fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.fail(cause, eventNameCustomizer))
     }
 
+    /**
+     * Cancels the entire workflow gracefully, publishing a cancellation event and
+     * cancelling all running steps.
+     *
+     * @param eventNameCustomizer customizer for the published cancellation event name
+     * @throws WorkflowCancelledException always, after the cancellation event is published
+     */
     fun cancel(eventNameCustomizer: EventNameCustomizer = eventName()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(eventNameCustomizer))
     }
 
+    /**
+     * Cancels the entire workflow gracefully with a human-readable reason, publishing a cancellation event and
+     * cancelling all running steps.
+     *
+     * @param reason descriptive reason for the cancellation
+     * @param eventNameCustomizer customizer for the published cancellation event name
+     * @throws WorkflowCancelledException always, after the cancellation event is published
+     */
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventNameCustomizer))
     }
 
+    /**
+     * Cancels the entire workflow gracefully, publishing a cancellation event and
+     * cancelling all running steps.
+     *
+     * @param cause the exception that triggered the cancellation
+     * @param eventNameCustomizer customizer for the published cancellation event name
+     * @throws WorkflowCancelledException always, after the cancellation event is published
+     */
     fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(cause, eventNameCustomizer))
     }
 
+    /**
+     * Cancels a single running step by name without terminating the workflow.
+     * The step's future is completed exceptionally with a [StepCancellationException].
+     *
+     * @param stepName the name of the step to cancel
+     * @param eventNameCustomizer customizer for the published event name
+     */
     fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.cancelStep(stepName, null, eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, null, eventNameCustomizer))
     }
 
+    /**
+     * Cancels a single running step by name without terminating the workflow.
+     * The step's future is completed exceptionally with the given cause, wrapped in a
+     * [StepCancellationException] if it isn't one already.
+     *
+     * @param stepName the name of the step to cancel
+     * @param cause the exception that caused the step cancellation
+     * @param eventNameCustomizer customizer for the published event name
+     */
     fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.cancelStep(stepName, cause, eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, cause, eventNameCustomizer))
     }
 
+    /**
+     * Cancels a single running step by name without terminating the workflow.
+     * The step's future is completed exceptionally with a [StepCancellationException]
+     * carrying the given reason.
+     *
+     * @param stepName the name of the step to cancel
+     * @param reason descriptive reason for the step cancellation
+     * @param eventNameCustomizer customizer for the published event name
+     */
     fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.cancelStep(stepName, io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventNameCustomizer))
     }
 
     // just to create blocking call

@@ -329,11 +329,15 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void terminate(@Nonnull TerminateCommand command) {
+        if (command.isStepCancellation()) {
+            terminateDelegate.terminate(command);
+            return;
+        }
         var name = resolvedWorkflowName != null ? resolvedWorkflowName : workflowId;
         var parent = configurationCustomizer != null ? configurationCustomizer : command.eventNameCustomizer();
         terminateDelegate.terminate(new TerminateCommand(
                 command.error(), command.cause(), merge(parent, command.eventNameCustomizer()),
-                name, workflowConfiguration
+                name, workflowConfiguration, null
         ));
     }
 
@@ -359,12 +363,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             }
         }
         return cancelled;
-    }
-
-    @Override
-    public void cancelStep(@Nonnull String stepName, @Nullable Throwable cause,
-                           @Nonnull EventNameCustomizer eventNameCustomizer) {
-        terminateDelegate.cancelStep(stepName, cause, eventNameCustomizer);
     }
 
     @Override

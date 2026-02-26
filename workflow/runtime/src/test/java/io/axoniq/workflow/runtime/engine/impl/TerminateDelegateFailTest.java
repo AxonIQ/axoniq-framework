@@ -163,7 +163,7 @@ class TerminateDelegateFailTest {
         when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of(WorkflowStatus.FAILED, listener));
 
         assertThatThrownBy(() -> delegate.terminate(
-                new TerminateCommand(true, new RuntimeException("boom"), eventNameCustomizer, "test-workflow", configuration)))
+                new TerminateCommand(true, new RuntimeException("boom"), eventNameCustomizer, "test-workflow", configuration, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));

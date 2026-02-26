@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
@@ -164,9 +165,15 @@ class TerminateDelegateCancelTest {
         when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of(WorkflowStatus.CANCELLED, listener));
 
         assertThatThrownBy(() -> delegate.terminate(
-                new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", configuration)))
+                new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", configuration, null)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
+    }
+
+    @Test
+    void terminateCancelledStepCancelsSpecificStep() {
+        delegate.terminate(TerminateCommand.cancelledStep("step-a", null, eventNameCustomizer));
+        verify(workflowState).cancelRunningStep(eq("step-a"), isA(StepCancellationException.class));
     }
 }

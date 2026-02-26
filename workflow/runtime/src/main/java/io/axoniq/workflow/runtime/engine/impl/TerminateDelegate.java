@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
@@ -28,7 +27,6 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 
@@ -70,21 +68,12 @@ public class TerminateDelegate implements TerminatePrimitive {
     }
 
     @Override
-    public void cancelStep(@Nonnull String stepName, @Nullable Throwable cause,
-                           @Nonnull EventNameCustomizer eventNameCustomizer) {
-        Throwable stepCause;
-        if (cause instanceof StepCancellationException) {
-            stepCause = cause;
-        } else if (cause != null) {
-            stepCause = new StepCancellationException(cause);
-        } else {
-            stepCause = new StepCancellationException("Step cancelled");
-        }
-        workflowState.cancelRunningStep(stepName, stepCause);
-    }
-
-    @Override
     public void terminate(@Nonnull TerminateCommand command) {
+        if (command.isStepCancellation()) {
+            cancelledStep(command);
+            return;
+        }
+
         var effectiveName = command.workflowNameOverride() != null
                 ? command.workflowNameOverride()
                 : workflowName;
@@ -106,6 +95,19 @@ public class TerminateDelegate implements TerminatePrimitive {
         } else {
             cancelled(command, effectiveName);
         }
+    }
+
+    private void cancelledStep(@Nonnull TerminateCommand command) {
+        var cause = command.cause();
+        Throwable stepCause;
+        if (cause instanceof StepCancellationException) {
+            stepCause = cause;
+        } else if (cause != null) {
+            stepCause = new StepCancellationException(cause);
+        } else {
+            stepCause = new StepCancellationException("Step cancelled");
+        }
+        workflowState.cancelRunningStep(command.stepName(), stepCause);
     }
 
     protected void failed(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
