@@ -345,6 +345,26 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
+    public boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
+        boolean cancelled = runningFutures.cancelWithCause(stepName, cause);
+        if (cancelled) {
+            try {
+                awaitStateChange(s -> s.containsStep(stepName)
+                                 && s.getStep(stepName).status().isTerminal());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        return cancelled;
+    }
+
+    @Override
+    public void cancelStep(@Nonnull String stepName, @Nullable Throwable cause,
+                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+        terminateDelegate.cancelStep(stepName, cause, eventNameCustomizer);
+    }
+
+    @Override
     public void cancelAllRunningSteps(@Nullable Throwable cause) {
         runningFutures.cancelAll(cause, cancelledSteps -> {
             if (cancelledSteps.isEmpty()) {

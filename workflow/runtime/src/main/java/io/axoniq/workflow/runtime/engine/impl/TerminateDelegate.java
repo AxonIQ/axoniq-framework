@@ -69,6 +69,12 @@ public class TerminateDelegate implements TerminatePrimitive {
     }
 
     @Override
+    public void cancelStep(@Nonnull String stepName, @Nullable Throwable cause,
+                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+        workflowState.cancelRunningStep(stepName, cause);
+    }
+
+    @Override
     public void terminate(boolean error, @Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer) {
         terminate(error, cause, eventNameCustomizer, workflowName);
     }

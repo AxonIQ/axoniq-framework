@@ -54,6 +54,16 @@ public class RunningSteps implements DescribableComponent {
         }
     }
 
+    public boolean cancelWithCause(@Nonnull String stepName, @Nullable Throwable cause) {
+        var future = runningFutures.remove(stepName);
+        if (future == null) {
+            return false;
+        }
+        var ex = new CancellationException("Step cancelled");
+        if (cause != null) ex.initCause(cause);
+        return future.completeExceptionally(ex);
+    }
+
     public void cancelAll(@Nullable Throwable cause, @Nonnull Consumer<Set<String>> awaitTermination) {
         var stepNames = new HashSet<>(runningFutures.keySet());
         runningFutures.values().forEach(f -> {

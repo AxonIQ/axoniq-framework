@@ -173,6 +173,22 @@ public class SimpleWorkflowContext extends WorkflowInstance
         terminate(false, cause, eventNameCustomizer);
     }
 
+    public void cancelStep(String stepName) {
+        cancelStep(stepName, (Throwable) null);
+    }
+
+    public void cancelStep(String stepName, Throwable cause) {
+        cancelStep(stepName, cause, eventName());
+    }
+
+    public void cancelStep(String stepName, String reason) {
+        cancelStep(stepName, new java.util.concurrent.CancellationException(reason));
+    }
+
+    public void cancelStep(WorkflowStepResult result) {
+        cancelStep(result.getStepName());
+    }
+
     public void addPayload(Object object) {
         addPayload(payload(this, object));
     }

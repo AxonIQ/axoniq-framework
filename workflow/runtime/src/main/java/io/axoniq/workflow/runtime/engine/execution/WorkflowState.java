@@ -97,6 +97,8 @@ public interface WorkflowState {
 
     void removeRunningFuture(@Nonnull String stepName);
 
+    boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
+
     void cancelAllRunningSteps(@Nullable Throwable cause);
 
     void cancelAndRemoveRunningFuture(@Nonnull String stepName, boolean mayInterruptIfRunning);

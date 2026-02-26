@@ -29,4 +29,6 @@ import jakarta.annotation.Nullable;
 public interface TerminatePrimitive {
 
     void terminate(boolean error, @Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer);
+
+    void cancelStep(@Nonnull String stepName, @Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer);
 }
