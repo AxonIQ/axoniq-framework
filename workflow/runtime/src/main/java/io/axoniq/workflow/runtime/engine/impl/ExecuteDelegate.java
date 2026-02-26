@@ -119,7 +119,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         var procContext = ProcessingContextUtils.copyResources(workflowState.getStep(stepName)
                                                                                             .context(),
                                                                                processingContext);
-                        var payload = parameterMapping.apply(workflowContext.getPayload(), local);
+                        var payload = parameterMapping.apply(workflowContext.workflowPayload(), local);
                         return CompletableFuture.completedFuture(action.apply(procContext, payload));
                     });
 

@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
@@ -49,7 +50,7 @@ class EventWaitConditionsTest {
     @Test
     void testAddAndRemove() {
         QualifiedName qName = new QualifiedName("ns", "Event");
-        EventCondition condition = new EventCondition(qName, m -> true);
+        EventCondition condition = EventConditions.fromQualifiedName(qName);
         eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
@@ -64,7 +65,7 @@ class EventWaitConditionsTest {
     @Test
     void testEvaluateAndApplyMatches() {
         QualifiedName qName = new QualifiedName("ns", "Event");
-        EventCondition condition = new EventCondition(qName, m -> true);
+        EventCondition condition = EventConditions.fromQualifiedName(qName);
         eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         EventMessage message = mock(EventMessage.class);
@@ -82,7 +83,7 @@ class EventWaitConditionsTest {
     @Test
     void testEvaluateAndApplyNoMatch() {
         QualifiedName qName = new QualifiedName("ns", "Event");
-        EventCondition condition = new EventCondition(qName, m -> false);
+        EventCondition condition = EventConditions.never(qName);
         eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         EventMessage message = mock(EventMessage.class);
@@ -100,11 +101,11 @@ class EventWaitConditionsTest {
     @Test
     void testDescribeTo() {
         QualifiedName qName1 = new QualifiedName("ns", "Event1");
-        EventCondition condition = new EventCondition(qName1, m -> true);
+        EventCondition condition = EventConditions.fromQualifiedName(qName1);
         eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
 
         QualifiedName qName2 = new QualifiedName("ns", "Event2");
-        EventCondition condition2 = new EventCondition(qName2, m -> true);
+        EventCondition condition2 = EventConditions.fromQualifiedName(qName2);
         eventWaitConditions.add("step2", condition2, new DefaultEventNameCustomizer());
 
 

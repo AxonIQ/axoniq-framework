@@ -24,9 +24,10 @@ import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
@@ -39,8 +40,6 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.LoggerFactory;
@@ -62,7 +61,7 @@ import static io.axoniq.workflow.runtime.api.Workflow.*;
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
  * given {@link WorkflowContext}. As a result the module will register its configuration in the
- * {@link WorkflowDefinitionRegistry}, used by the {@link io.axoniq.workflow.runtime.engine.impl.WorkflowEngine}.
+ * {@link WorkflowConfigurationRegistry}, used by the {@link io.axoniq.workflow.runtime.engine.impl.WorkflowEngine}.
  *
  * @param <C> type of workflow context.
  * @author Simon Zambrovski
@@ -154,7 +153,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
 
     protected void registerWorkflowDefinitions(@Nonnull Configuration configuration) {
-        WorkflowDefinitionRegistry<?> registry = configuration.getComponent(WorkflowDefinitionRegistry.class);
+        WorkflowConfigurationRegistry<?> registry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         if (workflowConfigurations.isEmpty()) {
             // sanity
             throw new IllegalStateException(
@@ -328,18 +327,9 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                         };
 
                         ComponentBuilder<EventCondition> eventConditionBuilder = c ->
-                                new EventCondition(
-                                        AutodetectionUtils.getIfNotDefault(attributes, ATTR_START_ON, Void.class)
-                                                          .flatMap(triggerType -> c.getComponent(MessageTypeResolver.class)
-                                                                                   .resolve(triggerType)
-                                                                                   .map(MessageType::qualifiedName)
-                                                          )
-                                                          .orElseGet(() -> new QualifiedName((String) attributes.get(
-                                                                  ATTR_START_ON_QUALIFIED_NAME))
-                                                          ),
-                                        (e) -> true
+                                EventConditions.fromQualifiedName(
+                                        new QualifiedName((String) attributes.get(ATTR_START_ON))
                                 ); // FIXME enrich with associations as soon as available, see #5
-
 
                         ComponentBuilder<WorkflowIdProvider> associationProviderComponentBuilder = c ->
                                 AutodetectionUtils.getIfNotDefault(attributes,

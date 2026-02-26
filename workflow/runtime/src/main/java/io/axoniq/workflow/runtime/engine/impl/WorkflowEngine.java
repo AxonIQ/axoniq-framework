@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
@@ -41,14 +41,14 @@ public class WorkflowEngine implements EventHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final WorkflowDefinitionRegistry<?> workflowDefinitionRegistry;
+    private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
 
     public WorkflowEngine(
-            @Nonnull WorkflowDefinitionRegistry<?> workflowDefinitionRegistry,
+            @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository
     ) {
-        this.workflowDefinitionRegistry = workflowDefinitionRegistry;
+        this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
@@ -94,7 +94,7 @@ public class WorkflowEngine implements EventHandler {
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
                                            @Nonnull ProcessingContext processingContext) {
-        var definitions = workflowDefinitionRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
+        var definitions = workflowConfigurationRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
         definitions.forEach(predicatedWorkflowConfiguration -> {
 
                                 if (predicatedWorkflowConfiguration.predicate().test(eventMessage)) {

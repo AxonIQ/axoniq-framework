@@ -15,16 +15,22 @@
  *
  *
  */
-package io.axoniq.example.workflow.fixture;
+package io.axoniq.workflow.runtime.engine.association;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.function.BiFunction;
 
-public class NotificationService {
+/**
+ * Association value comparison operator.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
+public interface ValueComparisonOperator extends BiFunction<Object, Object, Boolean> {
 
-    static Logger logger = LoggerFactory.getLogger(NotificationService.class);
-
-    public static void sendEmail(String emailAddress) {
-        logger.info("Sending welcome mail to user.");
-    }
+    /**
+     * Returns the name of the operator.
+     *
+     * @return name of the operator.
+     */
+    String name();
 }

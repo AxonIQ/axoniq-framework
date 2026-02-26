@@ -45,7 +45,7 @@ public record WorkflowExecution(
      * @return the current {@link WorkflowStatus}
      */
     public WorkflowStatus getStatus() {
-        return workflowContext.getStatus();
+        return workflowContext.workflowStatus();
     }
     @Override
     public boolean equals(Object o) {

@@ -39,12 +39,12 @@ class WorkflowEventNamespaceInheritanceTest {
         // Given a workflow-level namespace
         EventNameCustomizer workflowCustomizer = DefaultEventNameCustomizer.Builder.namespace("wf.ns");
         // And a step-level customizer which is not overriding anything (defaults)
-        EventNameCustomizer stepCustomizer = DefaultEventNameCustomizer.Builder.eventName();
+        EventNameCustomizer stepCustomizer = DefaultEventNameCustomizer.Builder.defaults();
         EventNameCustomizer merged = merge(workflowCustomizer, stepCustomizer);
 
         WorkflowContext ctx = mock(WorkflowContext.class);
-        when(ctx.getWorkflowId()).thenReturn("wf-1");
-        when(ctx.getPayload()).thenReturn(Map.of());
+        when(ctx.workflowId()).thenReturn("wf-1");
+        when(ctx.workflowPayload()).thenReturn(Map.of());
 
         // When producing a completed step event using the merged customizer
         EventMessage evt = EventMessageUtils.completedStep(ctx, "myStep", Map.of(), merged);
@@ -63,8 +63,8 @@ class WorkflowEventNamespaceInheritanceTest {
         EventNameCustomizer merged = merge(workflowCustomizer, stepCustomizer);
 
         WorkflowContext ctx = mock(WorkflowContext.class);
-        when(ctx.getWorkflowId()).thenReturn("wf-1");
-        when(ctx.getPayload()).thenReturn(Map.of());
+        when(ctx.workflowId()).thenReturn("wf-1");
+        when(ctx.workflowPayload()).thenReturn(Map.of());
 
         // When producing a completed step event using the merged customizer
         EventMessage evt = EventMessageUtils.completedStep(ctx, "myStep", Map.of(), merged);

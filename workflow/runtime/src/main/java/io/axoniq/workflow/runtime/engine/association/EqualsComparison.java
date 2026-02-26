@@ -15,16 +15,26 @@
  *
  *
  */
-package io.axoniq.example.workflow.fixture;
+package io.axoniq.workflow.runtime.engine.association;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+/**
+ * Executes comparison based on equality of objects.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
+public class EqualsComparison implements ValueComparisonOperator {
 
-public class NotificationService {
+    @Override
+    public Boolean apply(Object o, Object o2) {
+        if (o == null) {
+            return o2 == null;
+        }
+        return o.equals(o2);
+    }
 
-    static Logger logger = LoggerFactory.getLogger(NotificationService.class);
-
-    public static void sendEmail(String emailAddress) {
-        logger.info("Sending welcome mail to user.");
+    @Override
+    public String name() {
+        return "=";
     }
 }

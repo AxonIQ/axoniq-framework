@@ -19,9 +19,9 @@ package io.axoniq.workflow.runtime.test;
 
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.ContextToStateAdoptingStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingStateFactory;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
@@ -34,7 +34,6 @@ import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
@@ -45,7 +44,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     protected AxonConfiguration configuration;
     protected WorkflowEngine workflowEngine;
     protected DelayedPublisher delayedPublisher;
-    protected WorkflowDefinitionRegistry<?> workflowRegistry;
+    protected WorkflowConfigurationRegistry<?> workflowRegistry;
 
     public AbstractDeclarativeTestBase(@Nonnull Class<T> dslType,
                                        @Nonnull ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
@@ -63,7 +62,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
                                                                              WorkflowModule
                                                                                      .usingContext(dslType)
                                                                                      .workflowContextFactory(builder)
-                                                                                     .workflowStateFactory(c -> new ContextToStateAdoptingStateFactory<>(dslType))
+                                                                                     .workflowStateFactory(c -> new DSLAdoptingStateFactory<>(dslType))
                                                                                      .definitions(
                                                                                              getDeclaredDefinitions()
                                                                                      )
@@ -73,7 +72,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
         configuration = configurer.start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
-        workflowRegistry = configuration.getComponent(WorkflowDefinitionRegistry.class);
+        workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         delayedPublisher = configuration.getComponent(DelayedPublisher.class);
     }
 

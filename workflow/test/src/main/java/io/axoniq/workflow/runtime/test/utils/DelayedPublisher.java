@@ -21,6 +21,8 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -30,6 +32,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 public class DelayedPublisher {
+
+    private static final Logger logger = LoggerFactory.getLogger(DelayedPublisher.class);
 
     private final EventSink eventSink;
     private final Executor executor;
@@ -54,9 +58,11 @@ public class DelayedPublisher {
         for (Schedule schedule : schedules) {
             future = future.thenCompose(v ->
                                                 CompletableFuture.supplyAsync(() -> {
-                                                                                  eventSink.publish(null, new GenericEventMessage(
+                                                                                  var eventMessage = new GenericEventMessage(
                                                                                           messageTypeResolver.resolveOrThrow(schedule.event),
-                                                                                          schedule.event)
+                                                                                          schedule.event);
+                                                                                  logger.info("Publishing Event: {}", eventMessage.type());
+                                                                                  eventSink.publish(null, eventMessage
                                                                                   );
                                                                                   return null;
                                                                               },

@@ -17,18 +17,23 @@
  */
 package io.axoniq.workflow.dsl.kotlin
 
+import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext
 import io.axoniq.workflow.runtime.api.EventNameCustomizer
 import io.axoniq.workflow.runtime.api.WorkflowDefinition
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
-
+/**
+ * Kotlin Workflow Context.
+ * @since 1.0.0
+ * @author Simon Zambrovski
+ */
 class WorkflowKontext(
     workflowId: String,
     initialPayload: Map<String, Any?>,
     processingContext: ProcessingContext,
     parentCustomizer: EventNameCustomizer
-) : WorkflowInstance(
+) : AbstractDSLWorkflowContext(
     workflowId,
     initialPayload,
     processingContext,

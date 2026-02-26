@@ -19,7 +19,7 @@ package io.axoniq.workflow.runtime.engine.registry;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -38,13 +38,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class SimpleWorkflowDefinitionRegistry implements WorkflowDefinitionRegistry<SimpleWorkflowDefinitionRegistry> {
+public class SimpleWorkflowConfigurationRegistry
+        implements WorkflowConfigurationRegistry<SimpleWorkflowConfigurationRegistry> {
 
     private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> workflowsConfigurations = new ConcurrentHashMap<>();
 
     @Override
     @Nonnull
-    public SimpleWorkflowDefinitionRegistry register(
+    public SimpleWorkflowConfigurationRegistry register(
             @Nonnull EventCondition eventCondition,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration
     ) {
@@ -55,7 +56,7 @@ public class SimpleWorkflowDefinitionRegistry implements WorkflowDefinitionRegis
             if (workflowConfigurations == null) {
                 workflowConfigurations = new CopyOnWriteArrayList<>();
             }
-            workflowConfigurations.add(new PredicatedWorkflowConfiguration(eventCondition.payloadPredicate(),
+            workflowConfigurations.add(new PredicatedWorkflowConfiguration(eventCondition.predicate(),
                                                                            workflowConfiguration));
             return workflowConfigurations;
         });

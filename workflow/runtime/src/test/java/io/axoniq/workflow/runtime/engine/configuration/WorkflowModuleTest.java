@@ -25,9 +25,10 @@ import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
@@ -55,7 +56,7 @@ class WorkflowModuleTest {
 
     private SimpleWorkflowModule<TestWorkflowContext> module;
     private Configuration configuration;
-    private WorkflowDefinitionRegistry<?> registry;
+    private WorkflowConfigurationRegistry<?> registry;
     private MessageTypeResolver messageTypeResolver;
     private Converter converter;
 
@@ -63,10 +64,10 @@ class WorkflowModuleTest {
     void setUp() {
         module = new SimpleWorkflowModule<>(TestWorkflowContext.class);
         configuration = mock(Configuration.class);
-        registry = mock(WorkflowDefinitionRegistry.class);
+        registry = mock(WorkflowConfigurationRegistry.class);
         messageTypeResolver = mock(MessageTypeResolver.class);
         converter = mock(Converter.class);
-        when(configuration.getComponent(WorkflowDefinitionRegistry.class)).thenReturn(registry);
+        when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(registry);
         when(configuration.getComponent(MessageTypeResolver.class)).thenReturn(messageTypeResolver);
         when(configuration.getComponent(Converter.class)).thenReturn(converter);
     }
@@ -77,7 +78,7 @@ class WorkflowModuleTest {
         WorkflowContextFactory<TestWorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
         WorkflowStateFactory stateFactory = mock(WorkflowStateFactory.class);
 
-        EventCondition startCondition = new EventCondition(new QualifiedName("startEvent"), e -> true);
+        EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
         var myModule = WorkflowModule.usingContext(TestWorkflowContext.class)
@@ -97,7 +98,7 @@ class WorkflowModuleTest {
     @Test
     @SuppressWarnings("unchecked")
     void testDeclarativeWorkflowDefinition() {
-        EventCondition startCondition = new EventCondition(new QualifiedName("startEvent"), e -> true);
+        EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
         WorkflowContextFactory<TestWorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
@@ -126,7 +127,7 @@ class WorkflowModuleTest {
     @Test
     @SuppressWarnings("unchecked")
     void testCustomizedWorkflowDefinition() {
-        EventCondition startCondition = new EventCondition(new QualifiedName("startEvent"), e -> true);
+        EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
         WorkflowContextFactory<TestWorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
         WorkflowStateFactory stateFactory = mock(WorkflowStateFactory.class);
@@ -156,8 +157,8 @@ class WorkflowModuleTest {
     @Test
     @SuppressWarnings("unchecked")
     void testMultipleWorkflows() {
-        EventCondition startCondition1 = new EventCondition(new QualifiedName("startEvent1"), e -> true);
-        EventCondition startCondition2 = new EventCondition(new QualifiedName("startEvent2"), e -> true);
+        EventCondition startCondition1 = EventConditions.fromQualifiedName(new QualifiedName("startEvent1"));
+        EventCondition startCondition2 = EventConditions.fromQualifiedName(new QualifiedName("startEvent2"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
         module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
@@ -210,7 +211,7 @@ class WorkflowModuleTest {
     @Test
     @SuppressWarnings("unchecked")
     void testWorkflowStatusChangeListenerRegistration() {
-        EventCondition startCondition = new EventCondition(new QualifiedName("startEvent"), e -> true);
+        EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
         WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
 
@@ -242,7 +243,7 @@ class WorkflowModuleTest {
 
     public static class TestAutodetectedWorkflow {
 
-        @Workflow(workflowName = "autodetectedWorkflow", startOn = String.class, idProperty = "id")
+        @Workflow(workflowName = "autodetectedWorkflow", startOn = "java.lang.String", idProperty = "id")
         public void myWorkflow(TestWorkflowContext context) {
             // some workflow logic
         }
