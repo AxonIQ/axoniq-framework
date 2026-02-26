@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.execution;
 
+import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -24,7 +25,6 @@ import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -35,28 +35,13 @@ import java.util.function.Predicate;
  * Represents the part of the execution accessed by the Workflow Engine (internal).
  *
  * @author Simon Zambrovski
- * @author Allard Buize
+ * @author Stefan Dragisic
+ * @author Steven van Beelen
+ * @author Allard Buijze
  * @since 1.0.0
  */
 @Internal
 public interface WorkflowState {
-
-    /**
-     * Checks if provided class is a subtype of {@link WorkflowState} and throws an exception if this checks fails.
-     *
-     * @param clazz class to check.
-     * @return provided class.
-     */
-    @Nonnull
-    static <C> Class<C> requireIsWorkflowState(@Nonnull Class<C> clazz) {
-        if (!WorkflowState.class.isAssignableFrom(clazz)) {
-            throw new IllegalArgumentException(String.format(
-                    "Provided type %s must be instance of WorkflowState, but it was not.",
-                    clazz.getName()));
-        }
-        return clazz;
-    }
-
 
     @Nonnull
     <T extends WorkflowContext> T execute(@Nonnull WorkflowConfiguration<T> workflowConfiguration,
@@ -81,16 +66,28 @@ public interface WorkflowState {
     Consumer<WorkflowState> getNextTask();
 
     @Nonnull
-    WorkflowStatus getStatus();
+    WorkflowStatus workflowStatus();
 
     boolean isExecutable();
 
     boolean hasTasks();
 
-    void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
-                               @Nonnull Predicate<EventMessage> predicate,
+    /**
+     * Registers a new wait condition.
+     *
+     * @param stepName            waiting step name.
+     * @param eventCondition      event condition.
+     * @param eventNameCustomizer event name customizer.
+     */
+    void registerWaitCondition(@Nonnull String stepName,
+                               @Nonnull EventCondition eventCondition,
                                @Nonnull EventNameCustomizer eventNameCustomizer);
 
+    /**
+     * Remove existing wait condition.
+     *
+     * @param stepName name of waiting step.
+     */
     void removeWaitCondition(@Nonnull String stepName);
 
     // FIXME check if we can replace this for the Context interface

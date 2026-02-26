@@ -212,49 +212,49 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     public static class Builder {
 
-        public static DefaultEventNameCustomizer eventName() {
+        public static DefaultEventNameCustomizer defaults() {
             return new DefaultEventNameCustomizer();
         }
 
         public static DefaultEventNameCustomizer baseName(String baseName) {
-            return eventName().baseName(baseName);
+            return defaults().baseName(baseName);
         }
 
         public static DefaultEventNameCustomizer workflowBaseName(String workflowBaseName) {
-            return eventName().workflowBaseName(workflowBaseName);
+            return defaults().workflowBaseName(workflowBaseName);
         }
 
         public static DefaultEventNameCustomizer namespace(String namespace) {
-            return eventName().namespace(namespace);
+            return defaults().namespace(namespace);
         }
 
         public static DefaultEventNameCustomizer stepCompleted(String completed) {
-            return eventName().stepCompleted(completed);
+            return defaults().stepCompleted(completed);
         }
 
         public static DefaultEventNameCustomizer stepStarted(String started) {
-            return eventName().stepStarted(started);
+            return defaults().stepStarted(started);
         }
 
         public static DefaultEventNameCustomizer stepFailed(String failed) {
-            return eventName().stepFailed(failed);
+            return defaults().stepFailed(failed);
         }
 
         public static DefaultEventNameCustomizer stepTimedOut(String timedOut) {
-            return eventName().stepTimedOut(timedOut);
+            return defaults().stepTimedOut(timedOut);
         }
 
         public static DefaultEventNameCustomizer appendToBaseName(boolean appendToBaseName) {
-            return eventName().appendToBaseName(appendToBaseName);
+            return defaults().appendToBaseName(appendToBaseName);
         }
 
         public static DefaultEventNameCustomizer capitalizeSimpleName(boolean capitalizeSimpleName) {
-            return eventName().capitalizeSimpleName(capitalizeSimpleName);
+            return defaults().capitalizeSimpleName(capitalizeSimpleName);
         }
 
         public static DefaultEventNameCustomizer payloadCustomization(
                 Function<PayloadCustomization, QualifiedName> payloadCustomization) {
-            return eventName().payloadCustomization(payloadCustomization);
+            return defaults().payloadCustomization(payloadCustomization);
         }
 
         public static EventNameCustomizer merge(@Nonnull EventNameCustomizer parent,

@@ -33,7 +33,6 @@ import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -154,27 +153,27 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
                             @SuppressWarnings("unchecked")
                             var ctx = (T) workflowContext;
-                            if (ctx.getStatus().isTerminal()) {
+                            if (ctx.workflowStatus().isTerminal()) {
                                 logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
-                                             ctx.getStatus());
+                                             ctx.workflowStatus());
                                 return CompletableFuture.completedFuture(ctx);
                             }
                             var configuredName = Objects.requireNonNull(configuration.workflowName(),
                                                                         "Workflow name must not be null");
                             var workflowName = configuredName.isEmpty() ? workflowId : configuredName;
                             var customizer = configuration.eventNameCustomizer();
-                            if (ctx.getStatus() == WorkflowStatus.NONE) {
+                            if (ctx.workflowStatus() == WorkflowStatus.NONE) {
                                 sendWorkflowEvent(startedWorkflow(workflowContext, workflowName, customizer),
                                                   pc).join(); // FIXME join without timeout?
                             }
 
                             try {
                                 logger.trace("Executing workflow with initial payload {} from thread {}",
-                                             workflowContext.getPayload(),
+                                             workflowContext.workflowPayload(),
                                              Thread.currentThread());
                                 configuration.workflowDefinition().accept(ctx);
                                 logger.trace("Workflow executed. Resulting workflow payload {}.",
-                                             workflowContext.getPayload());
+                                             workflowContext.workflowPayload());
 
                                 sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
                                         5,
@@ -202,7 +201,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                 ).thenApply(wc -> {
                     try {
                         // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
-                        awaitStateChange(s -> s.getStatus().isTerminal());
+                        awaitStateChange(s -> s.workflowStatus().isTerminal());
                     } catch (Exception te) {
                         logger.error("Error waiting for workflow instance termination", te);
                     }
@@ -300,10 +299,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     @Nonnull
-    public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
-                                      @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout,
+    public WorkflowStepResult waitFor(@Nonnull String stepName,
+                                      @Nonnull EventCondition eventCondition,
+                                      @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
+        return waitForDelegate.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
     }
 
     @Override
@@ -337,10 +337,10 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    public void registerWaitCondition(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
-                                      @Nonnull Predicate<EventMessage> predicate,
+    public void registerWaitCondition(@Nonnull String stepName,
+                                      @Nonnull EventCondition eventCondition,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        eventWaitConditions.add(stepName, new EventCondition(qualifiedName, predicate), eventNameCustomizer);
+        eventWaitConditions.add(stepName, eventCondition, eventNameCustomizer);
     }
 
     @Override
@@ -351,25 +351,25 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     @Nonnull
-    public String getWorkflowId() {
+    public String workflowId() {
         return this.workflowId;
     }
 
     @Override
     @Nonnull
-    public Map<String, Object> getPayload() {
+    public Map<String, Object> workflowPayload() {
         return this.payload;
     }
 
     @Override
     @Nonnull
-    public WorkflowStatus getStatus() {
+    public WorkflowStatus workflowStatus() {
         return this.status;
     }
 
     @Override
     @Nonnull
-    public List<String> getStepHistory() {
+    public List<String> workflowStepNames() {
         return new ArrayList<>(steps.keySet());
     }
 

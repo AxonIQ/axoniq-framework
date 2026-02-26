@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -82,8 +83,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     @Nonnull
     public WorkflowStepResult waitFor(
             @Nonnull String stepName,
-            @Nonnull QualifiedName qualifiedName,
-            @Nonnull Predicate<EventMessage> predicate,
+            @Nonnull EventCondition eventCondition,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
@@ -119,7 +119,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 });
             } else {
                 // Register wait condition
-                workflowState.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
+                workflowState.registerWaitCondition(stepName, eventCondition, eventNameCustomizer);
                 CompletableFuture.runAsync(() -> {
                                                workflowState.removeWaitCondition(stepName);
                                                workflowState.appendTask(i -> {

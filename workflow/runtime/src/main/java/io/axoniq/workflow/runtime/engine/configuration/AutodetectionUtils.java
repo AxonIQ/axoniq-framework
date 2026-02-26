@@ -88,16 +88,6 @@ public class AutodetectionUtils {
     public static void validateAttributes(@Nonnull Map<String, Object> attributes,
                                           @Nonnull Class<?> type,
                                           @Nonnull Method method) {
-        if (!attributes.containsKey(ATTR_START_ON) || Void.class.equals(attributes.get(ATTR_START_ON))) {
-            if (!attributes.containsKey(ATTR_START_ON_QUALIFIED_NAME)
-                    || "".equals(attributes.get(ATTR_START_ON_QUALIFIED_NAME))) {
-                throw new IllegalArgumentException(
-                        "Either " + ATTR_START_ON + " or " + ATTR_START_ON_QUALIFIED_NAME
-                                + " attribute must be specified, "
-                                + " but none was specified on annotation of  " + type.getName() + "#"
-                                + method.getName());
-            }
-        }
         if (!attributes.containsKey(ATTR_ID_PROPERTY_PROVIDER) || WorkflowIdProvider.class.equals(attributes.get(
                 ATTR_ID_PROPERTY_PROVIDER))) {
             if (!attributes.containsKey(ATTR_ID_PROPERTY)

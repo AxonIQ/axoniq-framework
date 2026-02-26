@@ -15,15 +15,15 @@
  *
  *
  */
-package io.axoniq.example.workflow.kotlin.declarative
+package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.api.EventCondition
 import io.axoniq.workflow.runtime.api.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
+import io.axoniq.workflow.runtime.engine.execution.EventConditions
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
@@ -46,7 +46,7 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         return UnaryOperator { d ->
             d.declarative({ c -> WorkflowKontext.from(UserSignupWorkflow()::execute) })
                 .workflowName("User signup workflow in Kotlin")
-                .on(EventCondition.fromType(RegistrationReceivedEvent::class.java))
+                .on(EventConditions.fromType(RegistrationReceivedEvent::class.java))
                 .customized { c, wc ->
                     wc.eventNameCustomizer(namespace("io.axoniq.dsl.wf"))
                         .workflowIdProvider(
@@ -99,9 +99,9 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         // Verify that both workflows executed all steps
         for (context in workflowEngine.workflowInstances().stream()
             .map(WorkflowExecution::workflowContext).toList()) {
-            Assertions.assertThat(context.getStatus().isTerminal).isTrue()
-            Assertions.assertThat(context.getStatus()).isEqualTo(WorkflowStatus.COMPLETED)
-            Assertions.assertThat(context.getStepHistory()).containsExactlyInAnyOrder(
+            Assertions.assertThat(context.workflowStatus().isTerminal).isTrue()
+            Assertions.assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED)
+            Assertions.assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(
                 "createUser",
                 "activateUser",
                 "sendWelcomeEmail",

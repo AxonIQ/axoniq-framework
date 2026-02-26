@@ -19,54 +19,71 @@ package io.axoniq.workflow.dsl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
+/**
+ * Payload manipulation helper.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class Payload {
 
+    public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    };
     private final Map<String, Object> payload;
 
-    public Payload(Map<String, Object> payload) {
-        this.payload = payload;
+    public Payload(@Nonnull Map<String, Object> payload) {
+        this.payload = Objects.requireNonNull(payload, "Payload must not be null");
     }
 
-    public static Payload payload(WorkflowContext context, Object value) {
-        Map<String, Object> map = context.processingContext().component(Converter.class).convert(
-                value, new TypeReference<Map<String, Object>>() {
-                }.getType());
+    public static Payload payload(
+            @Nonnull WorkflowContext context,
+            @Nonnull Object value
+    ) {
+        var converter = Objects.requireNonNull(context, "Workflow context must not be null")
+                               .processingContext().component(Converter.class);
+        Map<String, Object> map = Objects.requireNonNull(converter.convert(value, PAYLOAD_TYPE.getType()),
+                                                         "Payload converted to null");
         return payload(map);
     }
 
-    public static Payload payload(Map<String, Object> payload) {
-        return new Payload(payload);
+    public static Payload payload(@Nonnull Map<String, Object> payload) {
+        return new Payload(Objects.requireNonNull(payload, "Payload must not be null"));
     }
 
     public static Payload payload() {
         return payload(new LinkedHashMap<>());
     }
 
-    public static Payload payload(WorkflowContext context) {
-        return payload(context.getPayload());
+    public static Payload payload(@Nonnull WorkflowContext context) {
+        return payload(Objects.requireNonNull(context, "Workflow context must not be null").workflowPayload());
     }
 
-    public static Payload payload(String key, Object value) {
-        return payload().with(key, value);
+    public static Payload payload(@Nonnull String key, Object value) {
+        return payload().with(Objects.requireNonNull(key, "Payload key must not be null"), value);
     }
 
-    public static Payload payload(String key, Object value, String key2, Object value2) {
-        return payload(key, value).with(key2, value2);
+    public static Payload payload(@Nonnull String key, Object value, @Nonnull String key2, Object value2) {
+        return payload(key, value)
+                .with(key2, value2);
     }
 
-    public static Payload payload(String key, Object value, String key2, Object value2, String key3, Object value3) {
+    public static Payload payload(@Nonnull String key, Object value,
+                                  @Nonnull String key2, Object value2,
+                                  @Nonnull String key3, Object value3) {
         return payload(key, value, key2, value2).with(key3, value3);
     }
 
-    public <T> T get(String key) {
+    public <T> T get(@Nonnull String key) {
         //noinspection unchecked
-        return (T) payload.get(key);
+        return (T) payload.get(Objects.requireNonNull(key, "Payload key must not be null"));
     }
 
     public <T> T getPayloadAs(String key, Function<Map<String, Object>, T> converter) {
@@ -79,17 +96,17 @@ public class Payload {
     }
 
 
-    public Payload set(String key, Object value) {
-        payload.put(key, value);
+    public Payload set(@Nonnull String key, Object value) {
+        payload.put(Objects.requireNonNull(key, "Payload key must not be null"), value);
         return this;
     }
 
-    public Payload with(Payload other) {
-        payload.putAll(other.getValues());
+    public Payload with(@Nonnull Payload other) {
+        payload.putAll(Objects.requireNonNull(other, "Payload must not be null").getValues());
         return this;
     }
 
-    public Payload with(String key, Object value) {
+    public Payload with(@Nonnull String key, Object value) {
         return set(key, value);
     }
 

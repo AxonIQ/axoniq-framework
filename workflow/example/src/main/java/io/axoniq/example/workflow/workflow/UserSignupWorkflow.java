@@ -15,12 +15,13 @@
  *
  *
  */
-package io.axoniq.example.workflow.declarative;
+package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.MagicHappenedEvent;
 import io.axoniq.example.workflow.fixture.NotificationService;
 import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.runtime.api.Workflow;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,13 +29,20 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 
+import static io.axoniq.workflow.dsl.Payload.payload;
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+
 public class UserSignupWorkflow {
 
+    @Workflow(
+            idProperty = "id",
+            startOn = "my.custom.RegistrationReceived" // Message Type Resolver for the rescue!
+    )
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
 
         Logger logger = LoggerFactory.getLogger(UserSignupWorkflow.class);
 
-        logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.getPayload());
+        logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.workflowPayload());
 
         // -> start
         var success = ctx.awaitExecute("createUser", Boolean.class, UserService::createUser);
@@ -42,7 +50,11 @@ public class UserSignupWorkflow {
             return;
         }
 
-        ctx.awaitExecute("activateUser", ctx.getPayload(), UserService::activateUser, Duration.ofSeconds(10));
+        ctx.awaitExecute("activateUser",
+                         ctx.workflowPayload(),
+                         UserService::activateUser,
+                         Duration.ofSeconds(10),
+                         defaults());
 
         /**
          var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
@@ -51,8 +63,10 @@ public class UserSignupWorkflow {
          */
 
 
-        ctx.awaitExecute("sendWelcomeEmail", NotificationService::sendEmail);
-        ctx.block("waitASecond", Duration.ofSeconds(1L));
+        ctx.awaitExecute("sendWelcomeEmail",
+                         ctx.workflowPayload(),
+                         p -> NotificationService.sendEmail(payload(p).get("email")));
+        ctx.sleep("waitASecond", Duration.ofSeconds(1L));
 
         var magic = ctx.awaitEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
         ctx.addPayload(magic);
@@ -60,6 +74,6 @@ public class UserSignupWorkflow {
         logger.info("Magic happened because of the magician {}", magic.magician());
         // -> end
 
-        logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.getPayload());
+        logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.workflowPayload());
     }
 }

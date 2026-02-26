@@ -26,14 +26,29 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public interface WorkflowDefinitionRegistry<W extends WorkflowDefinitionRegistry<W>> extends DescribableComponent {
+/**
+ * Registry for holding workflow configurations with corresponding start conditions.
+ *
+ * @param <W> type of the registry.
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
+public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>
+        extends DescribableComponent {
 
     @Nonnull
     default W register(
-            @Nonnull QualifiedName name,
+            @Nonnull QualifiedName qualifiedName,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration
     ) {
-        return register(new EventCondition(name, (e) -> true), workflowConfiguration);
+        return register(new EventCondition() {
+
+            @Nonnull
+            @Override
+            public QualifiedName qualifiedName() {
+                return qualifiedName;
+            }
+        }, workflowConfiguration);
     }
 
     @Nonnull

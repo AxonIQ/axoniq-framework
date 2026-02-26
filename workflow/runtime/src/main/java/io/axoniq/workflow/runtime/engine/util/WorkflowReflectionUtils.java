@@ -17,6 +17,8 @@
  */
 package io.axoniq.workflow.runtime.engine.util;
 
+import jakarta.annotation.Nonnull;
+
 import java.lang.reflect.InvocationTargetException;
 import java.util.Optional;
 
@@ -47,5 +49,22 @@ public class WorkflowReflectionUtils {
             // ignore
         }
         return Optional.empty();
+    }
+
+    /**
+     * Checks if provided class is a subtype of given type and throws an exception if this checks fails.
+     *
+     * @param expected expected type.
+     * @param clazz    class to check.
+     * @return provided class.
+     */
+    @Nonnull
+    public static <C> Class<C> requireIsAssignableFrom(@Nonnull Class<?> expected, @Nonnull Class<C> clazz) {
+        if (!expected.isAssignableFrom(clazz)) {
+            throw new IllegalArgumentException(String.format(
+                    "Provided type %s must be instance of WorkflowState, but it was not.",
+                    clazz.getName()));
+        }
+        return clazz;
     }
 }

@@ -30,7 +30,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.concurrent.ConcurrentHashMap;
 
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Holds wait for event conditions for a single workflow instance.
@@ -66,7 +66,7 @@ public class EventWaitConditions implements DescribableComponent {
         waitConditions.put(stepName,
                            new EventConditionWithStepNameCustomizer(eventCondition,
                                                                     eventNameCustomizer
-                                                                            != null ? eventNameCustomizer : eventName()));
+                                                                            != null ? eventNameCustomizer : defaults()));
     }
 
     /**
@@ -95,7 +95,7 @@ public class EventWaitConditions implements DescribableComponent {
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
-            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.test(eventMessage)) {
+            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
                 remove(stepName);
                 action.accept(eventMessage, stepName, entry.getValue().eventNameCustomizer());
             }

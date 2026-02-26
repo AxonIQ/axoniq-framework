@@ -17,33 +17,35 @@
  */
 package io.axoniq.workflow.runtime.engine.execution;
 
+import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.jetbrains.annotations.NotNull;
 
-import static io.axoniq.workflow.runtime.engine.execution.WorkflowState.requireIsWorkflowState;
+import static io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils.requireIsAssignableFrom;
 
 /**
- * State factory adopting an instance which implements both interfaces.
+ * State factory adopting a DSL instance implementing {@link AbstractDSLWorkflowContext}.
  *
  * @param <C> type of the implementation.
  * @author Simon Zambrovki
  * @since 1.0.0
  */
-public class ContextToStateAdoptingStateFactory<C extends WorkflowContext> implements WorkflowStateFactory {
+public class DSLAdoptingStateFactory<C extends WorkflowContext> implements WorkflowStateFactory {
 
     private final Class<C> workflowContextType;
 
-    public ContextToStateAdoptingStateFactory(@Nonnull Class<C> workflowContextType) {
-        this.workflowContextType = requireIsWorkflowState(workflowContextType);
+    public DSLAdoptingStateFactory(@Nonnull Class<C> workflowContextType) {
+        this.workflowContextType = requireIsAssignableFrom(AbstractDSLWorkflowContext.class, workflowContextType);
     }
 
     @Override
     @Nonnull
     public WorkflowState create(@NotNull WorkflowContext context) {
         if (workflowContextType.isAssignableFrom(context.getClass())) {
-            return (WorkflowState) context;
+            return ((AbstractDSLWorkflowContext) context).getWorkflowInstance();
         }
+
         throw new IllegalStateException("Unsupported context type " + context.getClass().getName());
     }
 }

@@ -15,12 +15,13 @@
  *
  *
  */
-package io.axoniq.example.workflow.kotlin.declarative
+package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.NotificationService
 import io.axoniq.example.workflow.kotlin.fixture.UserService
 import io.axoniq.workflow.dsl.kotlin.Kontext
+import io.axoniq.workflow.runtime.api.Workflow
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
@@ -30,6 +31,7 @@ private val logger = KotlinLogging.logger {}
 
 class UserSignupWorkflow {
 
+    @Workflow(idProperty = "id", startOn = "my.custom.RegistrationReceived")
     fun Kontext.onExecute() {
         logger.info { "User signup workflow started at ${Instant.now()} for $payload" }
 

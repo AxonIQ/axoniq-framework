@@ -67,11 +67,11 @@ public class WorkflowCustomization {
         this.workflowName = Objects.requireNonNull(workflowName, "Workflow name must be provided");
         if (configuration != null) {
             this.eventNameCustomizer = configuration.getComponent(EventNameCustomizer.class,
-                                                                  DefaultEventNameCustomizer.Builder::eventName);
+                                                                  DefaultEventNameCustomizer.Builder::defaults);
             this.workflowIdProvider = configuration.getComponent(WorkflowIdProvider.class,
                                                                  MessageWorkflowIdProvider::new);
         } else {
-            this.eventNameCustomizer = DefaultEventNameCustomizer.Builder.eventName();
+            this.eventNameCustomizer = DefaultEventNameCustomizer.Builder.defaults();
             this.workflowIdProvider = new MessageWorkflowIdProvider();
         }
         this.workflowStatusListeners = new ConcurrentHashMap<>();

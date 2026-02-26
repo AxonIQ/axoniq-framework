@@ -25,6 +25,8 @@ import jakarta.annotation.Nonnull;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
+import static io.axoniq.workflow.runtime.engine.step.StepStatus.*;
+
 /**
  * Workflow Step result based on the Workflow State.
  *
@@ -77,67 +79,39 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    public boolean isSuccess() {
-        if (await()) {
-            switch (workflowState.getStep(stepName).status()) {
-                case COMPLETED:
-                    return true;
-                case FAILED, TIMED_OUT, CANCELLED:
-                    return false;
-            }
-        }
-        return false;
+    public boolean success() {
+        await();
+        return COMPLETED == workflowState.getStep(stepName).status();
     }
 
     @Override
-    public boolean isFailure() {
-        if (await()) {
-            switch (workflowState.getStep(stepName).status()) {
-                case FAILED:
-                    return true;
-                case COMPLETED, TIMED_OUT, CANCELLED:
-                    return false;
-            }
-        }
-        return false;
+    public boolean failure() {
+        await();
+        return FAILED == workflowState.getStep(stepName).status();
     }
 
     @Override
-    public boolean isCanceled() {
-        if (await()) {
-            switch (workflowState.getStep(stepName).status()) {
-                case CANCELLED:
-                    return true;
-                case COMPLETED, TIMED_OUT, FAILED:
-                    return false;
-            }
-        }
-        return false;
+    public boolean canceled() {
+        await();
+        return CANCELLED == workflowState.getStep(stepName).status();
     }
 
     @Override
-    public boolean isTimeout() {
-        if (await()) {
-            switch (workflowState.getStep(stepName).status()) {
-                case TIMED_OUT:
-                    return true;
-                case COMPLETED, FAILED, CANCELLED:
-                    return false;
-            }
-        }
-        return false;
+    public boolean timeout() {
+        await();
+        return TIMED_OUT == workflowState.getStep(stepName).status();
     }
 
     @Override
-    public boolean await() {
+    public void await() {
         do {
             if (workflowState.getStep(stepName).status().isTerminal()) {
-                return true;
+                return;
             }
             try {
                 stateChangeTrigger.call();
             } catch (Exception e) {
-                return false;
+                throw new RuntimeException(e); // FIXME -> replace callable with a better fit.
             }
         } while (true /* FIXME workflow is not suspended */);
     }

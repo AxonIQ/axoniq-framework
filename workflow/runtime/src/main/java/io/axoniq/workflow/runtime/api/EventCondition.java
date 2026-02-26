@@ -18,28 +18,36 @@
 package io.axoniq.workflow.runtime.api;
 
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.configuration.ComponentBuilder;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.function.Predicate;
 
-public record EventCondition(
-        @Nonnull QualifiedName qualifiedName,
-        @Nonnull Predicate<EventMessage> payloadPredicate
-) implements Predicate<EventMessage> {
+/**
+ * Represents a condition for event receipt.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
+@FunctionalInterface
+public interface EventCondition {
 
-    public static ComponentBuilder<EventCondition> fromType(Class<?> clazz) {
-        return (c) -> new EventCondition(c.getComponent(MessageTypeResolver.class).resolve(clazz)
-                                          .orElse(new MessageType(clazz))
-                                          .qualifiedName(), (e) -> true);
+
+    /**
+     * Returns the predicate on event message.
+     *
+     * @return predicate.
+     */
+    @Nonnull
+    default Predicate<EventMessage> predicate() {
+        return eventMessage -> true;
     }
 
-    @Override
-    public boolean test(EventMessage eventMessage) {
-        return eventMessage.type().qualifiedName().equals(this.qualifiedName) &&
-                payloadPredicate.test(eventMessage);
-    }
+    /**
+     * Returns qualified name of the event message.
+     *
+     * @return qualified name of the event.
+     */
+    @Nonnull
+    QualifiedName qualifiedName();
 }

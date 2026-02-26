@@ -34,18 +34,18 @@ public interface WorkflowContext extends
         DescribableComponent {
 
     @Nonnull
-    String getWorkflowId();
+    String workflowId();
 
     @Nonnull
-    Map<String, Object> getPayload();
+    Map<String, Object> workflowPayload();
 
     void applyPayloadModification(@Nonnull PayloadModification payloadModification);
 
     @Nonnull
-    WorkflowStatus getStatus();
+    WorkflowStatus workflowStatus();
 
     @Nonnull
-    List<String> getStepHistory();
+    List<String> workflowStepNames();
 
     @Nonnull
     ProcessingContext processingContext();

@@ -86,27 +86,26 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    public boolean isSuccess() {
+    public boolean success() {
         return !cancelled && timeout == null && error == null;
     }
 
     @Override
-    public boolean isFailure() {
+    public boolean failure() {
         return error != null;
     }
 
     @Override
-    public boolean isCanceled() {
+    public boolean canceled() {
         return cancelled;
     }
 
     @Override
-    public boolean isTimeout() {
+    public boolean timeout() {
         return timeout != null;
     }
 
     @Override
-    public boolean await() {
-        return true;
+    public void await() {
     }
 }

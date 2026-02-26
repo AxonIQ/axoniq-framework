@@ -35,8 +35,8 @@ class DefaultEventNameCustomizerTest {
     class BuilderTests {
 
         @Test
-        void testEventName() {
-            assertNotNull(DefaultEventNameCustomizer.Builder.eventName());
+        void testDefaults() {
+            assertNotNull(DefaultEventNameCustomizer.Builder.defaults());
         }
 
         @Test
@@ -106,27 +106,27 @@ class DefaultEventNameCustomizerTest {
 
         @Test
         void testWorkflowCompleted() {
-            var customizer = DefaultEventNameCustomizer.Builder.eventName().workflowCompleted("Finished");
+            var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowCompleted("Finished");
             assertEquals("StepFinished",
                          customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
         }
 
         @Test
         void testWorkflowStarted() {
-            var customizer = DefaultEventNameCustomizer.Builder.eventName().workflowStarted("Start");
+            var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowStarted("Start");
             assertEquals("StepStart", customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName());
         }
 
         @Test
         void testWorkflowTimedOut() {
-            var customizer = DefaultEventNameCustomizer.Builder.eventName().workflowTimedOut("Timeout");
+            var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowTimedOut("Timeout");
             assertEquals("StepTimeout",
                          customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
         }
 
         @Test
         void testWorkflowFailed() {
-            var customizer = DefaultEventNameCustomizer.Builder.eventName().workflowFailed("Fail");
+            var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowFailed("Fail");
             assertEquals("StepFail", customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName());
         }
     }
@@ -237,7 +237,7 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testMergeStepStatusWithDefaultChild() {
             var parent = DefaultEventNameCustomizer.Builder.namespace("parent.ns").baseName("Parent");
-            var child = DefaultEventNameCustomizer.Builder.eventName(); // Default namespace "io.axoniq.workflow"
+            var child = DefaultEventNameCustomizer.Builder.defaults(); // Default namespace "io.axoniq.workflow"
             var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
 
             var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
@@ -249,7 +249,7 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testMergeWithOnlyNamespaceOnParent() {
             var parent = DefaultEventNameCustomizer.Builder.namespace("parent.ns");
-            var child = DefaultEventNameCustomizer.Builder.eventName();
+            var child = DefaultEventNameCustomizer.Builder.defaults();
             var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
 
             var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
@@ -260,9 +260,9 @@ class DefaultEventNameCustomizerTest {
 
         @Test
         void testMergeWorkflowStatus() {
-            var parent = DefaultEventNameCustomizer.Builder.eventName().namespace("parent.ns").workflowCompleted(
+            var parent = DefaultEventNameCustomizer.Builder.defaults().namespace("parent.ns").workflowCompleted(
                     "ParentDone");
-            var child = DefaultEventNameCustomizer.Builder.eventName().workflowCompleted("ChildDone");
+            var child = DefaultEventNameCustomizer.Builder.defaults().workflowCompleted("ChildDone");
             var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
 
             var name = merged.getEventName("step", Map.of(), WorkflowStatus.COMPLETED);
