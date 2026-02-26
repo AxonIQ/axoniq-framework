@@ -20,11 +20,13 @@ package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Comparison operator registry.
@@ -73,7 +75,8 @@ public class ValueComparisonOperatorRegistry {
      *
      * @return set of operators.
      */
-    public Set<String> getAllOperators() {
+    public Set<String> getOperatorNames() {
         return operators.keySet();
     }
+
 }

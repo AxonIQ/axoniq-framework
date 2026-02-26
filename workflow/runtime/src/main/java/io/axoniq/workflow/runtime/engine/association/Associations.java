@@ -19,16 +19,16 @@ package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
-import org.axonframework.common.configuration.ComponentBuilder;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Helper to build associations and create predicates out of them.
@@ -56,6 +56,18 @@ public class Associations implements PredicateBuilder {
     ) {
         var instance = new Associations(Set.of());
         return instance.and(name, operator, value);
+    }
+
+    /**
+     * Creates associations parsing string representations.
+     *
+     * @param registry     registry to use.
+     * @param associations associations to parse.
+     * @return associations object.
+     */
+    public static Associations parse(
+            @Nonnull ValueComparisonOperatorRegistry registry, String... associations) {
+        return new Associations(registry, parseAssociationValues(registry, associations));
     }
 
     /**
@@ -122,4 +134,37 @@ public class Associations implements PredicateBuilder {
         return new AssociationValue(associationKey, registry.get(operator), associationValue);
     }
 
+    /**
+     * Parse association values from their string representations.
+     *
+     * @param associations strings in form of <key><op><value>.
+     * @return set of association values.
+     * @throws IllegalArgumentException if strings are in wrong format or use unsupported operators.
+     */
+    public static Set<AssociationValue> parseAssociationValues(@Nonnull ValueComparisonOperatorRegistry registry,
+                                                               String... associations) {
+        var operators = registry.getOperatorNames();
+        return Arrays.stream(associations)
+                     .map(conditionString -> {
+                              var foundOperators = operators.stream().filter(conditionString::contains)
+                                                            .toList();
+                              if (foundOperators.size() == 1) {
+                                  var op = foundOperators.getFirst();
+                                  var split = conditionString.split(op);
+                                  if (split.length != 2) {
+                                      throw new IllegalArgumentException(
+                                              "Illegal format in start condition string "
+                                                      + conditionString + ". It should be <key>"
+                                                      + foundOperators + "<value>");
+                                  }
+                                  return new AssociationValue(split[0], registry.get(op), split[1]);
+                              } else {
+                                  throw new IllegalArgumentException(
+                                          "Illegal operator used in annotated start condition string "
+                                                  + conditionString + ". Supported operators are "
+                                                  + String.join(", ", operators));
+                              }
+                          }
+                     ).collect(Collectors.toSet());
+    }
 }
