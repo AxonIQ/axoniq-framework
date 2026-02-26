@@ -23,6 +23,7 @@ import jakarta.annotation.Nonnull;
 import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -39,6 +40,9 @@ public class ValueComparisonOperatorRegistry {
         load();
     }
 
+    /**
+     * Performs service loading of operators.
+     */
     public void load() {
         ServiceLoader<ValueComparisonOperator> loader = ServiceLoader.load(
                 ValueComparisonOperator.class, getClass().getClassLoader()
@@ -49,6 +53,12 @@ public class ValueComparisonOperatorRegistry {
         });
     }
 
+    /**
+     * Retrieves a value comparison for given operator name.
+     *
+     * @param name operator name.
+     * @return operator or throws exception if operator does not exist.
+     */
     @Nonnull
     public ValueComparisonOperator get(@Nonnull String name) {
         Objects.requireNonNull(name, "Operator name must not be null.");
@@ -56,5 +66,14 @@ public class ValueComparisonOperatorRegistry {
             throw new IllegalArgumentException("Unknown operator used " + name);
         }
         return operators.get(name);
+    }
+
+    /**
+     * Returns all operators of this registry.
+     *
+     * @return set of operators.
+     */
+    public Set<String> getAllOperators() {
+        return operators.keySet();
     }
 }

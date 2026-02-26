@@ -18,8 +18,8 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;

@@ -20,7 +20,7 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.Workflow;
+import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -70,6 +71,12 @@ class WorkflowModuleTest {
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(registry);
         when(configuration.getComponent(MessageTypeResolver.class)).thenReturn(messageTypeResolver);
         when(configuration.getComponent(Converter.class)).thenReturn(converter);
+
+        when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(java.util.function.Supplier.class))).thenAnswer(
+                invocation -> {
+                    java.util.function.Supplier<ValueComparisonOperatorRegistry> defaultSupplier = invocation.getArgument(1);
+                    return defaultSupplier.get();
+                });
     }
 
     @SuppressWarnings("unchecked")
@@ -243,7 +250,7 @@ class WorkflowModuleTest {
 
     public static class TestAutodetectedWorkflow {
 
-        @Workflow(workflowName = "autodetectedWorkflow", startOn = "java.lang.String", idProperty = "id")
+        @Workflow(workflowName = "autodetectedWorkflow", startOnEvent = "java.lang.String", idProperty = "id")
         public void myWorkflow(TestWorkflowContext context) {
             // some workflow logic
         }

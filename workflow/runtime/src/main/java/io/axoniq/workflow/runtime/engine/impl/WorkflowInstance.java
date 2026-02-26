@@ -70,7 +70,7 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-public class WorkflowInstance implements WorkflowState, WorkflowContext {
+public final class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
 

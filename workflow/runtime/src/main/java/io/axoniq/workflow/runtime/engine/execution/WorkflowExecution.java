@@ -15,10 +15,10 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
@@ -36,7 +36,7 @@ import org.axonframework.common.annotation.Internal;
 public record WorkflowExecution(
         @Nonnull String workflowId,
         @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-        @Nonnull  WorkflowContext workflowContext,
+        @Nonnull WorkflowContext workflowContext,
         @Nonnull WorkflowState workflowState) {
 
     /**
@@ -44,7 +44,7 @@ public record WorkflowExecution(
      *
      * @return the current {@link WorkflowStatus}
      */
-    public WorkflowStatus getStatus() {
+    public WorkflowStatus workflowStatus() {
         return workflowContext.workflowStatus();
     }
     @Override

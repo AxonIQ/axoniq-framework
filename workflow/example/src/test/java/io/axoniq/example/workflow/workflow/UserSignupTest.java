@@ -22,9 +22,10 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.association.Associations;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
@@ -61,7 +62,12 @@ class UserSignupTest {
             return d -> d
                     .declarative(c -> new UserSignupWorkflow()::execute)
                     .workflowName("MyWorkflow")
-                    .on(EventConditions.fromType(RegistrationReceivedEvent.class))
+                    .on(EventConditions
+                                .fromType(
+                                        RegistrationReceivedEvent.class,
+                                        Associations.associate("status", "=", "vip")
+                                )
+                    )
                     .customized((c, w) -> w
                             .eventNameCustomizer(namespace("io.axoniq.dsl.wf.workflow"))
                             .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "signup-" + id))
@@ -106,11 +112,19 @@ class UserSignupTest {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(
                         500,
-                        new RegistrationReceivedEvent("user-456", "kermit@muppets.biz")
+                        new RegistrationReceivedEvent("1", "kermit@muppets.biz", "regular") // don't start
                 ),
                 ofMillis(
-                        6500,
-                        new MagicHappenedEvent("Merlin")
+                        500,
+                        new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip") // start
+                ),
+                ofMillis(
+                        6100,
+                        new MagicHappenedEvent("Saruman") // don't correlate
+                ),
+                ofMillis(
+                        400,
+                        new MagicHappenedEvent("Merlin") // correlate
                 )
         ));
 
@@ -127,7 +141,7 @@ class UserSignupTest {
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.getStatus().isTerminal());
+            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
         });
 
         // Verify that both workflows executed all steps
@@ -135,10 +149,12 @@ class UserSignupTest {
                                                      .map(WorkflowExecution::workflowContext).toList()) {
             assertThat(context.workflowStatus().isTerminal()).isTrue();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("createUser", "activateUser",
-                    // "activateUser2",
-                                                                              "sendWelcomeEmail",
-                                                                              "waitASecond", "waitForMagicToHappen"
+            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(
+                    "createUser",
+                    "activateUser",
+                    "sendWelcomeEmail",
+                    "waitASecond",
+                    "waitForMagicToHappen"
             );
             assertThat(context.workflowPayload().containsKey("magic"));
             assertThat(context.workflowPayload().containsKey("__createUser"));

@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-class AssociationsPredicateBuilderTest {
+class AssociationsTest {
 
     private Converter converter;
 
@@ -25,7 +25,7 @@ class AssociationsPredicateBuilderTest {
 
     @Test
     void testBuildSingleAssociation() {
-        Predicate<EventMessage> predicate = AssociationsPredicateBuilder
+        Predicate<EventMessage> predicate = Associations
                 .associate("orderId", "=", "123")
                 .build(converter);
 
@@ -38,7 +38,7 @@ class AssociationsPredicateBuilderTest {
 
     @Test
     void testBuildMultipleAssociations() {
-        Predicate<EventMessage> predicate = AssociationsPredicateBuilder
+        Predicate<EventMessage> predicate = Associations
                 .associate("orderId", "=", "123")
                 .and("customerId", "=", "abc")
                 .build(converter);
@@ -67,7 +67,7 @@ class AssociationsPredicateBuilderTest {
         ProcessingContext processingContext = Mockito.mock(ProcessingContext.class);
         when(processingContext.component(Converter.class)).thenReturn(converter);
 
-        Predicate<EventMessage> predicate = AssociationsPredicateBuilder
+        Predicate<EventMessage> predicate = Associations
                 .associate("orderId", "=", "123")
                 .build(processingContext);
 
@@ -80,7 +80,7 @@ class AssociationsPredicateBuilderTest {
 
     @Test
     void testBuildWithMissingKey() {
-        Predicate<EventMessage> predicate = AssociationsPredicateBuilder
+        Predicate<EventMessage> predicate = Associations
                 .associate("orderId", "=", "123")
                 .build(converter);
 

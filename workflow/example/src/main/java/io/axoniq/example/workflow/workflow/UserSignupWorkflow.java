@@ -21,7 +21,7 @@ import io.axoniq.example.workflow.fixture.MagicHappenedEvent;
 import io.axoniq.example.workflow.fixture.NotificationService;
 import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.Workflow;
+import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,13 +30,15 @@ import java.time.Duration;
 import java.time.Instant;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
+import static io.axoniq.workflow.runtime.engine.association.Associations.associate;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 public class UserSignupWorkflow {
 
     @Workflow(
             idProperty = "id",
-            startOn = "my.custom.RegistrationReceived" // Message Type Resolver for the rescue!
+            startOnEvent = "my.custom.RegistrationReceived",
+            startOnConditions = {"status=vip"}
     )
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
 
@@ -68,7 +70,10 @@ public class UserSignupWorkflow {
                          p -> NotificationService.sendEmail(payload(p).get("email")));
         ctx.sleep("waitASecond", Duration.ofSeconds(1L));
 
-        var magic = ctx.awaitEvent("waitForMagicToHappen", MagicHappenedEvent.class, Duration.ofSeconds(5));
+        var magic = ctx.awaitEvent("waitForMagicToHappen",
+                                   MagicHappenedEvent.class,
+                                   associate("magician", "=", "Merlin"),
+                                   Duration.ofSeconds(5));
         ctx.addPayload(magic);
 
         logger.info("Magic happened because of the magician {}", magic.magician());

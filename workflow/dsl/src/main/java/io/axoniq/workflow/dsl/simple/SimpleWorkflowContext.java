@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.association.Associations;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -73,6 +74,20 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                         super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
                              .qualifiedName(),
                         e -> predicate.test(e.payloadAs(eventType))
+                ),
+                timeout,
+                TypeReference.fromType(eventType),
+                super.processingContext().component(Converter.class),
+                defaults()
+        ));
+    }
+
+    public <T> T awaitEvent(String stepName, Class<T> eventType, Associations associations, Duration timeout) {
+        return waitFor(PrimitiveCommands.blockingWait(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
+                        e -> associations.build(super.processingContext()).test(e)
                 ),
                 timeout,
                 TypeReference.fromType(eventType),

@@ -19,8 +19,9 @@ package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.HashSet;
@@ -35,27 +36,10 @@ import java.util.function.Predicate;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class AssociationsPredicateBuilder {
+public class Associations implements PredicateBuilder {
 
-    private static final ValueComparisonOperatorRegistry registry = new ValueComparisonOperatorRegistry();
+    private final ValueComparisonOperatorRegistry registry;
     private final Set<AssociationValue> values;
-
-    /**
-     * Creates an association using value equality for comparison.
-     *
-     * @param associationKey   property name.
-     * @param operator         operator for value comparison.
-     * @param associationValue value.
-     * @return association value.
-     */
-    static AssociationValue create(@Nonnull String associationKey,
-                                   @Nonnull String operator,
-                                   @Nonnull Object associationValue) {
-        Objects.requireNonNull(associationKey, "Association key is mandatory");
-        Objects.requireNonNull(operator, "Operator is mandatory");
-        Objects.requireNonNull(associationValue, "Association value is mandatory");
-        return new AssociationValue(associationKey, registry.get(operator), associationValue);
-    }
 
     /**
      * Create a builder with association.
@@ -65,11 +49,13 @@ public class AssociationsPredicateBuilder {
      * @param value    value.
      * @return association builder.
      */
-    public static AssociationsPredicateBuilder associate(@Nonnull String name, @Nonnull String operator,
-                                                         @Nonnull Object value) {
-        return new AssociationsPredicateBuilder(Set.of(
-                create(name, operator, value)
-        ));
+    public static Associations associate(
+            @Nonnull String name,
+            @Nonnull String operator,
+            @Nonnull Object value
+    ) {
+        var instance = new Associations(Set.of());
+        return instance.and(name, operator, value);
     }
 
     /**
@@ -77,8 +63,19 @@ public class AssociationsPredicateBuilder {
      *
      * @param values association values.
      */
-    public AssociationsPredicateBuilder(@Nonnull Set<AssociationValue> values) {
+    public Associations(@Nonnull Set<AssociationValue> values) {
+        this(new ValueComparisonOperatorRegistry(), values);
+    }
+
+    /**
+     * Creates a new association builder using provided association values and operator registry.
+     *
+     * @param registry operator registry.
+     * @param values   association values.
+     */
+    public Associations(@Nonnull ValueComparisonOperatorRegistry registry, @Nonnull Set<AssociationValue> values) {
         this.values = Objects.requireNonNull(values, "The set of association values must not be null.");
+        this.registry = Objects.requireNonNull(registry, "Registry must not be null");
     }
 
 
@@ -90,18 +87,14 @@ public class AssociationsPredicateBuilder {
      * @param value    value.
      * @return association builder.
      */
-    public AssociationsPredicateBuilder and(@Nonnull String name, @Nonnull String operator, @Nonnull Object value) {
+    public Associations and(@Nonnull String name, @Nonnull String operator, @Nonnull Object value) {
         var newValues = new HashSet<>(this.values);
         newValues.add(create(name, operator, value));
-        return new AssociationsPredicateBuilder(newValues);
+        return new Associations(newValues);
     }
 
-    /**
-     * Build a predicate for a message.
-     *
-     * @param converter converter to convert message payload.
-     * @return event message predicate.
-     */
+    @Nonnull
+    @Override
     public Predicate<EventMessage> build(@Nonnull Converter converter) {
         return (eventMessage) -> {
             var payload = eventMessage.payloadAs(new TypeReference<Map<String, Object>>() {
@@ -111,12 +104,22 @@ public class AssociationsPredicateBuilder {
     }
 
     /**
-     * Build a predicate for a message.
+     * Creates an association using value equality for comparison.
      *
-     * @param processingContext message processing context.
-     * @return event message predicate.
+     * @param associationKey   property name.
+     * @param operator         operator for value comparison.
+     * @param associationValue value.
+     * @return association value.
      */
-    public Predicate<EventMessage> build(@Nonnull ProcessingContext processingContext) {
-        return build(processingContext.component(Converter.class));
+    private AssociationValue create(
+            @Nonnull String associationKey,
+            @Nonnull String operator,
+            @Nonnull Object associationValue
+    ) {
+        Objects.requireNonNull(associationKey, "Association key is mandatory");
+        Objects.requireNonNull(operator, "Operator is mandatory");
+        Objects.requireNonNull(associationValue, "Association value is mandatory");
+        return new AssociationValue(associationKey, registry.get(operator), associationValue);
     }
+
 }
