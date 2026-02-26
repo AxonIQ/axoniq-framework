@@ -19,14 +19,17 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.Workflow;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
-import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.engine.association.AssociationValue;
+import io.axoniq.workflow.runtime.engine.association.Associations;
+import io.axoniq.workflow.runtime.engine.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -47,16 +50,19 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
-import static io.axoniq.workflow.runtime.api.Workflow.*;
+import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -327,9 +333,40 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                         };
 
                         ComponentBuilder<EventCondition> eventConditionBuilder = c ->
-                                EventConditions.fromQualifiedName(
-                                        new QualifiedName((String) attributes.get(ATTR_START_ON))
-                                ); // FIXME enrich with associations as soon as available, see #5
+                        {
+                            var opRegistry = c.getComponent(ValueComparisonOperatorRegistry.class,
+                                                            ValueComparisonOperatorRegistry::new);
+                            var allOperators = opRegistry.getAllOperators();
+                            var annotatedStarOnConditions = (String[]) attributes.get(ATTR_START_ON_CONDITIONS);
+                            var associationValues = Arrays.stream(annotatedStarOnConditions).map(
+                                    conditionString -> {
+                                        var foundOperators = allOperators.stream().filter(conditionString::contains)
+                                                                         .toList();
+                                        if (foundOperators.size() == 1) {
+                                            var op = foundOperators.getFirst();
+                                            var split = conditionString.split(op);
+                                            if (split.length != 2) {
+                                                throw new IllegalArgumentException(
+                                                        "Illegal format in start condition string "
+                                                                + conditionString + ". It should be <key>"
+                                                                + foundOperators + "<value>");
+                                            }
+                                            return new AssociationValue(split[0], opRegistry.get(op), split[1]);
+                                        } else {
+                                            throw new IllegalArgumentException(
+                                                    "Illegal operator used in annotated start condition string "
+                                                            + conditionString + ". Supported operators are "
+                                                            + String.join(", ", allOperators));
+                                        }
+                                    }
+                            ).collect(Collectors.toSet());
+
+                            return EventConditions.fromQualifiedName(
+                                    new QualifiedName((String) attributes.get(ATTR_START_ON_EVENT)),
+                                    new Associations(opRegistry, associationValues).build(c)
+                            );
+                        };
+
 
                         ComponentBuilder<WorkflowIdProvider> associationProviderComponentBuilder = c ->
                                 AutodetectionUtils.getIfNotDefault(attributes,

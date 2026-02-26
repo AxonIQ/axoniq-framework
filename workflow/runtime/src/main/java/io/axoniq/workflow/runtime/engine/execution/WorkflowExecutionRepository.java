@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.engine.execution;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;

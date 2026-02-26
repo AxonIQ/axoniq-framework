@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.test.configuration;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -39,7 +40,8 @@ public class WorkflowTestEnhancer implements ConfigurationEnhancer {
                         new DelayedPublisher(
                                 cfg.getComponent(EventSink.class),
                                 cfg.getComponent(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
-                                cfg.getComponent(MessageTypeResolver.class)
+                                cfg.getComponent(MessageTypeResolver.class),
+                                cfg.getComponent(Converter.class)
                         )
                 ).registerDecorator(EventStore.class,
                                     InterceptingEventStore.DECORATION_ORDER - 1,

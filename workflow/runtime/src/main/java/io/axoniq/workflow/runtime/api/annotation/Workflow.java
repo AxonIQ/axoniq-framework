@@ -15,8 +15,9 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.api.annotation;
 
+import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 
 import java.lang.annotation.Documented;
@@ -38,7 +39,8 @@ public @interface Workflow {
 
     String ATTR_ID_PROPERTY = "idProperty";
     String ATTR_ID_PROPERTY_PROVIDER = "idPropertyProvider";
-    String ATTR_START_ON = "startOn";
+    String ATTR_START_ON_EVENT = "startOnEvent";
+    String ATTR_START_ON_CONDITIONS = "startOnConditions";
     String ATTR_WORKFLOW_NAME = "workflowName";
     String ATTR_WORKFLOW_NAMESPACE = "workflowNamespace";
 
@@ -62,7 +64,14 @@ public @interface Workflow {
      *
      * @return qualified name of the event, defaults to empty string.
      */
-    String startOn();
+    String startOnEvent();
+
+    /**
+     * List of start conditions expressed as associations.
+     *
+     * @return array of value associations.
+     */
+    String[] startOnConditions() default {};
 
     /**
      * Specifies the property of the trigger event defining the workflow id.

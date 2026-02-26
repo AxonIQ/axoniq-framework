@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
-import io.axoniq.workflow.runtime.api.Workflow;
+import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import jakarta.annotation.Nonnull;
@@ -31,7 +31,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.api.Workflow.*;
+import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
 import static org.axonframework.common.annotation.AnnotationUtils.findAnnotationAttributes;
 
 public class AutodetectionUtils {

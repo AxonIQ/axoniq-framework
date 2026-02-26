@@ -25,6 +25,7 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
@@ -45,11 +46,41 @@ public class EventConditions {
      * @param clazz type of message (message type resolve will use this type to deduce the message type).
      * @return condition.
      */
-    public static ComponentBuilder<EventCondition> fromType(Class<?> clazz) {
+    public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz) {
+        Objects.requireNonNull(clazz, "Class must not be null");
         return (c) -> (EventCondition) () ->
                 c.getComponent(MessageTypeResolver.class).resolve(clazz)
                  .orElse(new MessageType(clazz))
                  .qualifiedName();
+    }
+
+    /**
+     * Constructs an event condition with a message predicate for the qualified name represented by the given type.
+     *
+     * @param clazz type of message (message type resolve will use this type to deduce the message type).
+     * @param eventMessagePredicate predicate for the message.
+     * @return condition.
+     */
+    public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz,
+                                                            @Nonnull ComponentBuilder<Predicate<EventMessage>> eventMessagePredicate) {
+        Objects.requireNonNull(clazz, "Class must not be null");
+        Objects.requireNonNull(eventMessagePredicate, "Predicate must not be null");
+        return (c) -> new EventCondition() {
+
+            @Nonnull
+            @Override
+            public Predicate<EventMessage> predicate() {
+                return eventMessagePredicate.build(c);
+            }
+
+            @Nonnull
+            @Override
+            public QualifiedName qualifiedName() {
+                return c.getComponent(MessageTypeResolver.class).resolve(clazz)
+                        .orElse(new MessageType(clazz))
+                        .qualifiedName();
+            }
+        };
     }
 
     /**
@@ -59,7 +90,7 @@ public class EventConditions {
      * @return event condition.
      */
     public static EventCondition fromQualifiedName(@Nonnull QualifiedName qualifiedName) {
-        return () -> qualifiedName;
+        return () -> Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
     }
 
     /**
@@ -71,6 +102,9 @@ public class EventConditions {
      */
     public static EventCondition fromQualifiedName(@Nonnull QualifiedName qualifiedName,
                                                    @Nonnull Predicate<EventMessage> predicate) {
+        Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
+        Objects.requireNonNull(predicate, "Predicate name must not be null");
+
         return new EventCondition() {
 
             @Nonnull
@@ -96,7 +130,14 @@ public class EventConditions {
         return () -> new QualifiedName(Void.class);
     }
 
+    /**
+     * Creates a condition for an event with given qualified name, which will never match. (This one is for testing).
+     *
+     * @param qualifiedName event qualified name.
+     * @return event condition.
+     */
     public static EventCondition never(@Nonnull QualifiedName qualifiedName) {
+        Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
         return new EventCondition() {
             @Nonnull
             @Override
