@@ -123,6 +123,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         return CompletableFuture.completedFuture(action.apply(procContext, payload));
                     });
 
+            workflowState.registerRunningFuture(stepName, result);
 
             if (remainingTimeout.isNegative()) {
                 workflowState.appendTask(i -> {
@@ -134,6 +135,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 result
                         .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                         .whenComplete((r, e) -> {
+                            workflowState.removeRunningFuture(stepName);
                             if (r != null) {
                                 workflowState.appendTask(i -> {
                                     workflowContext.applyPayloadModification(p -> resultMapping.apply(p,
@@ -147,10 +149,11 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                     workflowState.appendTask(i -> {
                                         timedOut(stepName, clock.instant(), eventNameCustomizer);
                                     });
-                                } else if (e instanceof InterruptedException) {
+                                } else if (isCancellation(e)) {
+                                    var terminationCause = unwrapCancellation(e);
                                     // FIXME - This is where we should publish using an append condition
                                     workflowState.appendTask(i -> {
-                                        cancelled(stepName, eventNameCustomizer);
+                                        cancelled(stepName, terminationCause, eventNameCustomizer);
                                     });
                                 } else {
                                     // FIXME - This is where we should publish using an append condition

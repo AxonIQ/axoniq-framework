@@ -120,8 +120,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             } else {
                 // Register wait condition
                 workflowState.registerWaitCondition(stepName, eventCondition, eventNameCustomizer);
-                CompletableFuture.runAsync(() -> {
+                var timeoutFuture = CompletableFuture.runAsync(() -> {
                                                workflowState.removeWaitCondition(stepName);
+                                               workflowState.removeRunningFuture(stepName);
                                                workflowState.appendTask(i -> {
                                                                             if (!i.getStep(stepName).status().isTerminal()) {
                                                                                 // only timeout if we are not completed yet
@@ -131,17 +132,20 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                                );
                                            }, CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 ).exceptionally(e -> {
-                    if (e instanceof InterruptedException) {
+                    workflowState.removeRunningFuture(stepName);
+                    if (isCancellation(e)) {
+                        var terminationCause = unwrapCancellation(e);
                         workflowState.removeWaitCondition(stepName);
                         workflowState.appendTask(i -> {
                             // FIXME - This is where we should publish using an append condition
                             if (!i.getStep(stepName).status().isTerminal()) {
-                                cancelled(stepName, eventNameCustomizer);
+                                cancelled(stepName, terminationCause, eventNameCustomizer);
                             }
                         });
                     }
                     return null;
                 });
+                workflowState.registerRunningFuture(stepName, timeoutFuture);
             }
         }
 
@@ -157,6 +161,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      */
     void eventReceived(@Nonnull EventMessage eventMessage, @Nonnull String stepName,
                        @Nonnull EventNameCustomizer eventNameCustomizer) {
+        // Cancel the timeout future since the awaited event has arrived
+        workflowState.cancelAndRemoveRunningFuture(stepName, false);
         // TODO event should be mapped back based on result mapping
         var payload = eventMessagePayload(eventMessage);
         workflowState.appendTask(state ->

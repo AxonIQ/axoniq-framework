@@ -90,6 +90,11 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
                                         eventNameCustomizer);
     }
 
+    @Override
+    public void terminate(@Nonnull TerminateCommand command) {
+        workflowInstance.terminate(command);
+    }
+
     @Nonnull
     @Override
     public String workflowId() {

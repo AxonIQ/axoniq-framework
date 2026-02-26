@@ -86,7 +86,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
-                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
+                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                             .qualifiedName(),
                         e -> associations.build(super.processingContext()).test(e)
                 ),
                 timeout,
@@ -253,6 +254,123 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return this.awaitExecute(stepName, Map.of(), returnType, (p) -> action.get());
     }
 
+
+    public <T> T awaitExecute(String stepName, Payload payload, Class<T> returnType, Function<Payload, T> action) {
+        return this.awaitExecute(stepName, payload.getValues(), returnType, (m) -> action.apply(payload(m)));
+    }
+
+    /**
+     * Terminates the entire workflow with an error, publishing a failure event and cancelling all running steps.
+     *
+     * @param cause the exception that caused the failure
+     * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
+     */
+    public void fail(Throwable cause) {
+        terminate(TerminateCommand.fail(cause, defaults()));
+    }
+
+    /**
+     * Terminates the entire workflow with an error, publishing a failure event and cancelling all running steps.
+     *
+     * @param cause               the exception that caused the failure
+     * @param eventNameCustomizer customizer for the published failure event name
+     * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
+     */
+    public void fail(Throwable cause, EventNameCustomizer eventNameCustomizer) {
+        terminate(TerminateCommand.fail(cause, eventNameCustomizer));
+    }
+
+    /**
+     * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
+     *
+     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
+     *                                                                   published
+     */
+    public void cancel() {
+        terminate(TerminateCommand.cancel(defaults()));
+    }
+
+    /**
+     * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
+     *
+     * @param eventNameCustomizer customizer for the published cancellation event name
+     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
+     *                                                                   published
+     */
+    public void cancel(EventNameCustomizer eventNameCustomizer) {
+        terminate(TerminateCommand.cancel(eventNameCustomizer));
+    }
+
+    /**
+     * Cancels the entire workflow gracefully with a human-readable reason, publishing a cancellation event and
+     * cancelling all running steps.
+     *
+     * @param reason descriptive reason for the cancellation
+     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
+     *                                                                   published
+     */
+    public void cancel(String reason) {
+        terminate(TerminateCommand.cancel(new io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason),
+                                          defaults()));
+    }
+
+    /**
+     * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
+     *
+     * @param cause the exception that triggered the cancellation
+     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
+     *                                                                   published
+     */
+    public void cancel(Throwable cause) {
+        terminate(TerminateCommand.cancel(cause, defaults()));
+    }
+
+    /**
+     * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
+     *
+     * @param cause               the exception that triggered the cancellation
+     * @param eventNameCustomizer customizer for the published cancellation event name
+     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
+     *                                                                   published
+     */
+    public void cancel(Throwable cause, EventNameCustomizer eventNameCustomizer) {
+        terminate(TerminateCommand.cancel(cause, eventNameCustomizer));
+    }
+
+    /**
+     * Cancels a single running step by name without terminating the workflow. The step's future is completed
+     * exceptionally with a {@link io.axoniq.workflow.runtime.api.StepCancellationException}.
+     *
+     * @param stepName the name of the step to cancel
+     */
+    public void cancelStep(String stepName) {
+        terminate(TerminateCommand.cancelledStep(stepName, null, defaults()));
+    }
+
+    /**
+     * Cancels a single running step by name without terminating the workflow. The step's future is completed
+     * exceptionally with the given cause, wrapped in a {@link io.axoniq.workflow.runtime.api.StepCancellationException}
+     * if it isn't one already.
+     *
+     * @param stepName the name of the step to cancel
+     * @param cause    the exception that caused the step cancellation
+     */
+    public void cancelStep(String stepName, Throwable cause) {
+        terminate(TerminateCommand.cancelledStep(stepName, cause, defaults()));
+    }
+
+    /**
+     * Cancels a single running step by name without terminating the workflow. The step's future is completed
+     * exceptionally with a {@link io.axoniq.workflow.runtime.api.StepCancellationException} carrying the given reason.
+     *
+     * @param stepName the name of the step to cancel
+     * @param reason   descriptive reason for the step cancellation
+     */
+    public void cancelStep(String stepName, String reason) {
+        terminate(TerminateCommand.cancelledStep(stepName,
+                                                 new io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                                                 defaults()));
+    }
 
     public void addPayload(@Nonnull Object object) {
         addPayload(payload(this, object));

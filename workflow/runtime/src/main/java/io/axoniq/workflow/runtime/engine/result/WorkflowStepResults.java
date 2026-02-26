@@ -151,6 +151,16 @@ public class WorkflowStepResults {
             public void await() {
                 Arrays.stream(results).forEach(WorkflowStepResult::await);
             }
+
+            @Override
+            public void cancel() {
+                Arrays.stream(results).forEach(WorkflowStepResult::cancel);
+            }
+
+            @Override
+            public void cancel(@Nonnull String reason) {
+                Arrays.stream(results).forEach(r -> r.cancel(reason));
+            }
         };
     }
 }

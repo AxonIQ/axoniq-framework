@@ -108,4 +108,14 @@ public class CompletedWorkflowStepResult implements WorkflowStepResult {
     @Override
     public void await() {
     }
+
+    @Override
+    public void cancel() {
+        // no-op: already in terminal state
+    }
+
+    @Override
+    public void cancel(@Nonnull String reason) {
+        // no-op: already in terminal state
+    }
 }
