@@ -338,6 +338,8 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                                             ValueComparisonOperatorRegistry::new);
                             var allOperators = opRegistry.getAllOperators();
                             var annotatedStarOnConditions = (String[]) attributes.get(ATTR_START_ON_CONDITIONS);
+
+                            // FIXME -> shift this code to Associations
                             var associationValues = Arrays.stream(annotatedStarOnConditions).map(
                                     conditionString -> {
                                         var foundOperators = allOperators.stream().filter(conditionString::contains)
