@@ -201,10 +201,6 @@ class Kontext(
         workflowKontext.cancelStep(stepName, java.util.concurrent.CancellationException(reason), eventNameCustomizer)
     }
 
-    fun cancelStep(result: WorkflowStepResult, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.cancelStep(result.stepName, null, eventNameCustomizer)
-    }
-
     // just to create blocking call
     fun block(result: Kontext.() -> WorkflowStepResult) {
         val r = result()

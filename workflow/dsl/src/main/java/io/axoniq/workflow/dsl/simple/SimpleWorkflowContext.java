@@ -185,10 +185,6 @@ public class SimpleWorkflowContext extends WorkflowInstance
         cancelStep(stepName, new java.util.concurrent.CancellationException(reason));
     }
 
-    public void cancelStep(WorkflowStepResult result) {
-        cancelStep(result.getStepName());
-    }
-
     public void addPayload(Object object) {
         addPayload(payload(this, object));
     }

@@ -58,10 +58,10 @@ public class CancelStepWorkflow {
             return Map.of();
         }, fiveMin);
 
-        // Cancel only stepB
+        // Cancel only stepB via the result handle
         sleepQuietly(1_000);
         logger.info("Cancelling stepB");
-        ctx.cancelStep("stepB", "No longer needed");
+        r2.cancel("No longer needed");
 
         //finish
         sleepQuietly(1_000);

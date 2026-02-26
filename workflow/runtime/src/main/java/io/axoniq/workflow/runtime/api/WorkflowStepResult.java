@@ -88,4 +88,16 @@ public interface WorkflowStepResult {
      * @return true, if finished without errors.
      */
     boolean await();
+
+    /**
+     * Cancels this step if it is still running. No-op if already in a terminal state.
+     */
+    void cancel();
+
+    /**
+     * Cancels this step with a reason if it is still running. No-op if already in a terminal state.
+     *
+     * @param reason human-readable cancellation reason.
+     */
+    void cancel(@Nonnull String reason);
 }

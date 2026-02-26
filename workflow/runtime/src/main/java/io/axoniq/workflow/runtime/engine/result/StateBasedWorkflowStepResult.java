@@ -24,6 +24,7 @@ import jakarta.annotation.Nonnull;
 
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 
 /**
  * Workflow Step result based on the Workflow State.
@@ -140,5 +141,15 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
                 return false;
             }
         } while (true /* FIXME workflow is not suspended */);
+    }
+
+    @Override
+    public void cancel() {
+        workflowState.cancelRunningStep(stepName, null);
+    }
+
+    @Override
+    public void cancel(@Nonnull String reason) {
+        workflowState.cancelRunningStep(stepName, new CancellationException(reason));
     }
 }
