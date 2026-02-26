@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -95,7 +96,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelCancelsAllRunningSteps() {
-        assertThatThrownBy(() -> delegate.terminate(false, null, eventNameCustomizer))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(workflowState).cancelAllRunningSteps(any());
@@ -103,7 +104,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelPublishesCancelledWorkflowEvent() {
-        assertThatThrownBy(() -> delegate.terminate(false, null, eventNameCustomizer))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
@@ -111,7 +112,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelAppliesStateChange() {
-        assertThatThrownBy(() -> delegate.terminate(false, null, eventNameCustomizer))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(workflowState).applyStateChange(any(EventMessage.class), eq(processingContext));
@@ -119,7 +120,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelWithNullCauseThrowsWorkflowCancelledExceptionWithMessage() {
-        assertThatThrownBy(() -> delegate.terminate(false, null, eventNameCustomizer))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class)
                 .hasMessage("Workflow cancelled");
     }
@@ -128,7 +129,7 @@ class TerminateDelegateCancelTest {
     void terminateCancelWithCauseThrowsWorkflowCancelledExceptionWithCause() {
         var cause = new RuntimeException("user requested cancellation");
 
-        assertThatThrownBy(() -> delegate.terminate(false, cause, eventNameCustomizer))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class)
                 .hasCause(cause);
     }
@@ -137,7 +138,7 @@ class TerminateDelegateCancelTest {
     void terminateCancelExecutesStepsInOrder() {
         var order = inOrder(workflowState, eventSink);
 
-        assertThatThrownBy(() -> delegate.terminate(false, null, eventNameCustomizer))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         order.verify(workflowState).cancelAllRunningSteps(any());
@@ -152,7 +153,8 @@ class TerminateDelegateCancelTest {
         var configuration = mock(WorkflowConfiguration.class);
         when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of(WorkflowStatus.CANCELLED, listener));
 
-        assertThatThrownBy(() -> delegate.terminate(false, null, eventNameCustomizer, "test-workflow", configuration))
+        assertThatThrownBy(() -> delegate.terminate(
+                new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", configuration)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));

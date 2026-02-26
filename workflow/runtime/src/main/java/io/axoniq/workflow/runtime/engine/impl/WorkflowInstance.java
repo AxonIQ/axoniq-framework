@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
@@ -327,11 +328,13 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    public void terminate(boolean error, @Nullable Throwable cause,
-                          @Nonnull EventNameCustomizer eventNameCustomizer) {
+    public void terminate(@Nonnull TerminateCommand command) {
         var name = resolvedWorkflowName != null ? resolvedWorkflowName : workflowId;
-        var parent = configurationCustomizer != null ? configurationCustomizer : eventNameCustomizer;
-        terminateDelegate.terminate(error, cause, merge(parent, eventNameCustomizer), name, workflowConfiguration);
+        var parent = configurationCustomizer != null ? configurationCustomizer : command.eventNameCustomizer();
+        terminateDelegate.terminate(new TerminateCommand(
+                command.error(), command.cause(), merge(parent, command.eventNameCustomizer()),
+                name, workflowConfiguration
+        ));
     }
 
     @Override

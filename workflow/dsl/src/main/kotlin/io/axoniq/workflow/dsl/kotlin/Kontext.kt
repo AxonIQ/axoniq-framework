@@ -174,19 +174,19 @@ class Kontext(
     }
 
     fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(true, cause, eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.fail(cause, eventNameCustomizer))
     }
 
     fun cancel(eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(false, null, eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(eventNameCustomizer))
     }
 
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(false, java.util.concurrent.CancellationException(reason), eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(java.util.concurrent.CancellationException(reason), eventNameCustomizer))
     }
 
     fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(false, cause, eventNameCustomizer)
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(cause, eventNameCustomizer))
     }
 
     fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = eventName()) {

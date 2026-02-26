@@ -75,42 +75,24 @@ public class TerminateDelegate implements TerminatePrimitive {
     }
 
     @Override
-    public void terminate(boolean error, @Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        terminate(error, cause, eventNameCustomizer, workflowName);
-    }
+    public void terminate(@Nonnull TerminateCommand command) {
+        var effectiveName = command.workflowNameOverride() != null
+                ? command.workflowNameOverride()
+                : workflowName;
 
-    public void terminate(boolean error, @Nullable Throwable cause,
-                          @Nonnull EventNameCustomizer eventNameCustomizer,
-                          @Nonnull String workflowNameOverride) {
-        terminate(error, cause, eventNameCustomizer, workflowNameOverride, null);
-    }
+        workflowState.cancelAllRunningSteps(command.cause());
 
-    public void terminate(boolean error, @Nullable Throwable cause,
-                          @Nonnull EventNameCustomizer eventNameCustomizer,
-                          @Nonnull String workflowNameOverride,
-                          @Nullable WorkflowConfiguration<?> configuration) {
-
-        workflowState.cancelAllRunningSteps(cause);
-
-        if (error) {
-            failed(cause, eventNameCustomizer, workflowNameOverride, configuration);
+        if (command.error()) {
+            failed(command, effectiveName);
         } else {
-            cancelled(cause, eventNameCustomizer, workflowNameOverride, configuration);
+            cancelled(command, effectiveName);
         }
     }
 
-    protected void failed(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        failed(cause, eventNameCustomizer, workflowName);
-    }
-
-    protected void failed(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
-                          @Nonnull String workflowNameOverride) {
-        failed(cause, eventNameCustomizer, workflowNameOverride, null);
-    }
-
-    protected void failed(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
-                          @Nonnull String workflowNameOverride,
-                          @Nullable WorkflowConfiguration<?> configuration) {
+    protected void failed(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
+        var cause = command.cause();
+        var eventNameCustomizer = command.eventNameCustomizer();
+        var configuration = command.configuration();
         var exception = cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
 
         ProcessingContextUtils.executeWithResult(
@@ -118,11 +100,11 @@ public class TerminateDelegate implements TerminatePrimitive {
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx, failedWorkflow(workflowContext, workflowNameOverride, exception, eventNameCustomizer))
+                ctx -> eventSink.publish(ctx, failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer))
         ).join(); // FIXME join
 
         workflowState.applyStateChange(
-                failedWorkflow(workflowContext, workflowNameOverride, exception, eventNameCustomizer),
+                failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer),
                 workflowContext.processingContext()
         );
 
@@ -139,28 +121,21 @@ public class TerminateDelegate implements TerminatePrimitive {
         throw new WorkflowFailedException("Workflow terminated with error");
     }
 
-    protected void cancelled(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        cancelled(cause, eventNameCustomizer, workflowName);
-    }
+    protected void cancelled(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
+        var cause = command.cause();
+        var eventNameCustomizer = command.eventNameCustomizer();
+        var configuration = command.configuration();
 
-    protected void cancelled(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
-                             @Nonnull String workflowNameOverride) {
-        cancelled(cause, eventNameCustomizer, workflowNameOverride, null);
-    }
-
-    protected void cancelled(@Nullable Throwable cause, @Nonnull EventNameCustomizer eventNameCustomizer,
-                             @Nonnull String workflowNameOverride,
-                             @Nullable WorkflowConfiguration<?> configuration) {
         ProcessingContextUtils.executeWithResult(
                 null,
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx, cancelledWorkflow(workflowContext, workflowNameOverride, cause, eventNameCustomizer))
+                ctx -> eventSink.publish(ctx, cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer))
         ).join(); // FIXME join
 
         workflowState.applyStateChange(
-                cancelledWorkflow(workflowContext, workflowNameOverride, cause, eventNameCustomizer),
+                cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer),
                 workflowContext.processingContext()
         );
 

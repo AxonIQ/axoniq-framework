@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
@@ -146,31 +147,31 @@ public class SimpleWorkflowContext extends WorkflowInstance
     }
 
     public void fail(Throwable cause) {
-        terminate(true, cause, eventName());
+        terminate(TerminateCommand.fail(cause, eventName()));
     }
 
     public void fail(Throwable cause, EventNameCustomizer eventNameCustomizer) {
-        terminate(true, cause, eventNameCustomizer);
+        terminate(TerminateCommand.fail(cause, eventNameCustomizer));
     }
 
     public void cancel() {
-        terminate(false, null, eventName());
+        terminate(TerminateCommand.cancel(eventName()));
     }
 
     public void cancel(EventNameCustomizer eventNameCustomizer) {
-        terminate(false, null, eventNameCustomizer);
+        terminate(TerminateCommand.cancel(eventNameCustomizer));
     }
 
     public void cancel(String reason) {
-        terminate(false, new java.util.concurrent.CancellationException(reason), eventName());
+        terminate(TerminateCommand.cancel(new java.util.concurrent.CancellationException(reason), eventName()));
     }
 
     public void cancel(Throwable cause) {
-        terminate(false, cause, eventName());
+        terminate(TerminateCommand.cancel(cause, eventName()));
     }
 
     public void cancel(Throwable cause, EventNameCustomizer eventNameCustomizer) {
-        terminate(false, cause, eventNameCustomizer);
+        terminate(TerminateCommand.cancel(cause, eventNameCustomizer));
     }
 
     public void cancelStep(String stepName) {
