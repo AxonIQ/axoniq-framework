@@ -151,6 +151,16 @@ public class WorkflowStepResults {
             public boolean await() {
                 return Arrays.stream(results).anyMatch(WorkflowStepResult::await);
             }
+
+            @Override
+            public void cancel() {
+                Arrays.stream(results).forEach(WorkflowStepResult::cancel);
+            }
+
+            @Override
+            public void cancel(@Nonnull String reason) {
+                Arrays.stream(results).forEach(r -> r.cancel(reason));
+            }
         };
     }
 }

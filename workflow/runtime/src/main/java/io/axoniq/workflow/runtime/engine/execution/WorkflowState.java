@@ -93,6 +93,16 @@ public interface WorkflowState {
 
     void removeWaitCondition(@Nonnull String stepName);
 
+    void registerRunningFuture(@Nonnull String stepName, @Nonnull java.util.concurrent.CompletableFuture<?> future);
+
+    void removeRunningFuture(@Nonnull String stepName);
+
+    boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
+
+    void cancelAllRunningSteps(@Nullable Throwable cause);
+
+    void cancelAndRemoveRunningFuture(@Nonnull String stepName, boolean mayInterruptIfRunning);
+
     // FIXME check if we can replace this for the Context interface
     @Nonnull
     ProcessingContext processingContext();

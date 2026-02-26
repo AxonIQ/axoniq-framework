@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.result;
 
+import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
@@ -140,5 +141,15 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
                 return false;
             }
         } while (true /* FIXME workflow is not suspended */);
+    }
+
+    @Override
+    public void cancel() {
+        workflowState.cancelRunningStep(stepName, new StepCancellationException("Step cancelled"));
+    }
+
+    @Override
+    public void cancel(@Nonnull String reason) {
+        workflowState.cancelRunningStep(stepName, new StepCancellationException(reason));
     }
 }

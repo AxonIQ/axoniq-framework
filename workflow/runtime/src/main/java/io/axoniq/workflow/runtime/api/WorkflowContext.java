@@ -31,6 +31,7 @@ import java.util.Map;
 public interface WorkflowContext extends
         ExecutePrimitive,
         WaitForPrimitive,
+        TerminatePrimitive,
         DescribableComponent {
 
     @Nonnull
