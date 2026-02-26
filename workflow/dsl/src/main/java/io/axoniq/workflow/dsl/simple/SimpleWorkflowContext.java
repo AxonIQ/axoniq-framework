@@ -163,7 +163,7 @@ public class SimpleWorkflowContext extends WorkflowInstance
     }
 
     public void cancel(String reason) {
-        terminate(TerminateCommand.cancel(new java.util.concurrent.CancellationException(reason), eventName()));
+        terminate(TerminateCommand.cancel(new io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventName()));
     }
 
     public void cancel(Throwable cause) {
@@ -183,7 +183,7 @@ public class SimpleWorkflowContext extends WorkflowInstance
     }
 
     public void cancelStep(String stepName, String reason) {
-        cancelStep(stepName, new java.util.concurrent.CancellationException(reason));
+        cancelStep(stepName, new io.axoniq.workflow.runtime.api.StepCancellationException(reason));
     }
 
     public void addPayload(Object object) {

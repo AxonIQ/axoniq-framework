@@ -38,9 +38,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -151,10 +149,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                     workflowState.appendTask(i -> {
                                         timedOut(stepName, clock.instant(), eventNameCustomizer);
                                     });
-                                } else if (e instanceof CancellationException
-                                        || (e instanceof CompletionException && e.getCause() instanceof CancellationException)) {
-                                    var cancellation = e instanceof CancellationException ? e : e.getCause();
-                                    var terminationCause = cancellation.getCause();
+                                } else if (isCancellation(e)) {
+                                    var terminationCause = unwrapCancellation(e);
                                     // FIXME - This is where we should publish using an append condition
                                     workflowState.appendTask(i -> {
                                         cancelled(stepName, terminationCause, eventNameCustomizer);

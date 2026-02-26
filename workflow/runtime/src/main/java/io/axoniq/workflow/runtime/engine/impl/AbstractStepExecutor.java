@@ -18,7 +18,10 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.StepCancellationException;
+import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
@@ -38,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
@@ -168,5 +172,17 @@ public abstract class AbstractStepExecutor {
         return sanitize(eventMessage.payloadAs(new TypeReference<>() {
                         }, workflowContext.processingContext().component(Converter.class))
         );
+    }
+
+    protected static boolean isCancellation(@Nonnull Throwable e) {
+        var cause = e instanceof CompletionException ? e.getCause() : e;
+        return cause instanceof StepCancellationException
+                || cause instanceof WorkflowCancelledException
+                || cause instanceof WorkflowFailedException;
+    }
+
+    @Nonnull
+    protected static Throwable unwrapCancellation(@Nonnull Throwable e) {
+        return e instanceof CompletionException ? e.getCause() : e;
     }
 }

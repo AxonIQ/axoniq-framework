@@ -99,7 +99,15 @@ class TerminateDelegateFailTest {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(workflowState).cancelAllRunningSteps(any());
+        verify(workflowState).cancelAllRunningSteps(isA(WorkflowFailedException.class));
+    }
+
+    @Test
+    void terminateFailWithNullCausePassesWorkflowFailedExceptionToSteps() {
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(null, eventNameCustomizer)))
+                .isInstanceOf(WorkflowFailedException.class);
+
+        verify(workflowState).cancelAllRunningSteps(isA(WorkflowFailedException.class));
     }
 
     @Test

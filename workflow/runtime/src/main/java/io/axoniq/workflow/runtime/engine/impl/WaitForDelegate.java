@@ -38,7 +38,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
@@ -134,8 +133,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                            }, CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 ).exceptionally(e -> {
                     workflowState.removeRunningFuture(stepName);
-                    if (e instanceof CancellationException) {
-                        var terminationCause = e.getCause();
+                    if (isCancellation(e)) {
+                        var terminationCause = unwrapCancellation(e);
                         workflowState.removeWaitCondition(stepName);
                         workflowState.appendTask(i -> {
                             // FIXME - This is where we should publish using an append condition

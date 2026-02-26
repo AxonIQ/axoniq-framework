@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
@@ -71,7 +72,15 @@ public class TerminateDelegate implements TerminatePrimitive {
     @Override
     public void cancelStep(@Nonnull String stepName, @Nullable Throwable cause,
                            @Nonnull EventNameCustomizer eventNameCustomizer) {
-        workflowState.cancelRunningStep(stepName, cause);
+        Throwable stepCause;
+        if (cause instanceof StepCancellationException) {
+            stepCause = cause;
+        } else if (cause != null) {
+            stepCause = new StepCancellationException(cause);
+        } else {
+            stepCause = new StepCancellationException("Step cancelled");
+        }
+        workflowState.cancelRunningStep(stepName, stepCause);
     }
 
     @Override
@@ -80,7 +89,17 @@ public class TerminateDelegate implements TerminatePrimitive {
                 ? command.workflowNameOverride()
                 : workflowName;
 
-        workflowState.cancelAllRunningSteps(command.cause());
+        Throwable stepCause;
+        if (command.error()) {
+            stepCause = command.cause() != null
+                    ? new WorkflowFailedException(command.cause().getMessage(), command.cause())
+                    : new WorkflowFailedException("Workflow terminated with error");
+        } else {
+            stepCause = command.cause() != null
+                    ? new WorkflowCancelledException(command.cause().getMessage(), command.cause())
+                    : new WorkflowCancelledException("Workflow cancelled");
+        }
+        workflowState.cancelAllRunningSteps(stepCause);
 
         if (command.error()) {
             failed(command, effectiveName);

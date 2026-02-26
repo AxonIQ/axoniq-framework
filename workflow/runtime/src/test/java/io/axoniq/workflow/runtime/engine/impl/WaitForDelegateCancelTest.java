@@ -17,18 +17,20 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.StepCancellationException;
+import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Proves that only {@link CancellationException} (manual cancel) triggers a step cancelled event,
+ * Proves that only cancellation exceptions trigger a step cancelled event,
  * while {@link InterruptedException} (thread interrupt / shutdown) does not.
  * <p>
  * This mirrors the {@code .exceptionally()} handler pattern used in {@link WaitForDelegate}.
@@ -46,16 +48,46 @@ class WaitForDelegateCancelTest {
     }
 
     @Test
-    void cancellationExceptionTriggersStepCancelledEvent() {
+    void stepCancellationExceptionTriggersStepCancelledEvent() {
         var root = new CompletableFuture<Void>();
         root.exceptionally(e -> {
-            if (e instanceof CancellationException) {
+            if (AbstractStepExecutor.isCancellation(e)) {
                 workflowState.appendTask(any());
             }
             return null;
         });
 
-        root.completeExceptionally(new CancellationException());
+        root.completeExceptionally(new StepCancellationException("cancelled"));
+
+        verify(workflowState).appendTask(any());
+    }
+
+    @Test
+    void workflowCancelledExceptionTriggersStepCancelledEvent() {
+        var root = new CompletableFuture<Void>();
+        root.exceptionally(e -> {
+            if (AbstractStepExecutor.isCancellation(e)) {
+                workflowState.appendTask(any());
+            }
+            return null;
+        });
+
+        root.completeExceptionally(new WorkflowCancelledException("cancelled"));
+
+        verify(workflowState).appendTask(any());
+    }
+
+    @Test
+    void workflowFailedExceptionTriggersStepCancelledEvent() {
+        var root = new CompletableFuture<Void>();
+        root.exceptionally(e -> {
+            if (AbstractStepExecutor.isCancellation(e)) {
+                workflowState.appendTask(any());
+            }
+            return null;
+        });
+
+        root.completeExceptionally(new WorkflowFailedException("failed"));
 
         verify(workflowState).appendTask(any());
     }
@@ -64,7 +96,7 @@ class WaitForDelegateCancelTest {
     void interruptedExceptionDoesNotTriggerStepCancelledEvent() {
         var root = new CompletableFuture<Void>();
         root.exceptionally(e -> {
-            if (e instanceof CancellationException) {
+            if (AbstractStepExecutor.isCancellation(e)) {
                 workflowState.appendTask(any());
             }
             return null;

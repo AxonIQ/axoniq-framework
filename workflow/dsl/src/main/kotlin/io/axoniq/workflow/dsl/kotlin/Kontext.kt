@@ -182,7 +182,7 @@ class Kontext(
     }
 
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(java.util.concurrent.CancellationException(reason), eventNameCustomizer))
+        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventNameCustomizer))
     }
 
     fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
@@ -198,7 +198,7 @@ class Kontext(
     }
 
     fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.cancelStep(stepName, java.util.concurrent.CancellationException(reason), eventNameCustomizer)
+        workflowKontext.cancelStep(stepName, io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventNameCustomizer)
     }
 
     // just to create blocking call

@@ -99,7 +99,17 @@ class TerminateDelegateCancelTest {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        verify(workflowState).cancelAllRunningSteps(any());
+        verify(workflowState).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
+    }
+
+    @Test
+    void terminateCancelWithCausePassesWorkflowCancelledExceptionToSteps() {
+        var cause = new RuntimeException("user requested cancellation");
+
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(cause, eventNameCustomizer)))
+                .isInstanceOf(WorkflowCancelledException.class);
+
+        verify(workflowState).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
     }
 
     @Test

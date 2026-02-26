@@ -22,9 +22,10 @@ import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 
+import io.axoniq.workflow.runtime.api.StepCancellationException;
+
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -59,18 +60,14 @@ public class RunningSteps implements DescribableComponent {
         if (future == null) {
             return false;
         }
-        var ex = new CancellationException("Step cancelled");
-        if (cause != null) ex.initCause(cause);
+        var ex = cause != null ? cause : new StepCancellationException("Step cancelled");
         return future.completeExceptionally(ex);
     }
 
     public void cancelAll(@Nullable Throwable cause, @Nonnull Consumer<Set<String>> awaitTermination) {
         var stepNames = new HashSet<>(runningFutures.keySet());
-        runningFutures.values().forEach(f -> {
-            var ex = new CancellationException("Workflow terminated");
-            if (cause != null) ex.initCause(cause);
-            f.completeExceptionally(ex);
-        });
+        var ex = cause != null ? cause : new StepCancellationException("Workflow terminated");
+        runningFutures.values().forEach(f -> f.completeExceptionally(ex));
         awaitTermination.accept(stepNames);
         runningFutures.clear();
     }

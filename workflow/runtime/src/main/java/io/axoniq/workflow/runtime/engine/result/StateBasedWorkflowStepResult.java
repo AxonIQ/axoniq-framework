@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.result;
 
+import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
@@ -24,7 +25,6 @@ import jakarta.annotation.Nonnull;
 
 import java.util.Optional;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
 
 /**
  * Workflow Step result based on the Workflow State.
@@ -145,11 +145,11 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void cancel() {
-        workflowState.cancelRunningStep(stepName, null);
+        workflowState.cancelRunningStep(stepName, new StepCancellationException("Step cancelled"));
     }
 
     @Override
     public void cancel(@Nonnull String reason) {
-        workflowState.cancelRunningStep(stepName, new CancellationException(reason));
+        workflowState.cancelRunningStep(stepName, new StepCancellationException(reason));
     }
 }
