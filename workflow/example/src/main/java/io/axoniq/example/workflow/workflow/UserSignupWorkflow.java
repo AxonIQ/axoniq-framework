@@ -21,7 +21,9 @@ import io.axoniq.example.workflow.fixture.MagicHappenedEvent;
 import io.axoniq.example.workflow.fixture.NotificationService;
 import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,16 +35,22 @@ import static io.axoniq.workflow.dsl.Payload.payload;
 import static io.axoniq.workflow.runtime.engine.association.Associations.associate;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
+/**
+ * Sample user registration.
+ */
 public class UserSignupWorkflow {
+
+    Logger logger = LoggerFactory.getLogger(UserSignupWorkflow.class);
 
     @Workflow(
             idProperty = "id",
             startOnEvent = "my.custom.RegistrationReceived",
             startOnConditions = {"status=vip"}
     )
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(
+            @Nonnull SimpleWorkflowContext ctx
+    ) {
 
-        Logger logger = LoggerFactory.getLogger(UserSignupWorkflow.class);
 
         logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.workflowPayload());
 
@@ -79,6 +87,14 @@ public class UserSignupWorkflow {
         logger.info("Magic happened because of the magician {}", magic.magician());
         // -> end
 
-        logger.info("User signup workflow ended at {} for {}", Instant.now(), ctx.workflowPayload());
+
+    }
+
+    @OnSuccess
+    public void onFinish(
+            @Nonnull WorkflowStatus workflowStatus,
+            @Nonnull SimpleWorkflowContext ctx
+    ) {
+        logger.info("User signup workflow {} at {} for {}", workflowStatus, Instant.now(), ctx.workflowPayload());
     }
 }

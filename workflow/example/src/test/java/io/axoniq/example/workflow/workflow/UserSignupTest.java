@@ -22,6 +22,7 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.association.Associations;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
@@ -30,6 +31,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
+import jakarta.annotation.Nonnull;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -71,6 +73,15 @@ class UserSignupTest {
                     .customized((c, w) -> w
                             .eventNameCustomizer(namespace("io.axoniq.dsl.wf.workflow"))
                             .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "signup-" + id))
+                            .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
+                                    new WorkflowStatusChangeListener() {
+                                        @Override
+                                        public <C extends WorkflowContext> void onWorkflowStatus(
+                                                @Nonnull WorkflowStatus state, @Nonnull C context) {
+                                            new UserSignupWorkflow().onFinish(state, (SimpleWorkflowContext) context);
+                                        }
+                                    }
+                            )
                     );
         }
 
