@@ -83,6 +83,14 @@ public interface WorkflowState {
     @Nonnull
     WorkflowStatus getStatus();
 
+    /**
+     * Returns the cause of workflow termination, if the workflow has been terminated via fail or cancel.
+     *
+     * @return the termination cause, or {@code null} if the workflow has not been terminated.
+     */
+    @Nullable
+    Throwable getTerminationCause();
+
     boolean isExecutable();
 
     boolean hasTasks();

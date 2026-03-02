@@ -94,6 +94,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private volatile WorkflowConfiguration<?> workflowConfiguration;
     private volatile String resolvedWorkflowName;
     private WorkflowStatus status = WorkflowStatus.NONE;
+    private volatile Throwable terminationCause;
     private boolean executable = false;
     private Map<String, Object> payload;
 
@@ -193,9 +194,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                 logger.trace("Workflow executed. Resulting workflow payload {}.",
                                              workflowContext.getPayload());
 
-                                sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
-                                        5,
-                                        TimeUnit.SECONDS); // FIXME constant?
+                                if (!ctx.getStatus().isTerminal()) {
+                                    sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
+                                            5,
+                                            TimeUnit.SECONDS); // FIXME constant?
+                                }
                             } catch (WorkflowFailedException | WorkflowCancelledException e) {
                                 // Events already sent by TerminateDelegate, just let it propagate
                             } catch (Exception e) {
@@ -272,9 +275,17 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                     break;
             }
         });
-        // Apply workflow-level state changes
-        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> this.status = status
-        );
+        // Apply workflow-level state changes — ignore transitions once already terminal
+        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> {
+            if (this.status.isTerminal()) {
+                return;
+            }
+            this.status = status;
+            if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
+                    && eventPayload instanceof Throwable t) {
+                this.terminationCause = t;
+            }
+        });
     }
 
     @Override
@@ -445,6 +456,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     @Nonnull
     public WorkflowStatus getStatus() {
         return this.status;
+    }
+
+    @Override
+    @Nullable
+    public Throwable getTerminationCause() {
+        return this.terminationCause;
     }
 
     @Override

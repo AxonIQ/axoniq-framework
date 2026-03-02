@@ -90,6 +90,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
         acceptAllPendingTasksForStep(stepName);
+        guardTerminalState();
 
         if (!workflowState.containsStep(stepName)) {
             workflowState.appendTask(i ->
