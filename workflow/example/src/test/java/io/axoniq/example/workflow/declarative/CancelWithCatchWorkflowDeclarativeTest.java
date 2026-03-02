@@ -25,7 +25,10 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
+import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -95,5 +98,27 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
             assertThat(context.getStepHistory()).contains("stepA");
             assertThat(context.getStepHistory()).doesNotContain("stepAfterCancel");
         }
+
+        // Verify no events were published after the workflow terminal event
+        var events = PrettyPrintingRecordingEventStore.lastInstance().getPublishedEvents().stream()
+                .filter(e -> e.metadata().containsKey("workflowId"))
+                .toList();
+
+        // Find index of the workflow CANCELLED event
+        int cancelledIndex = -1;
+        for (int i = 0; i < events.size(); i++) {
+            var wfStatus = MetadataUtils.getWorkflowStatus(events.get(i).metadata());
+            if (wfStatus.isPresent() && wfStatus.get() == WorkflowStatus.CANCELLED) {
+                cancelledIndex = i;
+                break;
+            }
+        }
+        assertThat(cancelledIndex).as("WorkflowCancelled event should exist").isGreaterThanOrEqualTo(0);
+
+        // No workflow or step events should appear after the terminal workflow event
+        List<EventMessage> eventsAfterTerminal = events.subList(cancelledIndex + 1, events.size());
+        assertThat(eventsAfterTerminal)
+                .as("No events should be published after WorkflowCancelled")
+                .isEmpty();
     }
 }

@@ -24,7 +24,6 @@ import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
-import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -41,8 +40,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
-import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.completedStep;
 
 /**
  * Delegate implementing {@link WaitForPrimitive}.
@@ -165,21 +162,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         workflowState.cancelAndRemoveRunningFuture(stepName, false);
         // TODO event should be mapped back based on result mapping
         var payload = eventMessagePayload(eventMessage);
-        workflowState.appendTask(state ->
-                                         ProcessingContextUtils.executeWithResult(
-                                                 stepName,
-                                                 unitOfWorkFactory,
-                                                 executor,
-                                                 state.getStep(stepName).context(),
-                                                 ctx ->
-                                                         eventSink.publish(
-                                                                 ctx,
-                                                                 completedStep(workflowContext, stepName, payload,
-                                                                               merge(parentEventNameCustomizer,
-                                                                                     eventNameCustomizer)
-                                                                 )
-                                                         )
-                                         ).join()
-        );
+        workflowState.appendTask(state -> completed(stepName, payload, eventNameCustomizer).join());
     }
 }
