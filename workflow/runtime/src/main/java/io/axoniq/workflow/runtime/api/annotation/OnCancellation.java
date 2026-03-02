@@ -15,25 +15,26 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.api;
+package io.axoniq.workflow.runtime.api.annotation;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import jakarta.annotation.Nonnull;
+import java.lang.annotation.*;
 
 /**
- * Listener informed on status change of workflow.
+ * Method marker to register a workflow lifecycle cancellation listener.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@FunctionalInterface
-public interface WorkflowStatusChangeListener {
-
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
+public @interface OnCancellation {
     /**
-     * React on workflow status change.
+     * Specifies the name of the workflow.
      *
-     * @param state   workflow status.
-     * @param context workflow context.
+     * @return workflow name, defaults to empty string, meaning that the full-qualified name and method name of the
+     * class is used.
      */
-    <C extends WorkflowContext> void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull C context);
+    String workflowName() default "";
+
 }

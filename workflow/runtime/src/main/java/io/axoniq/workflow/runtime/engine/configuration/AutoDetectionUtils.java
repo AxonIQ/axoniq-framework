@@ -18,15 +18,23 @@
 package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.annotation.OnCancellation;
+import io.axoniq.workflow.runtime.api.annotation.OnFailure;
+import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
+import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.engine.association.Associations;
 import io.axoniq.workflow.runtime.engine.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -35,12 +43,18 @@ import org.axonframework.messaging.core.QualifiedName;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
+import static io.axoniq.workflow.runtime.engine.execution.WorkflowStatus.*;
 import static org.axonframework.common.annotation.AnnotationUtils.findAnnotationAttributes;
 
 /**
@@ -61,6 +75,91 @@ public class AutoDetectionUtils {
             Map<String, Object> attributes
     ) {
 
+    }
+
+    /**
+     * Retrieve workflow methods.
+     *
+     * @param type                type to detect methods on.
+     * @param workflowContextType workflow context type.
+     * @return workflow methods.
+     */
+    @Nonnull
+    static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
+            @Nonnull Class<?> type,
+            @Nonnull Class<C> workflowContextType) {
+        var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(type));
+        return methodCandidates
+                .stream()
+                .filter(AutoDetectionUtils.parameterOfType(workflowContextType, 0)) // FIXME using parameter resolver
+                .map(AutoDetectionUtils.annotatedMethods(Workflow.class))
+                .filter(Objects::nonNull);
+    }
+
+
+    /**
+     * Retrieves workflow lifecycle change listeners for this workflow.
+     *
+     * @param instance            instance to detect methods on.
+     * @param workflowContextType workflow context type.
+     * @param workflowName        name of the workflow.
+     * @return map of lifecycle change listeners.
+     */
+    @Nonnull
+    public static <C extends WorkflowContext> Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> statusChangeListeners(
+            @Nonnull Object instance,
+            @Nonnull Class<C> workflowContextType,
+            @Nonnull String workflowName) {
+
+        var listeners = new ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener>();
+        Arrays.stream(WorkflowStatus.values()).forEach(workflowStatus -> {
+            listeners.put(workflowStatus, new CompositeWorkflowStatusChangeListener(workflowStatus));
+        });
+        var type = instance.getClass();
+
+        var mc = ((Collection<Method>) ReflectionUtils.methodsOf(type));
+
+        // TODO: consider registration based on workflow name?
+        detectAndAddListener(mc,
+                             OnCancellation.class,
+                             workflowName,
+                             instance,
+                             workflowContextType,
+                             CANCELLED,
+                             listeners);
+        detectAndAddListener(mc, OnTimeout.class, workflowName, instance, workflowContextType, TIMED_OUT, listeners);
+        detectAndAddListener(mc, OnFailure.class, workflowName, instance, workflowContextType, FAILED, listeners);
+        detectAndAddListener(mc, OnSuccess.class, workflowName, instance, workflowContextType, COMPLETED, listeners);
+
+        return listeners;
+    }
+
+    private static <C extends WorkflowContext> void detectAndAddListener(
+            @Nonnull Collection<Method> methodCandidates,
+            @Nonnull Class<? extends Annotation> annotation,
+            @Nonnull String workflowName,
+            @Nonnull Object instance,
+            @Nonnull Class<C> workflowContextType,
+            @Nonnull WorkflowStatus status,
+            @Nonnull ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners) {
+        methodCandidates.stream()
+                        .filter(parameterOfType(WorkflowStatus.class, 0).and(parameterOfType(workflowContextType, 1)))
+                        .map(AutoDetectionUtils.annotatedMethods(annotation))
+                        .filter(Objects::nonNull)
+                        .filter(mwa -> {
+                            Object nameAttr = mwa.attributes.getOrDefault(ATTR_WORKFLOW_NAME, "");
+                            return !(nameAttr instanceof String s) || s.isEmpty() || s.equals(workflowName);
+                        })
+                        .forEach(method -> {
+                            listeners.get(status).addListener(
+                                    new WorkflowStatusChangeListener() {
+                                        @Override
+                                        public <X extends WorkflowContext> void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull X context) {
+                                            WorkflowReflectionUtils.invoke(instance, method.method, state, context);
+                                        }
+                                    }
+                            );
+                        });
     }
 
     /**
@@ -138,16 +237,19 @@ public class AutoDetectionUtils {
     }
 
     /**
-     * Creates a predicate to check if the first parameter of the method is assignable from given type.
+     * Creates a predicate to check if the parameter of the method, addressed by its index is assignable from given
+     * type.
      *
-     * @param expectedType type to check for.
+     * @param expectedType   type to check for.
+     * @param parameterIndex index of the parameter to check
      * @return predicate.
      */
     @Nonnull
-    static Predicate<Method> firstParameterOfType(@Nonnull Class<?> expectedType) {
+    static Predicate<Method> parameterOfType(@Nonnull Class<?> expectedType, int parameterIndex) {
         return m -> {
             var parameterTypes = m.getParameterTypes();
-            return parameterTypes.length > 0 && parameterTypes[0].isAssignableFrom(expectedType);
+            return parameterTypes.length > parameterIndex && parameterTypes[parameterIndex].isAssignableFrom(
+                    expectedType);
         };
     }
 
@@ -159,7 +261,7 @@ public class AutoDetectionUtils {
      * <code>null</code>.
      */
     @Nonnull
-    static Function<Method, MethodWithWorkflowAttributes> extractAnnotatedMethods(
+    static Function<Method, MethodWithWorkflowAttributes> annotatedMethods(
             @Nonnull Class<? extends Annotation> type) {
         return m -> {
             var annotations = findAnnotationAttributes(m, type);

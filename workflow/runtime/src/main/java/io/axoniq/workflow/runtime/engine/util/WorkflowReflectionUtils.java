@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.engine.util;
 import jakarta.annotation.Nonnull;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Optional;
 
 /**
@@ -67,4 +68,26 @@ public class WorkflowReflectionUtils {
         }
         return clazz;
     }
+
+    /**
+     * Invokes a method.
+     *
+     * @param instance object to invoke on.
+     * @param method   method to invoke.
+     * @param args     args of the method.
+     * @return result of invocation.
+     */
+    public static Object invoke(@Nonnull Object instance, @Nonnull Method method, Object... args) {
+        try {
+            return method.invoke(instance, args);
+        } catch (InvocationTargetException e) {
+            throw new RuntimeException(e.getCause());
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Cannot access " + method, e);
+        } catch (Exception e) {
+            throw new RuntimeException("Error invoking " + method, e);
+        }
+    }
+
+    ;
 }

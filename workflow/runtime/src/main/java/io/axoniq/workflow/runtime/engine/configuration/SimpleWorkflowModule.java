@@ -26,11 +26,10 @@ import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -38,10 +37,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.jetbrains.annotations.NotNull;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -49,6 +45,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
+
+import static io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils.*;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
@@ -306,12 +304,8 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         public List<ConditionedWorkflowConfiguration<C>> build(@Nonnull Configuration config) {
             var instance = instanceBuilder.build(config);
             var type = instance.getClass();
-            var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(type));
-            return methodCandidates
-                    .stream()
-                    .filter(AutoDetectionUtils.firstParameterOfType(workflowContextType)) // FIXME using parameter resolver
-                    .map(AutoDetectionUtils.extractAnnotatedMethods(Workflow.class))
-                    .filter(Objects::nonNull)
+            return AutoDetectionUtils
+                    .workflowMethods(type, workflowContextType)
                     .map(t -> {
 
                         var attributes = t.attributes();
@@ -319,11 +313,11 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
                         AutoDetectionUtils.validateAttributes(attributes, type, method);
 
-                        var workflowName = AutoDetectionUtils.workflowName(type, attributes, method);
-                        var namespaceCustomizer = AutoDetectionUtils.namespace(type, attributes);
-                        var eventConditionBuilder = AutoDetectionUtils.eventConditionComponentBuilder(attributes);
-                        var workflowIdProviderComponentBuilder = AutoDetectionUtils.workflowIdProviderComponentBuilder(
-                                attributes);
+                        var workflowName = workflowName(type, attributes, method);
+                        var namespaceCustomizer = namespace(type, attributes);
+                        var eventConditionBuilder = eventConditionComponentBuilder(attributes);
+                        var workflowIdProviderComponentBuilder = workflowIdProviderComponentBuilder(attributes);
+                        var statusChangeListeners = statusChangeListeners(instance, workflowContextType, workflowName);
 
                         return new ConditionedWorkflowConfiguration<>(
                                 eventConditionBuilder.build(config),
@@ -332,11 +326,9 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                     @Override
                                     public WorkflowDefinition<C> workflowDefinition() {
                                         return workflowContext -> {
-                                            try {
-                                                method.invoke(instance, workflowContext);
-                                            } catch (InvocationTargetException | IllegalAccessException e) {
-                                                throw new RuntimeException(e.getCause());
-                                            }
+                                            WorkflowReflectionUtils.invoke(instance,
+                                                                           method,
+                                                                           workflowContext);
                                         };
                                     }
 
@@ -368,6 +360,18 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                     @Override
                                     public WorkflowIdProvider workflowIdProvider() {
                                         return workflowIdProviderComponentBuilder.build(config);
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+                                        var result = new HashMap<WorkflowStatus, WorkflowStatusChangeListener>();
+                                        statusChangeListeners.forEach((k, v) -> {
+                                            if (!v.isEmpty()) {
+                                                result.put(k, v);
+                                            }
+                                        });
+                                        return Collections.unmodifiableMap(result);
                                     }
                                 }
                         );

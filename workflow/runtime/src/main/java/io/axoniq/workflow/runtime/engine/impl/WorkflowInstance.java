@@ -22,10 +22,9 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
-import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
@@ -272,8 +271,14 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
             }
         });
         // Apply workflow-level state changes
-        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> this.status = status
-        );
+        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> {
+            this.status = status;
+            // notify workflow state change listeners.
+            var listener = this.workflowConfiguration.workflowStatusChangeListeners().get(status);
+            if (listener != null) {
+                listener.onWorkflowStatus(status, this);
+            }
+        });
     }
 
     @Override
@@ -357,7 +362,7 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
         if (cancelled) {
             try {
                 awaitStateChange(s -> s.containsStep(stepName)
-                                 && s.getStep(stepName).status().isTerminal());
+                        && s.getStep(stepName).status().isTerminal());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -373,8 +378,8 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
             }
             try {
                 awaitStateChange(s -> cancelledSteps.stream()
-                        .allMatch(stepName -> s.containsStep(stepName)
-                                 && s.getStep(stepName).status().isTerminal()));
+                                                    .allMatch(stepName -> s.containsStep(stepName)
+                                                            && s.getStep(stepName).status().isTerminal()));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
