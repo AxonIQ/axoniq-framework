@@ -77,28 +77,6 @@ public abstract class AbstractStepExecutor {
         this.executor = executor;
     }
 
-    /**
-     * Guards against executing a step when the workflow has already reached a terminal state.
-     * Rethrows the original termination cause wrapped in the appropriate exception type.
-     */
-    protected void guardTerminalState() {
-        if (workflowContext.getStatus().isTerminal()) {
-            var cause = workflowState.getTerminationCause();
-            switch (workflowContext.getStatus()) {
-                case FAILED -> throw cause instanceof WorkflowFailedException wfe
-                        ? wfe
-                        : new WorkflowFailedException(
-                                cause != null ? cause : new RuntimeException("Workflow already failed"));
-                case CANCELLED -> throw cause instanceof WorkflowCancelledException wce
-                        ? wce
-                        : new WorkflowCancelledException(
-                                cause != null ? cause.getMessage() : "Workflow already cancelled");
-                default -> throw new IllegalStateException(
-                        "Workflow is in terminal state: " + workflowContext.getStatus());
-            }
-        }
-    }
-
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
         while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
             var poll = workflowState.getNextTask();

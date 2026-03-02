@@ -314,6 +314,28 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
 
+    /**
+     * Guards against invoking any primitive when the workflow has already reached a terminal state.
+     * Rethrows the original termination cause wrapped in the appropriate exception type.
+     */
+    private void guardTerminalState() {
+        if (status.isTerminal()) {
+            var cause = terminationCause;
+            switch (status) {
+                case FAILED -> throw cause instanceof WorkflowFailedException wfe
+                        ? wfe
+                        : new WorkflowFailedException(
+                                cause != null ? cause : new RuntimeException("Workflow already failed"));
+                case CANCELLED -> throw cause instanceof WorkflowCancelledException wce
+                        ? wce
+                        : new WorkflowCancelledException(
+                                cause != null ? cause.getMessage() : "Workflow already cancelled");
+                default -> throw new IllegalStateException(
+                        "Workflow is in terminal state: " + status);
+            }
+        }
+    }
+
     // delegation
     @Override
     @Nonnull
@@ -321,6 +343,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
                                       @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
+        guardTerminalState();
         return executeDelegate.execute(stepName,
                                        local,
                                        action,
@@ -335,6 +358,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
                                       @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
+        guardTerminalState();
         return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
     }
 
@@ -344,6 +368,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             terminateDelegate.terminate(command);
             return;
         }
+        guardTerminalState();
         var name = resolvedWorkflowName != null ? resolvedWorkflowName : workflowId;
         var parent = configurationCustomizer != null ? configurationCustomizer : command.eventNameCustomizer();
         terminateDelegate.terminate(new TerminateCommand(

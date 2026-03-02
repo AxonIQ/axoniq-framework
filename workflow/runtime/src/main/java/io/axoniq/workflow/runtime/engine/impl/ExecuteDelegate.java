@@ -92,7 +92,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
         acceptAllPendingTasksForStep(stepName);
-        guardTerminalState();
 
         if (!workflowState.containsStep(stepName)) {
             workflowState.appendTask(i ->
