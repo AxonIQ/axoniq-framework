@@ -238,9 +238,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         logger.trace("Applying event {}", eventMessage.type());
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
-        // Apply step-level state changes
+        // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
+            if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
+                return;
+            }
             switch (stepStatus) {
                 case STARTED:
                     addStep(WorkflowStep.started(stepName,
