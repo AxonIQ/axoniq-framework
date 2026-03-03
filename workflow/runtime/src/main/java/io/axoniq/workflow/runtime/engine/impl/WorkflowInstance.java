@@ -88,7 +88,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     // State variables
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
-    private final RunningSteps runningFutures = new RunningSteps();
+    private final RunningSteps runningSteps = new RunningSteps();
     private final ProcessingContext processingContext;
     private final String workflowId;
     private volatile EventNameCustomizer configurationCustomizer;
@@ -386,17 +386,17 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void registerRunningFuture(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
-        runningFutures.register(stepName, future);
+        runningSteps.register(stepName, future);
     }
 
     @Override
     public void removeRunningFuture(@Nonnull String stepName) {
-        runningFutures.remove(stepName);
+        runningSteps.remove(stepName);
     }
 
     @Override
     public boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
-        boolean cancelled = runningFutures.cancelWithCause(stepName, cause);
+        boolean cancelled = runningSteps.cancelWithCause(stepName, cause);
         if (cancelled) {
             try {
                 awaitStateChange(s -> s.containsStep(stepName)
@@ -410,7 +410,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void cancelAllRunningSteps(@Nullable Throwable cause) {
-        runningFutures.cancelAll(cause, cancelledSteps -> {
+        runningSteps.cancelAll(cause, cancelledSteps -> {
             if (cancelledSteps.isEmpty()) {
                 return;
             }
@@ -426,7 +426,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void cancelAndRemoveRunningFuture(@Nonnull String stepName, boolean mayInterruptIfRunning) {
-        runningFutures.cancelAndRemove(stepName, mayInterruptIfRunning);
+        runningSteps.cancelAndRemove(stepName, mayInterruptIfRunning);
     }
 
     @Override
@@ -529,7 +529,15 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        descriptor.describeProperty("workflowId", workflowId);
+        descriptor.describeProperty("status", status);
+        descriptor.describeProperty("resolvedWorkflowName", resolvedWorkflowName);
+        descriptor.describeProperty("executable", executable);
+        if (terminationCause != null) {
+            descriptor.describeProperty("terminationCause", terminationCause.getMessage());
+        }
+        descriptor.describeProperty("steps", List.copyOf(steps.keySet()));
         eventWaitConditions.describeTo(descriptor);
-        runningFutures.describeTo(descriptor);
+        runningSteps.describeTo(descriptor);
     }
 }
