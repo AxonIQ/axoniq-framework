@@ -49,6 +49,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -242,6 +243,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
             if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
+                logger.warn("Ignoring step status {} for step '{}' — already in terminal state {}",
+                            stepStatus, stepName, getStep(stepName).status());
                 return;
             }
             switch (stepStatus) {
@@ -281,6 +284,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         // Apply workflow-level state changes — ignore transitions once already terminal
         MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> {
             if (this.status.isTerminal()) {
+                logger.warn("Ignoring workflow status {} — already in terminal state {}", status, this.status);
                 return;
             }
             this.status = status;
@@ -487,9 +491,9 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    @Nullable
-    public Throwable getTerminationCause() {
-        return this.terminationCause;
+    @Nonnull
+    public Optional<Throwable> getTerminationCause() {
+        return Optional.ofNullable(this.terminationCause);
     }
 
     @Override

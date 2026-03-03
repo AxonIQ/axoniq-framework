@@ -152,14 +152,18 @@ public abstract class AbstractStepExecutor {
                                                   @Nonnull EventMessage eventMessage,
                                                   @Nonnull Context context) {
         if (workflowContext.getStatus().isTerminal()) {
-            logger.trace("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
-                         workflowContext.getStatus());
-            return CompletableFuture.completedFuture(null);
+            logger.warn("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
+                        workflowContext.getStatus());
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "Workflow is in terminal state " + workflowContext.getStatus()
+                            + ", cannot publish step event " + eventMessage.type()));
         }
         if (workflowState.containsStep(stepName) && workflowState.getStep(stepName).status().isTerminal()) {
-            logger.trace("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
-                         stepName, workflowState.getStep(stepName).status());
-            return CompletableFuture.completedFuture(null);
+            logger.warn("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
+                        stepName, workflowState.getStep(stepName).status());
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "Step '" + stepName + "' is in terminal state " + workflowState.getStep(stepName).status()
+                            + ", cannot publish step event " + eventMessage.type()));
         }
         logger.trace("Appending event {}", eventMessage.type());
         return ProcessingContextUtils.executeWithResult(

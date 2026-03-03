@@ -162,6 +162,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         workflowState.cancelAndRemoveRunningFuture(stepName, false);
         // TODO event should be mapped back based on result mapping
         var payload = eventMessagePayload(eventMessage);
-        workflowState.appendTask(state -> completed(stepName, payload, eventNameCustomizer).join());
+        workflowState.appendTask(state -> {
+            try {
+                completed(stepName, payload, eventNameCustomizer).join();
+            } catch (Exception e) {
+                logger.warn("Failed to publish completed event for step '{}': {}", stepName, e.getMessage());
+            }
+        });
     }
 }

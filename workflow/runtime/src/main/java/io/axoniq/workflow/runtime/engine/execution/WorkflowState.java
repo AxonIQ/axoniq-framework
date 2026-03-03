@@ -28,6 +28,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -86,10 +87,10 @@ public interface WorkflowState {
     /**
      * Returns the cause of workflow termination, if the workflow has been terminated via fail or cancel.
      *
-     * @return the termination cause, or {@code null} if the workflow has not been terminated.
+     * @return the termination cause, or {@link Optional#empty()} if the workflow has not been terminated.
      */
-    @Nullable
-    Throwable getTerminationCause();
+    @Nonnull
+    Optional<Throwable> getTerminationCause();
 
     boolean isExecutable();
 
