@@ -119,7 +119,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 workflowState.registerWaitCondition(stepName, qualifiedName, predicate, eventNameCustomizer);
                 var timeoutFuture = CompletableFuture.runAsync(() -> {
                                                workflowState.removeWaitCondition(stepName);
-                                               workflowState.removeRunningFuture(stepName);
+                                               workflowState.removeRunningStep(stepName);
                                                workflowState.appendTask(i -> {
                                                                             if (!i.getStep(stepName).status().isTerminal()) {
                                                                                 // only timeout if we are not completed yet
@@ -129,7 +129,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                                );
                                            }, CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 ).exceptionally(e -> {
-                    workflowState.removeRunningFuture(stepName);
+                    workflowState.removeRunningStep(stepName);
                     if (isCancellation(e)) {
                         var terminationCause = unwrapCancellation(e);
                         workflowState.removeWaitCondition(stepName);
@@ -142,7 +142,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                     }
                     return null;
                 });
-                workflowState.registerRunningFuture(stepName, timeoutFuture);
+                workflowState.registerRunningStep(stepName, timeoutFuture);
             }
         }
 
@@ -159,7 +159,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     void eventReceived(@Nonnull EventMessage eventMessage, @Nonnull String stepName,
                        @Nonnull EventNameCustomizer eventNameCustomizer) {
         // Cancel the timeout future since the awaited event has arrived
-        workflowState.cancelAndRemoveRunningFuture(stepName, false);
+        workflowState.cancelAndRemoveRunningStep(stepName, false);
         // TODO event should be mapped back based on result mapping
         var payload = eventMessagePayload(eventMessage);
         workflowState.appendTask(state -> {

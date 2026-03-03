@@ -385,12 +385,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    public void registerRunningFuture(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
+    public void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
         runningSteps.register(stepName, future);
     }
 
     @Override
-    public void removeRunningFuture(@Nonnull String stepName) {
+    public void removeRunningStep(@Nonnull String stepName) {
         runningSteps.remove(stepName);
     }
 
@@ -425,7 +425,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    public void cancelAndRemoveRunningFuture(@Nonnull String stepName, boolean mayInterruptIfRunning) {
+    public void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning) {
         runningSteps.cancelAndRemove(stepName, mayInterruptIfRunning);
     }
 
