@@ -111,9 +111,9 @@ class TerminalStateGuardTest {
                 });
 
         when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.getWorkflowId()).thenReturn("wf-1");
-        when(workflowContext.getPayload()).thenReturn(Map.of());
-        when(workflowContext.getStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowContext.workflowId()).thenReturn("wf-1");
+        when(workflowContext.workflowPayload()).thenReturn(Map.of());
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -127,7 +127,7 @@ class TerminalStateGuardTest {
 
     @Test
     void completedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        when(workflowContext.getStatus()).thenReturn(WorkflowStatus.COMPLETED);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
 
@@ -140,7 +140,7 @@ class TerminalStateGuardTest {
 
     @Test
     void failedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        when(workflowContext.getStatus()).thenReturn(WorkflowStatus.FAILED);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.FAILED);
 
         var future = stepExecutor.testFailed("step-1", new RuntimeException("boom"), eventNameCustomizer);
 
@@ -153,7 +153,7 @@ class TerminalStateGuardTest {
 
     @Test
     void startedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        when(workflowContext.getStatus()).thenReturn(WorkflowStatus.CANCELLED);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.CANCELLED);
 
         var future = stepExecutor.testStarted("step-1", Map.of(), eventNameCustomizer);
 
@@ -166,7 +166,7 @@ class TerminalStateGuardTest {
 
     @Test
     void completedReturnsFailedFutureWhenStepIsTerminal() {
-        when(workflowContext.getStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(workflowState.containsStep("step-1")).thenReturn(true);
         when(workflowState.getStep("step-1")).thenReturn(
                 WorkflowStep.completed("step-1", Map.of(), Instant.now(), processingContext));

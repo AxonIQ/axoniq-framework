@@ -78,8 +78,8 @@ class TerminateDelegateCancelTest {
                 });
 
         when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.getWorkflowId()).thenReturn("wf-1");
-        when(workflowContext.getPayload()).thenReturn(Map.of());
+        when(workflowContext.workflowId()).thenReturn("wf-1");
+        when(workflowContext.workflowPayload()).thenReturn(Map.of());
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 

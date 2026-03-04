@@ -25,6 +25,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+
 /**
  * Example workflow that launches three parallel steps, cancels one by name,
  * then completes normally. Used to verify single-step cancellation via {@code cancelStep}.
@@ -37,7 +39,7 @@ public class CancelStepWorkflow {
     private static final Logger logger = LoggerFactory.getLogger(CancelStepWorkflow.class);
 
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
-        logger.info("CancelStep workflow started for {}", ctx.getPayload());
+        logger.info("CancelStep workflow started for {}", ctx.workflowPayload());
 
         Duration fiveMin = Duration.ofMinutes(5);
         long fiveMinMs = fiveMin.toMillis();
@@ -46,17 +48,17 @@ public class CancelStepWorkflow {
         var r1 = ctx.execute("stepA", Map.of(), (c, p) -> {
             sleepQuietly(fiveMinMs);
             return Map.of();
-        }, fiveMin);
+        }, fiveMin, defaults());
 
         var r2 = ctx.execute("stepB", Map.of(), (c, p) -> {
             sleepQuietly(fiveMinMs);
             return Map.of();
-        }, fiveMin);
+        }, fiveMin, defaults());
 
         var r3 = ctx.execute("stepC", Map.of(), (c, p) -> {
             sleepQuietly(fiveMinMs);
             return Map.of();
-        }, fiveMin);
+        }, fiveMin, defaults());
 
         // Cancel only stepB via the result handle
         sleepQuietly(1_000);

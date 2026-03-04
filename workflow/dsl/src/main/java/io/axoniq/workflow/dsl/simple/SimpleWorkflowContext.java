@@ -263,7 +263,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
      */
     public void fail(Throwable cause) {
-        terminate(TerminateCommand.fail(cause, eventName()));
+        terminate(TerminateCommand.fail(cause, defaults()));
     }
 
     /**
@@ -285,7 +285,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel() {
-        terminate(TerminateCommand.cancel(eventName()));
+        terminate(TerminateCommand.cancel(defaults()));
     }
 
     /**
@@ -307,7 +307,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel(String reason) {
-        terminate(TerminateCommand.cancel(new io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventName()));
+        terminate(TerminateCommand.cancel(new io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), defaults()));
     }
 
     /**
@@ -318,7 +318,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel(Throwable cause) {
-        terminate(TerminateCommand.cancel(cause, eventName()));
+        terminate(TerminateCommand.cancel(cause, defaults()));
     }
 
     /**
@@ -340,7 +340,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @param stepName the name of the step to cancel
      */
     public void cancelStep(String stepName) {
-        terminate(TerminateCommand.cancelledStep(stepName, null, eventName()));
+        terminate(TerminateCommand.cancelledStep(stepName, null, defaults()));
     }
 
     /**
@@ -352,7 +352,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @param cause    the exception that caused the step cancellation
      */
     public void cancelStep(String stepName, Throwable cause) {
-        terminate(TerminateCommand.cancelledStep(stepName, cause, eventName()));
+        terminate(TerminateCommand.cancelledStep(stepName, cause, defaults()));
     }
 
     /**
@@ -364,7 +364,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @param reason   descriptive reason for the step cancellation
      */
     public void cancelStep(String stepName, String reason) {
-        terminate(TerminateCommand.cancelledStep(stepName, new io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventName()));
+        terminate(TerminateCommand.cancelledStep(stepName, new io.axoniq.workflow.runtime.api.StepCancellationException(reason), defaults()));
     }
 
     public void addPayload(@Nonnull Object object) {

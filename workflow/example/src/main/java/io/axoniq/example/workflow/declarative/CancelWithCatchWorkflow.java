@@ -23,7 +23,6 @@ import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -38,9 +37,9 @@ public class CancelWithCatchWorkflow {
     private static final Logger logger = LoggerFactory.getLogger(CancelWithCatchWorkflow.class);
 
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
-        logger.info("CancelWithCatch workflow started for {}", ctx.getPayload());
+        logger.info("CancelWithCatch workflow started for {}", ctx.workflowPayload());
 
-        ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"), Duration.ofSeconds(5));
+        ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));
 
         try {
             ctx.cancel("I dont want it anymore");
@@ -48,7 +47,7 @@ public class CancelWithCatchWorkflow {
             logger.info("Caught WorkflowCancelledException, attempting another step...");
             try {
                 // This should rethrow the original error because workflow is in terminal state
-                ctx.awaitExecute("stepAfterCancel", Map.of(), (c, p) -> Map.of("result", "should not happen"), Duration.ofSeconds(5));
+                ctx.awaitExecute("stepAfterCancel", Map.of(), (c, p) -> Map.of("result", "should not happen"));
             } catch (WorkflowCancelledException e2) {
                 logger.info("Guard correctly prevented step execution after cancel: {}", e2.getMessage());
             }

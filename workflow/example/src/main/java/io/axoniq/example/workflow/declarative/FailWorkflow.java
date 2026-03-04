@@ -26,6 +26,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+
 /**
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -35,7 +37,7 @@ public class FailWorkflow {
     private static final Logger logger = LoggerFactory.getLogger(FailWorkflow.class);
 
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
-        logger.info("Fail workflow started for {}", ctx.getPayload());
+        logger.info("Fail workflow started for {}", ctx.workflowPayload());
 
         // Launch 3 long-running steps (non-blocking, each simulates 5 min work)
         Duration fiveMin = Duration.ofMinutes(5);
@@ -43,15 +45,15 @@ public class FailWorkflow {
         var r1 = ctx.execute("stepA", Map.of(), (c, p) -> {
             sleepQuietly(fiveMinMs);
             return Map.of();
-        }, fiveMin);
+        }, fiveMin, defaults());
         var r2 = ctx.execute("stepB", Map.of(), (c, p) -> {
             sleepQuietly(fiveMinMs);
             return Map.of();
-        }, fiveMin);
+        }, fiveMin, defaults());
         var r3 = ctx.execute("stepC", Map.of(), (c, p) -> {
             sleepQuietly(fiveMinMs);
             return Map.of();
-        }, fiveMin);
+        }, fiveMin, defaults());
 
         // Combine results but don't block on them
         WorkflowStepResults.all(r1, r2, r3);

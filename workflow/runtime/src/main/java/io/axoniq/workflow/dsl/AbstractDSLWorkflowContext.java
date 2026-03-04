@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -123,6 +124,11 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     @Override
     public ProcessingContext processingContext() {
         return workflowInstance.processingContext();
+    }
+
+    @Override
+    public void terminate(@Nonnull TerminatePrimitive.TerminateCommand command) {
+        workflowInstance.terminate(command);
     }
 
     @Override

@@ -23,7 +23,6 @@ import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -38,9 +37,9 @@ public class FailWithCatchWorkflow {
     private static final Logger logger = LoggerFactory.getLogger(FailWithCatchWorkflow.class);
 
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
-        logger.info("FailWithCatch workflow started for {}", ctx.getPayload());
+        logger.info("FailWithCatch workflow started for {}", ctx.workflowPayload());
 
-        ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"), Duration.ofSeconds(5));
+        ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));
 
         try {
             ctx.fail(new RuntimeException("Simulated failure"));
@@ -48,7 +47,7 @@ public class FailWithCatchWorkflow {
             logger.info("Caught WorkflowFailedException, attempting another step...");
             try {
                 // This should rethrow the original error because workflow is in terminal state
-                ctx.awaitExecute("stepAfterFail", Map.of(), (c, p) -> Map.of("result", "should not happen"), Duration.ofSeconds(5));
+                ctx.awaitExecute("stepAfterFail", Map.of(), (c, p) -> Map.of("result", "should not happen"));
             } catch (WorkflowFailedException e2) {
                 logger.info("Guard correctly prevented step execution after fail: {}", e2.getMessage());
             }

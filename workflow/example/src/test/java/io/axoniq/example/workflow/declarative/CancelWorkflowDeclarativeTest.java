@@ -20,9 +20,9 @@ package io.axoniq.example.workflow.declarative;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.EventConditions;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
@@ -54,7 +54,7 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
         return d -> d
                 .declarative(c -> workflow::execute)
                 .workflowName("Cancel workflow in Java")
-                .on(EventCondition.fromType(RegistrationReceivedEvent.class))
+                .on(EventConditions.fromType(RegistrationReceivedEvent.class))
                 .customized((c, w) -> w
                         .eventNameCustomizer(namespace("io.axoniq.dsl.cancel").workflowBaseName("Workflow"))
                         .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "cancel-" + id))
@@ -64,7 +64,7 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
     @Test
     void workflowIsCancelled() {
         delayedPublisher.addSchedules(List.of(
-                ofMillis(500, new RegistrationReceivedEvent("user-789", "cancel@test.com"))
+                ofMillis(500, new RegistrationReceivedEvent("user-789", "cancel@test.com", "active"))
         ));
 
         delayedPublisher.start();
@@ -76,7 +76,7 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
         workflowEngine.runWorkflows();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.getStatus().isTerminal());
+            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
         });
 
         // Wait 2 seconds before asserting to let async cleanup settle
@@ -88,9 +88,9 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
 
         for (WorkflowContext context : workflowEngine.workflowInstances().stream()
                                                      .map(WorkflowExecution::workflowContext).toList()) {
-            assertThat(context.getStatus().isTerminal()).isTrue();
-            assertThat(context.getStatus()).isEqualTo(WorkflowStatus.CANCELLED);
-            assertThat(context.getStepHistory()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
+            assertThat(context.workflowStatus().isTerminal()).isTrue();
+            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
+            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
         }
     }
 }

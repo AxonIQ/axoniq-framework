@@ -193,7 +193,7 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
                                 logger.trace("Workflow executed. Resulting workflow payload {}.",
                                              workflowContext.workflowPayload());
 
-                                if (!ctx.getStatus().isTerminal()) {
+                                if (!ctx.workflowStatus().isTerminal()) {
                                     sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
                                             5,
                                             TimeUnit.SECONDS); // FIXME constant?

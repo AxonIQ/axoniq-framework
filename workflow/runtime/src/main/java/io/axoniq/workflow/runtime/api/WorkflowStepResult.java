@@ -85,7 +85,7 @@ public interface WorkflowStepResult {
     /**
      * Blocks until step execution reaches a terminal state.
      */
-    boolean await();
+    void await();
 
     /**
      * Cancels this step if it is still running. No-op if already in a terminal state.

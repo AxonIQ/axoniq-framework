@@ -183,7 +183,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published failure event name
      * @throws WorkflowFailedException always, after the failure event is published
      */
-    fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.fail(cause, eventNameCustomizer))
     }
 
@@ -194,7 +194,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancel(eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(eventNameCustomizer))
     }
 
@@ -206,7 +206,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventNameCustomizer))
     }
 
@@ -218,7 +218,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(cause, eventNameCustomizer))
     }
 
@@ -229,7 +229,7 @@ class Kontext(
      * @param stepName the name of the step to cancel
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, null, eventNameCustomizer))
     }
 
@@ -242,7 +242,7 @@ class Kontext(
      * @param cause the exception that caused the step cancellation
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, cause, eventNameCustomizer))
     }
 
@@ -255,7 +255,7 @@ class Kontext(
      * @param reason descriptive reason for the step cancellation
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventNameCustomizer))
     }
 
