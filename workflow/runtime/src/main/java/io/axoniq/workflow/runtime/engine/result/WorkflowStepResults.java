@@ -255,12 +255,11 @@ public class WorkflowStepResults {
                                               WorkflowStepResult... results) {
         return new WorkflowStepResult() {
 
-            private volatile WorkflowStepResult winner;
+            private WorkflowStepResult winner;
 
             private WorkflowStepResult resolveWinner() {
-                WorkflowStepResult w = winner;
-                if (w != null) {
-                    return w;
+                if (winner != null) {
+                    return winner;
                 }
 
                 do {
@@ -292,14 +291,12 @@ public class WorkflowStepResults {
                 return winner;
             }
 
-            private synchronized WorkflowStepResult setWinner(WorkflowStepResult w, boolean cancelLosers) {
-                if (winner == null) {
-                    winner = w;
-                    if (cancelLosers) {
-                        for (WorkflowStepResult r : results) {
-                            if (r != w) {
-                                r.cancel("Superseded by " + w.getStepName());
-                            }
+            private WorkflowStepResult setWinner(WorkflowStepResult w, boolean cancelLosers) {
+                winner = w;
+                if (cancelLosers) {
+                    for (WorkflowStepResult r : results) {
+                        if (r != w) {
+                            r.cancel("Superseded by " + w.getStepName());
                         }
                     }
                 }
@@ -421,8 +418,8 @@ public class WorkflowStepResults {
                                                WorkflowStepResult... results) {
         return new WorkflowStepResult() {
 
-            private volatile WorkflowStepResult violator;
-            private volatile boolean allCompletedNoneMatched;
+            private WorkflowStepResult violator;
+            private boolean allCompletedNoneMatched;
 
             private void resolve() {
                 if (violator != null || allCompletedNoneMatched) {
@@ -437,11 +434,7 @@ public class WorkflowStepResults {
                     }
 
                     if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
-                        synchronized (this) {
-                            if (violator == null) {
-                                allCompletedNoneMatched = true;
-                            }
-                        }
+                        allCompletedNoneMatched = true;
                         return;
                     }
 
@@ -459,13 +452,11 @@ public class WorkflowStepResults {
                 } while (true);
             }
 
-            private synchronized void setViolator(WorkflowStepResult v) {
-                if (violator == null && !allCompletedNoneMatched) {
-                    violator = v;
-                    for (WorkflowStepResult r : results) {
-                        if (r != v) {
-                            r.cancel("Disqualified by " + v.getStepName());
-                        }
+            private void setViolator(WorkflowStepResult v) {
+                violator = v;
+                for (WorkflowStepResult r : results) {
+                    if (r != v) {
+                        r.cancel("Disqualified by " + v.getStepName());
                     }
                 }
             }
