@@ -282,7 +282,8 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
         // Apply workflow-level state changes — ignore transitions once already terminal
         MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> {
             if (this.status.isTerminal()) {
-                logger.warn("Ignoring workflow status {} — already in terminal state {}", status, this.status);
+                logger.warn("Ignoring workflow status {} — already in terminal state {}",
+                            status, this.status);
                 return;
             }
             this.status = status;

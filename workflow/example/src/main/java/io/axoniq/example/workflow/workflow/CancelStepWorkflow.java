@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.example.workflow.declarative;
+package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import jakarta.annotation.Nonnull;
@@ -28,8 +28,8 @@ import java.util.Map;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
- * Example workflow that launches three parallel steps, cancels one by name,
- * then completes normally. Used to verify single-step cancellation via {@code cancelStep}.
+ * Example workflow that launches three parallel steps, cancels one by name, then completes normally. Used to verify
+ * single-step cancellation via {@code cancelStep}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0

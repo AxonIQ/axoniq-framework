@@ -151,8 +151,7 @@ public class EventMessageUtils {
                                                  @Nullable Throwable cause,
                                                  @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
-        Object payload = cause != null ? cause : Map.of();
-        return new GenericEventMessage(new MessageType(name), payload,
+        return new GenericEventMessage(new MessageType(name), cause != null ? cause : Map.of(),
                                        MetadataUtils.create(context.workflowId(), WorkflowStatus.CANCELLED)
         );
     }

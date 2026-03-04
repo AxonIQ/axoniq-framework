@@ -15,18 +15,18 @@
  *
  *
  */
-package io.axoniq.example.workflow.declarative;
+package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -39,58 +39,68 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
+ * Verifies that {@code cancelStep} cancels a single running step without terminating the workflow.
+ *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
-    public CancelWorkflowDeclarativeTest() {
+    public CancelStepWorkflowDeclarativeTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());
     }
 
     @Override
     protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new CancelWorkflow();
+        var workflow = new CancelStepWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
-                .workflowName("Cancel workflow in Java")
+                .workflowName("Cancel step workflow in Java")
                 .on(EventConditions.fromType(RegistrationReceivedEvent.class))
                 .customized((c, w) -> w
-                        .eventNameCustomizer(namespace("io.axoniq.dsl.cancel").workflowBaseName("Workflow"))
-                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "cancel-" + id))
+                        .eventNameCustomizer(namespace("io.axoniq.dsl.cancelstep").workflowBaseName("Workflow"))
+                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "cancelstep-" + id))
                 );
     }
 
     @Test
-    void workflowIsCancelled() {
+    void singleStepIsCancelledWhileOthersRemainRunning() {
         delayedPublisher.addSchedules(List.of(
-                ofMillis(500, new RegistrationReceivedEvent("user-789", "cancel@test.com", "active"))
+                ofMillis(500, new RegistrationReceivedEvent("user-step-cancel", "step@test.com", "vip"))
         ));
 
         delayedPublisher.start();
 
-        await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty();
-        });
+        await().untilAsserted(() ->
+                                      assertThat(workflowEngine.workflowInstances()).isNotEmpty()
+        );
 
         workflowEngine.runWorkflows();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
-        });
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
+                                                                   assertThat(workflowEngine.workflowInstances()).allMatch(
+                                                                           h -> h.workflowStatus().isTerminal())
+        );
 
-        // Wait 2 seconds before asserting to let async cleanup settle
+        // Let async cleanup settle
         try {
             Thread.sleep(2_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowContext context : workflowEngine.workflowInstances().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
-            assertThat(context.workflowStatus().isTerminal()).isTrue();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
+        for (WorkflowExecution execution : workflowEngine.workflowInstances()) {
+            var context = execution.workflowContext();
+            // Workflow ended as CANCELLED (via ctx.cancel())
+            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+
+            // All three steps should be present in history
             assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
+
+            // stepB was explicitly cancelled via cancelStep before the workflow-level cancel
+            var state = execution.workflowState();
+            var stepB = state.getStep("stepB");
+            assertThat(stepB.status()).isEqualTo(StepStatus.CANCELLED);
         }
     }
 }

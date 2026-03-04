@@ -207,7 +207,13 @@ class Kontext(
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventNameCustomizer))
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancel(
+                io.axoniq.workflow.runtime.api.WorkflowCancelledException(
+                    reason
+                ), eventNameCustomizer
+            )
+        )
     }
 
     /**
@@ -230,7 +236,13 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published event name
      */
     fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, null, eventNameCustomizer))
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancelledStep(
+                stepName,
+                null,
+                eventNameCustomizer
+            )
+        )
     }
 
     /**
@@ -243,7 +255,13 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published event name
      */
     fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, cause, eventNameCustomizer))
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancelledStep(
+                stepName,
+                cause,
+                eventNameCustomizer
+            )
+        )
     }
 
     /**
@@ -256,7 +274,13 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published event name
      */
     fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventNameCustomizer))
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancelledStep(
+                stepName,
+                io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                eventNameCustomizer
+            )
+        )
     }
 
     // just to create blocking call

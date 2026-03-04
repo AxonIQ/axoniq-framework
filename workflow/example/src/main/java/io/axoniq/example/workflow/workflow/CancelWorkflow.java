@@ -15,10 +15,9 @@
  *
  *
  */
-package io.axoniq.example.workflow.declarative;
+package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,9 +53,6 @@ public class CancelWorkflow {
             sleepQuietly(fiveMinMs);
             return Map.of();
         }, fiveMin, defaults());
-
-        // Combine results but don't block on them
-        WorkflowStepResults.all(r1, r2, r3);
 
         // Wait 5 seconds then cancel
         sleepQuietly(5_000);
