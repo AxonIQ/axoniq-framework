@@ -103,7 +103,7 @@ public class WorkflowStepResults {
 
     /**
      * Barrier semantics — waits for <b>every</b> result to reach a terminal state before the
-     * composite itself is considered completed. Equivalent to JS {@code Promise.all()}.
+     * composite itself is considered completed.
      *
      * <h3>Completion</h3>
      * <p>{@link WorkflowStepResult#isCompleted() isCompleted()} returns {@code true} only when
