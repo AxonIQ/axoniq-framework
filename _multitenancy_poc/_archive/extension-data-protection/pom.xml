@@ -59,7 +59,8 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
+        <axon-framework.version>5.0.2</axon-framework.version>
+        <axonserver-connector.version>2026.0.0-SNAPSHOT</axonserver-connector.version>
         <!-- Conversion -->
         <jackson.version>2.18.2</jackson.version>
         <!-- Persistence -->
@@ -72,7 +73,7 @@
         <vault.java.driver.version>5.1.0</vault.java.driver.version>
         <!-- Internal Dependencies (will be shaded) -->
         <guava.version>33.3.1-jre</guava.version>
-        <protobuf.version>4.33.3</protobuf.version>
+        <protobuf.version>4.34.0</protobuf.version>
         <gson.version>2.11.0</gson.version>
         <gentyref.version>1.2.0</gentyref.version>
         <!-- Logging -->
@@ -128,6 +129,11 @@
                 <groupId>org.axonframework</groupId>
                 <artifactId>axon-legacy</artifactId>
                 <version>${axon-framework.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq</groupId>
+                <artifactId>axonserver-connector-java</artifactId>
+                <version>${axonserver-connector.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.axonframework</groupId>

@@ -50,6 +50,12 @@
             <version>${axon-framework.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.axoniq.platform</groupId>
+            <artifactId>framework-client-spring-boot-starter</artifactId>
+            <version>2.0.2-SNAPSHOT</version>
+        </dependency>
+
         <!-- Data Protection Extension -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
