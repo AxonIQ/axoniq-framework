@@ -28,6 +28,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -83,6 +84,14 @@ public interface WorkflowState {
     @Nonnull
     WorkflowStatus getStatus();
 
+    /**
+     * Returns the cause of workflow termination, if the workflow has been terminated via fail or cancel.
+     *
+     * @return the termination cause, or {@link Optional#empty()} if the workflow has not been terminated.
+     */
+    @Nonnull
+    Optional<Throwable> getTerminationCause();
+
     boolean isExecutable();
 
     boolean hasTasks();
@@ -93,15 +102,15 @@ public interface WorkflowState {
 
     void removeWaitCondition(@Nonnull String stepName);
 
-    void registerRunningFuture(@Nonnull String stepName, @Nonnull java.util.concurrent.CompletableFuture<?> future);
+    void registerRunningStep(@Nonnull String stepName, @Nonnull java.util.concurrent.CompletableFuture<?> future);
 
-    void removeRunningFuture(@Nonnull String stepName);
+    void removeRunningStep(@Nonnull String stepName);
 
     boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
     void cancelAllRunningSteps(@Nullable Throwable cause);
 
-    void cancelAndRemoveRunningFuture(@Nonnull String stepName, boolean mayInterruptIfRunning);
+    void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning);
 
     // FIXME check if we can replace this for the Context interface
     @Nonnull

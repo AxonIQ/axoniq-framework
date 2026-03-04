@@ -96,7 +96,7 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected CompletableFuture<Void> started(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(startedStep(workflowContext, stepName, sanitize(payload),
+        return sendStepEvent(stepName, startedStep(workflowContext, stepName, sanitize(payload),
                                          merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -104,7 +104,7 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(completedStep(workflowContext, stepName, sanitize(payload),
+        return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
                                            merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -119,7 +119,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> cancelled(@Nonnull String stepName,
                                                 @Nullable Throwable cause,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(cancelledStep(workflowContext, stepName, cause,
+        return sendStepEvent(stepName, cancelledStep(workflowContext, stepName, cause,
                                            merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -128,7 +128,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
         LoggerFactory.getLogger(AbstractStepExecutor.class).error("Error", ex);
-        return sendStepEvent(failStep(workflowContext, stepName, ex,
+        return sendStepEvent(stepName, failStep(workflowContext, stepName, ex,
                                       merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
@@ -142,13 +142,29 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected CompletableFuture<Void> timedOut(@Nonnull String stepName, @Nonnull Instant timeoutTimestamp,
                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return sendStepEvent(timeoutStep(workflowContext, stepName, timeoutTimestamp,
+        return sendStepEvent(stepName, timeoutStep(workflowContext, stepName, timeoutTimestamp,
                                          merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
     @Nonnull
-    private CompletableFuture<Void> sendStepEvent(@Nonnull EventMessage eventMessage, @Nonnull Context context) {
+    private CompletableFuture<Void> sendStepEvent(@Nonnull String stepName,
+                                                  @Nonnull EventMessage eventMessage,
+                                                  @Nonnull Context context) {
+        if (workflowContext.getStatus().isTerminal()) {
+            logger.warn("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
+                        workflowContext.getStatus());
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "Workflow is in terminal state " + workflowContext.getStatus()
+                            + ", cannot publish step event " + eventMessage.type()));
+        }
+        if (workflowState.containsStep(stepName) && workflowState.getStep(stepName).status().isTerminal()) {
+            logger.warn("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
+                        stepName, workflowState.getStep(stepName).status());
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "Step '" + stepName + "' is in terminal state " + workflowState.getStep(stepName).status()
+                            + ", cannot publish step event " + eventMessage.type()));
+        }
         logger.trace("Appending event {}", eventMessage.type());
         return ProcessingContextUtils.executeWithResult(
                 null,

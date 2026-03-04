@@ -27,14 +27,30 @@ import jakarta.annotation.Nonnull;
  */
 public class StepCancellationException extends RuntimeException {
 
+    /**
+     * Constructs a {@code StepCancellationException} with a descriptive message.
+     *
+     * @param message the detail message describing the cancellation reason
+     */
     public StepCancellationException(@Nonnull String message) {
         super(message);
     }
 
+    /**
+     * Constructs a {@code StepCancellationException} with a message and underlying cause.
+     *
+     * @param message the detail message describing the cancellation reason
+     * @param cause   the underlying cause of the cancellation
+     */
     public StepCancellationException(@Nonnull String message, Throwable cause) {
         super(message, cause);
     }
 
+    /**
+     * Constructs a {@code StepCancellationException} wrapping an underlying cause.
+     *
+     * @param cause the underlying cause of the cancellation
+     */
     public StepCancellationException(@Nonnull Throwable cause) {
         super(cause);
     }

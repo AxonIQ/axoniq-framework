@@ -123,7 +123,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         return CompletableFuture.completedFuture(action.apply(procContext, payload));
                     });
 
-            workflowState.registerRunningFuture(stepName, result);
+            workflowState.registerRunningStep(stepName, result);
 
             if (remainingTimeout.isNegative()) {
                 workflowState.appendTask(i -> {
@@ -135,7 +135,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 result
                         .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                         .whenComplete((r, e) -> {
-                            workflowState.removeRunningFuture(stepName);
+                            workflowState.removeRunningStep(stepName);
                             if (r != null) {
                                 workflowState.appendTask(i -> {
                                     workflowContext.applyPayloadModification(p -> resultMapping.apply(p,

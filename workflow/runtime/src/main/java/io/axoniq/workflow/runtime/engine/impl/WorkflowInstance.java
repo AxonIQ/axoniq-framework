@@ -49,6 +49,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -87,13 +88,14 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     // State variables
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
-    private final RunningSteps runningFutures = new RunningSteps();
+    private final RunningSteps runningSteps = new RunningSteps();
     private final ProcessingContext processingContext;
     private final String workflowId;
     private volatile EventNameCustomizer configurationCustomizer;
     private volatile WorkflowConfiguration<?> workflowConfiguration;
     private volatile String resolvedWorkflowName;
     private WorkflowStatus status = WorkflowStatus.NONE;
+    private volatile Throwable terminationCause;
     private boolean executable = false;
     private Map<String, Object> payload;
 
@@ -193,9 +195,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                 logger.trace("Workflow executed. Resulting workflow payload {}.",
                                              workflowContext.getPayload());
 
-                                sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
-                                        5,
-                                        TimeUnit.SECONDS); // FIXME constant?
+                                if (!ctx.getStatus().isTerminal()) {
+                                    sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
+                                            5,
+                                            TimeUnit.SECONDS); // FIXME constant?
+                                }
                             } catch (WorkflowFailedException | WorkflowCancelledException e) {
                                 // Events already sent by TerminateDelegate, just let it propagate
                             } catch (Exception e) {
@@ -235,9 +239,14 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         logger.trace("Applying event {}", eventMessage.type());
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
-        // Apply step-level state changes
+        // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
+            if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
+                logger.warn("Ignoring step status {} for step '{}' — already in terminal state {}",
+                            stepStatus, stepName, getStep(stepName).status());
+                return;
+            }
             switch (stepStatus) {
                 case STARTED:
                     addStep(WorkflowStep.started(stepName,
@@ -272,9 +281,18 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                     break;
             }
         });
-        // Apply workflow-level state changes
-        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> this.status = status
-        );
+        // Apply workflow-level state changes — ignore transitions once already terminal
+        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> {
+            if (this.status.isTerminal()) {
+                logger.warn("Ignoring workflow status {} — already in terminal state {}", status, this.status);
+                return;
+            }
+            this.status = status;
+            if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
+                    && eventPayload instanceof Throwable t) {
+                this.terminationCause = t;
+            }
+        });
     }
 
     @Override
@@ -303,6 +321,28 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
 
+    /**
+     * Guards against invoking any primitive when the workflow has already reached a terminal state.
+     * Rethrows the original termination cause wrapped in the appropriate exception type.
+     */
+    private void guardTerminalState() {
+        if (status.isTerminal()) {
+            var cause = terminationCause;
+            switch (status) {
+                case FAILED -> throw cause instanceof WorkflowFailedException wfe
+                        ? wfe
+                        : new WorkflowFailedException(
+                                cause != null ? cause : new RuntimeException("Workflow already failed"));
+                case CANCELLED -> throw cause instanceof WorkflowCancelledException wce
+                        ? wce
+                        : new WorkflowCancelledException(
+                                cause != null ? cause.getMessage() : "Workflow already cancelled");
+                default -> throw new IllegalStateException(
+                        "Workflow is in terminal state: " + status);
+            }
+        }
+    }
+
     // delegation
     @Override
     @Nonnull
@@ -310,6 +350,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
                                       @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
+        guardTerminalState();
         return executeDelegate.execute(stepName,
                                        local,
                                        action,
@@ -324,6 +365,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull QualifiedName qualifiedName,
                                       @Nonnull Predicate<EventMessage> predicate, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
+        guardTerminalState();
         return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
     }
 
@@ -333,6 +375,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             terminateDelegate.terminate(command);
             return;
         }
+        guardTerminalState();
         var name = resolvedWorkflowName != null ? resolvedWorkflowName : workflowId;
         var parent = configurationCustomizer != null ? configurationCustomizer : command.eventNameCustomizer();
         terminateDelegate.terminate(new TerminateCommand(
@@ -342,18 +385,18 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    public void registerRunningFuture(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
-        runningFutures.register(stepName, future);
+    public void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
+        runningSteps.register(stepName, future);
     }
 
     @Override
-    public void removeRunningFuture(@Nonnull String stepName) {
-        runningFutures.remove(stepName);
+    public void removeRunningStep(@Nonnull String stepName) {
+        runningSteps.remove(stepName);
     }
 
     @Override
     public boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
-        boolean cancelled = runningFutures.cancelWithCause(stepName, cause);
+        boolean cancelled = runningSteps.cancelWithCause(stepName, cause);
         if (cancelled) {
             try {
                 awaitStateChange(s -> s.containsStep(stepName)
@@ -367,7 +410,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void cancelAllRunningSteps(@Nullable Throwable cause) {
-        runningFutures.cancelAll(cause, cancelledSteps -> {
+        runningSteps.cancelAll(cause, cancelledSteps -> {
             if (cancelledSteps.isEmpty()) {
                 return;
             }
@@ -382,8 +425,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     }
 
     @Override
-    public void cancelAndRemoveRunningFuture(@Nonnull String stepName, boolean mayInterruptIfRunning) {
-        runningFutures.cancelAndRemove(stepName, mayInterruptIfRunning);
+    public void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning) {
+        runningSteps.cancelAndRemove(stepName, mayInterruptIfRunning);
     }
 
     @Override
@@ -449,6 +492,12 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     @Nonnull
+    public Optional<Throwable> getTerminationCause() {
+        return Optional.ofNullable(this.terminationCause);
+    }
+
+    @Override
+    @Nonnull
     public List<String> getStepHistory() {
         return new ArrayList<>(steps.keySet());
     }
@@ -480,7 +529,15 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        descriptor.describeProperty("workflowId", workflowId);
+        descriptor.describeProperty("status", status);
+        descriptor.describeProperty("resolvedWorkflowName", resolvedWorkflowName);
+        descriptor.describeProperty("executable", executable);
+        if (terminationCause != null) {
+            descriptor.describeProperty("terminationCause", terminationCause.getMessage());
+        }
+        descriptor.describeProperty("steps", List.copyOf(steps.keySet()));
         eventWaitConditions.describeTo(descriptor);
-        runningFutures.describeTo(descriptor);
+        runningSteps.describeTo(descriptor);
     }
 }

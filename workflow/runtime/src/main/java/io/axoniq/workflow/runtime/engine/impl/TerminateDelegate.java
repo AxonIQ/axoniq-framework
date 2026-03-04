@@ -114,7 +114,9 @@ public class TerminateDelegate implements TerminatePrimitive {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
         var configuration = command.configuration();
-        var exception = cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
+        var exception = cause instanceof Exception
+                ? (Exception) cause
+                : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
 
         ProcessingContextUtils.executeWithResult(
                 null,
@@ -136,10 +138,7 @@ public class TerminateDelegate implements TerminatePrimitive {
             }
         }
 
-        if (cause != null) {
-            throw new WorkflowFailedException(cause);
-        }
-        throw new WorkflowFailedException("Workflow terminated with error");
+        throw new WorkflowFailedException(exception);
     }
 
     protected void cancelled(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {

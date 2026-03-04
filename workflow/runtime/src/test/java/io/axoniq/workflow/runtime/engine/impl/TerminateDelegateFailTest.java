@@ -139,7 +139,7 @@ class TerminateDelegateFailTest {
     void terminateFailWithNullCauseThrowsWorkflowFailedExceptionWithMessage() {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class)
-                .hasMessage("Workflow terminated with error");
+                .hasRootCauseMessage("Workflow failed");
     }
 
     @Test
