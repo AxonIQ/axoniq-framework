@@ -21,6 +21,7 @@ import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
@@ -40,7 +41,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.all;
 import static io.axoniq.workflow.runtime.api.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName;
 
@@ -86,7 +86,7 @@ public class SimpleWorkflowContext extends WorkflowInstance
 
     public WorkflowStepResult execute(String stepName, Map<String, Object> payload, PayloadProcessor action,
                                       Duration duration) {
-        return execute(stepName, payload, action, local(), all(), duration, eventName());
+        return execute(stepName, payload, action, local(), PayloadReducer.all(), duration, eventName());
     }
 
 

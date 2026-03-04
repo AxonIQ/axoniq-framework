@@ -31,12 +31,13 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link WorkflowStepResults#anySuccessful(WorkflowState, WorkflowStepResult...)}.
+ * Tests for {@link WorkflowStepResults#anyMatch(WorkflowState, java.util.function.Predicate, WorkflowStepResult...)}
+ * with the {@link WorkflowStepResult#isSuccess()} predicate (formerly {@code anySuccessful()}).
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class WorkflowStepResultsAnySuccessfulTest {
+class WorkflowStepResultsAnyMatchSuccessfulTest {
 
     private WorkflowState workflowState;
 
@@ -44,7 +45,6 @@ class WorkflowStepResultsAnySuccessfulTest {
     void setUp() {
         workflowState = mock(WorkflowState.class);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
-        when(workflowState.anySuccessfulAmong(any())).thenReturn(Optional.empty());
     }
 
     // --- getStepName ---
@@ -55,9 +55,9 @@ class WorkflowStepResultsAnySuccessfulTest {
         var r2 = WorkflowStepResults.completed("stepB", null);
         var r3 = WorkflowStepResults.completed("stepC", null);
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2, r3);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2, r3);
 
-        assertThat(result.getStepName()).isEqualTo("anySuccessful(stepA, stepB, stepC)");
+        assertThat(result.getStepName()).isEqualTo("anyMatch(stepA, stepB, stepC)");
     }
 
     // --- First success wins ---
@@ -67,7 +67,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
@@ -78,12 +78,12 @@ class WorkflowStepResultsAnySuccessfulTest {
     void singleSuccessBecomesWinnerImmediately() {
         var r1 = WorkflowStepResults.completed("onlyStep", "only-value");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.<String>result()).contains("only-value");
-        assertThat(result.getStepName()).isEqualTo("anySuccessful(onlyStep)");
+        assertThat(result.getStepName()).isEqualTo("anyMatch(onlyStep)");
     }
 
     // --- Failures are ignored while steps are still running ---
@@ -103,7 +103,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.isSuccess()).thenReturn(false);
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -125,12 +125,12 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r2.isSuccess()).thenReturn(true);
         when(r2.await()).thenReturn(true);
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
 
-        verify(r1).cancel("Superseded by successful stepB");
+        verify(r1).cancel("Superseded by stepB");
         verify(r2, never()).cancel(anyString());
     }
 
@@ -143,7 +143,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         var r1 = WorkflowStepResults.failed("stepA", error1);
         var r2 = WorkflowStepResults.failed("stepB", error2);
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isFailure()).isTrue();
@@ -171,13 +171,13 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r3.isCompleted()).thenReturn(false);
         when(r3.isSuccess()).thenReturn(false);
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2, r3);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2, r3);
 
         // Trigger winner resolution
         result.isSuccess();
 
-        verify(r1).cancel("Superseded by successful stepB");
-        verify(r3).cancel("Superseded by successful stepB");
+        verify(r1).cancel("Superseded by stepB");
+        verify(r3).cancel("Superseded by stepB");
         verify(r2, never()).cancel(anyString());
     }
 
@@ -190,7 +190,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         result.cancel();
 
@@ -205,7 +205,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         result.cancel("workflow shutdown");
 
@@ -226,7 +226,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -242,7 +242,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -258,7 +258,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -269,13 +269,15 @@ class WorkflowStepResultsAnySuccessfulTest {
     void resolveWinnerBlocksUntilResultSucceeds() throws InterruptedException {
         var r1 = mock(WorkflowStepResult.class);
         when(r1.getStepName()).thenReturn("stepA");
-        when(r1.isCompleted()).thenReturn(false, true);
+        // First loop: isCompleted=false (guard filter), false (allMatch) → awaitStateChange
+        // Second loop after wake-up: isCompleted=true → found
+        when(r1.isCompleted()).thenReturn(false, false, true);
         when(r1.isSuccess()).thenReturn(false, true);
         when(r1.await()).thenReturn(true);
 
         doAnswer(invocation -> null).when(workflowState).awaitStateChange(any());
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess, r1);
 
         assertThat(result.isSuccess()).isTrue();
         verify(workflowState).awaitStateChange(any());
@@ -297,16 +299,16 @@ class WorkflowStepResultsAnySuccessfulTest {
         when(r2.isSuccess()).thenReturn(true);
 
         // Event-sourced state says stepB succeeded first
-        when(workflowState.anySuccessfulAmong(Set.of("stepA", "stepB")))
+        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         // Trigger winner resolution
         result.isSuccess();
 
         // stepB should be the winner despite being second in array order
-        verify(r1).cancel("Superseded by successful stepB");
+        verify(r1).cancel("Superseded by stepB");
         verify(r2, never()).cancel(anyString());
     }
 
@@ -317,7 +319,7 @@ class WorkflowStepResultsAnySuccessfulTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var result = WorkflowStepResults.anySuccessful(workflowState, r1, r2);
+        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
 
         assertThat(result.<String>result()).contains("payload-A");
         assertThat(result.<String>result()).contains("payload-A");

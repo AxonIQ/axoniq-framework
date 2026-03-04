@@ -18,7 +18,6 @@
 package io.axoniq.example.workflow.declarative;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +53,7 @@ public class FailWorkflow {
         }, fiveMin);
 
         // Combine results but don't block on them
-        WorkflowStepResults.all(r1, r2, r3);
+        ctx.all(r1, r2, r3);
 
         // Wait 5 seconds then fail
         sleepQuietly(5_000);

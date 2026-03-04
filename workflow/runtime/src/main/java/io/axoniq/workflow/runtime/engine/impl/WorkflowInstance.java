@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
@@ -525,6 +526,20 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     @Nonnull
     public ProcessingContext processingContext() {
         return processingContext;
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                       WorkflowStepResult... results) {
+        return WorkflowStepResults.anyMatch(this, predicate, results);
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                        WorkflowStepResult... results) {
+        return WorkflowStepResults.noneMatch(this, predicate, results);
     }
 
     @Override

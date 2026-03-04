@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -119,22 +118,6 @@ public interface WorkflowState {
     default Optional<String> firstCompletedAmong(@Nonnull Set<String> stepNames) {
         return stepNames.stream()
                 .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
-                .min(Comparator.comparing(name -> getStep(name).timestamp()));
-    }
-
-    /**
-     * Returns the step name that reached a successful state first among the given candidates,
-     * determined by event-sourced timestamps. Unlike {@link #firstCompletedAmong(Set)} which
-     * considers any terminal state, this method only considers steps with status
-     * {@link io.axoniq.workflow.runtime.engine.step.StepStatus#COMPLETED COMPLETED} (success).
-     *
-     * @param stepNames the candidate step names to compare.
-     * @return the step name with the earliest successful timestamp, or empty if none found.
-     */
-    @Nonnull
-    default Optional<String> anySuccessfulAmong(@Nonnull Set<String> stepNames) {
-        return stepNames.stream()
-                .filter(name -> containsStep(name) && getStep(name).status() == StepStatus.COMPLETED)
                 .min(Comparator.comparing(name -> getStep(name).timestamp()));
     }
 

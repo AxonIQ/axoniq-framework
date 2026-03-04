@@ -27,35 +27,37 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Demonstrates {@link io.axoniq.workflow.runtime.api.WorkflowContext#anyMatch} semantics:
- * two steps are launched in parallel — a fast one (~500 ms) and a slow one (5 min).
- * The first to complete wins; the loser is automatically cancelled.
+ * Demonstrates {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics:
+ * two steps are launched in parallel — a fast one that fails (~500 ms) and a slow one (5 min).
+ * The guard verifies that none of them fail; the fast failure short-circuits and
+ * the slow step is automatically cancelled.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public class AnyRaceWorkflow {
+public class NoneMatchGuardWorkflow {
 
-    private static final Logger logger = LoggerFactory.getLogger(AnyRaceWorkflow.class);
+    private static final Logger logger = LoggerFactory.getLogger(NoneMatchGuardWorkflow.class);
 
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
-        logger.info("anyMatch() workflow started for {}", ctx.getPayload());
+        logger.info("noneMatch() workflow started for {}", ctx.getPayload());
 
-        var fast = ctx.execute("fastStep", Map.of(), (c, p) -> {
+        var failingStep = ctx.execute("failingStep", Map.of(), (c, p) -> {
             sleepQuietly(500);
-            return Map.of("winner", "fast");
+            throw new RuntimeException("step failed");
         }, Duration.ofSeconds(10));
 
-        var slow = ctx.execute("slowStep", Map.of(), (c, p) -> {
+        var slowStep = ctx.execute("slowStep", Map.of(), (c, p) -> {
             sleepQuietly(Duration.ofMinutes(5).toMillis());
-            return Map.of("winner", "slow");
+            return Map.of("result", "slow-done");
         }, Duration.ofMinutes(5));
 
-        // anyMatch: first to reach a terminal state wins, loser is cancelled
-        var winner = ctx.anyMatch(WorkflowStepResult::isCompleted, fast, slow);
+        // noneMatch: guard that no step fails — the fast failure short-circuits,
+        // the slow step is cancelled with "Disqualified by failingStep"
+        var guard = ctx.noneMatch(WorkflowStepResult::isFailure, failingStep, slowStep);
 
-        if (winner.await()) {
-            logger.info("Race won by: {}", winner.getStepName());
+        if (guard.isFailure()) {
+            logger.info("Guard violated by: {}", guard.getStepName());
         }
     }
 

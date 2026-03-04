@@ -39,36 +39,36 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test for {@link AnyRaceWorkflow} — verifies that
- * {@link io.axoniq.workflow.runtime.api.WorkflowContext#anyMatch} semantics
- * resolve the fast step as winner and cancel the slow step.
+ * Integration test for {@link NoneMatchGuardWorkflow} — verifies that
+ * {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics
+ * short-circuit on the first failure and cancel the remaining slow step.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
-    public AnyRaceWorkflowDeclarativeTest() {
+    public NoneMatchGuardWorkflowDeclarativeTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());
     }
 
     @Override
     protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new AnyRaceWorkflow();
+        var workflow = new NoneMatchGuardWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
-                .workflowName("Any race workflow")
+                .workflowName("NoneMatch guard workflow")
                 .on(EventCondition.fromType(RegistrationReceivedEvent.class))
                 .customized((c, w) -> w
-                        .eventNameCustomizer(namespace("io.axoniq.dsl.anyrace").workflowBaseName("Workflow"))
-                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "race-" + id))
+                        .eventNameCustomizer(namespace("io.axoniq.dsl.nonematch").workflowBaseName("Workflow"))
+                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "guard-" + id))
                 );
     }
 
     @Test
-    void fastStepWinsAndSlowStepIsCancelled() {
+    void failingStepViolatesGuardAndSlowStepIsCancelled() {
         delayedPublisher.addSchedules(List.of(
-                ofMillis(500, new RegistrationReceivedEvent("user-race-1", "race@test.com"))
+                ofMillis(500, new RegistrationReceivedEvent("user-guard-1", "guard@test.com"))
         ));
 
         delayedPublisher.start();
@@ -94,7 +94,8 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
                                                      .map(WorkflowExecution::workflowContext).toList()) {
             assertThat(context.getStatus().isTerminal()).isTrue();
             assertThat(context.getStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(context.getStepHistory()).containsExactlyInAnyOrder("fastStep", "slowStep");
+            // Both steps should be in history: failingStep (failed) and slowStep (cancelled by guard)
+            assertThat(context.getStepHistory()).containsExactlyInAnyOrder("failingStep", "slowStep");
         }
     }
 }
