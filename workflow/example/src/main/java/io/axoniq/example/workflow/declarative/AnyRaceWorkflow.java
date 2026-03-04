@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *
+ *
+ */
+package io.axoniq.example.workflow.declarative;
+
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
+import jakarta.annotation.Nonnull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.util.Map;
+
+/**
+ * Demonstrates {@link WorkflowStepResults#race} race semantics:
+ * two steps are launched in parallel — a fast one (~500 ms) and a slow one (5 min).
+ * The first to complete wins; the loser is automatically cancelled.
+ *
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
+public class AnyRaceWorkflow {
+
+    private static final Logger logger = LoggerFactory.getLogger(AnyRaceWorkflow.class);
+
+    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        logger.info("race() workflow started for {}", ctx.getPayload());
+
+        var fast = ctx.execute("fastStep", Map.of(), (c, p) -> {
+            sleepQuietly(500);
+            return Map.of("winner", "fast");
+        }, Duration.ofSeconds(10));
+
+        var slow = ctx.execute("slowStep", Map.of(), (c, p) -> {
+            sleepQuietly(Duration.ofMinutes(5).toMillis());
+            return Map.of("winner", "slow");
+        }, Duration.ofMinutes(5));
+
+        // Race: first to reach a terminal state wins, loser is cancelled
+        var winner = WorkflowStepResults.race(ctx, fast, slow);
+
+        if (winner.await()) {
+            logger.info("Race won by: {}", winner.getStepName());
+        }
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}

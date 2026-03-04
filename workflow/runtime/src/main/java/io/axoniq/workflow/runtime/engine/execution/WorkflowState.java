@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -28,7 +29,9 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Comparator;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -101,6 +104,39 @@ public interface WorkflowState {
                                @Nonnull EventNameCustomizer eventNameCustomizer);
 
     void removeWaitCondition(@Nonnull String stepName);
+
+    /**
+     * Returns the step name that reached a terminal state first among the given candidates,
+     * determined by event-sourced timestamps. This is a safeguard against a race condition
+     * during event-sourcing replay: when multiple steps completed before cancellation took
+     * effect, array iteration order would pick an arbitrary winner. The event store timestamps
+     * are the source of truth for ordering and are stable across replays.
+     *
+     * @param stepNames the candidate step names to compare.
+     * @return the step name with the earliest terminal-state timestamp, or empty if none found.
+     */
+    @Nonnull
+    default Optional<String> firstCompletedAmong(@Nonnull Set<String> stepNames) {
+        return stepNames.stream()
+                .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                .min(Comparator.comparing(name -> getStep(name).timestamp()));
+    }
+
+    /**
+     * Returns the step name that reached a successful state first among the given candidates,
+     * determined by event-sourced timestamps. Unlike {@link #firstCompletedAmong(Set)} which
+     * considers any terminal state, this method only considers steps with status
+     * {@link io.axoniq.workflow.runtime.engine.step.StepStatus#COMPLETED COMPLETED} (success).
+     *
+     * @param stepNames the candidate step names to compare.
+     * @return the step name with the earliest successful timestamp, or empty if none found.
+     */
+    @Nonnull
+    default Optional<String> anySuccessfulAmong(@Nonnull Set<String> stepNames) {
+        return stepNames.stream()
+                .filter(name -> containsStep(name) && getStep(name).status() == StepStatus.COMPLETED)
+                .min(Comparator.comparing(name -> getStep(name).timestamp()));
+    }
 
     void registerRunningStep(@Nonnull String stepName, @Nonnull java.util.concurrent.CompletableFuture<?> future);
 
