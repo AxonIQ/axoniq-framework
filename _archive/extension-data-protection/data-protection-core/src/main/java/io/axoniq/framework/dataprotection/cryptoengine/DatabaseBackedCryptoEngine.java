@@ -76,7 +76,7 @@ public abstract class DatabaseBackedCryptoEngine implements CryptoEngine {
      * If the component is not enabled, an exception will be thrown on each attempt.
      */
     protected void validateEntitlement() {
-        entitlementManager.useComponent(DataProtectionAxoniqComponent.IDENTIFIER);
+        entitlementManager.useAddon(DataProtectionAxoniqComponent.IDENTIFIER);
     }
 
     private SecretKeySpec generateKey() {

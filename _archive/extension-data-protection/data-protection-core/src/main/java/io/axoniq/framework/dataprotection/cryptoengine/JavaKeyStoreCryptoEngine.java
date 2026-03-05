@@ -97,7 +97,7 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
      * Please see the class description for a caveat on key saving.
      */
     private void validateEntitlement() {
-        entitlementManager.useComponent(DataProtectionAxoniqComponent.IDENTIFIER);
+        entitlementManager.useAddon(DataProtectionAxoniqComponent.IDENTIFIER);
     }
 
     @Override
