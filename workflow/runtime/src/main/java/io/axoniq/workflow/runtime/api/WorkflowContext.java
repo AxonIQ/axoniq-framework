@@ -18,14 +18,12 @@
 package io.axoniq.workflow.runtime.api;
 
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
 
 /**
  * Public API facing class to access the execution from workflow definition.
@@ -34,6 +32,9 @@ public interface WorkflowContext extends
         ExecutePrimitive,
         WaitForPrimitive,
         TerminatePrimitive,
+        AllCompletedCombinator,
+        NoneMatchCombinator,
+        AnyMatchCombinator,
         DescribableComponent {
 
     @Nonnull
@@ -52,15 +53,4 @@ public interface WorkflowContext extends
 
     @Nonnull
     ProcessingContext processingContext();
-
-    @Nonnull
-    default WorkflowStepResult all(WorkflowStepResult... results) {
-        return WorkflowStepResults.all(results);
-    }
-
-    @Nonnull
-    WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
-
-    @Nonnull
-    WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
 }

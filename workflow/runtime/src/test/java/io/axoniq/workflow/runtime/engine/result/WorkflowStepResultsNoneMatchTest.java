@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.impl.NoneMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +54,7 @@ class WorkflowStepResultsNoneMatchTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
@@ -67,7 +68,7 @@ class WorkflowStepResultsNoneMatchTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.<Object>result()).isEmpty();
         assertThat(result.error()).isEmpty();
@@ -80,7 +81,7 @@ class WorkflowStepResultsNoneMatchTest {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isFailure()).isTrue();
@@ -92,7 +93,7 @@ class WorkflowStepResultsNoneMatchTest {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isFailure()).isTrue();
         assertThat(result.error()).isPresent();
@@ -117,7 +118,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(r3.isCompleted()).thenReturn(false);
         when(r3.isFailure()).thenReturn(false);
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2, r3);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2, r3);
 
         // Trigger resolution
         result.isSuccess();
@@ -142,7 +143,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.isFailure()).thenReturn(false);
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -160,7 +161,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.isFailure()).thenReturn(false);
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -178,7 +179,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(r2.isCompleted()).thenReturn(true);
         when(r2.isFailure()).thenReturn(false);
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -192,7 +193,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         result.cancel();
 
@@ -207,7 +208,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         result.cancel("workflow shutdown");
 
@@ -222,7 +223,7 @@ class WorkflowStepResultsNoneMatchTest {
         var r1 = WorkflowStepResults.completed("stepA", null);
         var r2 = WorkflowStepResults.completed("stepB", null);
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.getStepName()).isEqualTo("noneMatch(stepA, stepB)");
     }
@@ -248,7 +249,7 @@ class WorkflowStepResultsNoneMatchTest {
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var result = WorkflowStepResults.noneMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::isFailure, r1, r2);
 
         // Trigger resolution
         result.isSuccess();

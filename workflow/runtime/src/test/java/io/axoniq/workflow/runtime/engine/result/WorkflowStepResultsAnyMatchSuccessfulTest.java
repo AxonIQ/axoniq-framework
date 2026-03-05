@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,7 +56,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r2 = WorkflowStepResults.completed("stepB", null);
         var r3 = WorkflowStepResults.completed("stepC", null);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2, r3);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2, r3);
 
         assertThat(result.getStepName()).isEqualTo("anyMatch(stepA, stepB, stepC)");
     }
@@ -67,7 +68,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
@@ -78,7 +79,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
     void singleSuccessBecomesWinnerImmediately() {
         var r1 = WorkflowStepResults.completed("onlyStep", "only-value");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
@@ -103,7 +104,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.isSuccess()).thenReturn(false);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -125,7 +126,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r2.isSuccess()).thenReturn(true);
         when(r2.await()).thenReturn(true);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isSuccess()).isTrue();
@@ -143,7 +144,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = WorkflowStepResults.failed("stepA", error1);
         var r2 = WorkflowStepResults.failed("stepB", error2);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isFailure()).isTrue();
@@ -171,7 +172,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r3.isCompleted()).thenReturn(false);
         when(r3.isSuccess()).thenReturn(false);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2, r3);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2, r3);
 
         // Trigger winner resolution
         result.isSuccess();
@@ -190,7 +191,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         result.cancel();
 
@@ -205,7 +206,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         result.cancel("workflow shutdown");
 
@@ -226,7 +227,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -242,7 +243,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -258,7 +259,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -277,7 +278,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
 
         doAnswer(invocation -> null).when(workflowState).awaitStateChange(any());
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess, r1);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1);
 
         assertThat(result.isSuccess()).isTrue();
         verify(workflowState).awaitStateChange(any());
@@ -302,7 +303,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         // Trigger winner resolution
         result.isSuccess();
@@ -319,7 +320,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isSuccess,r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
 
         assertThat(result.<String>result()).contains("payload-A");
         assertThat(result.<String>result()).contains("payload-A");

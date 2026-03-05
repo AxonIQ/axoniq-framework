@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,7 +56,7 @@ class WorkflowStepResultsAnyMatchTest {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isFailure()).isTrue();
@@ -77,7 +78,7 @@ class WorkflowStepResultsAnyMatchTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.isFailure()).thenReturn(false);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -87,7 +88,7 @@ class WorkflowStepResultsAnyMatchTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         // Fallback: first completed wins, which is a success
@@ -110,7 +111,7 @@ class WorkflowStepResultsAnyMatchTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.isFailure()).thenReturn(false);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         result.isFailure();
 
@@ -125,7 +126,7 @@ class WorkflowStepResultsAnyMatchTest {
         var r1 = WorkflowStepResults.timeout("stepA", Duration.ofSeconds(5));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isTimeout, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isTimeout, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isTimeout()).isTrue();
@@ -138,7 +139,7 @@ class WorkflowStepResultsAnyMatchTest {
         var r1 = WorkflowStepResults.cancelled("stepA");
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isCanceled, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCanceled, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.isCanceled()).isTrue();
@@ -151,7 +152,7 @@ class WorkflowStepResultsAnyMatchTest {
         var r1 = WorkflowStepResults.completed("stepA", null);
         var r2 = WorkflowStepResults.completed("stepB", null);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         assertThat(result.getStepName()).isEqualTo("anyMatch(stepA, stepB)");
     }
@@ -176,7 +177,7 @@ class WorkflowStepResultsAnyMatchTest {
         when(r2.isSuccess()).thenReturn(true);
         when(r2.await()).thenReturn(true);
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         // Trigger winner resolution
         result.isSuccess();
@@ -209,7 +210,7 @@ class WorkflowStepResultsAnyMatchTest {
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var result = WorkflowStepResults.anyMatch(workflowState, WorkflowStepResult::isFailure, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isFailure, r1, r2);
 
         // The fallback winner should be stepB (event-ordered)
         result.await();

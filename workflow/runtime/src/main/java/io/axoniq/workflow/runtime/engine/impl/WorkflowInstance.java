@@ -24,13 +24,11 @@ import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
@@ -81,6 +79,9 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
 
     // primitive implementations
+    private final AllCompletedCombinatorDelegate allCombinatorDelegate = new AllCompletedCombinatorDelegate();
+    private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
+    private final NoneMatchCombinatorDelegate noneCombinatorDelegate;
     private final ExecuteDelegate executeDelegate;
     private final WaitForDelegate waitForDelegate;
     private final TerminateDelegate terminateDelegate;
@@ -149,6 +150,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                                        workflowId,
                                                        unitOfWorkFactory,
                                                        executor);
+        this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(this);
+        this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(this);
     }
 
 
@@ -197,7 +200,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                              workflowContext.getPayload());
 
                                 if (!ctx.getStatus().isTerminal()) {
-                                    sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer), pc).get(
+                                    sendWorkflowEvent(completedWorkflow(workflowContext, workflowName, customizer),
+                                                      pc).get(
                                             5,
                                             TimeUnit.SECONDS); // FIXME constant?
                                 }
@@ -323,8 +327,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
 
 
     /**
-     * Guards against invoking any primitive when the workflow has already reached a terminal state.
-     * Rethrows the original termination cause wrapped in the appropriate exception type.
+     * Guards against invoking any primitive when the workflow has already reached a terminal state. Rethrows the
+     * original termination cause wrapped in the appropriate exception type.
      */
     private void guardTerminalState() {
         if (status.isTerminal()) {
@@ -333,11 +337,11 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                 case FAILED -> throw cause instanceof WorkflowFailedException wfe
                         ? wfe
                         : new WorkflowFailedException(
-                                cause != null ? cause : new RuntimeException("Workflow already failed"));
+                        cause != null ? cause : new RuntimeException("Workflow already failed"));
                 case CANCELLED -> throw cause instanceof WorkflowCancelledException wce
                         ? wce
                         : new WorkflowCancelledException(
-                                cause != null ? cause.getMessage() : "Workflow already cancelled");
+                        cause != null ? cause.getMessage() : "Workflow already cancelled");
                 default -> throw new IllegalStateException(
                         "Workflow is in terminal state: " + status);
             }
@@ -368,6 +372,26 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         guardTerminalState();
         return waitForDelegate.waitFor(stepName, qualifiedName, predicate, timeout, eventNameCustomizer);
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                       WorkflowStepResult... results) {
+        return anyCombinatorDelegate.anyMatch(predicate, results);
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                        WorkflowStepResult... results) {
+        return noneCombinatorDelegate.noneMatch(predicate, results);
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowStepResult all(WorkflowStepResult... results) {
+        return allCombinatorDelegate.all(results);
     }
 
     @Override
@@ -401,7 +425,7 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
         if (cancelled) {
             try {
                 awaitStateChange(s -> s.containsStep(stepName)
-                                 && s.getStep(stepName).status().isTerminal());
+                        && s.getStep(stepName).status().isTerminal());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -417,8 +441,8 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
             }
             try {
                 awaitStateChange(s -> cancelledSteps.stream()
-                        .allMatch(stepName -> s.containsStep(stepName)
-                                 && s.getStep(stepName).status().isTerminal()));
+                                                    .allMatch(stepName -> s.containsStep(stepName)
+                                                            && s.getStep(stepName).status().isTerminal()));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -526,20 +550,6 @@ public class WorkflowInstance implements WorkflowState, WorkflowContext {
     @Nonnull
     public ProcessingContext processingContext() {
         return processingContext;
-    }
-
-    @Override
-    @Nonnull
-    public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                       WorkflowStepResult... results) {
-        return WorkflowStepResults.anyMatch(this, predicate, results);
-    }
-
-    @Override
-    @Nonnull
-    public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                        WorkflowStepResult... results) {
-        return WorkflowStepResults.noneMatch(this, predicate, results);
     }
 
     @Override
