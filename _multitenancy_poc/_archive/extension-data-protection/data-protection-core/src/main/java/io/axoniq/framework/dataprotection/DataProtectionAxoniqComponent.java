@@ -17,7 +17,7 @@
  */
 package io.axoniq.framework.dataprotection;
 
-import io.axoniq.license.entitlement.AxoniqComponent;
+import io.axoniq.license.entitlement.AxoniqAddon;
 
 /**
  * AxoniqComponent implementation for the Axon Framework Data Protection Extension. This allows the extension to be
@@ -25,7 +25,7 @@ import io.axoniq.license.entitlement.AxoniqComponent;
  *
  * @author Stefan Mirkovic
  */
-public class DataProtectionAxoniqComponent implements AxoniqComponent {
+public class DataProtectionAxoniqComponent implements AxoniqAddon {
     public static final String IDENTIFIER = "framework.data_protection";
 
     @Override
