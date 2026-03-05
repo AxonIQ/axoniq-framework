@@ -33,6 +33,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Holds the current state of a workflow.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class SimpleWorkflowState implements WorkflowState {
 
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
@@ -42,6 +48,12 @@ public class SimpleWorkflowState implements WorkflowState {
     private final Map<WorkflowStatus, WorkflowStatusChangeListener> listeners;
     private final WorkflowContext context;
 
+    /**
+     * Creates a new workflow state.
+     *
+     * @param context   workflow context.
+     * @param listeners workflow status change listeners.
+     */
     public SimpleWorkflowState(
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners

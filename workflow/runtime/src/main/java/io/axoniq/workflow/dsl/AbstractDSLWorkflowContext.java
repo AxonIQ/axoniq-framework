@@ -46,7 +46,8 @@ import java.util.Objects;
  */
 public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
 
-    private final SimpleWorkflowExecution simpleWorkflowExecution;
+    private final WorkflowContext delegate;
+    private final SimpleWorkflowExecution workflowExecution;
 
     /**
      * Constructs new DSL context.
@@ -62,20 +63,21 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
             @Nonnull ProcessingContext processingContext,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration
     ) {
-        this.simpleWorkflowExecution = new SimpleWorkflowExecution(
+        this.workflowExecution = new SimpleWorkflowExecution(
                 Objects.requireNonNull(workflowId, "Workflow id must not be null"),
                 Objects.requireNonNull(payload, "Initial workflow payload must not be null"),
                 Objects.requireNonNull(processingContext, "Processing context must not be null"),
                 Objects.requireNonNull(workflowConfiguration, "Workflow configuration must not be null"),
                 this
         );
+        this.delegate = workflowExecution.workflowContext();
     }
 
     @Nonnull
     @Override
     public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
                                       @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return simpleWorkflowExecution.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
+        return delegate.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
     }
 
     @Nonnull
@@ -84,63 +86,63 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
                                       @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return simpleWorkflowExecution.execute(stepName,
-                                               local,
-                                               action,
-                                               parameterMapping,
-                                               resultMapping,
-                                               timeout,
-                                               eventNameCustomizer);
+        return delegate.execute(stepName,
+                                local,
+                                action,
+                                parameterMapping,
+                                resultMapping,
+                                timeout,
+                                eventNameCustomizer);
     }
 
     @Override
     public void terminate(@Nonnull TerminateCommand command) {
-        simpleWorkflowExecution.terminate(command);
+        delegate.terminate(command);
     }
 
 
     @Nonnull
     @Override
     public String workflowId() {
-        return simpleWorkflowExecution.workflowId();
+        return delegate.workflowId();
     }
 
     @Nonnull
     @Override
     public Map<String, Object> workflowPayload() {
-        return simpleWorkflowExecution.workflowPayload();
+        return delegate.workflowPayload();
     }
 
     @Nonnull
     @Override
     public WorkflowStatus workflowStatus() {
-        return simpleWorkflowExecution.workflowStatus();
+        return workflowExecution.state().workflowStatus();
     }
 
     @Override
     public void applyPayloadModification(@Nonnull PayloadModification payloadModification) {
-        simpleWorkflowExecution.applyPayloadModification(payloadModification);
+        delegate.applyPayloadModification(payloadModification);
     }
 
     @Nonnull
     @Override
     public List<String> workflowStepNames() {
-        return simpleWorkflowExecution.workflowStepNames();
+        return delegate.workflowStepNames();
     }
 
     @Nonnull
     @Override
     public ProcessingContext processingContext() {
-        return simpleWorkflowExecution.processingContext();
+        return workflowExecution.processingContext();
     }
 
     @Nonnull
     public WorkflowExecution execution() {
-        return simpleWorkflowExecution;
+        return workflowExecution;
     }
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-        simpleWorkflowExecution.describeTo(descriptor);
+        workflowExecution.describeTo(descriptor);
     }
 }

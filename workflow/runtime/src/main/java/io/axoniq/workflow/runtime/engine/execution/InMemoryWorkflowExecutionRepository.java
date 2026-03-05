@@ -15,10 +15,8 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.engine.repository;
+package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;

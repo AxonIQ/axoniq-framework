@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -40,7 +41,7 @@ import java.util.function.Predicate;
  * @since 1.0.0
  */
 @Internal
-public interface WorkflowExecution {
+public interface WorkflowExecution extends DescribableComponent {
 
     /**
      * Execute workflow.
@@ -54,10 +55,9 @@ public interface WorkflowExecution {
     /**
      * Returns workflow context of the current execution.
      *
-     * @param <T> type of the context.
      * @return context.
      */
-    <T extends WorkflowContext> T workflowContext();
+    WorkflowContext workflowContext();
 
     void awaitStateChange(@Nonnull Predicate<WorkflowExecution> condition) throws InterruptedException;
 
