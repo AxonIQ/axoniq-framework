@@ -34,7 +34,7 @@ public interface EventCondition {
 
 
     /**
-     * Returns the predicate on event message.
+     * Returns the predicate on the event message.
      *
      * @return predicate.
      */

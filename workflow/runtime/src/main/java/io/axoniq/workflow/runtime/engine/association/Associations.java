@@ -139,7 +139,7 @@ public class Associations implements PredicateBuilder {
      *
      * @param associations strings in form of <key><op><value>.
      * @return set of association values.
-     * @throws IllegalArgumentException if strings are in wrong format or use unsupported operators.
+     * @throws IllegalArgumentException if strings are in the wrong format or use unsupported operators.
      */
     public static Set<AssociationValue> parseAssociationValues(@Nonnull ValueComparisonOperatorRegistry registry,
                                                                String... associations) {
@@ -152,17 +152,17 @@ public class Associations implements PredicateBuilder {
                                   var op = foundOperators.getFirst();
                                   var split = conditionString.split(op);
                                   if (split.length != 2) {
-                                      throw new IllegalArgumentException(
-                                              "Illegal format in start condition string "
-                                                      + conditionString + ". It should be <key>"
-                                                      + foundOperators + "<value>");
+                                      throw BadAssociationFormatException.wrongFormat(
+                                              op,
+                                              conditionString
+                                      );
                                   }
                                   return new AssociationValue(split[0], registry.get(op), split[1]);
                               } else {
-                                  throw new IllegalArgumentException(
-                                          "Illegal operator used in annotated start condition string "
-                                                  + conditionString + ". Supported operators are "
-                                                  + String.join(", ", operators));
+                                  throw BadAssociationFormatException.unsupportedOperator(
+                                          operators,
+                                          conditionString
+                                  );
                               }
                           }
                      ).collect(Collectors.toSet());

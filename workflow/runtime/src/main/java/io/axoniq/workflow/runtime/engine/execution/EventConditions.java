@@ -29,7 +29,7 @@ import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
- * Helper for construction of event conditions.
+ * Helper for construction of {@link EventCondition}.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -41,10 +41,11 @@ public class EventConditions {
     }
 
     /**
-     * Constructs an event condition without message predicate for the qualified name represented by the given type.
+     * Constructs an event condition without **message predicate** for the qualified name represented by the given type.
+     * The resulting event condition will always trigger if the qualified name is matching.
      *
      * @param clazz type of message (message type resolve will use this type to deduce the message type).
-     * @return condition.
+     * @return condition component builder.
      */
     public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz) {
         Objects.requireNonNull(clazz, "Class must not be null");
@@ -57,9 +58,10 @@ public class EventConditions {
     /**
      * Constructs an event condition with a message predicate for the qualified name represented by the given type.
      *
-     * @param clazz type of message (message type resolve will use this type to deduce the message type).
+     * @param clazz                 type of message (message type resolve will use this type to deduce the message
+     *                              type).
      * @param eventMessagePredicate predicate for the message.
-     * @return condition.
+     * @return event condition builder.
      */
     public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz,
                                                             @Nonnull ComponentBuilder<Predicate<EventMessage>> eventMessagePredicate) {
@@ -84,7 +86,8 @@ public class EventConditions {
     }
 
     /**
-     * Constructs an event condition from qualified name.
+     * Constructs an event condition without **message predicate** from the qualified name which matches all messages
+     * with the given qualified name.
      *
      * @param qualifiedName qualified name.
      * @return event condition.
@@ -94,7 +97,7 @@ public class EventConditions {
     }
 
     /**
-     * Constructs an event condition from qualified name and a message predicate.
+     * Constructs an event condition from the qualified name and a message predicate.
      *
      * @param qualifiedName qualified name.
      * @param predicate     message predicate.
@@ -131,7 +134,7 @@ public class EventConditions {
     }
 
     /**
-     * Creates a condition for an event with given qualified name, which will never match. (This one is for testing).
+     * Creates a condition for an event with the given qualified name, which will never match. (This one is for testing).
      *
      * @param qualifiedName event qualified name.
      * @return event condition.

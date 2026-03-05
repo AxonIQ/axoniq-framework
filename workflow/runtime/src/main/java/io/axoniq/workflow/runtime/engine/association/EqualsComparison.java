@@ -19,6 +19,11 @@ package io.axoniq.workflow.runtime.engine.association;
 
 /**
  * Executes comparison based on equality of objects.
+ * <p>
+ * This is a simple equals operator allowing to specify association string of type: "key=value". The comparison will be
+ * converted into a predicate on the event message accessing a payload attribute and comparing it with the given value
+ * by applying the {@link Object#equals(Object)} method.
+ * </p>
  *
  * @author Simon Zambrovski
  * @since 1.0.0

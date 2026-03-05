@@ -40,6 +40,9 @@ import java.util.Objects;
 
 /**
  * Base class for DSL implementations.
+ * <p>Implementors of DSLs have to provide their version of a {@link WorkflowContext} class and
+ * are intended to subclass this class and delegate their calls to the methods available in the {@link WorkflowContext}.
+ * </p>
  *
  * @author Simon Zambrovski
  * @since 1.0.0
