@@ -543,6 +543,6 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
         }
         descriptor.describeProperty("steps", List.copyOf(steps.keySet()));
         eventWaitConditions.describeTo(descriptor);
-        runningSteps.describeTo(descriptor);
+        descriptor.describeProperty("runningSteps", runningSteps);
     }
 }
