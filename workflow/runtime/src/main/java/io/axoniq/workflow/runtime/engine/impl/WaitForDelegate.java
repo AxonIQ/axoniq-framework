@@ -149,7 +149,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     /**
-     * Receive event message (because of wait condition) to trigger the wait for continuation.
+     * Receives an event message (because of wait condition) to trigger the wait for continuation.
      *
      * @param eventMessage        message to deliver the event.
      * @param stepName            step name waiting for event.
