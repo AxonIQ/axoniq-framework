@@ -43,7 +43,7 @@ public class DSLAdoptingStateFactory<C extends WorkflowContext> implements Workf
     @Nonnull
     public WorkflowExecution create(@NotNull WorkflowContext context) {
         if (workflowContextType.isAssignableFrom(context.getClass())) {
-            return ((AbstractDSLWorkflowContext) context).getWorkflowInstance();
+            return ((AbstractDSLWorkflowContext) context).execution();
         }
 
         throw new IllegalStateException("Unsupported context type " + context.getClass().getName());

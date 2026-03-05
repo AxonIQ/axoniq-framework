@@ -128,7 +128,7 @@ class WorkflowModuleTest {
         assertThat(config.workflowName()).isEqualTo("testWorkflow");
         assertThat(config.workflowDefinition()).isSameAs(definition);
         assertThat(config.workflowContextFactory()).isSameAs(contextFactory);
-        assertThat(config.workflowStateFactory()).isSameAs(stateFactory);
+        assertThat(config.workflowExecutionFactory()).isSameAs(stateFactory);
     }
 
     @Test

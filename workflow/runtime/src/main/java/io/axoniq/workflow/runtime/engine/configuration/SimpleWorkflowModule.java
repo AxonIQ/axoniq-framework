@@ -248,7 +248,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
                                                 @NotNull
                                                 @Override
-                                                public WorkflowExecutionFactory workflowStateFactory() {
+                                                public WorkflowExecutionFactory workflowExecutionFactory() {
                                                     return workflowStateFactory.build(configuration);
                                                 }
 
@@ -340,7 +340,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
                                     @Nonnull
                                     @Override
-                                    public WorkflowExecutionFactory workflowStateFactory() {
+                                    public WorkflowExecutionFactory workflowExecutionFactory() {
                                         return workflowStateFactory.build(config);
                                     }
 

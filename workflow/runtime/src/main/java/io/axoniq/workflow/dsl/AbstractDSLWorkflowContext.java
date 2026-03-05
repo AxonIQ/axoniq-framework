@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.SimpleWorkflowExecution;
 import jakarta.annotation.Nonnull;
@@ -50,10 +51,10 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     /**
      * Constructs new DSL context.
      *
-     * @param workflowId        workflow id.
-     * @param payload           initial payload.
-     * @param processingContext processing context of the incoming event.
-     * @param parentCustomizer  parent event name customizer.
+     * @param workflowId            workflow id.
+     * @param payload               initial payload.
+     * @param processingContext     processing context of the incoming event.
+     * @param workflowConfiguration workflow configuration.
      */
     public AbstractDSLWorkflowContext(
             @Nonnull String workflowId,
@@ -65,7 +66,8 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
                 Objects.requireNonNull(workflowId, "Workflow id must not be null"),
                 Objects.requireNonNull(payload, "Initial workflow payload must not be null"),
                 Objects.requireNonNull(processingContext, "Processing context must not be null"),
-                Objects.requireNonNull(workflowConfiguration, "Workflow configuration must not be null")
+                Objects.requireNonNull(workflowConfiguration, "Workflow configuration must not be null"),
+                this
         );
     }
 
@@ -132,13 +134,13 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
         return simpleWorkflowExecution.processingContext();
     }
 
+    @Nonnull
+    public WorkflowExecution execution() {
+        return simpleWorkflowExecution;
+    }
+
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         simpleWorkflowExecution.describeTo(descriptor);
-    }
-
-    @Nonnull
-    public SimpleWorkflowExecution getWorkflowInstance() {
-        return simpleWorkflowExecution;
     }
 }

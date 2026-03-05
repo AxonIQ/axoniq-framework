@@ -35,7 +35,7 @@ import java.util.function.Supplier;
  * @since 1.0.0
  */
 @Internal
-public interface WorkflowInstanceRepository extends DescribableComponent {
+public interface WorkflowExecutionRepository extends DescribableComponent {
 
     /**
      * Finds a workflow handle by its identifier.
@@ -44,7 +44,7 @@ public interface WorkflowInstanceRepository extends DescribableComponent {
      * @return an {@link Optional} containing the workflow handle, or empty if not found
      */
     @Nonnull
-    Optional<WorkflowInstance> findById(@Nonnull String workflowId);
+    Optional<WorkflowExecution> findById(@Nonnull String workflowId);
 
     /**
      * Returns all stored workflow handles.
@@ -52,7 +52,7 @@ public interface WorkflowInstanceRepository extends DescribableComponent {
      * @return an unmodifiable collection of all workflow handles
      */
     @Nonnull
-    Set<WorkflowInstance> findAll();
+    Set<WorkflowExecution> findAll();
 
     /**
      * Atomically stores a new workflow handle if no handle exists for the given workflow identifier.
@@ -62,7 +62,7 @@ public interface WorkflowInstanceRepository extends DescribableComponent {
      * @return the existing or newly created workflow handle
      */
     @Nonnull
-    WorkflowInstance save(@Nonnull Supplier<WorkflowInstance> factory);
+    WorkflowExecution save(@Nonnull String workflowId, @Nonnull Supplier<WorkflowExecution> factory);
 
     /**
      * Removes the workflow handle associated with the given identifier.
@@ -70,7 +70,7 @@ public interface WorkflowInstanceRepository extends DescribableComponent {
      * @param workflowId the identifier of the workflow to remove
      * @return the removed {@link WorkflowInstance}, or {@code null} if no handle was found
      */
-    WorkflowInstance remove(@Nonnull String workflowId);
+    WorkflowExecution remove(@Nonnull String workflowId);
 
     /**
      * Removes all stored workflow handles.

@@ -23,7 +23,7 @@ import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
@@ -78,24 +78,24 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
         delayedPublisher.start()
 
         Awaitility.await().untilAsserted(ThrowingRunnable {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty()
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         })
 
         workflowEngine.runWorkflows()
 
         Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
-            assertThat(workflowEngine.workflowInstances())
-                .allMatch(Predicate { h: WorkflowInstance? -> h!!.workflowStatus().isTerminal })
+            assertThat(workflowEngine.workflowExecutions())
+                .allMatch(Predicate { h: WorkflowExecution? -> h!!.state().workflowStatus().isTerminal })
         })
 
         // Wait 2 seconds before asserting to let async cleanup settle
         Thread.sleep(2_000)
 
-        for (context in workflowEngine.workflowInstances().stream()
-            .map(WorkflowInstance::workflowContext).toList()) {
-            assertThat(context.workflowStatus().isTerminal).isTrue()
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED)
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC")
+        for (state in workflowEngine.workflowExecutions().stream()
+            .map(WorkflowExecution::state).toList()) {
+            assertThat(state.workflowStatus().isTerminal).isTrue()
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED)
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC")
         }
     }
 }

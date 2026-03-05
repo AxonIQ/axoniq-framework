@@ -18,8 +18,8 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstanceRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -42,14 +42,14 @@ public class WorkflowEngine implements EventHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
-    private final WorkflowInstanceRepository workflowInstanceRepository;
+    private final WorkflowExecutionRepository workflowExecutionRepository;
 
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
-            @Nonnull WorkflowInstanceRepository workflowInstanceRepository
+            @Nonnull WorkflowExecutionRepository workflowExecutionRepository
     ) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
-        this.workflowInstanceRepository = workflowInstanceRepository;
+        this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
     @NotNull
@@ -61,17 +61,18 @@ public class WorkflowEngine implements EventHandler {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            var instance = workflowInstanceRepository.findById(workflowId)
-                                      .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId));
-            instance.workflowExecution().onEvent(eventMessage, processingContext);
+            var instance = workflowExecutionRepository.findById(workflowId)
+                                                      .orElseThrow(() -> new IllegalStateException(
+                                                              "No workflow found for id: " + workflowId));
+            instance.onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
-            for (var instance : workflowInstanceRepository.findAll()) {
+            for (var instance : workflowExecutionRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
-                instance.workflowExecution().onEvent(eventMessage, processingContext);
+                instance.onEvent(eventMessage, processingContext);
             }
         }
 
@@ -82,10 +83,10 @@ public class WorkflowEngine implements EventHandler {
      * This is a place to be called from Event Processor
      */
     public void runWorkflows() {
-        logger.debug("Executing {} workflows.", workflowInstanceRepository.findAll().size());
-        for (var instances : workflowInstanceRepository.findAll()) {
+        logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
+        for (var instance : workflowExecutionRepository.findAll()) {
             try {
-                instances.workflowExecution().execute(instances.workflowContext());
+                instance.execute();
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }
@@ -108,25 +109,28 @@ public class WorkflowEngine implements EventHandler {
                                     ), "Error converting initial payload");
                                     var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
 
-                                    var workflowContext = workflowConfiguration.workflowContextFactory()
-                                                                               .createContext(payload, workflowId, processingContext, workflowConfiguration);
+                                    var workflowContext = workflowConfiguration
+                                            .workflowContextFactory()
+                                            .createContext(payload,
+                                                           workflowId,
+                                                           processingContext,
+                                                           workflowConfiguration);
 
                                     // avoid multiple workflows for the same workflow id.
-                                    workflowInstanceRepository.save(() -> {
+                                    workflowExecutionRepository.save(workflowId, () -> {
                                         logger.info("Starting new workflow with '{}'", eventMessage.payload());
-                                        var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
-                                        return new WorkflowInstance(workflowId, workflowConfiguration, workflowContext, workflowState);
+                                        return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                     });
                                 }
                             }
         );
     }
 
-    public Set<WorkflowInstance> workflowInstances() {
-        return workflowInstanceRepository.findAll();
+    public Set<WorkflowExecution> workflowExecutions() {
+        return workflowExecutionRepository.findAll();
     }
 
     public void shutdown() {
-        workflowInstanceRepository.clear();
+        workflowExecutionRepository.clear();
     }
 }

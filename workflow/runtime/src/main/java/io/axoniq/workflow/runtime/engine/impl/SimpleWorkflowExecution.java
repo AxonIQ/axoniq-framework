@@ -70,13 +70,13 @@ import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-public final class SimpleWorkflowExecution<T extends WorkflowContext> implements WorkflowExecution, WorkflowContext {
+public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowContext {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // Attributes
     private final String workflowId;
-    private final WorkflowConfiguration<T> workflowConfiguration;
+    private final WorkflowConfiguration<?> workflowConfiguration;
     private final String workflowName;
 
     // primitive implementations
@@ -88,6 +88,7 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
     private final WorkflowState workflowState;
 
     // Runtime
+    private final WorkflowContext workflowContext;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
@@ -102,6 +103,7 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
     private final Executor executor;
     private final EventSink eventSink;
 
+
     /**
      * Constructs a new instance.
      *
@@ -109,15 +111,18 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
      * @param initial               initial payload of workflow instance.
      * @param processingContext     processing context.
      * @param workflowConfiguration workflow configuration.
+     * @param workflowContext       outer workflow context.
      */
     public SimpleWorkflowExecution(@Nonnull String workflowId,
                                    @Nonnull Map<String, Object> initial,
                                    @Nonnull ProcessingContext processingContext,
-                                   @Nonnull WorkflowConfiguration<T> workflowConfiguration
+                                   @Nonnull WorkflowConfiguration<?> workflowConfiguration,
+                                   @Nullable WorkflowContext workflowContext
     ) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
         this.payload = Objects.requireNonNull(initial, "Payload must not be null");
         this.processingContext = Objects.requireNonNull(processingContext, "Processing context is mandatory");
+        this.workflowContext = workflowContext != null ? workflowContext : this;
         this.unitOfWorkFactory = Objects.requireNonNull(processingContext.component(UnitOfWorkFactory.class),
                                                         "Could not retrieve UoW factory");
         this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
@@ -158,28 +163,26 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
 
     @Override
     @Nonnull
-    public T execute(@Nonnull WorkflowContext workflowContext) {
+    public <T extends WorkflowContext> T execute() {
         // TODO: discuss when we switch to the executable
         switchToExecutable();
-
-        return ProcessingContextUtils
+        //noinspection unchecked
+        return (T) ProcessingContextUtils
                 .executeWithResult(
                         workflowId,
                         unitOfWorkFactory,
                         executor,
-                        workflowContext.processingContext(),
+                        this.processingContext(),
                         pc -> {
 
-                            @SuppressWarnings("unchecked")
-                            var ctx = (T) workflowContext;
-                            if (ctx.workflowStatus().isTerminal()) {
+                            if (this.workflowStatus().isTerminal()) {
                                 logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
-                                             ctx.workflowStatus());
-                                return CompletableFuture.completedFuture(ctx);
+                                             this.workflowStatus());
+                                return CompletableFuture.completedFuture(this);
                             }
 
-                            if (ctx.workflowStatus() == WorkflowStatus.NONE) {
-                                sendWorkflowEvent(startedWorkflow(workflowContext,
+                            if (this.workflowStatus() == WorkflowStatus.NONE) {
+                                sendWorkflowEvent(startedWorkflow(this,
                                                                   workflowName,
                                                                   this.workflowConfiguration.eventNameCustomizer()),
                                                   pc).join(); // FIXME join without timeout?
@@ -187,14 +190,15 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
 
                             try {
                                 logger.trace("Executing workflow with initial payload {} from thread {}",
-                                             workflowContext.workflowPayload(),
+                                             this.workflowPayload(),
                                              Thread.currentThread());
-                                workflowConfiguration.workflowDefinition().accept(ctx);
-                                logger.trace("Workflow executed. Resulting workflow payload {}.",
-                                             workflowContext.workflowPayload());
 
-                                if (!ctx.workflowStatus().isTerminal()) {
-                                    sendWorkflowEvent(completedWorkflow(workflowContext,
+                                workflowConfiguration.workflowDefinition().accept(this.workflowContext());
+                                logger.trace("Workflow executed. Resulting workflow payload {}.",
+                                             this.workflowPayload());
+
+                                if (!this.workflowStatus().isTerminal()) {
+                                    sendWorkflowEvent(completedWorkflow(this,
                                                                         workflowName,
                                                                         this.workflowConfiguration.eventNameCustomizer()),
                                                       pc).get(
@@ -205,13 +209,13 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
                                 // Events already sent by TerminateDelegate, just let it propagate
                             } catch (Exception e) {
                                 if (e instanceof TimeoutException) {
-                                    sendWorkflowEvent(timeoutWorkflow(workflowContext,
+                                    sendWorkflowEvent(timeoutWorkflow(this,
                                                                       workflowName,
                                                                       clock.instant(),
                                                                       workflowConfiguration.eventNameCustomizer()),
                                                       processingContext()).join(); // FIXME join without timeout
                                 } else if (e instanceof InterruptedException) {
-                                    sendWorkflowEvent(cancelledWorkflow(workflowContext,
+                                    sendWorkflowEvent(cancelledWorkflow(this,
                                                                         workflowName,
                                                                         workflowConfiguration.eventNameCustomizer()),
                                                       pc).join(); // FIXME join without timeout
@@ -220,7 +224,7 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
                                 }
                             }
 
-                            return CompletableFuture.completedFuture(ctx);
+                            return CompletableFuture.completedFuture(this);
                         }
                 ).thenApply(wc -> {
                     try {
@@ -428,6 +432,13 @@ public final class SimpleWorkflowExecution<T extends WorkflowContext> implements
     @Nonnull
     public WorkflowState state() {
         return workflowState;
+    }
+
+    @Override
+    @Nonnull
+    public <T extends WorkflowContext> T workflowContext() {
+        //noinspection unchecked
+        return (T) this.workflowContext;
     }
 
     @Override

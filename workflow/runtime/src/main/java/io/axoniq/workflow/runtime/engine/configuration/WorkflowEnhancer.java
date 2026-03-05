@@ -22,8 +22,8 @@ import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstanceRepository;
-import io.axoniq.workflow.runtime.engine.repository.InMemoryWorkflowInstanceRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.repository.InMemoryWorkflowExecutionRepository;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -71,13 +71,13 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                                    cfg -> Executors.newVirtualThreadPerTaskExecutor());
 
         componentRegistry
-                .registerComponent(WorkflowInstanceRepository.class, cfg -> new InMemoryWorkflowInstanceRepository());
+                .registerComponent(WorkflowExecutionRepository.class, cfg -> new InMemoryWorkflowExecutionRepository());
 
         componentRegistry
                 .registerComponent(WorkflowEngine.class, cfg ->
                         new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                cfg.getComponent(WorkflowInstanceRepository.class)
+                                cfg.getComponent(WorkflowExecutionRepository.class)
                         )
                 );
         componentRegistry.registerModule(

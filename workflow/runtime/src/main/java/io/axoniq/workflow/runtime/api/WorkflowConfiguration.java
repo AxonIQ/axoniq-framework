@@ -57,7 +57,7 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      * @return factory for workflow state.
      */
     @Nonnull
-    WorkflowExecutionFactory workflowStateFactory();
+    WorkflowExecutionFactory workflowExecutionFactory();
 
     /**
      * Returns workflow id provider.

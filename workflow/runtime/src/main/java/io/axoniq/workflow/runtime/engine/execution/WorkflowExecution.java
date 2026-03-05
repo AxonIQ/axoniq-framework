@@ -42,8 +42,22 @@ import java.util.function.Predicate;
 @Internal
 public interface WorkflowExecution {
 
+    /**
+     * Execute workflow.
+     *
+     * @param <T> type of the workflow context.
+     * @return workflow context.
+     */
     @Nonnull
-    <T extends WorkflowContext> T execute(@Nonnull WorkflowContext workflowContext) throws ExecutionSuspended;
+    <T extends WorkflowContext> T execute();
+
+    /**
+     * Returns workflow context of the current execution.
+     *
+     * @param <T> type of the context.
+     * @return context.
+     */
+    <T extends WorkflowContext> T workflowContext();
 
     void awaitStateChange(@Nonnull Predicate<WorkflowExecution> condition) throws InterruptedException;
 

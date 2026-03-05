@@ -15,21 +15,20 @@
  *
  *
  */
-package io.axoniq.example.workflow.declarative;
+package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
+import io.axoniq.workflow.runtime.engine.execution.EventConditions;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -42,8 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that no further steps can be executed after a workflow has been cancelled,
- * even if the user code catches the exception.
+ * Verifies that no further steps can be executed after a workflow has been cancelled, even if the user code catches the
+ * exception.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -56,7 +55,7 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
 
     @Override
     protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new CancelWithCatchWorkflow();
+        var workflow = new io.axoniq.example.workflow.declarative.CancelWithCatchWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
                 .workflowName("CancelWithCatch workflow in Java")
@@ -76,13 +75,14 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
         delayedPublisher.start();
 
         await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty();
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
         workflowEngine.runWorkflows();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
+            assertThat(workflowEngine.workflowExecutions())
+                    .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
         // Wait for async cleanup to settle
@@ -92,8 +92,8 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowContext context : workflowEngine.workflowInstances().stream()
-                                                     .map(WorkflowInstance::workflowContext).toList()) {
+        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
+            var context = execution.workflowContext();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
             assertThat(context.workflowStepNames()).contains("stepA");
             assertThat(context.workflowStepNames()).doesNotContain("stepAfterCancel");
@@ -101,8 +101,8 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
 
         // Verify no events were published after the workflow terminal event
         var events = PrettyPrintingRecordingEventStore.lastInstance().getPublishedEvents().stream()
-                .filter(e -> e.metadata().containsKey("workflowId"))
-                .toList();
+                                                      .filter(e -> e.metadata().containsKey("workflowId"))
+                                                      .toList();
 
         // Find index of the workflow CANCELLED event
         int cancelledIndex = -1;

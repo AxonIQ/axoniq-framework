@@ -22,7 +22,7 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
@@ -72,15 +72,15 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
         delayedPublisher.start();
 
         await().untilAsserted(() ->
-                                      assertThat(workflowEngine.workflowInstances()).isNotEmpty()
+                                      assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         );
 
         workflowEngine.runWorkflows();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
-                                                                   assertThat(workflowEngine.workflowInstances()).allMatch(
-                                                                           h -> h.workflowStatus().isTerminal())
-        );
+        await().atMost(30, TimeUnit.SECONDS)
+               .untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).allMatch(
+                       h -> h.state().workflowStatus().isTerminal())
+               );
 
         // Let async cleanup settle
         try {
@@ -89,17 +89,16 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowInstance instance : workflowEngine.workflowInstances()) {
-            var context = instance.workflowContext();
+        for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
+            var state = workflowExecution.state();
             // Workflow ended as CANCELLED (via ctx.cancel())
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
 
             // All three steps should be present in history
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
 
             // stepB was explicitly cancelled via cancelStep before the workflow-level cancel
-            var execution = instance.workflowExecution();
-            var stepB = execution.state().getStep("stepB");
+            var stepB = workflowExecution.state().getStep("stepB");
             assertThat(stepB.status()).isEqualTo(StepStatus.CANCELLED);
         }
     }
