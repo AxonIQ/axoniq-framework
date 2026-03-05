@@ -22,7 +22,7 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
@@ -89,8 +89,8 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowExecution execution : workflowEngine.workflowInstances()) {
-            var context = execution.workflowContext();
+        for (WorkflowInstance instance : workflowEngine.workflowInstances()) {
+            var context = instance.workflowContext();
             // Workflow ended as CANCELLED (via ctx.cancel())
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
 
@@ -98,8 +98,8 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
             assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
 
             // stepB was explicitly cancelled via cancelStep before the workflow-level cancel
-            var state = execution.workflowState();
-            var stepB = state.getStep("stepB");
+            var execution = instance.workflowExecution();
+            var stepB = execution.state().getStep("stepB");
             assertThat(stepB.status()).isEqualTo(StepStatus.CANCELLED);
         }
     }

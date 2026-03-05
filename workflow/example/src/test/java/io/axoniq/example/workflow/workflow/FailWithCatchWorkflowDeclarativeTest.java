@@ -22,7 +22,7 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
@@ -93,7 +93,7 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
         }
 
         for (WorkflowContext context : workflowEngine.workflowInstances().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
+                                                     .map(WorkflowInstance::workflowContext).toList()) {
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
             assertThat(context.workflowStepNames()).contains("stepA");
             assertThat(context.workflowStepNames()).doesNotContain("stepAfterFail");

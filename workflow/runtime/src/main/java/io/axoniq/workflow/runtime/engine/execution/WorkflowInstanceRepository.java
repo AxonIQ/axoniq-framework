@@ -26,16 +26,16 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Repository for retrieving workflow handles.
+ * Repository for retrieving workflow instances.
  * <p>
  * Each workflow instance is identified by a unique workflow identifier and is represented
- * as a {@link WorkflowExecution} bundling configuration, context, and execution state.
+ * as a {@link WorkflowInstance} bundling configuration, context, and execution state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
 @Internal
-public interface WorkflowExecutionRepository extends DescribableComponent {
+public interface WorkflowInstanceRepository extends DescribableComponent {
 
     /**
      * Finds a workflow handle by its identifier.
@@ -44,7 +44,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @return an {@link Optional} containing the workflow handle, or empty if not found
      */
     @Nonnull
-    Optional<WorkflowExecution> findById(@Nonnull String workflowId);
+    Optional<WorkflowInstance> findById(@Nonnull String workflowId);
 
     /**
      * Returns all stored workflow handles.
@@ -52,7 +52,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @return an unmodifiable collection of all workflow handles
      */
     @Nonnull
-    Set<WorkflowExecution> findAll();
+    Set<WorkflowInstance> findAll();
 
     /**
      * Atomically stores a new workflow handle if no handle exists for the given workflow identifier.
@@ -62,15 +62,15 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @return the existing or newly created workflow handle
      */
     @Nonnull
-    WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory);
+    WorkflowInstance save(@Nonnull Supplier<WorkflowInstance> factory);
 
     /**
      * Removes the workflow handle associated with the given identifier.
      *
      * @param workflowId the identifier of the workflow to remove
-     * @return the removed {@link WorkflowExecution}, or {@code null} if no handle was found
+     * @return the removed {@link WorkflowInstance}, or {@code null} if no handle was found
      */
-    WorkflowExecution remove(@Nonnull String workflowId);
+    WorkflowInstance remove(@Nonnull String workflowId);
 
     /**
      * Removes all stored workflow handles.

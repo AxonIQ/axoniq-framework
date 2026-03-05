@@ -17,19 +17,19 @@
  */
 package io.axoniq.workflow.runtime.engine.repository;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
 import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
-class InMemoryWorkflowExecutionRepositoryTest {
+class InMemoryWorkflowInstanceRepositoryTest {
 
-    private InMemoryWorkflowExecutionRepository repository;
+    private InMemoryWorkflowInstanceRepository repository;
 
     @BeforeEach
     void setUp() {
-        repository = new InMemoryWorkflowExecutionRepository();
+        repository = new InMemoryWorkflowInstanceRepository();
     }
 
     @Test
@@ -118,7 +118,7 @@ class InMemoryWorkflowExecutionRepositoryTest {
         assertThat(repository.findById("wf-2")).isEmpty();
     }
 
-    private static WorkflowExecution createHandle(String workflowId) {
-        return new WorkflowExecution(workflowId, mock(), mock(), mock());
+    private static WorkflowInstance createHandle(String workflowId) {
+        return new WorkflowInstance(workflowId, mock(), mock(), mock());
     }
 }

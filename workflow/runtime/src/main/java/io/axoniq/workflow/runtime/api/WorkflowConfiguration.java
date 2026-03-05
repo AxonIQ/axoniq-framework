@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.api;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
@@ -57,7 +57,7 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      * @return factory for workflow state.
      */
     @Nonnull
-    WorkflowStateFactory workflowStateFactory();
+    WorkflowExecutionFactory workflowStateFactory();
 
     /**
      * Returns workflow id provider.

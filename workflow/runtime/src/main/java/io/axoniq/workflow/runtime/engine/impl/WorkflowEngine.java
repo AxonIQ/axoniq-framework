@@ -18,8 +18,8 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstanceRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -42,14 +42,14 @@ public class WorkflowEngine implements EventHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
-    private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final WorkflowInstanceRepository workflowInstanceRepository;
 
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
-            @Nonnull WorkflowExecutionRepository workflowExecutionRepository
+            @Nonnull WorkflowInstanceRepository workflowInstanceRepository
     ) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
-        this.workflowExecutionRepository = workflowExecutionRepository;
+        this.workflowInstanceRepository = workflowInstanceRepository;
     }
 
     @NotNull
@@ -61,17 +61,17 @@ public class WorkflowEngine implements EventHandler {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            workflowExecutionRepository.findById(workflowId)
-                                       .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId))
-                                       .workflowState().onEvent(eventMessage, processingContext);
+            var instance = workflowInstanceRepository.findById(workflowId)
+                                      .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId));
+            instance.workflowExecution().onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
-            for (var workflowExecution : workflowExecutionRepository.findAll()) {
+            for (var instance : workflowInstanceRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
-                workflowExecution.workflowState().onEvent(eventMessage, processingContext);
+                instance.workflowExecution().onEvent(eventMessage, processingContext);
             }
         }
 
@@ -82,10 +82,10 @@ public class WorkflowEngine implements EventHandler {
      * This is a place to be called from Event Processor
      */
     public void runWorkflows() {
-        logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
-        for (var workflowExecution : workflowExecutionRepository.findAll()) {
+        logger.debug("Executing {} workflows.", workflowInstanceRepository.findAll().size());
+        for (var instances : workflowInstanceRepository.findAll()) {
             try {
-                workflowExecution.workflowState().execute(workflowExecution.workflowConfiguration(), workflowExecution.workflowContext());
+                instances.workflowExecution().execute(instances.workflowContext());
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }
@@ -109,25 +109,24 @@ public class WorkflowEngine implements EventHandler {
                                     var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
 
                                     var workflowContext = workflowConfiguration.workflowContextFactory()
-                                                                               .createContext(payload, workflowId, processingContext,
-                                                                                              workflowConfiguration.eventNameCustomizer());
+                                                                               .createContext(payload, workflowId, processingContext, workflowConfiguration);
 
                                     // avoid multiple workflows for the same workflow id.
-                                    workflowExecutionRepository.save(() -> {
+                                    workflowInstanceRepository.save(() -> {
                                         logger.info("Starting new workflow with '{}'", eventMessage.payload());
                                         var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
-                                        return new WorkflowExecution(workflowId, workflowConfiguration, workflowContext, workflowState);
+                                        return new WorkflowInstance(workflowId, workflowConfiguration, workflowContext, workflowState);
                                     });
                                 }
                             }
         );
     }
 
-    public Set<WorkflowExecution> workflowInstances() {
-        return workflowExecutionRepository.findAll();
+    public Set<WorkflowInstance> workflowInstances() {
+        return workflowInstanceRepository.findAll();
     }
 
     public void shutdown() {
-        workflowExecutionRepository.clear();
+        workflowInstanceRepository.clear();
     }
 }

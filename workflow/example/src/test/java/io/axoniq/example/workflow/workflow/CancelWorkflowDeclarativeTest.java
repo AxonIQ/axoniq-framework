@@ -22,7 +22,7 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
@@ -85,7 +85,7 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowExecution execution : workflowEngine.workflowInstances()) {
+        for (WorkflowInstance execution : workflowEngine.workflowInstances()) {
             var context = execution.workflowContext();
             assertThat(context.workflowStatus().isTerminal()).isTrue();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);

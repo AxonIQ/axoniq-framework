@@ -20,10 +20,9 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
@@ -45,7 +44,7 @@ import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.failedWor
 public class TerminateDelegate implements TerminatePrimitive {
 
     private final WorkflowContext workflowContext;
-    private final WorkflowState workflowState;
+    private final WorkflowExecution workflowExecution;
     private final EventSink eventSink;
     private final String workflowName;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -53,14 +52,14 @@ public class TerminateDelegate implements TerminatePrimitive {
 
     public TerminateDelegate(
             @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowState workflowState,
+            @Nonnull WorkflowExecution workflowExecution,
             @Nonnull EventSink eventSink,
             @Nonnull String workflowName,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull Executor executor
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
-        this.workflowState = Objects.requireNonNull(workflowState, "Workflow state is mandatory");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
         this.workflowName = Objects.requireNonNull(workflowName, "Workflow name is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWork factory is mandatory");
@@ -88,7 +87,7 @@ public class TerminateDelegate implements TerminatePrimitive {
                     ? new WorkflowCancelledException(command.cause().getMessage(), command.cause())
                     : new WorkflowCancelledException("Workflow cancelled");
         }
-        workflowState.cancelAllRunningSteps(stepCause);
+        workflowExecution.cancelAllRunningSteps(stepCause);
 
         if (command.error()) {
             failed(command, effectiveName);
@@ -107,13 +106,12 @@ public class TerminateDelegate implements TerminatePrimitive {
         } else {
             stepCause = new StepCancellationException("Step cancelled");
         }
-        workflowState.cancelRunningStep(command.stepName(), stepCause);
+        workflowExecution.cancelRunningStep(command.stepName(), stepCause);
     }
 
     protected void failed(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
-        var configuration = command.configuration();
         var exception = cause instanceof Exception
                 ? (Exception) cause
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
@@ -123,19 +121,14 @@ public class TerminateDelegate implements TerminatePrimitive {
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx, failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer))
+                ctx -> eventSink.publish(ctx,
+                                         failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer))
         ).join(); // FIXME join
 
-        workflowState.applyStateChange(
-                failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer),
-                workflowContext.processingContext()
-        );
-
-        if (configuration != null) {
-            var listener = configuration.workflowStatusChangeListeners().get(WorkflowStatus.FAILED);
-            if (listener != null) {
-                listener.onWorkflowStatus(WorkflowStatus.FAILED, workflowContext);
-            }
+        try {
+            workflowExecution.awaitStateChange(w -> w.state().workflowStatus() == WorkflowStatus.FAILED);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
 
         throw new WorkflowFailedException(exception);
@@ -144,26 +137,20 @@ public class TerminateDelegate implements TerminatePrimitive {
     protected void cancelled(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
-        var configuration = command.configuration();
 
         ProcessingContextUtils.executeWithResult(
                 null,
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx, cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer))
+                ctx -> eventSink.publish(ctx,
+                                         cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer))
         ).join(); // FIXME join
 
-        workflowState.applyStateChange(
-                cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer),
-                workflowContext.processingContext()
-        );
-
-        if (configuration != null) {
-            var listener = configuration.workflowStatusChangeListeners().get(WorkflowStatus.CANCELLED);
-            if (listener != null) {
-                listener.onWorkflowStatus(WorkflowStatus.CANCELLED, workflowContext);
-            }
+        try {
+            workflowExecution.awaitStateChange(w -> w.state().workflowStatus() == WorkflowStatus.CANCELLED);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
 
         if (cause != null) {

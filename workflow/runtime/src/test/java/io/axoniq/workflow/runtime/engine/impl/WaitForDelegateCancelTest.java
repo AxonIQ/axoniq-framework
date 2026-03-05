@@ -20,7 +20,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,11 +40,11 @@ import static org.mockito.Mockito.*;
  */
 class WaitForDelegateCancelTest {
 
-    private WorkflowState workflowState;
+    private WorkflowExecution workflowExecution;
 
     @BeforeEach
     void setUp() {
-        workflowState = mock(WorkflowState.class);
+        workflowExecution = mock(WorkflowExecution.class);
     }
 
     @Test
@@ -52,14 +52,14 @@ class WaitForDelegateCancelTest {
         var root = new CompletableFuture<Void>();
         root.exceptionally(e -> {
             if (AbstractStepExecutor.isCancellation(e)) {
-                workflowState.appendTask(any());
+                workflowExecution.appendTask(any());
             }
             return null;
         });
 
         root.completeExceptionally(new StepCancellationException("cancelled"));
 
-        verify(workflowState).appendTask(any());
+        verify(workflowExecution).appendTask(any());
     }
 
     @Test
@@ -67,14 +67,14 @@ class WaitForDelegateCancelTest {
         var root = new CompletableFuture<Void>();
         root.exceptionally(e -> {
             if (AbstractStepExecutor.isCancellation(e)) {
-                workflowState.appendTask(any());
+                workflowExecution.appendTask(any());
             }
             return null;
         });
 
         root.completeExceptionally(new WorkflowCancelledException("cancelled"));
 
-        verify(workflowState).appendTask(any());
+        verify(workflowExecution).appendTask(any());
     }
 
     @Test
@@ -82,14 +82,14 @@ class WaitForDelegateCancelTest {
         var root = new CompletableFuture<Void>();
         root.exceptionally(e -> {
             if (AbstractStepExecutor.isCancellation(e)) {
-                workflowState.appendTask(any());
+                workflowExecution.appendTask(any());
             }
             return null;
         });
 
         root.completeExceptionally(new WorkflowFailedException("failed"));
 
-        verify(workflowState).appendTask(any());
+        verify(workflowExecution).appendTask(any());
     }
 
     @Test
@@ -97,13 +97,13 @@ class WaitForDelegateCancelTest {
         var root = new CompletableFuture<Void>();
         root.exceptionally(e -> {
             if (AbstractStepExecutor.isCancellation(e)) {
-                workflowState.appendTask(any());
+                workflowExecution.appendTask(any());
             }
             return null;
         });
 
         root.completeExceptionally(new InterruptedException("shutdown"));
 
-        verify(workflowState, never()).appendTask(any());
+        verify(workflowExecution, never()).appendTask(any());
     }
 }

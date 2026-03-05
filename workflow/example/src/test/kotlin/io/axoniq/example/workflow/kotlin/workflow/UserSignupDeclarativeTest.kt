@@ -21,7 +21,7 @@ import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
@@ -92,13 +92,13 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         // run to the end
         Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
             Assertions.assertThat(workflowEngine.workflowInstances())
-                .allMatch(Predicate { h: WorkflowExecution -> h.workflowStatus().isTerminal })
+                .allMatch(Predicate { h: WorkflowInstance -> h.workflowStatus().isTerminal })
         })
 
 
         // Verify that both workflows executed all steps
         for (context in workflowEngine.workflowInstances().stream()
-            .map(WorkflowExecution::workflowContext).toList()) {
+            .map(WorkflowInstance::workflowContext).toList()) {
             Assertions.assertThat(context.workflowStatus().isTerminal).isTrue()
             Assertions.assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED)
             Assertions.assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(

@@ -22,10 +22,11 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
+import io.axoniq.workflow.runtime.engine.impl.SimpleWorkflowExecution;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -44,7 +45,7 @@ import java.util.Objects;
  */
 public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
 
-    private final WorkflowInstance workflowInstance;
+    private final SimpleWorkflowExecution simpleWorkflowExecution;
 
     /**
      * Constructs new DSL context.
@@ -58,13 +59,13 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
             @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer parentCustomizer
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
     ) {
-        this.workflowInstance = new WorkflowInstance(
+        this.simpleWorkflowExecution = new SimpleWorkflowExecution(
                 Objects.requireNonNull(workflowId, "Workflow id must not be null"),
                 Objects.requireNonNull(payload, "Initial workflow payload must not be null"),
                 Objects.requireNonNull(processingContext, "Processing context must not be null"),
-                Objects.requireNonNull(parentCustomizer, "Parent EventNameCustomizer must not be null")
+                Objects.requireNonNull(workflowConfiguration, "Workflow configuration must not be null")
         );
     }
 
@@ -72,7 +73,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     @Override
     public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
                                       @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return workflowInstance.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
+        return simpleWorkflowExecution.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
     }
 
     @Nonnull
@@ -81,63 +82,63 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
                                       @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return workflowInstance.execute(stepName,
-                                        local,
-                                        action,
-                                        parameterMapping,
-                                        resultMapping,
-                                        timeout,
-                                        eventNameCustomizer);
+        return simpleWorkflowExecution.execute(stepName,
+                                               local,
+                                               action,
+                                               parameterMapping,
+                                               resultMapping,
+                                               timeout,
+                                               eventNameCustomizer);
     }
 
     @Override
     public void terminate(@Nonnull TerminateCommand command) {
-        workflowInstance.terminate(command);
+        simpleWorkflowExecution.terminate(command);
     }
 
 
     @Nonnull
     @Override
     public String workflowId() {
-        return workflowInstance.workflowId();
+        return simpleWorkflowExecution.workflowId();
     }
 
     @Nonnull
     @Override
     public Map<String, Object> workflowPayload() {
-        return workflowInstance.workflowPayload();
+        return simpleWorkflowExecution.workflowPayload();
     }
 
     @Nonnull
     @Override
     public WorkflowStatus workflowStatus() {
-        return workflowInstance.workflowStatus();
+        return simpleWorkflowExecution.workflowStatus();
     }
 
     @Override
     public void applyPayloadModification(@Nonnull PayloadModification payloadModification) {
-        workflowInstance.applyPayloadModification(payloadModification);
+        simpleWorkflowExecution.applyPayloadModification(payloadModification);
     }
 
     @Nonnull
     @Override
     public List<String> workflowStepNames() {
-        return workflowInstance.workflowStepNames();
+        return simpleWorkflowExecution.workflowStepNames();
     }
 
     @Nonnull
     @Override
     public ProcessingContext processingContext() {
-        return workflowInstance.processingContext();
+        return simpleWorkflowExecution.processingContext();
     }
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-        workflowInstance.describeTo(descriptor);
+        simpleWorkflowExecution.describeTo(descriptor);
     }
 
     @Nonnull
-    public WorkflowInstance getWorkflowInstance() {
-        return workflowInstance;
+    public SimpleWorkflowExecution getWorkflowInstance() {
+        return simpleWorkflowExecution;
     }
 }

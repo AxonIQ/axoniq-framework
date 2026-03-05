@@ -17,12 +17,11 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.StepCancellationException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
-
-import io.axoniq.workflow.runtime.api.StepCancellationException;
 
 import java.util.HashSet;
 import java.util.Set;

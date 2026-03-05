@@ -26,7 +26,7 @@ import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.association.Associations;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
@@ -157,7 +157,7 @@ class UserSignupTest {
 
         // Verify that both workflows executed all steps
         for (WorkflowContext context : workflowEngine.workflowInstances().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
+                                                     .map(WorkflowInstance::workflowContext).toList()) {
             assertThat(context.workflowStatus().isTerminal()).isTrue();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(

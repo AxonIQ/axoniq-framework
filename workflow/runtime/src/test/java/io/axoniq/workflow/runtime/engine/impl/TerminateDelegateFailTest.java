@@ -23,7 +23,8 @@ import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -37,6 +38,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,7 +51,7 @@ import static org.mockito.Mockito.*;
 class TerminateDelegateFailTest {
 
     private WorkflowContext workflowContext;
-    private WorkflowState workflowState;
+    private WorkflowExecution workflowExecution;
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -61,7 +63,7 @@ class TerminateDelegateFailTest {
     @BeforeEach
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
-        workflowState = mock(WorkflowState.class);
+        workflowExecution = mock(WorkflowExecution.class);
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -76,6 +78,7 @@ class TerminateDelegateFailTest {
                     return action.apply(processingContext);
                 });
 
+        when(workflowExecution.state()).thenReturn(new SimpleWorkflowState(workflowContext, Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
@@ -86,7 +89,7 @@ class TerminateDelegateFailTest {
 
         delegate = new TerminateDelegate(
                 workflowContext,
-                workflowState,
+                workflowExecution,
                 eventSink,
                 "test-workflow",
                 unitOfWorkFactory,
@@ -99,7 +102,7 @@ class TerminateDelegateFailTest {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(workflowState).cancelAllRunningSteps(isA(WorkflowFailedException.class));
+        verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowFailedException.class));
     }
 
     @Test
@@ -107,7 +110,7 @@ class TerminateDelegateFailTest {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(workflowState).cancelAllRunningSteps(isA(WorkflowFailedException.class));
+        verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowFailedException.class));
     }
 
     @Test
@@ -116,14 +119,6 @@ class TerminateDelegateFailTest {
                 .isInstanceOf(WorkflowFailedException.class);
 
         verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
-    }
-
-    @Test
-    void terminateFailAppliesStateChange() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(new RuntimeException("boom"), eventNameCustomizer)))
-                .isInstanceOf(WorkflowFailedException.class);
-
-        verify(workflowState).applyStateChange(any(EventMessage.class), eq(processingContext));
     }
 
     @Test
@@ -145,25 +140,28 @@ class TerminateDelegateFailTest {
     @Test
     void terminateFailExecutesStepsInOrder() {
         var cause = new RuntimeException("boom");
-        var order = inOrder(workflowState, eventSink);
+        var order = inOrder(workflowExecution, eventSink);
 
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        order.verify(workflowState).cancelAllRunningSteps(any());
+        order.verify(workflowExecution).cancelAllRunningSteps(any());
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
-        order.verify(workflowState).applyStateChange(any(EventMessage.class), eq(processingContext));
     }
 
     @SuppressWarnings("unchecked")
     @Test
-    void terminateFailInvokesFailedStatusChangeListener() {
+    void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        var configuration = mock(WorkflowConfiguration.class);
-        when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of(WorkflowStatus.FAILED, listener));
+        SimpleWorkflowState state = new SimpleWorkflowState(workflowContext, Map.of(WorkflowStatus.FAILED, listener));
+        when(workflowExecution.state()).thenReturn(state);
+        doAnswer(invocation -> {
+            state.setStatus(WorkflowStatus.FAILED, null);
+            return null;
+        }).when(workflowExecution).awaitStateChange(any(Predicate.class));
 
         assertThatThrownBy(() -> delegate.terminate(
-                new TerminateCommand(true, new RuntimeException("boom"), eventNameCustomizer, "test-workflow", configuration, null)))
+                new TerminateCommand(true, new RuntimeException("boom"), eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));

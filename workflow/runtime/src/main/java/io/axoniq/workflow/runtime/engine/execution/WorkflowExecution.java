@@ -17,45 +17,79 @@
  */
 package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
- * Represents a running or completed workflow instance, bundling its configuration,
- * context, and execution state.
+ * Represents the part of the execution accessed by the Workflow Engine (internal).
  *
- * @param workflowConfiguration the workflow configuration that created this instance
- * @param workflowContext       the context holding workflow data and status
- * @param workflowState         the execution state machine for this workflow
+ * @author Simon Zambrovski
  * @author Stefan Dragisic
+ * @author Steven van Beelen
+ * @author Allard Buijze
  * @since 1.0.0
  */
 @Internal
-public record WorkflowExecution(
-        @Nonnull String workflowId,
-        @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-        @Nonnull WorkflowContext workflowContext,
-        @Nonnull WorkflowState workflowState) {
+public interface WorkflowExecution {
+
+    @Nonnull
+    <T extends WorkflowContext> T execute(@Nonnull WorkflowContext workflowContext) throws ExecutionSuspended;
+
+    void awaitStateChange(@Nonnull Predicate<WorkflowExecution> condition) throws InterruptedException;
+
+    void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
+
+    void appendTask(@Nonnull Consumer<WorkflowExecution> task);
+
+    @Nullable
+    Consumer<WorkflowExecution> getNextTask();
+
+    boolean isExecutable();
+
+    boolean hasTasks();
 
     /**
-     * Returns the current execution status of this workflow instance.
+     * Registers a new wait condition.
      *
-     * @return the current {@link WorkflowStatus}
+     * @param stepName            waiting step name.
+     * @param eventCondition      event condition.
+     * @param eventNameCustomizer event name customizer.
      */
-    public WorkflowStatus workflowStatus() {
-        return workflowContext.workflowStatus();
-    }
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof WorkflowExecution that)) return false;
-        return workflowId.equals(that.workflowId);
-    }
+    void registerWaitCondition(@Nonnull String stepName,
+                               @Nonnull EventCondition eventCondition,
+                               @Nonnull EventNameCustomizer eventNameCustomizer);
 
-    @Override
-    public int hashCode() {
-        return workflowId.hashCode();
-    }
+    /**
+     * Remove existing wait condition.
+     *
+     * @param stepName name of the waiting step.
+     */
+    void removeWaitCondition(@Nonnull String stepName);
+
+    void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future);
+
+    void removeRunningStep(@Nonnull String stepName);
+
+    boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
+
+    void cancelAllRunningSteps(@Nullable Throwable cause);
+
+    void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning);
+
+    @Nonnull
+    WorkflowState state();
+
+    // FIXME check if we can replace this for the Context interface
+    @Nonnull
+    ProcessingContext processingContext();
 }

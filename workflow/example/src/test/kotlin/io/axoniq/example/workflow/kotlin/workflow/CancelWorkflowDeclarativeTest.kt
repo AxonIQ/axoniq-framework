@@ -23,7 +23,7 @@ import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
@@ -85,14 +85,14 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
 
         Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
             assertThat(workflowEngine.workflowInstances())
-                .allMatch(Predicate { h: WorkflowExecution? -> h!!.workflowStatus().isTerminal })
+                .allMatch(Predicate { h: WorkflowInstance? -> h!!.workflowStatus().isTerminal })
         })
 
         // Wait 2 seconds before asserting to let async cleanup settle
         Thread.sleep(2_000)
 
         for (context in workflowEngine.workflowInstances().stream()
-            .map(WorkflowExecution::workflowContext).toList()) {
+            .map(WorkflowInstance::workflowContext).toList()) {
             assertThat(context.workflowStatus().isTerminal).isTrue()
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED)
             assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC")

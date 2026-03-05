@@ -31,7 +31,7 @@ import static io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils.req
  * @author Simon Zambrovki
  * @since 1.0.0
  */
-public class DSLAdoptingStateFactory<C extends WorkflowContext> implements WorkflowStateFactory {
+public class DSLAdoptingStateFactory<C extends WorkflowContext> implements WorkflowExecutionFactory {
 
     private final Class<C> workflowContextType;
 
@@ -41,7 +41,7 @@ public class DSLAdoptingStateFactory<C extends WorkflowContext> implements Workf
 
     @Override
     @Nonnull
-    public WorkflowState create(@NotNull WorkflowContext context) {
+    public WorkflowExecution create(@NotNull WorkflowContext context) {
         if (workflowContextType.isAssignableFrom(context.getClass())) {
             return ((AbstractDSLWorkflowContext) context).getWorkflowInstance();
         }

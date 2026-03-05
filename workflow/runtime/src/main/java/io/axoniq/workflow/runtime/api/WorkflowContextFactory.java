@@ -35,6 +35,6 @@ public interface WorkflowContextFactory<T extends WorkflowContext> {
             @Nonnull Map<String, Object> initialPayload,
             @Nonnull String workflowId,
             @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
     );
 }

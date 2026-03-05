@@ -24,7 +24,8 @@ import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -38,7 +39,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -50,7 +53,7 @@ import static org.mockito.Mockito.*;
 class TerminateDelegateCancelTest {
 
     private WorkflowContext workflowContext;
-    private WorkflowState workflowState;
+    private WorkflowExecution workflowExecution;
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -61,8 +64,9 @@ class TerminateDelegateCancelTest {
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
+
         workflowContext = mock(WorkflowContext.class);
-        workflowState = mock(WorkflowState.class);
+        workflowExecution = mock(WorkflowExecution.class);
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -76,7 +80,7 @@ class TerminateDelegateCancelTest {
                     Function<ProcessingContext, CompletableFuture<?>> action = invocation.getArgument(0);
                     return action.apply(processingContext);
                 });
-
+        when(workflowExecution.state()).thenReturn(new SimpleWorkflowState(workflowContext, Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
@@ -87,7 +91,7 @@ class TerminateDelegateCancelTest {
 
         delegate = new TerminateDelegate(
                 workflowContext,
-                workflowState,
+                workflowExecution,
                 eventSink,
                 "test-workflow",
                 unitOfWorkFactory,
@@ -100,7 +104,7 @@ class TerminateDelegateCancelTest {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        verify(workflowState).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
+        verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
     }
 
     @Test
@@ -110,7 +114,7 @@ class TerminateDelegateCancelTest {
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        verify(workflowState).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
+        verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
     }
 
     @Test
@@ -119,14 +123,6 @@ class TerminateDelegateCancelTest {
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
-    }
-
-    @Test
-    void terminateCancelAppliesStateChange() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
-                .isInstanceOf(WorkflowCancelledException.class);
-
-        verify(workflowState).applyStateChange(any(EventMessage.class), eq(processingContext));
     }
 
     @Test
@@ -147,33 +143,38 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelExecutesStepsInOrder() {
-        var order = inOrder(workflowState, eventSink);
+        var order = inOrder(workflowExecution, eventSink);
 
         assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        order.verify(workflowState).cancelAllRunningSteps(any());
+        order.verify(workflowExecution).cancelAllRunningSteps(any());
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
-        order.verify(workflowState).applyStateChange(any(EventMessage.class), eq(processingContext));
     }
 
     @SuppressWarnings("unchecked")
     @Test
-    void terminateCancelInvokesCancelledStatusChangeListener() {
+    void terminateCancelInvokesCancelledStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        var configuration = mock(WorkflowConfiguration.class);
-        when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of(WorkflowStatus.CANCELLED, listener));
+        SimpleWorkflowState state = new SimpleWorkflowState(workflowContext, Map.of(WorkflowStatus.CANCELLED, listener));
+        when(workflowExecution.state()).thenReturn(state);
+        doAnswer(invocation -> {
+            state.setStatus(WorkflowStatus.CANCELLED, null);
+            return null;
+        }).when(workflowExecution).awaitStateChange(any(Predicate.class));
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.CANCELLED);
 
         assertThatThrownBy(() -> delegate.terminate(
-                new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", configuration, null)))
+                new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
+        assertThat(workflowContext.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
     }
 
     @Test
     void terminateCancelledStepCancelsSpecificStep() {
         delegate.terminate(TerminateCommand.cancelledStep("step-a", null, eventNameCustomizer));
-        verify(workflowState).cancelRunningStep(eq("step-a"), isA(StepCancellationException.class));
+        verify(workflowExecution).cancelRunningStep(eq("step-a"), isA(StepCancellationException.class));
     }
 }

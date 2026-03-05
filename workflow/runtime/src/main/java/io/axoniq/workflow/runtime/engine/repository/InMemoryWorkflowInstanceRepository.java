@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.runtime.engine.repository;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstance;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowInstanceRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -31,40 +31,40 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * In-memory implementation of {@link WorkflowExecutionRepository} backed by a {@link ConcurrentHashMap}.
+ * In-memory implementation of {@link WorkflowInstanceRepository} backed by a {@link ConcurrentHashMap}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
 @Internal
-public class InMemoryWorkflowExecutionRepository implements
-        WorkflowExecutionRepository {
+public class InMemoryWorkflowInstanceRepository implements
+  WorkflowInstanceRepository {
 
-    private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, WorkflowInstance> workflowExecutions = new ConcurrentHashMap<>();
 
     @Nonnull
     @Override
-    public Optional<WorkflowExecution> findById(@Nonnull String workflowId) {
+    public Optional<WorkflowInstance> findById(@Nonnull String workflowId) {
         Objects.requireNonNull(workflowId, "workflowId must not be null");
         return Optional.ofNullable(workflowExecutions.get(workflowId));
     }
 
     @Nonnull
     @Override
-    public Set<WorkflowExecution> findAll() {
+    public Set<WorkflowInstance> findAll() {
         return Set.copyOf(workflowExecutions.values());
     }
 
     @Nonnull
     @Override
-    public WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory) {
+    public WorkflowInstance save(@Nonnull Supplier<WorkflowInstance> factory) {
         Objects.requireNonNull(factory, "factory must not be null");
-        WorkflowExecution workflowInstance = factory.get();
+        WorkflowInstance workflowInstance = factory.get();
         return workflowExecutions.computeIfAbsent(workflowInstance.workflowId(), s->workflowInstance);
     }
 
     @Override
-    public WorkflowExecution remove(@NotNull String workflowId) {
+    public WorkflowInstance remove(@NotNull String workflowId) {
         return workflowExecutions.remove(workflowId);
     }
 
