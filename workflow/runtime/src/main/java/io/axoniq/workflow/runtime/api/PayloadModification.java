@@ -20,6 +20,13 @@ package io.axoniq.workflow.runtime.api;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * Payload modification interface.
+ *
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
 @FunctionalInterface
 public interface PayloadModification extends Function<Map<String, Object>, Map<String, Object>> {
 

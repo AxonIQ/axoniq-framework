@@ -35,6 +35,11 @@ public class DSLAdoptingExecutionFactory<C extends WorkflowContext> implements W
 
     private final Class<C> workflowContextType;
 
+    /**
+     * Creates a new factory.
+     *
+     * @param workflowContextType type of the workflow context.
+     */
     public DSLAdoptingExecutionFactory(@Nonnull Class<C> workflowContextType) {
         this.workflowContextType = requireIsAssignableFrom(AbstractDSLWorkflowContext.class, workflowContextType);
     }

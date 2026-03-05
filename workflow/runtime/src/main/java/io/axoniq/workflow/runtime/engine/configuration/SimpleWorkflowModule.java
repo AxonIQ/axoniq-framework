@@ -79,7 +79,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     /**
-     * Constructs new workflow module.
+     * Constructs a new workflow module.
      *
      * @param workflowContextType workflow context class.
      */
@@ -89,7 +89,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     /**
-     * Constructs new workflow module with given name.
+     * Constructs a new workflow module with given name.
      *
      * @param name                name of the workflow module.
      * @param workflowContextType workflow context class.

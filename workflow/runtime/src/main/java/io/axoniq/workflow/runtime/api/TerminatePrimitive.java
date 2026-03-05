@@ -30,6 +30,11 @@ import java.util.Objects;
  */
 public interface TerminatePrimitive {
 
+    /**
+     * Terminate a step or entire workflow.
+     *
+     * @param command termination command.
+     */
     void terminate(@Nonnull TerminateCommand command);
 
     record TerminateCommand(

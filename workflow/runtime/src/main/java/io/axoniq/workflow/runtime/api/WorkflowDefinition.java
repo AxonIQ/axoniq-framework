@@ -22,7 +22,10 @@ import java.util.function.Consumer;
 /**
  * Definition of the workflow.
  *
- * @param <T>
+ * @param <T> type of the workflow context.
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface WorkflowDefinition<T extends WorkflowContext> extends Consumer<T> {

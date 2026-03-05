@@ -35,10 +35,10 @@ import java.util.function.Predicate;
 public interface PredicateBuilder extends ComponentBuilder<Predicate<EventMessage>> {
 
     /**
-     * Builds predicate for a message using specified converter.
+     * Builds predicate for a message using a specified converter.
      *
      * @param converter converter to use.
-     * @return predicate on message.
+     * @return predicate on a message.
      */
     @Nonnull
     Predicate<EventMessage> build(@Nonnull Converter converter);

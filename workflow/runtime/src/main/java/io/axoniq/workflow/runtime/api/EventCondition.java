@@ -44,7 +44,7 @@ public interface EventCondition {
     }
 
     /**
-     * Returns qualified name of the event message.
+     * Returns a qualified name of the event message.
      *
      * @return qualified name of the event.
      */

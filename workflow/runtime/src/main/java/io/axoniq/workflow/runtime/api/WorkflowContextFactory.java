@@ -26,10 +26,22 @@ import java.util.Map;
  * Creates a context for workflow execution.
  *
  * @param <T> type of the context.
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface WorkflowContextFactory<T extends WorkflowContext> {
 
+    /**
+     * Creates a new workflow context.
+     *
+     * @param initialPayload        initial payload of the workflow.
+     * @param workflowId            id of the workflow.
+     * @param processingContext     processing context.
+     * @param workflowConfiguration workflow configuration.
+     * @return workflow context.
+     */
     @Nonnull
     T createContext(
             @Nonnull Map<String, Object> initialPayload,

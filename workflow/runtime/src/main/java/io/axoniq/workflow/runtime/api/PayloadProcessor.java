@@ -23,7 +23,11 @@ import java.util.Map;
 import java.util.function.BiFunction;
 
 /**
- * Action executed consuming payload and returning payload as result run in provided processing context.
+ * Action executed consuming payload and returning payload as a result run in a provided processing context.
+ *
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 @FunctionalInterface
 public interface PayloadProcessor extends BiFunction<ProcessingContext, Map<String, Object>, Map<String, Object>> {

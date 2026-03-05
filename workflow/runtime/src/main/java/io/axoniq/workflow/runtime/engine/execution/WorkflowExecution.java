@@ -59,17 +59,49 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     WorkflowContext workflowContext();
 
+    /**
+     * Apply tasks as long the condition is not satisfied.
+     *
+     * @param condition condition on workflow execution.
+     * @throws InterruptedException if interrupted while waiting.
+     */
     void awaitStateChange(@Nonnull Predicate<WorkflowExecution> condition) throws InterruptedException;
 
+    /**
+     * Delivers an event to the workflow execution.
+     *
+     * @param eventMessage      event message.
+     * @param processingContext processing context.
+     */
     void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 
+    /**
+     * Append a task to the workflow execution.
+     *
+     * @param task a task to execute by the workflow control thread.
+     */
     void appendTask(@Nonnull Consumer<WorkflowExecution> task);
 
+    /**
+     * Returns the next task to execute.
+     *
+     * @return new task to execute.
+     */
     @Nullable
     Consumer<WorkflowExecution> getNextTask();
 
+    /**
+     * Returns true if the workflow execution is executable.
+     *
+     * @return true if the workflow execution is executable.
+     */
     boolean isExecutable();
 
+    /**
+     * Returns true if the workflow execution has tasks to execute.
+     *
+     * @return true if the workflow execution has tasks to execute.
+     */
     boolean hasTasks();
 
     /**
@@ -90,19 +122,58 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     void removeWaitCondition(@Nonnull String stepName);
 
+    /**
+     * Register a running step.
+     *
+     * @param stepName step name.
+     * @param future   future of the execution.
+     */
     void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future);
 
+    /**
+     * Remove a running step.
+     *
+     * @param stepName step name.
+     */
     void removeRunningStep(@Nonnull String stepName);
 
+    /**
+     * Cancel a running step.
+     *
+     * @param stepName name of the step.
+     * @param cause    optional cause of the cancellation.
+     * @return true if the step was found and cancelled, false otherwise.
+     */
     boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
+    /**
+     * Cancel all running steps.
+     *
+     * @param cause optional cause of the cancellation.
+     */
     void cancelAllRunningSteps(@Nullable Throwable cause);
 
+    /**
+     * Cancel and remove a running step.
+     *
+     * @param stepName              name of the step.
+     * @param mayInterruptIfRunning whether to interrupt the step if it is running.
+     */
     void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning);
 
+    /**
+     * Retrieves the current state of the workflow execution.
+     *
+     * @return workflow state.
+     */
     @Nonnull
     WorkflowState state();
 
+    /**
+     * Returns the processing context of the workflow execution.
+     *
+     * @return processing context.
+     */
     // FIXME check if we can replace this for the Context interface
     @Nonnull
     ProcessingContext processingContext();

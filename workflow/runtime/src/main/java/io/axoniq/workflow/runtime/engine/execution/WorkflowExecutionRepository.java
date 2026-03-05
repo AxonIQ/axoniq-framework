@@ -68,7 +68,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * Removes the workflow handle associated with the given identifier.
      *
      * @param workflowId the identifier of the workflow to remove
-     * @return the removed {@link WorkflowInstance}, or {@code null} if no handle was found
+     * @return the removed {@link WorkflowExecution}, or {@code null} if no handle was found
      */
     WorkflowExecution remove(@Nonnull String workflowId);
 

@@ -20,13 +20,11 @@ package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Comparison operator registry.
@@ -38,8 +36,22 @@ public class ValueComparisonOperatorRegistry {
 
     private final Map<String, ValueComparisonOperator> operators = new ConcurrentHashMap<>();
 
+    /**
+     * Constructs a new registry and loads operators.
+     */
     public ValueComparisonOperatorRegistry() {
-        load();
+        this(true);
+    }
+
+    /**
+     * Constructs a new registry.
+     *
+     * @param loadOperators flag indicating if the Service loading of operators should be performed.
+     */
+    public ValueComparisonOperatorRegistry(boolean loadOperators) {
+        if (loadOperators) {
+            load();
+        }
     }
 
     /**
@@ -56,10 +68,10 @@ public class ValueComparisonOperatorRegistry {
     }
 
     /**
-     * Retrieves a value comparison for given operator name.
+     * Retrieves a value comparison for a given operator name.
      *
      * @param name operator name.
-     * @return operator or throws exception if operator does not exist.
+     * @return operator or throws exception if an operator does not exist.
      */
     @Nonnull
     public ValueComparisonOperator get(@Nonnull String name) {
@@ -78,5 +90,4 @@ public class ValueComparisonOperatorRegistry {
     public Set<String> getOperatorNames() {
         return operators.keySet();
     }
-
 }
