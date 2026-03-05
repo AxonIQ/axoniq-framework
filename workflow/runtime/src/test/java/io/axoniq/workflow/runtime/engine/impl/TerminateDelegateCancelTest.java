@@ -21,7 +21,6 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
@@ -92,9 +91,9 @@ class TerminateDelegateCancelTest {
         delegate = new TerminateDelegate(
                 workflowContext,
                 workflowExecution,
-                eventSink,
                 "test-workflow",
                 unitOfWorkFactory,
+                eventSink,
                 executor
         );
     }

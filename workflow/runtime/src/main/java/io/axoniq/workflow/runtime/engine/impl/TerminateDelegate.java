@@ -53,9 +53,9 @@ public class TerminateDelegate implements TerminatePrimitive {
     public TerminateDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull EventSink eventSink,
             @Nonnull String workflowName,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull EventSink eventSink,
             @Nonnull Executor executor
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");

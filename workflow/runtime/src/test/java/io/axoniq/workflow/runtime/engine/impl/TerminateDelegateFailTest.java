@@ -19,7 +19,6 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
@@ -71,6 +70,7 @@ class TerminateDelegateFailTest {
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
+        when(unitOfWorkFactory.create(any(String.class), any(Function.class))).thenReturn(unitOfWork);
         when(unitOfWorkFactory.create(any(Function.class))).thenReturn(unitOfWork);
         when(unitOfWork.executeWithResult(any(Function.class)))
                 .thenAnswer(invocation -> {
@@ -90,9 +90,9 @@ class TerminateDelegateFailTest {
         delegate = new TerminateDelegate(
                 workflowContext,
                 workflowExecution,
-                eventSink,
                 "test-workflow",
                 unitOfWorkFactory,
+                eventSink,
                 executor
         );
     }
