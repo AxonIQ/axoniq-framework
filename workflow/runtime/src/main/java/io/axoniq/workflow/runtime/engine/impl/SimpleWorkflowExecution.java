@@ -95,7 +95,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 () -> this,
                 processingContext
         );
-        this.workflowState = new SimpleWorkflowState(this.workflowContext(),
+        this.workflowState = new SimpleWorkflowState(this.contextDelegate.typepWorkflowContext(),
                                                      workflowConfiguration.workflowStatusChangeListeners());
     }
 
