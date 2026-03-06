@@ -27,7 +27,7 @@ import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.jpa.JpaCryptoEngine;
 import io.axoniq.license.entitlement.EntitlementConfiguration;
 import io.axoniq.license.entitlement.EntitlementManager;
-import io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSource;
+import io.axoniq.license.entitlement.source.AxonServerLicenseSource;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.ChainingContentTypeConverter;
@@ -37,6 +37,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.annotation.Order;
 
@@ -56,7 +57,7 @@ import org.springframework.core.annotation.Order;
  *
  * @author Stefan Mirkovic
  */
-@org.springframework.context.annotation.Configuration
+@Configuration
 @AutoConfigureBefore(name = "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration")
 @Order(0)
 public class DataProtectionConfiguration {
