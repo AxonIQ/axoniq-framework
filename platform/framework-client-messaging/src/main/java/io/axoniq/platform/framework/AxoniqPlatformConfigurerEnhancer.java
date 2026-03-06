@@ -16,7 +16,7 @@
 
 package io.axoniq.platform.framework;
 
-import io.axoniq.license.entitlement.LicenseSource;
+import io.axoniq.license.entitlement.source.LicenseSource;
 import io.axoniq.platform.framework.application.ApplicationMetricRegistry;
 import io.axoniq.platform.framework.application.ApplicationMetricReporter;
 import io.axoniq.platform.framework.application.ApplicationReportCreator;
@@ -29,7 +29,9 @@ import io.axoniq.platform.framework.client.ClientSettingsService;
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.platform.framework.client.ServerProcessorReporter;
 import io.axoniq.platform.framework.client.SetupPayloadCreator;
-import io.axoniq.platform.framework.client.license.PlatformLicenseSource;
+import io.axoniq.license.entitlement.PlatformConnector;
+import io.axoniq.license.entitlement.source.PlatformLicenseSource;
+import io.axoniq.platform.framework.client.license.RSocketPlatformConnector;
 import io.axoniq.platform.framework.client.strategy.CborEncodingStrategy;
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy;
 import io.axoniq.platform.framework.eventprocessor.AxoniqPlatformEventHandlingComponent;
@@ -75,13 +77,14 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
         });
         registry
                 .registerComponent(ComponentDefinition.ofTypeAndName(LicenseSource.class, "AxoniqPlatformLicenseSource")
-                                                      .withBuilder(c -> new PlatformLicenseSource(
-                                                              c.getComponent(AxoniqConsoleRSocketClient.class),
-                                                              c.getComponent(RSocketHandlerRegistrar.class),
-                                                              c.getComponent(ClientSettingsService.class),
-                                                              executorService
-                                                              ))
-                                                      )
+                                                      .withBuilder(c -> {
+                                                          PlatformConnector connector = new RSocketPlatformConnector(
+                                                                  c.getComponent(AxoniqConsoleRSocketClient.class),
+                                                                  c.getComponent(RSocketHandlerRegistrar.class),
+                                                                  c.getComponent(ClientSettingsService.class)
+                                                          );
+                                                          return new PlatformLicenseSource(connector, executorService);
+                                                      }))
                 .registerComponent(ComponentDefinition
                                            .ofType(ClientSettingsService.class)
                                            .withBuilder(c -> new ClientSettingsService()))
