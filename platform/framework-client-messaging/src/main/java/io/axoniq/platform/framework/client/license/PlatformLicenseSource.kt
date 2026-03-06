@@ -28,7 +28,6 @@ import reactor.core.Disposable
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
 import java.time.Instant
-import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.atomic.AtomicReference
 
@@ -92,6 +91,20 @@ class PlatformLicenseSource(
     override fun onDisconnected() {
         logger.debug { "Disconnected" }
         currentStatus.set(ClientStatus.PENDING)
+
+        // Schedule a delayed check: if still not reconnected after DISCONNECT_GRACE_MS,
+        // notify the entitlement system that the license source is unreachable.
+        // This delay prevents false alarms during brief reconnects.
+        executorService.schedule({
+            if (!currentStatus.get().enabled) {
+                if (currentLicense != null) {
+                    logger.warn { "Platform disconnected and did not reconnect within grace window. Marking license source as unreachable." }
+                } else {
+                    logger.warn { "Platform not reachable. Marking license source as unreachable." }
+                }
+                listener?.onLicenseSourceUnreachable()
+            }
+        }, DISCONNECT_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     private fun retrieveLicense(attempt: Int = 1) {
@@ -122,5 +135,6 @@ class PlatformLicenseSource(
     companion object {
         private val logger = KotlinLogging.logger { }
         private const val RETRY_INTERVAL_MS = 30_000L // 30 seconds
+        private const val DISCONNECT_GRACE_MS = 60_000L // 1 minute before notifying entitlement system
     }
 }
