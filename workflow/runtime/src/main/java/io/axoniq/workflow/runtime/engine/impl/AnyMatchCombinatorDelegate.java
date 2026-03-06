@@ -84,34 +84,37 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                     return winner;
                 }
 
-                do {
-                    var matching = findFirstMatching(predicate);
-                    if (matching.isPresent()) {
-                        return setWinner(matching.get(), true);
-                    }
+                var matching = findFirstMatching(predicate);
+                if (matching.isPresent()) {
+                    return setWinner(matching.get(), true);
+                }
 
-                    if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
-                        var fallback = findFirstMatching(WorkflowStepResult::isCompleted);
-                        if (fallback.isPresent()) {
-                            return setWinner(fallback.get(), false);
-                        }
+                if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
+                    var fallback = findFirstMatching(WorkflowStepResult::isCompleted);
+                    if (fallback.isPresent()) {
+                        return setWinner(fallback.get(), false);
                     }
+                }
 
-                    try {
-                        workflowState.awaitStateChange(s ->
-                                                               Arrays.stream(results)
-                                                                     .filter(WorkflowStepResult::isCompleted)
-                                                                     .anyMatch(predicate)
-                                                                       || Arrays.stream(results)
-                                                                                .allMatch(WorkflowStepResult::isCompleted)
-                        );
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                } while (true);
+                try {
+                    workflowState.awaitStateChange(s ->
+                                                           Arrays.stream(results)
+                                                                 .filter(WorkflowStepResult::isCompleted)
+                                                                 .anyMatch(predicate)
+                                                                   || Arrays.stream(results)
+                                                                            .allMatch(WorkflowStepResult::isCompleted)
+                    );
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return winner;
+                }
 
-                return winner;
+                var matchAfterWait = findFirstMatching(predicate);
+                if (matchAfterWait.isPresent()) {
+                    return setWinner(matchAfterWait.get(), true);
+                }
+                var fallback = findFirstMatching(WorkflowStepResult::isCompleted);
+                return setWinner(fallback.orElse(results[0]), false);
             }
 
             private WorkflowStepResult setWinner(WorkflowStepResult winner, boolean cancelLosers) {

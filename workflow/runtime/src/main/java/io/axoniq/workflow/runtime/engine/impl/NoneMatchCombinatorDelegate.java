@@ -67,31 +67,36 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
                     return;
                 }
 
-                do {
-                    var matched = findFirstViolator();
-                    if (matched.isPresent()) {
-                        setViolator(matched.get());
-                        return;
-                    }
+                var matched = findFirstViolator();
+                if (matched.isPresent()) {
+                    setViolator(matched.get());
+                    return;
+                }
 
-                    if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
-                        allCompletedNoneMatched = true;
-                        return;
-                    }
+                if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
+                    allCompletedNoneMatched = true;
+                    return;
+                }
 
-                    try {
-                        workflowState.awaitStateChange(s ->
-                                                               Arrays.stream(results)
-                                                                     .filter(WorkflowStepResult::isCompleted)
-                                                                     .anyMatch(predicate)
-                                                                       || Arrays.stream(results)
-                                                                                .allMatch(WorkflowStepResult::isCompleted)
-                        );
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                } while (true);
+                try {
+                    workflowState.awaitStateChange(s ->
+                                                           Arrays.stream(results)
+                                                                 .filter(WorkflowStepResult::isCompleted)
+                                                                 .anyMatch(predicate)
+                                                                   || Arrays.stream(results)
+                                                                            .allMatch(WorkflowStepResult::isCompleted)
+                    );
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+
+                var matchAfterWait = findFirstViolator();
+                if (matchAfterWait.isPresent()) {
+                    setViolator(matchAfterWait.get());
+                } else {
+                    allCompletedNoneMatched = true;
+                }
             }
 
             private void setViolator(WorkflowStepResult v) {
