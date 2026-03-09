@@ -32,8 +32,10 @@ import java.time.Duration;
 import java.time.Instant;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.engine.association.Associations.associate;
+import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
 
 /**
  * Sample user registration.
@@ -80,7 +82,7 @@ public class UserSignupWorkflow {
 
         var magic = ctx.awaitEvent("waitForMagicToHappen",
                                    MagicHappenedEvent.class,
-                                   associate("magician", "=", "Merlin"),
+                                   associate(payloadProperty("magician"), equalsTo("Merlin")),
                                    Duration.ofSeconds(5));
         ctx.addPayload(magic);
 
