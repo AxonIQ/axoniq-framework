@@ -62,6 +62,14 @@ public class AssociationsUtils implements PredicateBuilder {
         return instance.and(valueRetriever, operator, value);
     }
 
+    /**
+     * Create a builder with association.
+     *
+     * @param retriever value retriever, see @link {@link PayloadPropertyValueRetriever#payloadProperty(String)} for
+     *                  example.
+     * @param matcher   variable matcher, see @link {@link VariableMatcher#equals(Object)}} for example.
+     * @return fluent builder association utils.
+     */
     public static AssociationsUtils associate(@Nonnull ValueRetriever retriever, @Nonnull VariableMatcher matcher) {
         return AssociationsUtils.associate(
                 retriever,
