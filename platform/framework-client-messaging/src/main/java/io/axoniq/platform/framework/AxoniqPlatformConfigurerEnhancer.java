@@ -16,7 +16,6 @@
 
 package io.axoniq.platform.framework;
 
-import io.axoniq.license.entitlement.LicenseSource;
 import io.axoniq.platform.framework.application.ApplicationMetricRegistry;
 import io.axoniq.platform.framework.application.ApplicationMetricReporter;
 import io.axoniq.platform.framework.application.ApplicationReportCreator;
@@ -29,7 +28,6 @@ import io.axoniq.platform.framework.client.ClientSettingsService;
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.platform.framework.client.ServerProcessorReporter;
 import io.axoniq.platform.framework.client.SetupPayloadCreator;
-import io.axoniq.platform.framework.client.license.PlatformLicenseSource;
 import io.axoniq.platform.framework.client.strategy.CborEncodingStrategy;
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy;
 import io.axoniq.platform.framework.eventprocessor.AxoniqPlatformEventHandlingComponent;
@@ -54,12 +52,8 @@ import org.axonframework.messaging.eventhandling.processing.subscribing.Subscrib
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-
 public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
-    private ScheduledExecutorService executorService;
     public static final int PLATFORM_ENHANCER_ORDER = Integer.MAX_VALUE - 5;
 
     @Override
@@ -67,21 +61,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
         if (!registry.hasComponent(AxoniqPlatformConfiguration.class)) {
             return;
         }
-        executorService = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "AxoniqPlatform");
-            // Set daemon to not prevent JVM shutdown if the platform is not properly stopped
-            t.setDaemon(true);
-            return t;
-        });
         registry
-                .registerComponent(ComponentDefinition.ofTypeAndName(LicenseSource.class, "AxoniqPlatformLicenseSource")
-                                                      .withBuilder(c -> new PlatformLicenseSource(
-                                                              c.getComponent(AxoniqConsoleRSocketClient.class),
-                                                              c.getComponent(RSocketHandlerRegistrar.class),
-                                                              c.getComponent(ClientSettingsService.class),
-                                                              executorService
-                                                              ))
-                                                      )
                 .registerComponent(ComponentDefinition
                                            .ofType(ClientSettingsService.class)
                                            .withBuilder(c -> new ClientSettingsService()))
