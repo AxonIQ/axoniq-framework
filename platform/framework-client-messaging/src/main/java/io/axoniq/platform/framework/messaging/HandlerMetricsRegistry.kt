@@ -19,6 +19,7 @@ package io.axoniq.platform.framework.messaging
 import io.axoniq.platform.framework.api.ClientSettingsV2
 import io.axoniq.platform.framework.api.Routes
 import io.axoniq.platform.framework.AxoniqPlatformConfiguration
+import io.axoniq.platform.framework.api.ClientStatus
 import io.axoniq.platform.framework.api.metrics.DispatcherStatisticIdentifier
 import io.axoniq.platform.framework.api.metrics.DispatcherStatistics
 import io.axoniq.platform.framework.api.metrics.DispatcherStatisticsWithIdentifier
@@ -65,7 +66,10 @@ class HandlerMetricsRegistry(
         clientSettingsService.subscribeToSettings(this)
     }
 
-    override fun onConnectedWithSettings(settings: ClientSettingsV2) {
+    override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+        if (!clientStatus.enabled || reportTask != null) {
+            return
+        }
         logger.debug { "Sending handler information every ${settings.handlerReportInterval}ms to Axoniq Platform" }
         this.reportTask = executor.scheduleAtFixedRate({
             if (!axoniqConsoleRSocketClient.isConnected()) {

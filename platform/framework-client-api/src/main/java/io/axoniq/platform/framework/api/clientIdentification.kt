@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import java.net.URLEncoder
  * The token looks like the following:
  * @code Bearer WORK_SPACE_ID:ENVIRONMENT_ID:COMPONENT_NAME:NODE_ID:ACCESS_TOKEN}
  */
-data class ConsoleClientAuthentication(
+data class PlatformClientAuthentication(
         val identification: ConsoleClientIdentifier,
         val accessToken: String,
 ) {
@@ -45,13 +45,13 @@ data class ConsoleClientAuthentication(
         private const val BEARER_PREFIX: String = "Bearer "
         private const val TOKEN_ERROR: String = "Not a valid Bearer token!"
 
-        fun fromToken(token: String): ConsoleClientAuthentication {
+        fun fromToken(token: String): PlatformClientAuthentication {
             assert(token.startsWith(BEARER_PREFIX)) { TOKEN_ERROR }
 
             val tokenParts = token.removePrefix(BEARER_PREFIX).split(":")
             if (tokenParts.size == 5) {
                 val (_, environmentId, applicationName, nodeName, accessToken) = tokenParts
-                return ConsoleClientAuthentication(
+                return PlatformClientAuthentication(
                         ConsoleClientIdentifier(
                                 environmentId = environmentId,
                                 applicationName = applicationName.decode(),
@@ -63,7 +63,7 @@ data class ConsoleClientAuthentication(
 
             assert(tokenParts.size == 4) { TOKEN_ERROR }
             val (environmentId, applicationName, nodeName, accessToken) = tokenParts
-            return ConsoleClientAuthentication(
+            return PlatformClientAuthentication(
                     ConsoleClientIdentifier(
                             environmentId = environmentId,
                             applicationName = applicationName.decode(),
@@ -99,6 +99,7 @@ data class SupportedFeatures(
         val heartbeat: Boolean? = false,
         /* Whether the client supports direct logging.*/
         val logDirect: Boolean? = false,
+        @Deprecated("Was never used, accidentally, will be removed in 2.1.0")
         /* Whether the client supports pause/resume of reports.*/
         val pauseReports: Boolean? = false,
         /* Whether the client supports thread dumps.*/
@@ -107,6 +108,8 @@ data class SupportedFeatures(
         val deadLetterQueuesInsights: AxoniqConsoleDlqMode = AxoniqConsoleDlqMode.NONE,
         /* Whether the client supports domain events insights. Can be FULL, LOAD_DOMAIN_STATE_ONLY, PREVIEW_PAYLOAD_ONLY, or NONE (default).*/
         val domainEventsInsights: DomainEventAccessMode = DomainEventAccessMode.NONE,
+        /* Whether the client supports client status updates .*/
+        val clientStatusUpdates: Boolean? = false,
 )
 
 data class Versions(

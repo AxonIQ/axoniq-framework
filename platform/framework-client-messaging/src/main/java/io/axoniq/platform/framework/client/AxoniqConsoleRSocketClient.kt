@@ -17,13 +17,15 @@
 package io.axoniq.platform.framework.client
 
 import io.axoniq.platform.framework.api.ClientSettingsV2
-import io.axoniq.platform.framework.api.ConsoleClientAuthentication
+import io.axoniq.platform.framework.api.PlatformClientAuthentication
 import io.axoniq.platform.framework.api.ConsoleClientIdentifier
 import io.axoniq.platform.framework.api.Routes
 import io.axoniq.platform.framework.api.notifications.Notification
 import io.axoniq.platform.framework.api.notifications.NotificationLevel
 import io.axoniq.platform.framework.api.notifications.NotificationList
 import io.axoniq.platform.framework.AxoniqPlatformConfiguration
+import io.axoniq.platform.framework.api.ClientStatus
+import io.axoniq.platform.framework.api.ClientStatusUpdate
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy
 import io.netty.buffer.ByteBufAllocator
 import io.netty.buffer.CompositeByteBuf
@@ -34,6 +36,7 @@ import io.rsocket.metadata.WellKnownMimeType
 import io.rsocket.transport.netty.client.TcpClientTransport
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.netty.tcp.TcpClient
 import java.time.Instant
@@ -79,12 +82,14 @@ class AxoniqConsoleRSocketClient(
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     private val connectionLock = ReentrantLock()
+
     @Volatile
     private var rsocket: RSocket? = null
     private var lastConnectionTry = Instant.EPOCH
     private var connectionRetryCount = 0
+
     @Volatile
-    private var pausedReports = false
+    private var status: ClientStatus = ClientStatus.PENDING
     private var supressConnectMessage = false
 
     init {
@@ -95,14 +100,11 @@ class AxoniqConsoleRSocketClient(
             clientSettingsService.updateSettings(it)
         }
 
-        // Server can block and unblock reports
-        registrar.registerHandlerWithoutPayload(Routes.Management.STOP_REPORTS) {
-            pausedReports = true
-            true
-        }
-        registrar.registerHandlerWithoutPayload(Routes.Management.START_REPORTS) {
-            pausedReports = false
-            true
+        // Server sends client status updates
+        registrar.registerHandlerWithPayload(Routes.Management.STATUS, ClientStatusUpdate::class.java) {
+            logger.debug("Received status update from Axoniq Platform. New status: {}", it.newStatus)
+            status = it.newStatus
+            clientSettingsService.updateClientStatus(status)
         }
 
         // Server can send log requests
@@ -115,7 +117,7 @@ class AxoniqConsoleRSocketClient(
      * Sends a report to Axoniq Platform. If reports are paused, does nothing silently.
      */
     fun sendReport(route: String, payload: Any): Mono<Unit> {
-        if (pausedReports) {
+        if (!status.enabled) {
             return Mono.empty()
         }
         return sendMessage(payload, route)
@@ -132,6 +134,15 @@ class AxoniqConsoleRSocketClient(
                 logger.log(notifications)
             }
             ?: Mono.empty())
+
+    fun <R> retrieve(payload: Any, route: String, responseType: Class<R>): Mono<R> {
+        return rsocket
+                ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
+                ?.map { responsePayload ->
+                    encodingStrategy.decode(responsePayload, responseType)
+                }
+                ?: Mono.empty()
+    }
 
     /**
      * Starts the connection, and starts the maintenance task.
@@ -186,7 +197,7 @@ class AxoniqConsoleRSocketClient(
     }
 
     private fun createRSocket(): RSocket {
-        val authentication = ConsoleClientAuthentication(
+        val authentication = PlatformClientAuthentication(
                 identification = ConsoleClientIdentifier(
                         environmentId = environmentId,
                         applicationName = applicationName,
@@ -217,7 +228,7 @@ class AxoniqConsoleRSocketClient(
         return metadata
     }
 
-    private fun createSetupMetadata(auth: ConsoleClientAuthentication): CompositeByteBuf {
+    private fun createSetupMetadata(auth: PlatformClientAuthentication): CompositeByteBuf {
         val metadata: CompositeByteBuf = ByteBufAllocator.DEFAULT.compositeBuffer()
         metadata.addRouteMetadata("client")
         metadata.addAuthMetadata(auth)
@@ -280,7 +291,10 @@ class AxoniqConsoleRSocketClient(
             }
         }
 
-        override fun onConnectedWithSettings(settings: ClientSettingsV2) {
+        override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+            if (this.heartbeatSendTask != null) {
+                return
+            }
             lastReceivedHeartbeat = Instant.now()
             this.heartbeatSendTask = executor.scheduleWithFixedDelay(
                     { sendHeartbeat().subscribe() },

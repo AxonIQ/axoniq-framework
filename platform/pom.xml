@@ -73,11 +73,13 @@
                 <groupId>org.axonframework</groupId>
                 <artifactId>axon-messaging</artifactId>
                 <version>${axon.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>org.axonframework</groupId>
                 <artifactId>axon-modelling</artifactId>
                 <version>${axon.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>org.axonframework</groupId>
@@ -107,6 +109,7 @@
                 <artifactId>kotlin-reflect</artifactId>
                 <version>${kotlin.version}</version>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 
