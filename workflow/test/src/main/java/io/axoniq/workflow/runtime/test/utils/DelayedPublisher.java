@@ -17,10 +17,14 @@
  */
 package io.axoniq.workflow.runtime.test.utils;
 
+import io.axoniq.workflow.dsl.Payload;
 import jakarta.annotation.Nonnull;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -31,17 +35,22 @@ import java.util.concurrent.TimeUnit;
 
 public class DelayedPublisher {
 
+    private static final Logger logger = LoggerFactory.getLogger(DelayedPublisher.class);
+
     private final EventSink eventSink;
     private final Executor executor;
     private final List<Schedule> schedules = new ArrayList<>();
     private final MessageTypeResolver messageTypeResolver;
+    private final Converter converter;
 
     public DelayedPublisher(@Nonnull EventSink eventSink,
                             @Nonnull Executor executor,
-                            @Nonnull MessageTypeResolver messageTypeResolver) {
+                            @Nonnull MessageTypeResolver messageTypeResolver,
+                            @Nonnull Converter converter) {
         this.eventSink = eventSink;
         this.executor = executor;
         this.messageTypeResolver = messageTypeResolver;
+        this.converter = converter;
     }
 
     public void addSchedules(List<Schedule> schedules) {
@@ -52,18 +61,24 @@ public class DelayedPublisher {
         CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
 
         for (Schedule schedule : schedules) {
-            future = future.thenCompose(v ->
-                                                CompletableFuture.supplyAsync(() -> {
-                                                                                  eventSink.publish(null, new GenericEventMessage(
-                                                                                          messageTypeResolver.resolveOrThrow(schedule.event),
-                                                                                          schedule.event)
-                                                                                  );
-                                                                                  return null;
-                                                                              },
-                                                                              CompletableFuture.delayedExecutor(schedule.duration.toMillis(),
-                                                                                                                TimeUnit.MILLISECONDS,
-                                                                                                                executor))
-            );
+            future = future
+                    .thenCompose(v ->
+                                         CompletableFuture
+                                                 .supplyAsync(() -> {
+                                                                  var eventMessage = new GenericEventMessage(
+                                                                          messageTypeResolver.resolveOrThrow(schedule.event),
+                                                                          schedule.event);
+                                                                  logger.info("Publishing Event: {}, {}",
+                                                                              eventMessage.type(),
+                                                                              eventMessage.payloadAs(Payload.PAYLOAD_TYPE.getType(), converter)
+                                                                  );
+                                                                  eventSink.publish(null, eventMessage);
+                                                                  return null;
+                                                              },
+                                                              CompletableFuture.delayedExecutor(schedule.duration.toMillis(),
+                                                                                                TimeUnit.MILLISECONDS,
+                                                                                                executor))
+                    );
         }
         return future;
     }

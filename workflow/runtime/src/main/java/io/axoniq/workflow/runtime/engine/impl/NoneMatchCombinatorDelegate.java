@@ -52,7 +52,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
      *
      * @param predicate the predicate that no result should match.
      * @param results   the step results to guard.
-     * @return a composite result that succeeds when no result matches, or short-circuits on first match.
+     * @return a composite result which succeeds when no result matches, or short-circuits on the first match.
      */
     @Nonnull
     public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
@@ -62,7 +62,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
             private WorkflowStepResult violator;
             private boolean allCompletedNoneMatched;
 
-            private void resolve() {
+            private void resolveViolator() {
                 if (violator != null || allCompletedNoneMatched) {
                     return;
                 }
@@ -146,7 +146,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
             @Override
             @Nonnull
             public <T> Optional<T> result() {
-                resolve();
+                resolveViolator();
                 if (violator != null) {
                     return violator.result();
                 }
@@ -156,7 +156,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
             @Override
             @Nonnull
             public Optional<StepFailedException> error() {
-                resolve();
+                resolveViolator();
                 if (violator != null) {
                     return violator.error();
                 }
@@ -164,39 +164,38 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
             }
 
             @Override
-            public boolean isSuccess() {
-                resolve();
+            public boolean success() {
+                resolveViolator();
                 return violator == null && allCompletedNoneMatched;
             }
 
             @Override
-            public boolean isFailure() {
-                resolve();
+            public boolean failure() {
+                resolveViolator();
                 return violator != null;
             }
 
             @Override
-            public boolean isCanceled() {
-                resolve();
+            public boolean canceled() {
+                resolveViolator();
                 if (violator != null) {
-                    return violator.isCanceled();
+                    return violator.canceled();
                 }
                 return false;
             }
 
             @Override
-            public boolean isTimeout() {
-                resolve();
+            public boolean timeout() {
+                resolveViolator();
                 if (violator != null) {
-                    return violator.isTimeout();
+                    return violator.timeout();
                 }
                 return false;
             }
 
             @Override
-            public boolean await() {
-                resolve();
-                return violator == null;
+            public void await() {
+                resolveViolator();
             }
 
             @Override

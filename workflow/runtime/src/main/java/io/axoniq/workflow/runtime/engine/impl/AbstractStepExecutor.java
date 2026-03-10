@@ -151,11 +151,11 @@ public abstract class AbstractStepExecutor {
     private CompletableFuture<Void> sendStepEvent(@Nonnull String stepName,
                                                   @Nonnull EventMessage eventMessage,
                                                   @Nonnull Context context) {
-        if (workflowContext.getStatus().isTerminal()) {
+        if (workflowContext.workflowStatus().isTerminal()) {
             logger.warn("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
-                        workflowContext.getStatus());
+                        workflowContext.workflowStatus());
             return CompletableFuture.failedFuture(new IllegalStateException(
-                    "Workflow is in terminal state " + workflowContext.getStatus()
+                    "Workflow is in terminal state " + workflowContext.workflowStatus()
                             + ", cannot publish step event " + eventMessage.type()));
         }
         if (workflowState.containsStep(stepName) && workflowState.getStep(stepName).status().isTerminal()) {

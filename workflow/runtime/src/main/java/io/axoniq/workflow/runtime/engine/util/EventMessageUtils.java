@@ -66,9 +66,9 @@ public class EventMessageUtils {
     public static EventMessage startedWorkflow(@Nonnull WorkflowContext context,
                                                @Nonnull String workflowName,
                                                @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.STARTED);
+        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
         return new GenericEventMessage(new MessageType(name), Map.of(),
-                                       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.STARTED)
+                                       MetadataUtils.create(context.workflowId(), WorkflowStatus.STARTED)
         );
     }
 
@@ -84,9 +84,9 @@ public class EventMessageUtils {
     public static EventMessage completedWorkflow(@Nonnull WorkflowContext context,
                                                  @Nonnull String workflowName,
                                                  @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.COMPLETED);
+        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.COMPLETED);
         return new GenericEventMessage(new MessageType(name), Map.of(),
-                                       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.COMPLETED)
+                                       MetadataUtils.create(context.workflowId(), WorkflowStatus.COMPLETED)
         );
     }
 
@@ -104,9 +104,9 @@ public class EventMessageUtils {
                                               @Nonnull String workflowName,
                                               @Nonnull Exception exception,
                                               @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.FAILED);
+        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.FAILED);
         return new GenericEventMessage(new MessageType(name), exception,
-                                       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.FAILED)
+                                       MetadataUtils.create(context.workflowId(), WorkflowStatus.FAILED)
         );
     }
 
@@ -124,9 +124,9 @@ public class EventMessageUtils {
                                                @Nonnull String workflowName,
                                                @Nonnull Instant time,
                                                @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.TIMED_OUT);
+        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.TIMED_OUT);
         return new GenericEventMessage(new MessageType(name), time,
-                                       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.TIMED_OUT)
+                                       MetadataUtils.create(context.workflowId(), WorkflowStatus.TIMED_OUT)
         );
     }
 
@@ -150,10 +150,9 @@ public class EventMessageUtils {
                                                  @Nonnull String workflowName,
                                                  @Nullable Throwable cause,
                                                  @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.getPayload(), WorkflowStatus.CANCELLED);
-        Object payload = cause != null ? cause : Map.of();
-        return new GenericEventMessage(new MessageType(name), payload,
-                                       MetadataUtils.create(context.getWorkflowId(), WorkflowStatus.CANCELLED)
+        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
+        return new GenericEventMessage(new MessageType(name), cause != null ? cause : Map.of(),
+                                       MetadataUtils.create(context.workflowId(), WorkflowStatus.CANCELLED)
         );
     }
 
@@ -173,7 +172,7 @@ public class EventMessageUtils {
                                            @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
         return new GenericEventMessage(new MessageType(name), local,
-                                       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.STARTED)
+                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.STARTED)
         );
     }
 
@@ -193,7 +192,7 @@ public class EventMessageUtils {
                                              @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
         return new GenericEventMessage(new MessageType(name), result,
-                                       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.COMPLETED)
+                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED)
         );
     }
 
@@ -213,7 +212,7 @@ public class EventMessageUtils {
                                         @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
         return new GenericEventMessage(new MessageType(name), exception,
-                                       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.FAILED)
+                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
         );
     }
 
@@ -249,7 +248,7 @@ public class EventMessageUtils {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
         Object payload = cause != null ? cause : Map.of();
         return new GenericEventMessage(new MessageType(name), payload,
-                                       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.CANCELLED)
+                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.CANCELLED)
         );
     }
 
@@ -269,7 +268,7 @@ public class EventMessageUtils {
                                            @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.TIMED_OUT);
         return new GenericEventMessage(new MessageType(name), time,
-                                       MetadataUtils.create(context.getWorkflowId(), stepName, StepStatus.TIMED_OUT)
+                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.TIMED_OUT)
         );
     }
 }

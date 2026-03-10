@@ -72,7 +72,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(race.isCompleted()).isTrue();
-        assertThat(race.isSuccess()).isTrue();
+        assertThat(race.success()).isTrue();
         assertThat(race.<String>result()).contains("payload-A");
     }
 
@@ -83,7 +83,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1);
 
         assertThat(race.isCompleted()).isTrue();
-        assertThat(race.isSuccess()).isTrue();
+        assertThat(race.success()).isTrue();
         assertThat(race.<String>result()).contains("only-value");
         assertThat(race.getStepName()).isEqualTo("anyMatch(onlyStep)");
     }
@@ -97,10 +97,10 @@ class WorkflowStepResultsAnyMatchTerminalTest {
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
-        assertThat(race.isSuccess()).isTrue();
-        assertThat(race.isFailure()).isFalse();
-        assertThat(race.isCanceled()).isFalse();
-        assertThat(race.isTimeout()).isFalse();
+        assertThat(race.success()).isTrue();
+        assertThat(race.failure()).isFalse();
+        assertThat(race.canceled()).isFalse();
+        assertThat(race.timeout()).isFalse();
         assertThat(race.<String>result()).contains("value");
         assertThat(race.error()).isEmpty();
     }
@@ -112,20 +112,20 @@ class WorkflowStepResultsAnyMatchTerminalTest {
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, failed, success);
 
-        assertThat(race.isSuccess()).isFalse();
-        assertThat(race.isFailure()).isTrue();
+        assertThat(race.success()).isFalse();
+        assertThat(race.failure()).isTrue();
         assertThat(race.error()).isPresent();
     }
 
     @Test
     void delegatesCancelledToWinner() {
-        var cancelled = WorkflowStepResults.cancelled("cancelStep");
+        var cancelled = WorkflowStepResults.canceled("cancelStep");
         var success = WorkflowStepResults.completed("successStep", "value");
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, cancelled, success);
 
-        assertThat(race.isSuccess()).isFalse();
-        assertThat(race.isCanceled()).isTrue();
+        assertThat(race.success()).isFalse();
+        assertThat(race.canceled()).isTrue();
     }
 
     @Test
@@ -135,8 +135,8 @@ class WorkflowStepResultsAnyMatchTerminalTest {
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, timedOut, success);
 
-        assertThat(race.isSuccess()).isFalse();
-        assertThat(race.isTimeout()).isTrue();
+        assertThat(race.success()).isFalse();
+        assertThat(race.timeout()).isTrue();
     }
 
     // --- await delegates to winner ---
@@ -147,7 +147,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1);
 
-        assertThat(race.await()).isTrue();
+        assertThat(race.isCompleted()).isTrue();
     }
 
     // --- Losers are cancelled with "Superseded by" reason ---
@@ -164,14 +164,13 @@ class WorkflowStepResultsAnyMatchTerminalTest {
 
         when(r1.isCompleted()).thenReturn(false);
         when(r2.isCompleted()).thenReturn(true);
-        when(r2.isSuccess()).thenReturn(true);
-        when(r2.await()).thenReturn(true);
+        when(r2.success()).thenReturn(true);
         when(r3.isCompleted()).thenReturn(false);
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2, r3);
 
         // Trigger winner resolution
-        race.isSuccess();
+        race.success();
 
         verify(r1).cancel("Superseded by stepB");
         verify(r3).cancel("Superseded by stepB");
@@ -249,14 +248,13 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         // findFirstMatching calls isCompleted() twice (guard + predicate) in the first loop,
         // then allMatch calls it once more. After awaitStateChange, the next calls return true.
         when(r1.isCompleted()).thenReturn(false, false, false, true);
-        when(r1.isSuccess()).thenReturn(true);
-        when(r1.await()).thenReturn(true);
+        when(r1.success()).thenReturn(true);
 
         doAnswer(invocation -> null).when(workflowState).awaitStateChange(any());
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1);
 
-        assertThat(race.isSuccess()).isTrue();
+        assertThat(race.success()).isTrue();
         verify(workflowState).awaitStateChange(any());
     }
 
@@ -273,7 +271,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         // Both completed (race condition: B completed first, but A also completed before cancel)
         when(r1.isCompleted()).thenReturn(true);
         when(r2.isCompleted()).thenReturn(true);
-        when(r2.isSuccess()).thenReturn(true);
+        when(r2.success()).thenReturn(true);
 
         // Event-sourced state says stepB completed first
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
@@ -282,7 +280,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         // Trigger winner resolution
-        race.isSuccess();
+        race.success();
 
         // stepB should be the winner despite being second in array order
         verify(r1).cancel("Superseded by stepB");
@@ -299,6 +297,6 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         // Call multiple times — same winner each time
         assertThat(race.<String>result()).contains("payload-A");
         assertThat(race.<String>result()).contains("payload-A");
-        assertThat(race.isSuccess()).isTrue();
+        assertThat(race.success()).isTrue();
     }
 }

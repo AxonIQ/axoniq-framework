@@ -19,17 +19,11 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * Utility containing {@link WorkflowStepResult} factory methods.
@@ -82,7 +76,7 @@ public class WorkflowStepResults {
      * @return cancelled result.
      */
     @Nonnull
-    public static WorkflowStepResult cancelled(@Nonnull String stepName) {
+    public static WorkflowStepResult canceled(@Nonnull String stepName) {
         return new CompletedWorkflowStepResult(stepName, null, null, null, true);
     }
 

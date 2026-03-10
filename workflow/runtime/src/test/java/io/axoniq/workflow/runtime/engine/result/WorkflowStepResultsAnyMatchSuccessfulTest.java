@@ -33,7 +33,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link WorkflowStepResults#anyMatch(WorkflowState, java.util.function.Predicate, WorkflowStepResult...)}
- * with the {@link WorkflowStepResult#isSuccess()} predicate (formerly {@code anySuccessful()}).
+ * with the {@link WorkflowStepResult#success()} predicate (formerly {@code anySuccessful()}).
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -56,7 +56,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r2 = WorkflowStepResults.completed("stepB", null);
         var r3 = WorkflowStepResults.completed("stepC", null);
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2, r3);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2, r3);
 
         assertThat(result.getStepName()).isEqualTo("anyMatch(stepA, stepB, stepC)");
     }
@@ -68,10 +68,10 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
-        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.success()).isTrue();
         assertThat(result.<String>result()).contains("payload-A");
     }
 
@@ -79,10 +79,10 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
     void singleSuccessBecomesWinnerImmediately() {
         var r1 = WorkflowStepResults.completed("onlyStep", "only-value");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1);
 
         assertThat(result.isCompleted()).isTrue();
-        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.success()).isTrue();
         assertThat(result.<String>result()).contains("only-value");
         assertThat(result.getStepName()).isEqualTo("anyMatch(onlyStep)");
     }
@@ -99,12 +99,12 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
 
         // stepA failed, stepB still running
         when(r1.isCompleted()).thenReturn(true);
-        when(r1.isSuccess()).thenReturn(false);
-        when(r1.isFailure()).thenReturn(true);
+        when(r1.success()).thenReturn(false);
+        when(r1.failure()).thenReturn(true);
         when(r2.isCompleted()).thenReturn(false);
-        when(r2.isSuccess()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -119,17 +119,16 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
 
         // stepA failed, stepB succeeded
         when(r1.isCompleted()).thenReturn(true);
-        when(r1.isSuccess()).thenReturn(false);
-        when(r1.isFailure()).thenReturn(true);
+        when(r1.success()).thenReturn(false);
+        when(r1.failure()).thenReturn(true);
 
         when(r2.isCompleted()).thenReturn(true);
-        when(r2.isSuccess()).thenReturn(true);
-        when(r2.await()).thenReturn(true);
+        when(r2.success()).thenReturn(true);
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
-        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.success()).isTrue();
 
         verify(r1).cancel("Superseded by stepB");
         verify(r2, never()).cancel(anyString());
@@ -144,11 +143,11 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = WorkflowStepResults.failed("stepA", error1);
         var r2 = WorkflowStepResults.failed("stepB", error2);
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
-        assertThat(result.isFailure()).isTrue();
-        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.failure()).isTrue();
+        assertThat(result.success()).isFalse();
         assertThat(result.error()).isPresent();
     }
 
@@ -165,17 +164,16 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r3.getStepName()).thenReturn("stepC");
 
         when(r1.isCompleted()).thenReturn(false);
-        when(r1.isSuccess()).thenReturn(false);
+        when(r1.success()).thenReturn(false);
         when(r2.isCompleted()).thenReturn(true);
-        when(r2.isSuccess()).thenReturn(true);
-        when(r2.await()).thenReturn(true);
+        when(r2.success()).thenReturn(true);
         when(r3.isCompleted()).thenReturn(false);
-        when(r3.isSuccess()).thenReturn(false);
+        when(r3.success()).thenReturn(false);
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2, r3);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2, r3);
 
         // Trigger winner resolution
-        result.isSuccess();
+        result.success();
 
         verify(r1).cancel("Superseded by stepB");
         verify(r3).cancel("Superseded by stepB");
@@ -191,7 +189,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         result.cancel();
 
@@ -206,7 +204,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         result.cancel("workflow shutdown");
 
@@ -221,13 +219,13 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.isCompleted()).thenReturn(false);
-        when(r1.isSuccess()).thenReturn(false);
+        when(r1.success()).thenReturn(false);
         when(r2.isCompleted()).thenReturn(false);
-        when(r2.isSuccess()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -237,13 +235,13 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.isCompleted()).thenReturn(true);
-        when(r1.isSuccess()).thenReturn(true);
+        when(r1.success()).thenReturn(true);
         when(r2.isCompleted()).thenReturn(false);
-        when(r2.isSuccess()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -253,13 +251,13 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.isCompleted()).thenReturn(true);
-        when(r1.isSuccess()).thenReturn(false);
+        when(r1.success()).thenReturn(false);
         when(r2.isCompleted()).thenReturn(true);
-        when(r2.isSuccess()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -273,14 +271,13 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         // First loop: isCompleted=false (guard filter), false (allMatch) → awaitStateChange
         // Second loop after wake-up: isCompleted=true → found
         when(r1.isCompleted()).thenReturn(false, false, true);
-        when(r1.isSuccess()).thenReturn(false, true);
-        when(r1.await()).thenReturn(true);
+        when(r1.success()).thenReturn(false, true);
 
         doAnswer(invocation -> null).when(workflowState).awaitStateChange(any());
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1);
 
-        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.success()).isTrue();
         verify(workflowState).awaitStateChange(any());
     }
 
@@ -295,18 +292,18 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         when(r2.getStepName()).thenReturn("stepB");
 
         when(r1.isCompleted()).thenReturn(true);
-        when(r1.isSuccess()).thenReturn(true);
+        when(r1.success()).thenReturn(true);
         when(r2.isCompleted()).thenReturn(true);
-        when(r2.isSuccess()).thenReturn(true);
+        when(r2.success()).thenReturn(true);
 
         // Event-sourced state says stepB succeeded first
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         // Trigger winner resolution
-        result.isSuccess();
+        result.success();
 
         // stepB should be the winner despite being second in array order
         verify(r1).cancel("Superseded by stepB");
@@ -320,10 +317,10 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isSuccess, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.<String>result()).contains("payload-A");
         assertThat(result.<String>result()).contains("payload-A");
-        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.success()).isTrue();
     }
 }

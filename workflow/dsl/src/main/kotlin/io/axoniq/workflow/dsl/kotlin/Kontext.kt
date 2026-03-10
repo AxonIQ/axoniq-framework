@@ -18,23 +18,28 @@
 package io.axoniq.workflow.dsl.kotlin
 
 import io.axoniq.workflow.runtime.api.*
-import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.eventName
+import io.axoniq.workflow.runtime.engine.execution.EventConditions
+import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
-import org.axonframework.messaging.eventhandling.EventMessage
-import java.util.function.Predicate
+import org.testcontainers.shaded.com.google.common.base.Predicate
 import kotlin.reflect.KClass
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
+/**
+ * Kotlin Workflow Context extension object.
+ * @since 1.0.0
+ * @author Simon Zambrovski
+ */
 class Kontext(
     private val workflowKontext: WorkflowKontext
 ) {
 
-    val payload: Map<String, Any?> get() = workflowKontext.payload
-    val workflowId: String get() = workflowKontext.workflowId
+    val payload: Map<String, Any?> get() = workflowKontext.workflowPayload()
+    val workflowId: String get() = workflowKontext.workflowId()
 
     class MapPropertyExtractingExecuteCommand<T>(
         val resultPropertyName: String,
@@ -42,7 +47,7 @@ class Kontext(
     ) :
         PrimitiveCommands.DelegatingExecuteCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
-            if (result.isSuccess && result.result<Any>().isPresent) {
+            if (result.success() && result.result<Any>().isPresent) {
                 @Suppress("UNCHECKED_CAST")
                 return (result.result<Map<String, Any?>>().get())[resultPropertyName] as T
             } else {
@@ -58,7 +63,7 @@ class Kontext(
     ) :
         PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
-            if (result.isSuccess && result.result<Any>().isPresent) {
+            if (result.success() && result.result<Any>().isPresent) {
                 @Suppress("UNCHECKED_CAST")
                 return converter.convert(result.result<Map<String, Any?>>().get(), type) as T
             } else {
@@ -74,7 +79,7 @@ class Kontext(
         parameterMapping: PayloadReducer = PayloadReducer.local(),
         resultMapping: PayloadReducer = PayloadReducer.all(),
         timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = eventName()
+        eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
         val stepSpecificName = "__$stepName"
         return workflowKontext.execute(
@@ -98,17 +103,18 @@ class Kontext(
     fun <T : Any> awaitEvent(
         stepName: String,
         type: KClass<T>,
-        predicate: Predicate<EventMessage> = Predicate { true },
         timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = eventName()
+        eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
         return workflowKontext.waitFor(
             TypeConvertingWaitForCommand(
                 PrimitiveCommands.WorkflowStepResultWaitForCommand(
                     stepName,
-                    workflowKontext.processingContext().component(MessageTypeResolver::class.java).resolve(type.java)
-                        .orElseThrow().qualifiedName,
-                    predicate,
+                    EventConditions.fromQualifiedName(
+                        workflowKontext.processingContext().component(MessageTypeResolver::class.java)
+                            .resolve(type.java)
+                            .orElseThrow().qualifiedName
+                    ),
                     timeout.toJavaDuration(),
                     eventNameCustomizer
                 ),
@@ -118,6 +124,14 @@ class Kontext(
         )
     }
 
+    fun allMatch(vararg results: WorkflowStepResult)
+            : WorkflowStepResult = workflowKontext.all(*results)
+
+    fun noneMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
+            : WorkflowStepResult = workflowKontext.noneMatch(predicate, *results)
+
+    fun anyMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
+            : WorkflowStepResult = workflowKontext.anyMatch(predicate, *results)
 
     fun execute(
         stepName: String,
@@ -126,7 +140,7 @@ class Kontext(
         parameterMapping: PayloadReducer = PayloadReducer.local(),
         resultMapping: PayloadReducer = PayloadReducer.all(),
         timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = eventName()
+        eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.execute(
         PrimitiveCommands.WorkflowStepResultExecuteCommand(
             stepName,
@@ -142,14 +156,12 @@ class Kontext(
     fun waitFor(
         stepName: String,
         qualifiedName: QualifiedName,
-        predicate: Predicate<EventMessage> = Predicate { true },
         timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = eventName()
+        eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.waitFor(
         PrimitiveCommands.WorkflowStepResultWaitForCommand(
             stepName,
-            qualifiedName,
-            predicate,
+            EventConditions.fromQualifiedName(qualifiedName),
             timeout.toJavaDuration(),
             eventNameCustomizer
         )
@@ -159,16 +171,15 @@ class Kontext(
     fun block(
         stepName: String,
         timeout: Duration,
-        eventNameCustomizer: EventNameCustomizer = eventName()
+        eventNameCustomizer: EventNameCustomizer = defaults()
     ) {
         val result = waitFor(
             stepName,
             QualifiedName(Void::class.java),
-            { false },
             timeout,
             eventNameCustomizer
         )
-        if (result.isFailure && result.error().isPresent) {
+        if (result.failure() && result.error().isPresent) {
             throw result.error().get()
         }
     }
@@ -181,7 +192,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published failure event name
      * @throws WorkflowFailedException always, after the failure event is published
      */
-    fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.fail(cause, eventNameCustomizer))
     }
 
@@ -192,7 +203,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancel(eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(eventNameCustomizer))
     }
 
@@ -204,8 +215,14 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason), eventNameCustomizer))
+    fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancel(
+                io.axoniq.workflow.runtime.api.WorkflowCancelledException(
+                    reason
+                ), eventNameCustomizer
+            )
+        )
     }
 
     /**
@@ -216,7 +233,7 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
+    fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(cause, eventNameCustomizer))
     }
 
@@ -227,8 +244,14 @@ class Kontext(
      * @param stepName the name of the step to cancel
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, null, eventNameCustomizer))
+    fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancelledStep(
+                stepName,
+                null,
+                eventNameCustomizer
+            )
+        )
     }
 
     /**
@@ -240,8 +263,14 @@ class Kontext(
      * @param cause the exception that caused the step cancellation
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, cause, eventNameCustomizer))
+    fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancelledStep(
+                stepName,
+                cause,
+                eventNameCustomizer
+            )
+        )
     }
 
     /**
@@ -253,14 +282,20 @@ class Kontext(
      * @param reason descriptive reason for the step cancellation
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = eventName()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancelledStep(stepName, io.axoniq.workflow.runtime.api.StepCancellationException(reason), eventNameCustomizer))
+    fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
+        workflowKontext.terminate(
+            TerminatePrimitive.TerminateCommand.cancelledStep(
+                stepName,
+                io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                eventNameCustomizer
+            )
+        )
     }
 
     // just to create blocking call
     fun block(result: Kontext.() -> WorkflowStepResult) {
         val r = result()
-        if (r.isFailure) {
+        if (r.failure()) {
             if (r.error().isPresent) {
                 throw r.error().get()
             } else {

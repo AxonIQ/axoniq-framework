@@ -25,6 +25,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 
+/**
+ * Context factory for {@link SimpleWorkflowContext}.
+ * @since 1.0.0
+ * @author Simon Zambrovski
+ */
 public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
     @NotNull

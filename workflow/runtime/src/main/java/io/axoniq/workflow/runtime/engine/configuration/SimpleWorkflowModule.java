@@ -19,36 +19,25 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.Workflow;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
-import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.core.QualifiedName;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -57,12 +46,12 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
-import static io.axoniq.workflow.runtime.api.Workflow.*;
+import static io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils.*;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
  * given {@link WorkflowContext}. As a result the module will register its configuration in the
- * {@link WorkflowDefinitionRegistry}, used by the {@link io.axoniq.workflow.runtime.engine.impl.WorkflowEngine}.
+ * {@link WorkflowConfigurationRegistry}, used by the {@link io.axoniq.workflow.runtime.engine.impl.WorkflowEngine}.
  *
  * @param <C> type of workflow context.
  * @author Simon Zambrovski
@@ -80,6 +69,14 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurations;
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
     private ComponentBuilder<WorkflowStateFactory> workflowStateFactory;
+
+
+    record ConditionedWorkflowConfiguration<C extends WorkflowContext>(
+            EventCondition eventCondition,
+            WorkflowConfiguration<C> workflowConfiguration
+    ) {
+
+    }
 
     /**
      * Constructs new workflow module.
@@ -154,7 +151,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
 
     protected void registerWorkflowDefinitions(@Nonnull Configuration configuration) {
-        WorkflowDefinitionRegistry<?> registry = configuration.getComponent(WorkflowDefinitionRegistry.class);
+        WorkflowConfigurationRegistry<?> registry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         if (workflowConfigurations.isEmpty()) {
             // sanity
             throw new IllegalStateException(
@@ -167,6 +164,10 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         );
     }
 
+    /**
+     * Declarative component builder for workflow configuration.
+     */
+    @Internal
     class DeclarativeComponentBuilder implements
             WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<C>,
             WorkflowModule.WorkflowDefinitionPhase.NamingPhase<C>,
@@ -286,72 +287,37 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
         }
     }
 
+    /**
+     * Auto-detected component builder for workflow configuration list.
+     * <p>One builder operates on one class and can detect multiple workflow methods.</p>
+     */
     class AutoDetectingBuilder implements DetectionPhase<C>,
             ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>> {
 
         private final ComponentBuilder<Object> instanceBuilder;
 
-        public AutoDetectingBuilder(ComponentBuilder<Object> instanceBuilder) {
-            this.instanceBuilder = instanceBuilder;
+        public AutoDetectingBuilder(@Nonnull ComponentBuilder<Object> instanceBuilder) {
+            this.instanceBuilder = Objects.requireNonNull(instanceBuilder, "Instance builder must not be null.");
         }
 
         @Override
         public List<ConditionedWorkflowConfiguration<C>> build(@Nonnull Configuration config) {
             var instance = instanceBuilder.build(config);
-            var autodetectionType = instance.getClass();
-            var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(autodetectionType));
-            return methodCandidates
-                    .stream()
-                    .filter(AutodetectionUtils.firstParameterOfType(workflowContextType))
-                    .map(AutodetectionUtils.extractAnnotatedMethods(Workflow.class))
-                    .filter(Objects::nonNull)
+            var type = instance.getClass();
+            return AutoDetectionUtils
+                    .workflowMethods(type, workflowContextType)
                     .map(t -> {
 
-                        Map<String, Object> attributes = t._2();
-                        Method method = t._1();
+                        var attributes = t.attributes();
+                        var method = t.method();
 
-                        AutodetectionUtils.validateAttributes(attributes, autodetectionType, method);
+                        AutoDetectionUtils.validateAttributes(attributes, type, method);
 
-                        var workflowName = AutodetectionUtils.getWorkflowName(autodetectionType,
-                                                                              attributes,
-                                                                              method);
-                        var namespaceCustomizer = AutodetectionUtils.getNamespace(autodetectionType, attributes);
-
-                        ComponentBuilder<WorkflowDefinition<C>> workflowDefinitionComponentBuilder = c -> workflowContext -> {
-                            try {
-                                method.invoke(instance, workflowContext);
-                            } catch (InvocationTargetException | IllegalAccessException e) {
-                                // FIXME -> this will catch any exception ?! Steven -> any ideas
-                                LoggerFactory.getLogger("Auto detected").error("Error 0", e);
-                                throw new RuntimeException(e.getCause());
-                            }
-                        };
-
-                        ComponentBuilder<EventCondition> eventConditionBuilder = c ->
-                                new EventCondition(
-                                        AutodetectionUtils.getIfNotDefault(attributes, ATTR_START_ON, Void.class)
-                                                          .flatMap(triggerType -> c.getComponent(MessageTypeResolver.class)
-                                                                                   .resolve(triggerType)
-                                                                                   .map(MessageType::qualifiedName)
-                                                          )
-                                                          .orElseGet(() -> new QualifiedName((String) attributes.get(
-                                                                  ATTR_START_ON_QUALIFIED_NAME))
-                                                          ),
-                                        (e) -> true
-                                ); // FIXME enrich with associations as soon as available, see #5
-
-
-                        ComponentBuilder<WorkflowIdProvider> associationProviderComponentBuilder = c ->
-                                AutodetectionUtils.getIfNotDefault(attributes,
-                                                                   ATTR_ID_PROPERTY_PROVIDER,
-                                                                   PayloadPropertyWorkflowIdProvider.class)
-                                                  .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
-                                                  .orElseGet(() -> new PayloadPropertyWorkflowIdProvider(c.getComponent(
-                                                          Converter.class),
-                                                                                                         (String) attributes.get(
-                                                                                                                 ATTR_ID_PROPERTY))
-                                                  );
-
+                        var workflowName = workflowName(type, attributes, method);
+                        var namespaceCustomizer = namespace(type, attributes);
+                        var eventConditionBuilder = eventConditionComponentBuilder(attributes);
+                        var workflowIdProviderComponentBuilder = workflowIdProviderComponentBuilder(attributes);
+                        var statusChangeListeners = statusChangeListeners(instance, workflowContextType, workflowName);
 
                         return new ConditionedWorkflowConfiguration<>(
                                 eventConditionBuilder.build(config),
@@ -359,7 +325,11 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                     @Nonnull
                                     @Override
                                     public WorkflowDefinition<C> workflowDefinition() {
-                                        return workflowDefinitionComponentBuilder.build(config);
+                                        return workflowContext -> {
+                                            WorkflowReflectionUtils.invoke(instance,
+                                                                           method,
+                                                                           workflowContext);
+                                        };
                                     }
 
                                     @Nonnull
@@ -389,7 +359,19 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                     @Nonnull
                                     @Override
                                     public WorkflowIdProvider workflowIdProvider() {
-                                        return associationProviderComponentBuilder.build(config);
+                                        return workflowIdProviderComponentBuilder.build(config);
+                                    }
+
+                                    @Nonnull
+                                    @Override
+                                    public Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+                                        var result = new HashMap<WorkflowStatus, WorkflowStatusChangeListener>();
+                                        statusChangeListeners.forEach((k, v) -> {
+                                            if (!v.isEmpty()) {
+                                                result.put(k, v);
+                                            }
+                                        });
+                                        return Collections.unmodifiableMap(result);
                                     }
                                 }
                         );
@@ -407,12 +389,5 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                               @Nonnull Class<C> workflowContextType) {
             return SimpleWorkflowModule.this.autodetected(componentBuilder, workflowContextType);
         }
-    }
-
-    record ConditionedWorkflowConfiguration<C extends WorkflowContext>(
-            EventCondition eventCondition,
-            WorkflowConfiguration<C> workflowConfiguration
-    ) {
-
     }
 }

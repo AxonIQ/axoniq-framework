@@ -177,28 +177,28 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
             }
 
             @Override
-            public boolean isSuccess() {
-                return resolveWinner().isSuccess();
+            public boolean success() {
+                return resolveWinner().success();
             }
 
             @Override
-            public boolean isFailure() {
-                return resolveWinner().isFailure();
+            public boolean failure() {
+                return resolveWinner().failure();
             }
 
             @Override
-            public boolean isCanceled() {
-                return resolveWinner().isCanceled();
+            public boolean canceled() {
+                return resolveWinner().canceled();
             }
 
             @Override
-            public boolean isTimeout() {
-                return resolveWinner().isTimeout();
+            public boolean timeout() {
+                return resolveWinner().timeout();
             }
 
             @Override
-            public boolean await() {
-                return resolveWinner().await();
+            public void await() {
+                resolveWinner().await();
             }
 
             @Override

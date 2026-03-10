@@ -20,6 +20,8 @@ package io.axoniq.example.workflow.fixture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+
 public class Waiter {
 
     static Logger logger = LoggerFactory.getLogger(Waiter.class);
@@ -33,5 +35,27 @@ public class Waiter {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Takes a nap.
+     *
+     * @param millis thread sleep timeout.
+     */
+    public static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Takes a nap.
+     *
+     * @param duration timeout to sleep.
+     */
+    public static void sleepQuietly(Duration duration) {
+        sleepQuietly(duration.toMillis());
     }
 }

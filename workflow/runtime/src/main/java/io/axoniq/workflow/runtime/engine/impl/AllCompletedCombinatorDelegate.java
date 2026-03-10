@@ -47,7 +47,7 @@ public class AllCompletedCombinatorDelegate implements AllCompletedCombinator {
      *   <tr><th>Combinator</th><th>Resolves when</th><th>Cancels losers?</th></tr>
      *   <tr><td><b>all</b></td><td>All results complete</td><td>No</td></tr>
      *   <tr><td>{@link #anyMatch}</td><td>First predicate match, or all complete</td><td>Yes (on match)</td></tr>
-     *   <tr><td>{@link #noneMatch}</td><td>All complete without match, or short-circuit</td><td>Yes (on short-circuit)</td></tr>
+     *   <tr><td>{@link #noneMatch}</td><td>All complete without a match, or short-circuit</td><td>Yes (on short-circuit)</td></tr>
      * </table>
      *
      * @param results the step results to combine.
@@ -77,33 +77,33 @@ public class AllCompletedCombinatorDelegate implements AllCompletedCombinator {
             @Override
             @Nonnull
             public Optional<StepFailedException> error() {
-                return Arrays.stream(results).filter(WorkflowStepResult::isFailure).findFirst().flatMap(
+                return Arrays.stream(results).filter(WorkflowStepResult::failure).findFirst().flatMap(
                         WorkflowStepResult::error);
             }
 
             @Override
-            public boolean isSuccess() {
-                return Arrays.stream(results).allMatch(WorkflowStepResult::isSuccess);
+            public boolean success() {
+                return Arrays.stream(results).allMatch(WorkflowStepResult::success);
             }
 
             @Override
-            public boolean isFailure() {
-                return Arrays.stream(results).anyMatch(WorkflowStepResult::isFailure);
+            public boolean failure() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::failure);
             }
 
             @Override
-            public boolean isCanceled() {
-                return Arrays.stream(results).anyMatch(WorkflowStepResult::isCanceled);
+            public boolean canceled() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::canceled);
             }
 
             @Override
-            public boolean isTimeout() {
-                return Arrays.stream(results).anyMatch(WorkflowStepResult::isTimeout);
+            public boolean timeout() {
+                return Arrays.stream(results).anyMatch(WorkflowStepResult::timeout);
             }
 
             @Override
-            public boolean await() {
-                return Arrays.stream(results).anyMatch(WorkflowStepResult::await);
+            public void await() {
+                Arrays.stream(results).forEach(WorkflowStepResult::await);
             }
 
             @Override
