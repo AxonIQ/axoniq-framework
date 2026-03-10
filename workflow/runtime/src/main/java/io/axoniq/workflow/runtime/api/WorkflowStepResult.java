@@ -59,35 +59,33 @@ public interface WorkflowStepResult {
      *
      * @return true, if the operation completed successfully.
      */
-    boolean isSuccess();
+    boolean success();
 
     /**
      * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation completed with an exception.
      */
-    boolean isFailure();
+    boolean failure();
 
     /**
      * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation was interrupted by external party.
      */
-    boolean isCanceled();
+    boolean canceled();
 
     /**
      * Blocks until step execution reaches a terminal state.
      *
      * @return true, if the operation was interrupted by timeout specified on start.
      */
-    boolean isTimeout();
+    boolean timeout();
 
     /**
      * Blocks until step execution reaches a terminal state.
-     *
-     * @return true, if finished without errors.
      */
-    boolean await();
+    void await();
 
     /**
      * Cancels this step if it is still running. No-op if already in a terminal state.

@@ -35,5 +35,5 @@ public interface WorkflowStatusChangeListener {
      * @param state   workflow status.
      * @param context workflow context.
      */
-    void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull WorkflowContext context);
+    <C extends WorkflowContext> void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull C context);
 }

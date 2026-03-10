@@ -18,11 +18,11 @@
 package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.WorkflowDefinitionRegistry;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
-import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowDefinitionRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.repository.InMemoryWorkflowExecutionRepository;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -57,10 +57,10 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
     public void enhance(@NotNull ComponentRegistry componentRegistry) {
 
         componentRegistry
-                .registerComponent(WorkflowDefinitionRegistry.class, cfg -> new SimpleWorkflowDefinitionRegistry());
+                .registerComponent(WorkflowConfigurationRegistry.class, cfg -> new SimpleWorkflowConfigurationRegistry());
 
         componentRegistry
-                .registerComponent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.eventName());
+                .registerComponent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.defaults());
 
         componentRegistry
                 .registerComponent(Clock.class, cfg -> Clock.systemUTC());
@@ -76,7 +76,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
         componentRegistry
                 .registerComponent(WorkflowEngine.class, cfg ->
                         new WorkflowEngine(
-                                cfg.getComponent(WorkflowDefinitionRegistry.class),
+                                cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class)
                         )
                 );

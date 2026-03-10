@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
 import jakarta.annotation.Nonnull;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -87,7 +86,7 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      */
     @Nonnull
     default EventNameCustomizer eventNameCustomizer() {
-        return DefaultEventNameCustomizer.Builder.eventName();
+        return DefaultEventNameCustomizer.Builder.defaults();
     }
 
     /**

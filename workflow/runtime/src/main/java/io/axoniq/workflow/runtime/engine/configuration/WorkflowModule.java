@@ -135,7 +135,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * Specifies trigger condition for the workflow.
              *
              * @param startCondition start condition builder.
-             * @return builder for declarative definition phase.
+             * @return builder for workflow definition phase.
              */
             WorkflowCustomizationPhase<C> on(@Nonnull ComponentBuilder<EventCondition> startCondition);
         }

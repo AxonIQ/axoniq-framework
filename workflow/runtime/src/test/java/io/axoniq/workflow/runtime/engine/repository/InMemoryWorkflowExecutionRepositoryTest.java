@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.repository;
 
-import io.axoniq.workflow.runtime.api.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.*;

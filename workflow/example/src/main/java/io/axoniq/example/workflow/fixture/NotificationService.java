@@ -24,7 +24,7 @@ public class NotificationService {
 
     static Logger logger = LoggerFactory.getLogger(NotificationService.class);
 
-    public static void sendEmail() {
+    public static void sendEmail(String emailAddress) {
         logger.info("Sending welcome mail to user.");
     }
 }
