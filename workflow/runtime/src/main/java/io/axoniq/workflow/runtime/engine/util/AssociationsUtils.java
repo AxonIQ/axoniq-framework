@@ -15,16 +15,20 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.engine.association;
+package io.axoniq.workflow.runtime.engine.util;
 
+import io.axoniq.workflow.runtime.engine.association.AssociationValue;
+import io.axoniq.workflow.runtime.engine.association.BadAssociationFormatException;
+import io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever;
+import io.axoniq.workflow.runtime.engine.association.PredicateBuilder;
+import io.axoniq.workflow.runtime.engine.association.ValueComparisonOperatorRegistry;
+import io.axoniq.workflow.runtime.engine.association.ValueRetriever;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -36,7 +40,7 @@ import java.util.stream.Collectors;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class Associations implements PredicateBuilder {
+public class AssociationsUtils implements PredicateBuilder {
 
     private final ValueComparisonOperatorRegistry registry;
     private final Set<AssociationValue> values;
@@ -44,18 +48,41 @@ public class Associations implements PredicateBuilder {
     /**
      * Create a builder with association.
      *
-     * @param name     property name.
-     * @param operator operator for value comparison.
-     * @param value    value.
+     * @param valueRetriever event value retriever.
+     * @param operator       operator for value comparison.
+     * @param value          value.
      * @return association builder.
      */
-    public static Associations associate(
-            @Nonnull String name,
+    public static AssociationsUtils associate(
+            @Nonnull ValueRetriever valueRetriever,
             @Nonnull String operator,
             @Nonnull Object value
     ) {
-        var instance = new Associations(Set.of());
-        return instance.and(name, operator, value);
+        var instance = new AssociationsUtils(Set.of());
+        return instance.and(valueRetriever, operator, value);
+    }
+
+    /**
+     * Create a builder with association.
+     *
+     * @param retriever value retriever, see @link {@link PayloadPropertyValueRetriever#payloadProperty(String)} for
+     *                  example.
+     * @param matcher   variable matcher, see @link {@link VariableMatcher#equals(Object)}} for example.
+     * @return fluent builder association utils.
+     */
+    public static AssociationsUtils associate(@Nonnull ValueRetriever retriever, @Nonnull VariableMatcher matcher) {
+        return AssociationsUtils.associate(
+                retriever,
+                matcher.operator,
+                matcher.value
+        );
+    }
+
+
+    public record VariableMatcher(
+            @Nonnull String operator,
+            @Nonnull Object value) {
+
     }
 
     /**
@@ -65,9 +92,9 @@ public class Associations implements PredicateBuilder {
      * @param associations associations to parse.
      * @return associations object.
      */
-    public static Associations parse(
+    public static AssociationsUtils parse(
             @Nonnull ValueComparisonOperatorRegistry registry, String... associations) {
-        return new Associations(registry, parseAssociationValues(registry, associations));
+        return new AssociationsUtils(registry, parseAssociationValues(registry, associations));
     }
 
     /**
@@ -75,7 +102,7 @@ public class Associations implements PredicateBuilder {
      *
      * @param values association values.
      */
-    public Associations(@Nonnull Set<AssociationValue> values) {
+    public AssociationsUtils(@Nonnull Set<AssociationValue> values) {
         this(new ValueComparisonOperatorRegistry(), values);
     }
 
@@ -85,7 +112,7 @@ public class Associations implements PredicateBuilder {
      * @param registry operator registry.
      * @param values   association values.
      */
-    public Associations(@Nonnull ValueComparisonOperatorRegistry registry, @Nonnull Set<AssociationValue> values) {
+    public AssociationsUtils(@Nonnull ValueComparisonOperatorRegistry registry, @Nonnull Set<AssociationValue> values) {
         this.values = Objects.requireNonNull(values, "The set of association values must not be null.");
         this.registry = Objects.requireNonNull(registry, "Registry must not be null");
     }
@@ -94,44 +121,48 @@ public class Associations implements PredicateBuilder {
     /**
      * Creates a new builder containing all old and a new association.
      *
-     * @param name     property name.
-     * @param operator operator for value comparison.
-     * @param value    value.
+     * @param valueRetriever value retriever.
+     * @param operator       operator for value comparison.
+     * @param value          value.
      * @return association builder.
      */
-    public Associations and(@Nonnull String name, @Nonnull String operator, @Nonnull Object value) {
+    public AssociationsUtils and(@Nonnull ValueRetriever valueRetriever,
+                                 @Nonnull String operator,
+                                 @Nonnull Object value) {
         var newValues = new HashSet<>(this.values);
-        newValues.add(create(name, operator, value));
-        return new Associations(newValues);
+        newValues.add(create(valueRetriever, operator, value));
+        return new AssociationsUtils(newValues);
     }
 
     @Nonnull
     @Override
     public Predicate<EventMessage> build(@Nonnull Converter converter) {
-        return (eventMessage) -> {
-            var payload = eventMessage.payloadAs(new TypeReference<Map<String, Object>>() {
-            }, converter);
-            return this.values.stream().allMatch(av -> av.asPayloadPredicate().test(payload));
-        };
+        return (eventMessage) -> this.values.stream().allMatch(av ->
+                                                                       av.asEventMessagePredicate(converter)
+                                                                         .test(eventMessage));
     }
 
     /**
-     * Creates an association using value equality for comparison.
+     * Creates an association using operator for comparison.
      *
-     * @param associationKey   property name.
+     * @param valueRetriever   retriever of value from the event message.
      * @param operator         operator for value comparison.
      * @param associationValue value.
      * @return association value.
      */
     private AssociationValue create(
-            @Nonnull String associationKey,
+            @Nonnull ValueRetriever valueRetriever,
             @Nonnull String operator,
             @Nonnull Object associationValue
     ) {
-        Objects.requireNonNull(associationKey, "Association key is mandatory");
+        Objects.requireNonNull(valueRetriever, "Value retriever is mandatory");
         Objects.requireNonNull(operator, "Operator is mandatory");
         Objects.requireNonNull(associationValue, "Association value is mandatory");
-        return new AssociationValue(associationKey, registry.get(operator), associationValue);
+        return new AssociationValue(
+                valueRetriever,
+                registry.get(operator),
+                () -> associationValue
+        );
     }
 
     /**
@@ -151,13 +182,16 @@ public class Associations implements PredicateBuilder {
                               if (foundOperators.size() == 1) {
                                   var op = foundOperators.getFirst();
                                   var split = conditionString.split(op);
-                                  if (split.length != 2) {
+                                  if (split.length != 2 || split[0].isBlank() || split[1].isBlank()) {
                                       throw BadAssociationFormatException.wrongFormat(
                                               op,
                                               conditionString
                                       );
                                   }
-                                  return new AssociationValue(split[0], registry.get(op), split[1]);
+                                  return new AssociationValue(
+                                          new PayloadPropertyValueRetriever(split[0]),
+                                          registry.get(op),
+                                          () -> split[1]);
                               } else {
                                   throw BadAssociationFormatException.unsupportedOperator(
                                           operators,

@@ -26,7 +26,7 @@ import io.axoniq.workflow.runtime.api.annotation.OnFailure;
 import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.engine.association.Associations;
+import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -177,7 +177,7 @@ public class AutoDetectionUtils {
             var associationValues = (String[]) attributes.get(ATTR_START_ON_CONDITIONS);
             return EventConditions.fromQualifiedName(
                     new QualifiedName((String) attributes.get(ATTR_START_ON_EVENT)),
-                    Associations.parse(opRegistry, associationValues).build(c)
+                    AssociationsUtils.parse(opRegistry, associationValues).build(c)
             );
         };
     }

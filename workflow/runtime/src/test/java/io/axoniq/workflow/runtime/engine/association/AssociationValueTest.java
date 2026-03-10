@@ -17,9 +17,19 @@
  */
 package io.axoniq.workflow.runtime.engine.association;
 
-import org.junit.jupiter.api.*;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests the {@link AssociationValue}.
@@ -29,20 +39,68 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class AssociationValueTest {
 
-    @Test
-    void applyEqualsComparison() {
-        EqualsComparison equalsComparison = new EqualsComparison();
-        AssociationValue associationValue = new AssociationValue("key", equalsComparison, "expected");
+    private final ValueRetriever retriever = Mockito.mock(ValueRetriever.class);
+    private final ValueComparisonOperator operator = new EqualsComparison();
+    private final Converter converter = Mockito.mock(Converter.class);
+    private final EventMessage eventMessage = Mockito.mock(EventMessage.class);
 
-        assertTrue(associationValue.apply("expected"));
-        assertFalse(associationValue.apply("actual"));
-        assertFalse(associationValue.apply(null));
+    @BeforeEach
+    void setUp() {
+        reset(retriever, converter, eventMessage);
     }
 
     @Test
-    void applyEqualsComparisonWithNull() {
-        EqualsComparison equalsComparison = new EqualsComparison();
-        AssociationValue associationValue = new AssociationValue("key", equalsComparison, "something");
-        assertFalse(associationValue.apply(null));
+    void shouldMatchWhenValueIsEqual() {
+        String expectedValue = "123";
+        AssociationValue associationValue = new AssociationValue(retriever, operator, () -> expectedValue);
+
+        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("123");
+
+        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+
+        assertTrue(predicate.test(eventMessage));
+        verify(retriever).apply(eventMessage, converter);
+    }
+
+    @Test
+    void shouldNotMatchWhenValueIsDifferent() {
+        String expectedValue = "123";
+        AssociationValue associationValue = new AssociationValue(retriever, operator, () -> expectedValue);
+
+        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("456");
+
+        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+
+        assertFalse(predicate.test(eventMessage));
+    }
+
+    @Test
+    void shouldMatchWhenBothAreNull() {
+        AssociationValue associationValue = new AssociationValue(retriever, operator, () -> null);
+
+        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn(null);
+
+        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+
+        assertTrue(predicate.test(eventMessage));
+    }
+
+    @Test
+    void shouldEvaluateSupplierOnEachCall() {
+        final String[] valueHolder = {"first"};
+        Supplier<Object> supplier = () -> valueHolder[0];
+
+        AssociationValue associationValue = new AssociationValue(retriever, operator, supplier);
+        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("first");
+
+        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+
+        assertTrue(predicate.test(eventMessage), "Should match 'first'");
+
+        valueHolder[0] = "second";
+        assertFalse(predicate.test(eventMessage), "Should not match 'first' anymore");
+
+        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("second");
+        assertTrue(predicate.test(eventMessage), "Should match 'second'");
     }
 }

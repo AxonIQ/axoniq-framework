@@ -18,42 +18,36 @@
 package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
-import java.util.Map;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Describes association between an event and the workflow instance.
  *
- * @param associationKey   represents the property name of the event (payload).
- * @param operator         comparison operator.
- * @param associationValue value
+ * @param associationValueRetriever retrieves the value from the event.
+ * @param operator                  comparison operator.
+ * @param associationValueSupplier  value supplier used for comparison.
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 public record AssociationValue(
-        @Nonnull String associationKey,
+        @Nonnull ValueRetriever associationValueRetriever,
         @Nonnull ValueComparisonOperator operator,
-        @Nonnull Object associationValue
+        @Nonnull Supplier<Object> associationValueSupplier
 ) {
 
     /**
-     * Applies the comparison operator to the given {@code actualValue} and the {@link #associationValue()}.
+     * Returns a predicate on a message.
      *
-     * @param actualValue value to compare
-     * @return {@code true} if the comparison matches, {@code false} otherwise
+     * @return predicate to be applied on the message using the association value retriever and comparing the value
+     * using the specified operator.
      */
-    public boolean apply(Object actualValue) {
-        return operator.apply(actualValue, associationValue);
-    }
-
-    /**
-     * Returns a predicate on a payload map.
-     *
-     * @return predicate to be applied on payload using the association key as a key in the map and comparing the
-     * payload value using the specified operator.
-     */
-    public Predicate<Map<String, Object>> asPayloadPredicate() {
-        return map -> map.containsKey(associationKey) && apply(map.get(associationKey));
+    public Predicate<EventMessage> asEventMessagePredicate(@Nonnull Converter converter) {
+        return eventMessage ->
+                operator.apply(associationValueSupplier.get(),
+                               associationValueRetriever.apply(eventMessage, converter));
     }
 }

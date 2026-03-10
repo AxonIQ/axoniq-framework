@@ -26,8 +26,9 @@ import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.association.Associations;
+import io.axoniq.workflow.runtime.engine.association.EqualsComparison;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
+import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
@@ -60,6 +61,17 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     private Duration defaultTimeout;
 
+    /**
+     * Creates an equals matcher for association values.
+     *
+     * @param value value to match inside the event.
+     * @return equals value matcher.
+     */
+    public static AssociationsUtils.VariableMatcher equalsTo(Object value) {
+        return new AssociationsUtils.VariableMatcher(EqualsComparison.OPERATOR, value);
+    }
+
+
     public SimpleWorkflowContext(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
@@ -85,13 +97,14 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         ));
     }
 
-    public <T> T awaitEvent(String stepName, Class<T> eventType, Associations associations, Duration timeout) {
+    public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
+                            Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
                         super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
                              .qualifiedName(),
-                        e -> associations.build(super.processingContext()).test(e)
+                        e -> associationsUtils.build(super.processingContext()).test(e)
                 ),
                 timeout,
                 TypeReference.fromType(eventType),

@@ -30,6 +30,11 @@ package io.axoniq.workflow.runtime.engine.association;
  */
 public class EqualsComparison implements ValueComparisonOperator {
 
+    /**
+     * String representation of the operator.
+     */
+    public static final String OPERATOR = "=";
+
     @Override
     public Boolean apply(Object o, Object o2) {
         if (o == null) {
@@ -40,6 +45,6 @@ public class EqualsComparison implements ValueComparisonOperator {
 
     @Override
     public String name() {
-        return "=";
+        return OPERATOR;
     }
 }
