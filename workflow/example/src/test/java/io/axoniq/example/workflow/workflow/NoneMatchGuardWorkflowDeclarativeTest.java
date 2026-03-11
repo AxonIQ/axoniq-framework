@@ -42,7 +42,7 @@ import static org.awaitility.Awaitility.await;
 /**
  * Integration test for {@link NoneMatchGuardWorkflow} — verifies that
  * {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics
- * short-circuit on the first failure and cancel the remaining slow step.
+ * short-circuit on the first failure.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -67,7 +67,7 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
     }
 
     @Test
-    void failingStepViolatesGuardAndSlowStepIsCancelled() {
+    void failingStepViolatesGuard() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new RegistrationReceivedEvent("user-guard-1", "guard@test.com", "vip"))
         ));
@@ -95,7 +95,7 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
                                                      .map(WorkflowExecution::workflowContext).toList()) {
             assertThat(context.workflowStatus().isTerminal()).isTrue();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            // Both steps should be in history: failingStep (failed) and slowStep (cancelled by guard)
+            // Both steps should be in history: failingStep (failed) and slowStep
             assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("failingStep", "slowStep");
         }
     }

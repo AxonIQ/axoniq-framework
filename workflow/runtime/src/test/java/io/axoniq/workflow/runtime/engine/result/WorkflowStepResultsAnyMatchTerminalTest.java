@@ -29,7 +29,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
@@ -150,33 +149,6 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         assertThat(race.isCompleted()).isTrue();
     }
 
-    // --- Losers are cancelled with "Superseded by" reason ---
-
-    @Test
-    void losersCancelledWithSupersededReason() {
-        var r1 = mock(WorkflowStepResult.class);
-        var r2 = mock(WorkflowStepResult.class);
-        var r3 = mock(WorkflowStepResult.class);
-
-        when(r1.getStepName()).thenReturn("stepA");
-        when(r2.getStepName()).thenReturn("stepB");
-        when(r3.getStepName()).thenReturn("stepC");
-
-        when(r1.isCompleted()).thenReturn(false);
-        when(r2.isCompleted()).thenReturn(true);
-        when(r2.success()).thenReturn(true);
-        when(r3.isCompleted()).thenReturn(false);
-
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2, r3);
-
-        // Trigger winner resolution
-        race.success();
-
-        verify(r1).cancel("Superseded by stepB");
-        verify(r3).cancel("Superseded by stepB");
-        verify(r2, never()).cancel(anyString());
-    }
-
     // --- cancel propagates to all results ---
 
     @Test
@@ -268,7 +240,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        // Both completed (race condition: B completed first, but A also completed before cancel)
+        // Both completed (race condition: B completed first)
         when(r1.isCompleted()).thenReturn(true);
         when(r2.isCompleted()).thenReturn(true);
         when(r2.success()).thenReturn(true);
@@ -279,12 +251,10 @@ class WorkflowStepResultsAnyMatchTerminalTest {
 
         var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
-        // Trigger winner resolution
-        race.success();
-
         // stepB should be the winner despite being second in array order
-        verify(r1).cancel("Superseded by stepB");
-        verify(r2, never()).cancel(anyString());
+        race.await();
+
+        verify(r2).await();
     }
 
     @Test

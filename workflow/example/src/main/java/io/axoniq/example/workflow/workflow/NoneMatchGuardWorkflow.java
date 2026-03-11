@@ -32,8 +32,7 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 /**
  * Demonstrates {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics:
  * two steps are launched in parallel — a fast one that fails (~500 ms) and a slow one (5 min).
- * The guard verifies that none of them fail; the fast failure short-circuits and
- * the slow step is automatically cancelled.
+ * The guard verifies that none of them fail; the fast failure short-circuits.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -55,8 +54,7 @@ public class NoneMatchGuardWorkflow {
             return Map.of("result", "slow-done");
         }, Duration.ofMinutes(5), defaults());
 
-        // noneMatch: guard that no step fails — the fast failure short-circuits,
-        // the slow step is cancelled with "Disqualified by failingStep"
+        // noneMatch: guard that no step matches the failure predicate — short-circuits on first match
         var guard = ctx.noneMatch(WorkflowStepResult::failure, failingStep, slowStep);
 
         if (guard.failure()) {

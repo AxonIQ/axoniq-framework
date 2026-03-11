@@ -28,7 +28,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
@@ -98,34 +97,6 @@ class WorkflowStepResultsNoneMatchTest {
         assertThat(result.failure()).isTrue();
         assertThat(result.error()).isPresent();
         assertThat(result.<Object>result()).isEmpty();
-    }
-
-    @Test
-    void noneMatch_shortCircuit_cancelsRemainingWithDisqualifiedReason() {
-        var r1 = mock(WorkflowStepResult.class);
-        var r2 = mock(WorkflowStepResult.class);
-        var r3 = mock(WorkflowStepResult.class);
-
-        when(r1.getStepName()).thenReturn("stepA");
-        when(r2.getStepName()).thenReturn("stepB");
-        when(r3.getStepName()).thenReturn("stepC");
-
-        when(r1.isCompleted()).thenReturn(false);
-        when(r1.failure()).thenReturn(false);
-        when(r2.isCompleted()).thenReturn(true);
-        when(r2.failure()).thenReturn(true);
-        when(r2.success()).thenReturn(false);
-        when(r3.isCompleted()).thenReturn(false);
-        when(r3.failure()).thenReturn(false);
-
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2, r3);
-
-        // Trigger resolution
-        result.success();
-
-        verify(r1).cancel("Disqualified by stepB");
-        verify(r3).cancel("Disqualified by stepB");
-        verify(r2, never()).cancel(anyString());
     }
 
     // --- isCompleted behavior ---
@@ -251,11 +222,7 @@ class WorkflowStepResultsNoneMatchTest {
 
         var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
 
-        // Trigger resolution
-        result.success();
-
-        // stepB should be the violator despite being second in array order
-        verify(r1).cancel("Disqualified by stepB");
-        verify(r2, never()).cancel(anyString());
+        // Trigger resolution — violator should be stepB despite array order
+        assertThat(result.failure()).isTrue();
     }
 }

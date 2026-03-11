@@ -7,6 +7,7 @@ import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -27,33 +28,10 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
      * @param workflowState the workflow state used for event-sourced timestamp resolution
      */
     public NoneMatchCombinatorDelegate(@Nonnull WorkflowState workflowState) {
-        this.workflowState = workflowState;
+        this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
     }
 
-    /**
-     * Guard combinator — ensures <b>no</b> completed result matches the given predicate. Short-circuits on the first
-     * match.
-     *
-     * <h3>Short-circuit (match found)</h3>
-     * <p>When a completed result matches the predicate, it becomes the "violator". The composite
-     * delegates all state queries to the violating result and cancels remaining results with
-     * {@code cancel("Disqualified by <violatorStepName>")}.</p>
-     *
-     * <h3>Success (all complete, none matched)</h3>
-     * <p>When all results complete without any matching the predicate:
-     * {@code isSuccess()=true}, {@code result()=empty}, {@code isFailure()=false}.</p>
-     *
-     * <h3>Completion</h3>
-     * <p>{@code isCompleted()} is non-blocking and returns {@code true} when any completed result
-     * matches the predicate <b>or</b> when all results have reached a terminal state.</p>
-     *
-     * <h3>Cancellation</h3>
-     * <p>{@code cancel()} and {@code cancel(reason)} propagate to <b>all</b> results.</p>
-     *
-     * @param predicate the predicate that no result should match.
-     * @param results   the step results to guard.
-     * @return a composite result which succeeds when no result matches, or short-circuits on the first match.
-     */
+    /** {@inheritDoc} */
     @Nonnull
     public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
                                         WorkflowStepResult... results) {
@@ -78,6 +56,10 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
                     return;
                 }
 
+                awaitAndResolve();
+            }
+
+            private void awaitAndResolve() {
                 try {
                     workflowState.awaitStateChange(s ->
                                                            Arrays.stream(results)
@@ -88,7 +70,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    return;
+                    throw new IllegalStateException("Interrupted while awaiting noneMatch result", e);
                 }
 
                 var matchAfterWait = findFirstViolator();
@@ -101,11 +83,6 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
 
             private void setViolator(WorkflowStepResult v) {
                 violator = v;
-                for (WorkflowStepResult r : results) {
-                    if (r != v) {
-                        r.cancel("Disqualified by " + v.getStepName());
-                    }
-                }
             }
 
             private Optional<WorkflowStepResult> findFirstViolator() {

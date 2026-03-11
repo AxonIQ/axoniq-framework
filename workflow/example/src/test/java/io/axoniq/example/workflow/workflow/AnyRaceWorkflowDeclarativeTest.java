@@ -42,7 +42,7 @@ import static org.awaitility.Awaitility.await;
 /**
  * Integration test for {@link AnyRaceWorkflow} — verifies that
  * {@link io.axoniq.workflow.runtime.api.WorkflowContext#anyMatch} semantics
- * resolve the fast step as winner and cancel the slow step.
+ * resolve the fast step as winner.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -67,7 +67,7 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
     }
 
     @Test
-    void fastStepWinsAndSlowStepIsCancelled() {
+    void fastStepWinsRace() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new RegistrationReceivedEvent("user-race-1", "race@test.com", "vip"))
         ));

@@ -29,14 +29,42 @@ import java.util.function.Predicate;
 public interface AnyMatchCombinator {
 
     /**
-     * Combines the given results into a composite that resolves to the first completed result matching the predicate.
-     * When a match is found, all other (losing) results are automatically cancelled. If no result matches but all
-     * complete, falls back to the first completed result without cancelling any.
+     * Predicate-based combinator — resolves when the <b>first</b> completed result matches the given predicate.
+     * Replaces both the former {@code race()} and {@code anySuccessful()} methods:
+     * <ul>
+     *   <li>{@code anyMatch(state, WorkflowStepResult::isCompleted, ...)} — any terminal wins (old {@code race})</li>
+     *   <li>{@code anyMatch(state, WorkflowStepResult::isSuccess, ...)} — first success wins (old {@code anySuccessful})</li>
+     *   <li>Also works with {@code ::isFailure}, {@code ::isTimeout}, {@code ::isCanceled}</li>
+     * </ul>
      *
-     * @param predicate the predicate to match against completed results
-     * @param results   the competing step results
-     * @return a composite {@link WorkflowStepResult} that resolves to the winning match, or falls back to the first completed result
-     * @see io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate#anyMatch(Predicate, WorkflowStepResult...) for detailed semantics
+     * <h3>Winner selection</h3>
+     * <p>The composite blocks until at least one <em>completed</em> result matches the predicate.
+     * That result becomes the winner and the composite delegates every state query
+     * ({@code isSuccess()}, {@code isFailure()}, {@code result()}, {@code error()}, etc.) to it.</p>
+     *
+     * <h3>Fallback</h3>
+     * <p>When all results complete but none matched the predicate, the first completed result
+     * (by event-sourced timestamp) becomes the consolation winner.</p>
+     *
+     * <h3>Loser handling</h3>
+     * <p>Losers are <b>not</b> automatically cancelled. The caller is responsible for cancelling
+     * remaining results if desired.</p>
+     *
+     * <h3>Event-sourcing replay safety</h3>
+     * <p>When multiple steps match the predicate before cancellation takes effect
+     * (e.g. during event replay), the winner is determined by <b>event-sourced timestamps</b>
+     * via {@link io.axoniq.workflow.runtime.engine.execution.WorkflowState#firstCompletedAmong(java.util.Set)}, not by array order.</p>
+     *
+     * <h3>Completion</h3>
+     * <p>{@code isCompleted()} is non-blocking and returns {@code true} when any completed result
+     * matches the predicate <b>or</b> when all results have reached a terminal state.</p>
+     *
+     * <h3>Cancellation</h3>
+     * <p>{@code cancel()} and {@code cancel(reason)} propagate to <b>all</b> results.</p>
+     *
+     * @param predicate the predicate to match against completed results.
+     * @param results   the competing step results.
+     * @return a composite result that resolves to the first matching result, or fallback to first completed.
      */
     @Nonnull
     WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);

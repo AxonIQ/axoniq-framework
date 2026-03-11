@@ -29,14 +29,32 @@ import java.util.function.Predicate;
 public interface NoneMatchCombinator {
 
     /**
-     * Combines the given results into a composite that succeeds when no result matches, or short-circuits on the first
-     * match. When a violating result is found, all remaining results are cancelled. If all results complete without
-     * a match, the composite succeeds.
+     * Guard combinator — ensures <b>no</b> completed result matches the given predicate. Short-circuits on the first
+     * match.
      *
-     * @param predicate the predicate that no result should match
-     * @param results   the step results to guard
-     * @return a composite {@link WorkflowStepResult} that succeeds when none match, or delegates to the violating result
-     * @see io.axoniq.workflow.runtime.engine.impl.NoneMatchCombinatorDelegate#noneMatch(Predicate, WorkflowStepResult...) for detailed semantics
+     * <h3>Short-circuit (match found)</h3>
+     * <p>When a completed result matches the predicate, it becomes the "violator". The composite
+     * delegates all state queries to the violating result. Remaining results are <b>not</b>
+     * automatically cancelled — the caller is responsible for cancelling if desired.</p>
+     *
+     * <h3>Success (all complete, none matched)</h3>
+     * <p>When all results complete without any matching the predicate:
+     * {@code isSuccess()=true}, {@code result()=empty}, {@code isFailure()=false}.</p>
+     *
+     * <h3>Completion</h3>
+     * <p>{@code isCompleted()} is non-blocking and returns {@code true} when any completed result
+     * matches the predicate <b>or</b> when all results have reached a terminal state.</p>
+     *
+     * <h3>Cancellation</h3>
+     * <p>{@code cancel()} and {@code cancel(reason)} propagate to <b>all</b> results.</p>
+     *
+     * <h3>Summary</h3>
+     * <p>Similar to {@code .all()} but with guard semantics: succeeds when <b>none</b> match, but
+     * short-circuits on first match to avoid cascading errors.</p>
+     *
+     * @param predicate the predicate that no result should match.
+     * @param results   the step results to guard.
+     * @return a composite result which succeeds when no result matches, or short-circuits on the first match.
      */
     @Nonnull
     WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);

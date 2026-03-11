@@ -7,6 +7,7 @@ import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -28,48 +29,10 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
      * @param workflowState the workflow state used for event-sourced timestamp resolution
      */
     public AnyMatchCombinatorDelegate(@Nonnull WorkflowState workflowState) {
-        this.workflowState = workflowState;
+        this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
     }
 
-    /**
-     * Predicate-based combinator — resolves when the <b>first</b> completed result matches the given predicate.
-     * Replaces both the former {@code race()} and {@code anySuccessful()} methods:
-     * <ul>
-     *   <li>{@code anyMatch(state, WorkflowStepResult::isCompleted, ...)} — any terminal wins (old {@code race})</li>
-     *   <li>{@code anyMatch(state, WorkflowStepResult::isSuccess, ...)} — first success wins (old {@code anySuccessful})</li>
-     *   <li>Also works with {@code ::isFailure}, {@code ::isTimeout}, {@code ::isCanceled}</li>
-     * </ul>
-     *
-     * <h3>Winner selection</h3>
-     * <p>The composite blocks until at least one <em>completed</em> result matches the predicate.
-     * That result becomes the winner and the composite delegates every state query
-     * ({@code isSuccess()}, {@code isFailure()}, {@code result()}, {@code error()}, etc.) to it.</p>
-     *
-     * <h3>Fallback</h3>
-     * <p>When all results complete but none matched the predicate, the first completed result
-     * (by event-sourced timestamp) becomes the consolation winner. No loser cancellation occurs
-     * in this fallback path since all results are already terminal.</p>
-     *
-     * <h3>Loser cancellation</h3>
-     * <p>When a predicate match is found, every other result receives
-     * {@code cancel("Superseded by <winnerStepName>")}.</p>
-     *
-     * <h3>Event-sourcing replay safety</h3>
-     * <p>When multiple steps match the predicate before cancellation takes effect
-     * (e.g. during event replay), the winner is determined by <b>event-sourced timestamps</b>
-     * via {@link WorkflowState#firstCompletedAmong(Set)}, not by array order.</p>
-     *
-     * <h3>Completion</h3>
-     * <p>{@code isCompleted()} is non-blocking and returns {@code true} when any completed result
-     * matches the predicate <b>or</b> when all results have reached a terminal state.</p>
-     *
-     * <h3>Cancellation</h3>
-     * <p>{@code cancel()} and {@code cancel(reason)} propagate to <b>all</b> results.</p>
-     *
-     * @param predicate the predicate to match against completed results.
-     * @param results   the competing step results.
-     * @return a composite result that resolves to the first matching result, or fallback to first completed.
-     */
+    /** {@inheritDoc} */
     @Override
     @Nonnull
     public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
@@ -86,7 +49,7 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
 
                 var matching = findFirstMatching(predicate);
                 if (matching.isPresent()) {
-                    return setWinner(matching.get(), true);
+                    return setWinner(matching.get(), false);
                 }
 
                 if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
@@ -96,6 +59,10 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                     }
                 }
 
+                return awaitAndResolve();
+            }
+
+            private WorkflowStepResult awaitAndResolve() {
                 try {
                     workflowState.awaitStateChange(s ->
                                                            Arrays.stream(results)
@@ -106,12 +73,12 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    return winner;
+                    throw new IllegalStateException("Interrupted while awaiting anyMatch result", e);
                 }
 
                 var matchAfterWait = findFirstMatching(predicate);
                 if (matchAfterWait.isPresent()) {
-                    return setWinner(matchAfterWait.get(), true);
+                    return setWinner(matchAfterWait.get(), false);
                 }
                 var fallback = findFirstMatching(WorkflowStepResult::isCompleted);
                 return setWinner(fallback.orElse(results[0]), false);

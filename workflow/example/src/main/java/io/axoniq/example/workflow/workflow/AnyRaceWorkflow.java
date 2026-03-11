@@ -31,8 +31,7 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 
 /**
  * Demonstrates {@link io.axoniq.workflow.runtime.api.WorkflowContext#anyMatch} semantics: two steps are launched in
- * parallel — a fast one (~500 ms) and a slow one (5 min). The first to complete wins; the loser is automatically
- * cancelled.
+ * parallel — a fast one (~500 ms) and a slow one (5 min). The first to complete wins.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -54,7 +53,7 @@ public class AnyRaceWorkflow {
             return Map.of("winner", "slow");
         }, Duration.ofMinutes(5), defaults());
 
-        // anyMatch: first to reach a terminal state wins, loser is cancelled
+        // anyMatch: first to reach a terminal state wins
         var winner = ctx.anyMatch(WorkflowStepResult::isCompleted, fast, slow);
 
         winner.await();
