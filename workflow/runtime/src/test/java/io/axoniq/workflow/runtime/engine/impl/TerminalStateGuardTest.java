@@ -19,11 +19,12 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
+import io.axoniq.workflow.runtime.engine.util.EventMessageUtils;
+import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -57,7 +58,7 @@ class TerminalStateGuardTest {
 
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
-    private SimpleWorkflowState workflowState;
+    private EventSourcedWorkflowState workflowState;
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -99,7 +100,7 @@ class TerminalStateGuardTest {
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
-        workflowState = new SimpleWorkflowState(workflowContext, Map.of());
+        workflowState = new EventSourcedWorkflowState(workflowContext, Map.of());
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -134,7 +135,6 @@ class TerminalStateGuardTest {
 
     @Test
     void completedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        workflowState.setStatus(WorkflowStatus.COMPLETED, null);
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
@@ -148,7 +148,6 @@ class TerminalStateGuardTest {
 
     @Test
     void failedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        workflowState.setStatus(WorkflowStatus.FAILED, null);
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.FAILED);
 
         var future = stepExecutor.testFailed("step-1", new RuntimeException("boom"), eventNameCustomizer);
@@ -162,7 +161,6 @@ class TerminalStateGuardTest {
 
     @Test
     void startedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        workflowState.setStatus(WorkflowStatus.CANCELLED, null);
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.CANCELLED);
 
         var future = stepExecutor.testStarted("step-1", Map.of(), eventNameCustomizer);
@@ -177,7 +175,9 @@ class TerminalStateGuardTest {
     @Test
     void completedReturnsFailedFutureWhenStepIsTerminal() {
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        workflowState.addStep(WorkflowStep.completed("step-1", Map.of(), Instant.now(), processingContext));
+
+        workflowState.onEvent(EventMessageUtils.completedStep(workflowContext, "step-1", Map.of(), eventNameCustomizer),
+                              processingContext);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
 
@@ -190,7 +190,8 @@ class TerminalStateGuardTest {
 
     @Test
     void failedFutureContainsStepNameInMessage() {
-        workflowState.addStep(WorkflowStep.failed("my-step", new RuntimeException("err"), Instant.now(), processingContext));
+        workflowState.onEvent(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(), eventNameCustomizer),
+                              processingContext);
 
         var future = stepExecutor.testCompleted("my-step", Map.of(), eventNameCustomizer);
 

@@ -53,7 +53,6 @@ public class TerminateDelegate implements TerminatePrimitive {
     public TerminateDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull String workflowName,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
             @Nonnull Executor executor
@@ -61,7 +60,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
-        this.workflowName = Objects.requireNonNull(workflowName, "Workflow name is mandatory");
+        this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWork factory is mandatory");
         this.executor = Objects.requireNonNull(executor, "Executor is mandatory");
     }
@@ -126,7 +125,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         ).join(); // FIXME join
 
         try {
-            workflowExecution.awaitStateChange(w -> w.state().workflowStatus() == WorkflowStatus.FAILED);
+            workflowExecution.awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.FAILED);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -148,7 +147,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         ).join(); // FIXME join
 
         try {
-            workflowExecution.awaitStateChange(w -> w.state().workflowStatus() == WorkflowStatus.CANCELLED);
+            workflowExecution.awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.CANCELLED);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

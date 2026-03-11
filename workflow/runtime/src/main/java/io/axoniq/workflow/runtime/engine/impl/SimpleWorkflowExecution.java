@@ -23,10 +23,9 @@ import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
-import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStateProjector;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
@@ -38,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -63,9 +63,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     // State variables
     private final WorkflowState workflowState;
+    // Attributes
+    private final String workflowId;
+    private final String workflowName;
+    private final WorkflowConfiguration<?> workflowConfiguration;
+
+    // Execution
+    private final WorkflowContextDelegation contextDelegate;
 
     // Runtime
-    private final WorkflowContextDelegation contextDelegate;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
@@ -87,16 +93,23 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                    @Nonnull WorkflowConfiguration<?> workflowConfiguration,
                                    @Nonnull WorkflowContext workflowContext
     ) {
+        this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
+        this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
+                                                            "Workflow configuration must not be null");
+        var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
+                                                    "Workflow name must not be null");
+        this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
+
+
         this.contextDelegate = new WorkflowContextDelegation(
-                workflowId,
                 initial,
                 workflowConfiguration,
                 workflowContext,
                 () -> this,
                 processingContext
         );
-        this.workflowState = new SimpleWorkflowState(this.contextDelegate.typepWorkflowContext(),
-                                                     workflowConfiguration.workflowStatusChangeListeners());
+        this.workflowState = new EventSourcedWorkflowState(this.contextDelegate.typepWorkflowContext(),
+                                                           workflowConfiguration.workflowStatusChangeListeners());
     }
 
 
@@ -114,8 +127,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         this.processingContext(),
                         pc -> {
 
-                            var workflowName = this.contextDelegate.workflowName();
-                            var eventNameCustomizer = this.contextDelegate.workflowConfiguration().eventNameCustomizer();
+                            var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
                             if (this.state().workflowStatus().isTerminal()) {
                                 logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
                                              this.state().workflowStatus());
@@ -134,7 +146,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                              this.workflowContext().workflowPayload(),
                                              Thread.currentThread());
 
-                                this.contextDelegate.workflowConfiguration().workflowDefinition()
+                                this.workflowConfiguration.workflowDefinition()
                                                     .accept(this.contextDelegate.typepWorkflowContext());
                                 logger.trace("Workflow executed. Resulting workflow payload {}.",
                                              this.workflowContext().workflowPayload());
@@ -182,7 +194,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 ).thenApply(wc -> {
                     try {
                         // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
-                        awaitStateChange(s -> s.state().workflowStatus().isTerminal());
+                        awaitStateChange(s -> s.workflowStatus().isTerminal());
                     } catch (Exception te) {
                         logger.error("Error waiting for workflow instance termination", te);
                     }
@@ -193,17 +205,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void awaitStateChange(
-            @Nonnull Predicate<WorkflowExecution> predicate
+            @Nonnull Predicate<WorkflowState> predicate
     ) throws InterruptedException {
         do {
             taskQueue.take().accept(this);
-        } while (!predicate.test(this));
+        } while (!predicate.test(this.state()));
     }
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
-        appendTask(i -> WorkflowStateProjector.applyStateChange(eventMessage, processingContext, state()));
+        appendTask(i -> state().onEvent(eventMessage, processingContext));
     }
 
     @Override
@@ -217,17 +229,16 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
+    public void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
         boolean cancelled = runningSteps.cancelWithCause(stepName, cause);
         if (cancelled) {
             try {
-                awaitStateChange(s -> s.state().containsStep(stepName)
-                        && s.state().getStep(stepName).status().isTerminal());
+                awaitStateChange(s -> s.containsStep(stepName)
+                        && s.getStep(stepName).status().isTerminal());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
-        return cancelled;
     }
 
     @Override
@@ -239,8 +250,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             try {
                 awaitStateChange(s -> cancelledSteps
                         .stream()
-                        .allMatch(stepName -> s.state().containsStep(stepName)
-                                && s.state().getStep(stepName).status().isTerminal()
+                        .allMatch(stepName -> s.containsStep(stepName)
+                                && s.getStep(stepName).status().isTerminal()
                         )
                 );
             } catch (InterruptedException e) {
@@ -313,6 +324,24 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Nonnull
     public WorkflowContext workflowContext() {
         return this.contextDelegate;
+    }
+
+    @Nonnull
+    @Override
+    public String workflowName() {
+        return this.workflowName;
+    }
+
+    @Nonnull
+    @Override
+    public String workflowId() {
+        return this.workflowId;
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowConfiguration<?> workflowConfiguration() {
+        return this.workflowConfiguration;
     }
 
     @Override

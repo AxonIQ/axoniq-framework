@@ -62,7 +62,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
                                                                              WorkflowModule
                                                                                      .usingContext(dslType)
                                                                                      .workflowContextFactory(builder)
-                                                                                     .workflowStateFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
+                                                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
                                                                                      .definitions(
                                                                                              getDeclaredDefinitions()
                                                                                      )

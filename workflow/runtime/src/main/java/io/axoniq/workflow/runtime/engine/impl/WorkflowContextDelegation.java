@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -57,12 +58,6 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
  */
 public class WorkflowContextDelegation implements WorkflowContext {
 
-    // Attributes
-    private final String workflowId;
-    private final WorkflowConfiguration<?> workflowConfiguration;
-    private final String workflowName;
-
-
     private Map<String, Object> payload; // TODO -> move to WorkflowState!
 
     // Primitive implementations
@@ -82,8 +77,15 @@ public class WorkflowContextDelegation implements WorkflowContext {
     private final Executor executor;
 
 
+    /**
+     * Creates the context delegation.
+     *
+     * @param initial                   initial payload of the workflow instance.
+     * @param workflowContext           workflow context created by the factory.
+     * @param workflowExecutionSupplier workflow execution supplier.
+     * @param processingContext         processing context.
+     */
     public WorkflowContextDelegation(
-            @Nonnull String workflowId,
             @Nonnull Map<String, Object> initial,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration,
             @Nonnull WorkflowContext workflowContext,
@@ -91,17 +93,10 @@ public class WorkflowContextDelegation implements WorkflowContext {
             @Nonnull ProcessingContext processingContext
     ) {
         this.payload = Objects.requireNonNull(initial, "Payload must not be null");
-
-        this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
-        this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
-                                                            "Workflow configuration must not be null");
         this.workflowExecutionSupplier = Objects.requireNonNull(workflowExecutionSupplier,
                                                                 "Workflow execution supplier must not be null");
-        var stepParent = workflowConfiguration.eventNameCustomizer().forStepInheritance();
 
-        var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
-                                                    "Workflow name must not be null");
-        this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
+        var stepParent = workflowConfiguration.eventNameCustomizer().forStepInheritance();
 
         this.processingContext = Objects.requireNonNull(processingContext, "Processing context must not be null");
         this.workflowContext = workflowContext;
@@ -131,7 +126,6 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    executor);
         this.terminateDelegate = new TerminateDelegate(workflowContext,
                                                        workflowExecutionSupplier.get(),
-                                                       this.workflowName,
                                                        unitOfWorkFactory,
                                                        eventSink,
                                                        executor);
@@ -140,7 +134,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     @Override
     public String workflowId() {
-        return workflowId;
+        return workflowExecutionSupplier.get().workflowId();
     }
 
     @Nonnull
@@ -174,18 +168,10 @@ public class WorkflowContextDelegation implements WorkflowContext {
         return this.processingContext;
     }
 
-    public WorkflowConfiguration<?> workflowConfiguration() {
-        return this.workflowConfiguration;
-    }
-
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-        descriptor.describeProperty("workflowId", workflowId);
-        descriptor.describeProperty("workflowName", workflowName);
-    }
-
-    public String workflowName() {
-        return workflowName;
+        descriptor.describeProperty("workflowId", workflowExecutionSupplier.get().workflowId());
+        descriptor.describeProperty("workflowName", workflowExecutionSupplier.get().workflowName());
     }
 
     // delegation
@@ -196,7 +182,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
                                       @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        workflowExecutionSupplier.get().state().guardTerminalState();
+        workflowExecutionSupplier.get().state().throwTerminalCause();
         return executeDelegate.execute(stepName,
                                        local,
                                        action,
@@ -212,7 +198,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                       @Nonnull EventCondition eventCondition,
                                       @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        workflowExecutionSupplier.get().state().guardTerminalState();
+        workflowExecutionSupplier.get().state().throwTerminalCause();
         return waitForDelegate.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
     }
 
@@ -222,12 +208,13 @@ public class WorkflowContextDelegation implements WorkflowContext {
             terminateDelegate.terminate(command);
             return;
         }
-        workflowExecutionSupplier.get().state().guardTerminalState();
+        workflowExecutionSupplier.get().state().throwTerminalCause();
         terminateDelegate.terminate(new TerminatePrimitive.TerminateCommand(
                 command.error(),
                 command.cause(),
-                merge(workflowConfiguration.eventNameCustomizer(), command.eventNameCustomizer()),
-                workflowName,
+                merge(workflowExecutionSupplier.get().workflowConfiguration().eventNameCustomizer(),
+                      command.eventNameCustomizer()),
+                workflowExecutionSupplier.get().workflowName(),
                 null
         ));
     }
@@ -253,12 +240,13 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     /**
-     * Event dispatichin to wait for primitive.
+     * Event dispatching to the "wait for primitive".
      *
      * @param eventMessage        event message to wait for.
      * @param stepName            step name to wait for.
      * @param eventNameCustomizer event name customizer.
      */
+    @Internal
     public void eventReceived(
             @Nonnull EventMessage eventMessage,
             @Nonnull String stepName,

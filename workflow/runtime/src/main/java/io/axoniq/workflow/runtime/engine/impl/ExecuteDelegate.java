@@ -98,8 +98,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                  started(stepName, sanitize(local), eventNameCustomizer)
             );
             try {
-                workflowExecution.awaitStateChange(s -> s.state().containsStep(stepName)
-                        && s.state().getStep(stepName).status() == StepStatus.STARTED);
+                workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
+                        && s.getStep(stepName).status() == StepStatus.STARTED);
             } catch (InterruptedException e) {
                 return WorkflowStepResults.failed(stepName, e);
             }

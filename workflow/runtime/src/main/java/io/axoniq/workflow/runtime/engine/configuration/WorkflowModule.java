@@ -78,13 +78,13 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         interface WorkflowStateFactoryPhase<C extends WorkflowContext> {
 
             /**
-             * Provide a workflow state factory.
+             * Provide a workflow execution factory.
              *
-             * @param workflowStateFactory factory to create a new workflow state from the given context.
+             * @param workflowExecutionFactory factory to create a new workflow execution from the given context.
              * @return builder for workflow definition.
              */
-            WorkflowDefinitionPhase<C> workflowStateFactory(
-                    @Nonnull ComponentBuilder<WorkflowExecutionFactory> workflowStateFactory);
+            WorkflowDefinitionPhase<C> workflowExecutionFactory(
+                    @Nonnull ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory);
         }
     }
 

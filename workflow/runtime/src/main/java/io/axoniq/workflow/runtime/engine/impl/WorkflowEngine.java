@@ -39,7 +39,7 @@ import java.util.Set;
 
 public class WorkflowEngine implements EventHandler {
 
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
@@ -61,18 +61,18 @@ public class WorkflowEngine implements EventHandler {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            var instance = workflowExecutionRepository.findById(workflowId)
+            var execution = workflowExecutionRepository.findById(workflowId)
                                                       .orElseThrow(() -> new IllegalStateException(
                                                               "No workflow found for id: " + workflowId));
-            instance.onEvent(eventMessage, processingContext);
+            execution.onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
-            for (var instance : workflowExecutionRepository.findAll()) {
+            for (var execution : workflowExecutionRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
-                instance.onEvent(eventMessage, processingContext);
+                execution.onEvent(eventMessage, processingContext);
             }
         }
 
@@ -84,9 +84,9 @@ public class WorkflowEngine implements EventHandler {
      */
     public void runWorkflows() {
         logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
-        for (var instance : workflowExecutionRepository.findAll()) {
+        for (var execution : workflowExecutionRepository.findAll()) {
             try {
-                instance.execute();
+                execution.execute();
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }

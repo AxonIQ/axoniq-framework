@@ -19,9 +19,10 @@ package io.axoniq.workflow.runtime.engine.execution;
 
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.Optional;
@@ -52,13 +53,6 @@ public interface WorkflowState extends DescribableComponent {
     WorkflowStep getStep(@Nonnull String stepName);
 
     /**
-     * Adds a step to the workflow execution.
-     *
-     * @param workflowStep step to add.
-     */
-    void addStep(@Nonnull WorkflowStep workflowStep);
-
-    /**
      * Checks if a step with the given name exists in the workflow execution.
      *
      * @param stepName name of the step.
@@ -75,24 +69,17 @@ public interface WorkflowState extends DescribableComponent {
     WorkflowStatus workflowStatus();
 
     /**
-     * Returns the cause of workflow termination if the workflow has been terminated via fail or cancel.
-     *
-     * @return the termination cause, or {@link Optional#empty()} if the workflow has not been terminated.
-     */
-    @Nonnull
-    Optional<Throwable> getTerminationCause();
-
-    /**
-     * Sets state and optional termination cause.
-     *
-     * @param workflowStatus   workflow status to set.
-     * @param terminationCause cause of termination.
-     */
-    void setStatus(@Nonnull WorkflowStatus workflowStatus, @Nullable Throwable terminationCause);
-
-    /**
      * Guards against invoking any primitive when the workflow has already reached a terminal state. Rethrows the
      * original termination cause wrapped in the appropriate exception type.
      */
-    void guardTerminalState();
+    void throwTerminalCause();
+
+    /**
+     * Handles an event message received during workflow execution. This handle is responsible for the modification of
+     * the state.
+     *
+     * @param eventMessage      the event message received.
+     * @param processingContext the processing context for the event.
+     */
+    void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 }

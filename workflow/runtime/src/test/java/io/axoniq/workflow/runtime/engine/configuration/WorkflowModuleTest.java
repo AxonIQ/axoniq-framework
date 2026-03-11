@@ -90,7 +90,7 @@ class WorkflowModuleTest {
 
         var myModule = WorkflowModule.usingContext(TestWorkflowContext.class)
                                      .workflowContextFactory(c -> contextFactory)
-                                     .workflowStateFactory(c -> stateFactory)
+                                     .workflowExecutionFactory(c -> stateFactory)
                                      .definitions(d -> d.declarative(
                                                                 c -> definition
                                                         ).workflowName("name")
@@ -112,7 +112,7 @@ class WorkflowModuleTest {
         WorkflowExecutionFactory stateFactory = mock(WorkflowExecutionFactory.class);
 
         module.workflowContextFactory(c -> contextFactory)
-              .workflowStateFactory(c -> stateFactory)
+              .workflowExecutionFactory(c -> stateFactory)
               .definitions(dsl -> dsl.declarative(c -> definition)
                                      .workflowName("testWorkflow")
                                      .on(c -> startCondition)
@@ -142,7 +142,7 @@ class WorkflowModuleTest {
         WorkflowIdProvider idProvider = mock(WorkflowIdProvider.class);
 
         module.workflowContextFactory(c -> contextFactory)
-              .workflowStateFactory(c -> stateFactory)
+              .workflowExecutionFactory(c -> stateFactory)
               .definitions(dsl -> dsl.declarative(c -> definition)
                                      .workflowName("testWorkflow")
                                      .on(c -> startCondition)
@@ -169,7 +169,7 @@ class WorkflowModuleTest {
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
         module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
-              .workflowStateFactory(c -> mock(WorkflowExecutionFactory.class))
+              .workflowExecutionFactory(c -> mock(WorkflowExecutionFactory.class))
               .definitions(dsl ->
                                    ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
                                            .declarative(c -> definition)
@@ -195,7 +195,7 @@ class WorkflowModuleTest {
         when(messageTypeResolver.resolve(String.class)).thenReturn(Optional.of(new MessageType(startEventName)));
 
         module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
-              .workflowStateFactory(c -> mock(WorkflowExecutionFactory.class))
+              .workflowExecutionFactory(c -> mock(WorkflowExecutionFactory.class))
               .definitions(dsl ->
                                    ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
                                            .autodetected(
@@ -223,7 +223,7 @@ class WorkflowModuleTest {
         WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
 
         module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
-              .workflowStateFactory(c -> mock(WorkflowExecutionFactory.class))
+              .workflowExecutionFactory(c -> mock(WorkflowExecutionFactory.class))
               .definitions(dsl -> ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
                       .declarative(c -> definition)
                       .workflowName("testWorkflow")

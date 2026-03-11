@@ -22,7 +22,7 @@ import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -78,8 +78,9 @@ class TerminateDelegateFailTest {
                     return action.apply(processingContext);
                 });
 
-        when(workflowExecution.state()).thenReturn(new SimpleWorkflowState(workflowContext, Map.of()));
+        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState(workflowContext, Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
@@ -90,7 +91,6 @@ class TerminateDelegateFailTest {
         delegate = new TerminateDelegate(
                 workflowContext,
                 workflowExecution,
-                "test-workflow",
                 unitOfWorkFactory,
                 eventSink,
                 executor
@@ -153,16 +153,15 @@ class TerminateDelegateFailTest {
     @Test
     void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        SimpleWorkflowState state = new SimpleWorkflowState(workflowContext, Map.of(WorkflowStatus.FAILED, listener));
+        EventSourcedWorkflowState state = new EventSourcedWorkflowState(workflowContext, Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
-        doAnswer(invocation -> {
-            state.setStatus(WorkflowStatus.FAILED, null);
-            return null;
-        }).when(workflowExecution).awaitStateChange(any(Predicate.class));
 
+        var cause = new RuntimeException("boom");
         assertThatThrownBy(() -> delegate.terminate(
-                new TerminateCommand(true, new RuntimeException("boom"), eventNameCustomizer, "test-workflow", null)))
+                new TerminateCommand(true, cause, eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowFailedException.class);
+
+        state.onEvent(io.axoniq.workflow.runtime.engine.util.EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, eventNameCustomizer), processingContext);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));
     }

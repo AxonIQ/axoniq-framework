@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.execution;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -65,7 +66,7 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param condition condition on workflow execution.
      * @throws InterruptedException if interrupted while waiting.
      */
-    void awaitStateChange(@Nonnull Predicate<WorkflowExecution> condition) throws InterruptedException;
+    void awaitStateChange(@Nonnull Predicate<WorkflowState> condition) throws InterruptedException;
 
     /**
      * Delivers an event to the workflow execution.
@@ -142,9 +143,8 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @param stepName name of the step.
      * @param cause    optional cause of the cancellation.
-     * @return true if the step was found and cancelled, false otherwise.
      */
-    boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
+    void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
     /**
      * Cancel all running steps.
@@ -177,4 +177,28 @@ public interface WorkflowExecution extends DescribableComponent {
     // FIXME check if we can replace this for the Context interface
     @Nonnull
     ProcessingContext processingContext();
+
+    /**
+     * Returns the name of the workflow.
+     *
+     * @return returns the human-readable name of the workflow.
+     */
+    @Nonnull
+    String workflowName();
+
+    /**
+     * Returns the id of the workflow.
+     *
+     * @return unique id of the workflow execution.
+     */
+    @Nonnull
+    String workflowId();
+
+    /**
+     * Returns the configuration of the workflow.
+     *
+     * @return workflow configuration.
+     */
+    @Nonnull
+    WorkflowConfiguration<?> workflowConfiguration();
 }

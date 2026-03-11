@@ -35,8 +35,7 @@ import java.util.function.Supplier;
  * @since 1.0.0
  */
 @Internal
-public class InMemoryWorkflowExecutionRepository implements
-        WorkflowExecutionRepository {
+public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRepository {
 
     private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
 

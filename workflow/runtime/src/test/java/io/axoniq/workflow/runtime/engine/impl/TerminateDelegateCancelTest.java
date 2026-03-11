@@ -23,7 +23,7 @@ import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.execution.SimpleWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -79,8 +79,9 @@ class TerminateDelegateCancelTest {
                     Function<ProcessingContext, CompletableFuture<?>> action = invocation.getArgument(0);
                     return action.apply(processingContext);
                 });
-        when(workflowExecution.state()).thenReturn(new SimpleWorkflowState(workflowContext, Map.of()));
+        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState(workflowContext, Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
@@ -91,7 +92,6 @@ class TerminateDelegateCancelTest {
         delegate = new TerminateDelegate(
                 workflowContext,
                 workflowExecution,
-                "test-workflow",
                 unitOfWorkFactory,
                 eventSink,
                 executor
@@ -155,19 +155,15 @@ class TerminateDelegateCancelTest {
     @Test
     void terminateCancelInvokesCancelledStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        SimpleWorkflowState state = new SimpleWorkflowState(workflowContext, Map.of(WorkflowStatus.CANCELLED, listener));
+        EventSourcedWorkflowState state = new EventSourcedWorkflowState(workflowContext, Map.of(WorkflowStatus.CANCELLED, listener));
         when(workflowExecution.state()).thenReturn(state);
-        doAnswer(invocation -> {
-            state.setStatus(WorkflowStatus.CANCELLED, null);
-            return null;
-        }).when(workflowExecution).awaitStateChange(any(Predicate.class));
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.CANCELLED);
 
         assertThatThrownBy(() -> delegate.terminate(
                 new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        assertThat(workflowContext.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
+        state.onEvent(io.axoniq.workflow.runtime.engine.util.EventMessageUtils.cancelledWorkflow(workflowContext, "test-workflow", null, eventNameCustomizer), processingContext);
+
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
     }
 
