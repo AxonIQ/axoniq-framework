@@ -320,6 +320,22 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
     }
 
     @Test
+    void anyMatch_unmatched_includesNonCompletedResults() {
+        var r1 = WorkflowStepResults.completed("fastStep", "ok");
+        var r2 = mock(WorkflowStepResult.class);
+        when(r2.getStepName()).thenReturn("slowStep");
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("fastStep");
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("slowStep");
+    }
+
+    @Test
     void anyMatch_matched_sortedByTimestamp() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");

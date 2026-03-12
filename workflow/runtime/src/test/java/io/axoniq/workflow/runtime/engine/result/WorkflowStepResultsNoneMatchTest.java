@@ -267,6 +267,50 @@ class WorkflowStepResultsNoneMatchTest {
     }
 
     @Test
+    void noneMatch_unmatched_includesNonCompletedResults() {
+        var r1 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
+        var r2 = mock(WorkflowStepResult.class);
+        when(r2.getStepName()).thenReturn("slowStep");
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.failure()).thenReturn(false);
+
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("failingStep");
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("slowStep");
+    }
+
+    @Test
+    void noneMatch_unmatched_includesNotYetCompletedFailure() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("failingStep1");
+        when(r2.getStepName()).thenReturn("failingStep2");
+
+        // failingStep1 completed and failed — triggers short-circuit
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.failure()).thenReturn(true);
+        // failingStep2 will also fail, but hasn't completed yet at resolution time
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.failure()).thenReturn(true);
+
+        when(workflowState.sortedCompletedAmong(Set.of("failingStep1")))
+                .thenReturn(List.of("failingStep1"));
+
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+
+        // failingStep1 triggered the predicate → matched
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("failingStep1");
+        // failingStep2 not yet completed → unmatched, even though failure()==true
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("failingStep2");
+    }
+
+    @Test
     void noneMatch_categoriesSortedByTimestamp() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");

@@ -267,6 +267,42 @@ class WorkflowStepResultsAllMatchTest {
     }
 
     @Test
+    void allMatch_unmatched_includesNonCompletedResults() {
+        var r1 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
+        var r2 = mock(WorkflowStepResult.class);
+        when(r2.getStepName()).thenReturn("slowStep");
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        // No step succeeded → matched is empty
+        assertThat(result.matched()).isEmpty();
+        // Both the violator and the still-running step are in unmatched
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("failingStep", "slowStep");
+    }
+
+    @Test
+    void allMatch_unmatched_includesViolatorAndRunningStep() {
+        var r1 = WorkflowStepResults.completed("successStep", "ok");
+        var r2 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
+        var r3 = mock(WorkflowStepResult.class);
+        when(r3.getStepName()).thenReturn("slowStep");
+        when(r3.isCompleted()).thenReturn(false);
+        when(r3.success()).thenReturn(false);
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2, r3);
+
+        // successStep completed and matched success → matched
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("successStep");
+        // failingStep (violator) and slowStep (still running) → unmatched
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("failingStep", "slowStep");
+    }
+
+    @Test
     void allMatch_categoriesSortedByEventSourcedTimestamp() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");

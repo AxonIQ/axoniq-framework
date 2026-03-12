@@ -64,11 +64,11 @@ public interface AnyMatchCombinator {
      *
      * <h3>Result categorization</h3>
      * <p>The returned {@link CombinatorWorkflowStepResult} provides {@code matched()} and {@code unmatched()}
-     * to access categorized sub-results. For {@code anyMatch(WorkflowStepResult::success, stepA, stepB)}
-     * where stepA succeeds and stepB fails:</p>
+     * to access categorized sub-results. For {@code anyMatch(WorkflowStepResult::success, fastStep, slowStep)}
+     * where fastStep succeeds and slowStep is still running:</p>
      * <ul>
-     *   <li>{@code matched()}   → [stepA] — results that satisfied {@code success()} (winners)</li>
-     *   <li>{@code unmatched()} → [stepB] — results that did not satisfy {@code success()}</li>
+     *   <li>{@code matched()}   → [fastStep] — results that satisfied {@code success()} (winners)</li>
+     *   <li>{@code unmatched()} → [slowStep] — all other results, including those not yet completed</li>
      * </ul>
      *
      * @param predicate the predicate to match against completed results.

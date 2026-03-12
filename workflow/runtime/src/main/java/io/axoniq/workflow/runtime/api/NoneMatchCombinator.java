@@ -54,11 +54,11 @@ public interface NoneMatchCombinator {
      *
      * <h3>Result categorization</h3>
      * <p>The returned {@link CombinatorWorkflowStepResult} provides {@code matched()} and {@code unmatched()}
-     * to access categorized sub-results. For {@code noneMatch(WorkflowStepResult::failure, stepA, stepB)}
-     * where stepA fails (short-circuits) and stepB succeeded before the violation:</p>
+     * to access categorized sub-results. For {@code noneMatch(WorkflowStepResult::failure, failingStep, slowStep)}
+     * where failingStep fails (short-circuits) and slowStep is still running:</p>
      * <ul>
-     *   <li>{@code matched()}   → [stepA] — results that satisfied {@code failure()} (violators!)</li>
-     *   <li>{@code unmatched()} → [stepB] — results that did not satisfy {@code failure()} (clean)</li>
+     *   <li>{@code matched()}   → [failingStep] — results that satisfied {@code failure()} (violators!)</li>
+     *   <li>{@code unmatched()} → [slowStep]    — all other results, including those not yet completed</li>
      * </ul>
      *
      * @param predicate the predicate that no result should match.

@@ -8,13 +8,10 @@ import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 
 /**
@@ -44,21 +41,21 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
         return new CombinatorWorkflowStepResult() {
 
             private WorkflowStepResult winner;
-            private List<WorkflowStepResult> cachedMatched;
-            private List<WorkflowStepResult> cachedUnmatched;
+            private CombinatorSupport.Categories categories;
 
             private WorkflowStepResult resolveWinner() {
                 if (winner != null) {
                     return winner;
                 }
 
-                var matching = findFirstMatching(predicate);
+                var matching = CombinatorSupport.findFirstByPredicate(results, predicate, workflowState);
                 if (matching.isPresent()) {
                     return setWinner(matching.get(), false);
                 }
 
                 if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
-                    var fallback = findFirstMatching(WorkflowStepResult::isCompleted);
+                    var fallback = CombinatorSupport.findFirstByPredicate(
+                            results, WorkflowStepResult::isCompleted, workflowState);
                     if (fallback.isPresent()) {
                         return setWinner(fallback.get(), false);
                     }
@@ -81,11 +78,12 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                     throw new IllegalStateException("Interrupted while awaiting anyMatch result", e);
                 }
 
-                var matchAfterWait = findFirstMatching(predicate);
+                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results, predicate, workflowState);
                 if (matchAfterWait.isPresent()) {
                     return setWinner(matchAfterWait.get(), false);
                 }
-                var fallback = findFirstMatching(WorkflowStepResult::isCompleted);
+                var fallback = CombinatorSupport.findFirstByPredicate(
+                        results, WorkflowStepResult::isCompleted, workflowState);
                 return setWinner(fallback.orElse(results[0]), false);
             }
 
@@ -101,72 +99,25 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                 return winner;
             }
 
-            private Optional<WorkflowStepResult> findFirstMatching(Predicate<WorkflowStepResult> matchPredicate) {
-                var matchedNames = Arrays.stream(results)
-                                         .filter(WorkflowStepResult::isCompleted)
-                                         .filter(matchPredicate)
-                                         .map(WorkflowStepResult::getStepName)
-                                         .collect(Collectors.toSet());
-                if (matchedNames.isEmpty()) {
-                    return Optional.empty();
+            private CombinatorSupport.Categories categories() {
+                if (categories == null) {
+                    categories = CombinatorSupport.computeCategories(results, predicate, workflowState);
                 }
-                return workflowState.firstCompletedAmong(matchedNames)
-                                    .flatMap(name -> Arrays.stream(results)
-                                                           .filter(r -> r.getStepName().equals(name))
-                                                           .findFirst())
-                                    .or(() -> Arrays.stream(results)
-                                                    .filter(WorkflowStepResult::isCompleted)
-                                                    .filter(matchPredicate)
-                                                    .findFirst());
-            }
-
-            private void computeCategories() {
-                if (cachedMatched != null) {
-                    return;
-                }
-                var completed = Arrays.stream(results)
-                                      .filter(WorkflowStepResult::isCompleted)
-                                      .toList();
-
-                var matchedResults = completed.stream().filter(predicate).toList();
-                var unmatchedResults = completed.stream().filter(predicate.negate()).toList();
-
-                cachedMatched = sortByEventSourcedTimestamp(matchedResults);
-                cachedUnmatched = sortByEventSourcedTimestamp(unmatchedResults);
-            }
-
-            private List<WorkflowStepResult> sortByEventSourcedTimestamp(List<WorkflowStepResult> items) {
-                if (items.isEmpty()) {
-                    return List.of();
-                }
-                var names = items.stream()
-                                 .map(WorkflowStepResult::getStepName)
-                                 .collect(Collectors.toSet());
-                var sortedNames = workflowState.sortedCompletedAmong(names);
-                if (!sortedNames.isEmpty()) {
-                    return Collections.unmodifiableList(
-                            sortedNames.stream()
-                                       .flatMap(name -> items.stream()
-                                                             .filter(r -> r.getStepName().equals(name)))
-                                       .toList());
-                }
-                return Collections.unmodifiableList(items);
+                return categories;
             }
 
             @Override
             @Nonnull
             public List<WorkflowStepResult> matched() {
                 resolveWinner();
-                computeCategories();
-                return cachedMatched;
+                return categories().matched();
             }
 
             @Override
             @Nonnull
             public List<WorkflowStepResult> unmatched() {
                 resolveWinner();
-                computeCategories();
-                return cachedUnmatched;
+                return categories().unmatched();
             }
 
             @Override

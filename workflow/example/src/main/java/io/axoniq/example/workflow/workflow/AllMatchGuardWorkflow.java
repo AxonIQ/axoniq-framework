@@ -54,6 +54,8 @@ public class AllMatchGuardWorkflow {
             throw new RuntimeException("step failed");
         }, Duration.ofSeconds(10), defaults());
 
+
+
         // allMatch: guard that all steps match the success predicate — short-circuits on first non-match
         var guard = ctx.allMatch(WorkflowStepResult::success, successStep, failingStep);
 
@@ -63,6 +65,8 @@ public class AllMatchGuardWorkflow {
                     guard.matched().stream().map(WorkflowStepResult::getStepName).toList());
             logger.info("Violators (unmatched): {}",
                     guard.unmatched().stream().map(WorkflowStepResult::getStepName).toList());
+
+
         }
     }
 }
