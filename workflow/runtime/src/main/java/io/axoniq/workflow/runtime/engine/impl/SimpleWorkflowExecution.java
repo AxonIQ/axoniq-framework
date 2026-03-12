@@ -215,7 +215,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
-        appendTask(i -> state().onEvent(eventMessage, processingContext));
+        appendTask(i -> state().evolve(eventMessage, processingContext));
     }
 
     @Override

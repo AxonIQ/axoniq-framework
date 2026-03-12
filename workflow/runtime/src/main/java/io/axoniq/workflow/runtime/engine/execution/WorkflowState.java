@@ -25,7 +25,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Event sourced state of the workflow execution.
@@ -81,5 +80,5 @@ public interface WorkflowState extends DescribableComponent {
      * @param eventMessage      the event message received.
      * @param processingContext the processing context for the event.
      */
-    void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
+    void evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 }

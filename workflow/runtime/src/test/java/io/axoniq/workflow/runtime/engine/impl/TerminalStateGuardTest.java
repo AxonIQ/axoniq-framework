@@ -23,8 +23,6 @@ import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.EventMessageUtils;
-import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
-import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -34,7 +32,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -176,7 +173,7 @@ class TerminalStateGuardTest {
     void completedReturnsFailedFutureWhenStepIsTerminal() {
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
 
-        workflowState.onEvent(EventMessageUtils.completedStep(workflowContext, "step-1", Map.of(), eventNameCustomizer),
+        workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "step-1", Map.of(), eventNameCustomizer),
                               processingContext);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
@@ -190,7 +187,7 @@ class TerminalStateGuardTest {
 
     @Test
     void failedFutureContainsStepNameInMessage() {
-        workflowState.onEvent(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(), eventNameCustomizer),
+        workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(), eventNameCustomizer),
                               processingContext);
 
         var future = stepExecutor.testCompleted("my-step", Map.of(), eventNameCustomizer);

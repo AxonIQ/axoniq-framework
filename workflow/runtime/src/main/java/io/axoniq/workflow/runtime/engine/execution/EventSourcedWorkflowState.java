@@ -35,13 +35,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 /**
- * Holds the current state of a workflow and modified by the {@link #onEvent} method receiving messages.
+ * Holds the current state of a workflow and modified by the {@link #evolve} method receiving messages.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -101,13 +100,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
         return new ArrayList<>(steps.keySet());
     }
 
-    /**
-     * Applies changes carried by the event message to a given workflow
-     *
-     * @param eventMessage      event message.
-     * @param processingContext processing context opf message delivery.
-     */
-    public void onEvent(
+    @Override
+    public void evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
@@ -226,7 +220,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     /**
-     * Offload the safe usage of listeners from the state implementation.
+     * Offload the safe usage of listeners from the state implementation and makes it safe to operate with.
      *
      * @param listeners       map of status listeners or null.
      * @param workflowContext workflow context or null.
