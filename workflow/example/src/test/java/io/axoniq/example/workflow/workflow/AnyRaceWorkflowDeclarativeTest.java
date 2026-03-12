@@ -76,7 +76,7 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions()).allMatch(h -> h.workflowContext().workflowStatus()
@@ -89,6 +89,8 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         for (WorkflowContext context : workflowEngine.workflowExecutions().stream()
                                                      .map(WorkflowExecution::workflowContext).toList()) {

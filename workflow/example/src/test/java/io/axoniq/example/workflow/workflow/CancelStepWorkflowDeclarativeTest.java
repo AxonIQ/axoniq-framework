@@ -75,7 +75,7 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
                                       assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         );
 
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
 
         await().atMost(30, TimeUnit.SECONDS)
                .untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).allMatch(
@@ -88,6 +88,8 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
             var state = workflowExecution.state();

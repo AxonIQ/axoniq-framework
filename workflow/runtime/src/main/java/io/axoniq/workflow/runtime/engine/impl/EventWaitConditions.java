@@ -102,6 +102,13 @@ public class EventWaitConditions implements DescribableComponent {
         }
     }
 
+    /**
+     * Clears all event wait conditions.
+     */
+    public void clear() {
+        this.waitConditions.clear();
+    }
+
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {

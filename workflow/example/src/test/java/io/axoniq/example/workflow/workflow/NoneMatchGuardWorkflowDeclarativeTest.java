@@ -75,7 +75,7 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions()).allMatch(e -> e.workflowContext().workflowStatus()
@@ -88,6 +88,8 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
             var context = execution.workflowContext();
