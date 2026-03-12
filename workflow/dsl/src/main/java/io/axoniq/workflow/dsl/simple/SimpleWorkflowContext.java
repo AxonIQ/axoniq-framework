@@ -21,10 +21,9 @@ import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
-import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.association.EqualsComparison;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
@@ -44,7 +43,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.all;
 import static io.axoniq.workflow.runtime.api.PayloadReducer.local;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
@@ -151,7 +149,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-        return execute(stepName, payload, action, local(), all(), duration, eventNameCustomizer);
+        return execute(stepName, payload, action, local(), PayloadReducer.all(), duration, eventNameCustomizer);
     }
 
     /**
@@ -171,7 +169,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Map<String, Object> payload,
             @Nonnull PayloadProcessor action
     ) {
-        return execute(stepName, payload, action, local(), all(), defaultTimeout, defaults());
+        return execute(stepName, payload, action, local(), PayloadReducer.all(), defaultTimeout, defaults());
     }
 
 

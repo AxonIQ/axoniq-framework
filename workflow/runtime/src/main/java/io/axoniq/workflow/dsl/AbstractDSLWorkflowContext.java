@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.dsl;
 
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
@@ -37,11 +38,13 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * Base class for DSL implementations.
  * <p>Implementors of DSLs have to provide their version of a {@link WorkflowContext} class and
- * are intended to subclass this class and delegate their calls to the methods available in the {@link WorkflowContext}.
+ * are intended to subclass this class and delegate their calls to the methods available in the
+ * {@link WorkflowContext}.
  * </p>
  *
  * @author Simon Zambrovski
@@ -96,6 +99,27 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
                                 resultMapping,
                                 timeout,
                                 eventNameCustomizer);
+    }
+
+    @Nonnull
+    @Override
+    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                 WorkflowStepResult... results) {
+        return delegate.allMatch(predicate, results);
+    }
+
+    @Nonnull
+    @Override
+    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                 WorkflowStepResult... results) {
+        return delegate.anyMatch(predicate, results);
+    }
+
+    @Nonnull
+    @Override
+    public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  WorkflowStepResult... results) {
+        return delegate.noneMatch(predicate, results);
     }
 
     @Override

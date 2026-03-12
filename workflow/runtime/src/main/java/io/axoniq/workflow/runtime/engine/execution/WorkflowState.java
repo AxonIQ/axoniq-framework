@@ -24,7 +24,10 @@ import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Event sourced state of the workflow execution.
@@ -81,4 +84,35 @@ public interface WorkflowState extends DescribableComponent {
      * @param processingContext the processing context for the event.
      */
     void evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
+
+    /**
+     * Returns the step name that reached a terminal state first among the given candidates, determined by event-sourced
+     * timestamps. This is a safeguard against a race condition during event-sourcing replay: when multiple steps
+     * completed before cancellation took effect, array iteration order would pick an arbitrary winner. The event store
+     * timestamps are the source of truth for ordering and are stable across replays.
+     *
+     * @param stepNames the candidate step names to compare.
+     * @return the step name with the earliest terminal-state timestamp, or empty if none found.
+     */
+    @Nonnull
+    default Optional<String> firstCompletedAmong(@Nonnull Set<String> stepNames) {
+        return stepNames.stream()
+                        .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                        .min(Comparator.comparing(name -> getStep(name).timestamp()));
+    }
+
+    /**
+     * Returns the step names that reached a terminal state among the given candidates, sorted by event-sourced
+     * timestamps (earliest first). This is the plural counterpart of {@link #firstCompletedAmong(Set)}.
+     *
+     * @param stepNames the candidate step names to compare.
+     * @return step names with terminal states, sorted by the earliest timestamp first.
+     */
+    @Nonnull
+    default List<String> sortedCompletedAmong(@Nonnull Set<String> stepNames) {
+        return stepNames.stream()
+                        .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                        .sorted(Comparator.comparing(name -> getStep(name).timestamp()))
+                        .toList();
+    }
 }

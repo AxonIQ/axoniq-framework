@@ -105,7 +105,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 initial,
                 workflowConfiguration,
                 workflowContext,
-                () -> this,
+                this,
                 processingContext
         );
         this.workflowState = new EventSourcedWorkflowState(this.contextDelegate.typepWorkflowContext(),

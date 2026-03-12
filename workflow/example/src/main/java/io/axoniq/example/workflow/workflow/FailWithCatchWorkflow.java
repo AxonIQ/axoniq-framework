@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.example.workflow.declarative;
+package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;

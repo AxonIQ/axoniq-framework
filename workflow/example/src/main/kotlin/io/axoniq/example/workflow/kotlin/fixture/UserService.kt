@@ -17,7 +17,7 @@
  */
 package io.axoniq.example.workflow.kotlin.fixture
 
-import io.axoniq.example.workflow.fixture.Waiter
+import io.axoniq.example.workflow.fixture.SleepUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 import java.time.Duration
@@ -35,7 +35,7 @@ object UserService {
     fun activateUser(pc: ProcessingContext, payload: Map<String, Any?>): Map<String, Any?> {
         val now = Instant.now()
         logger.info { "Activating user with id: ${payload["id"]}" }
-        Waiter.waitWithProgress(1000)
+        SleepUtils.waitWithProgress(1000)
         logger.info { "Activation took ${Duration.between(Instant.now(), now)}." }
         return mapOf()
     }

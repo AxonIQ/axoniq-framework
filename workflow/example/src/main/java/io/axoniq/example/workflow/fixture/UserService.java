@@ -25,7 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.example.workflow.fixture.Waiter.waitWithProgress;
+import static io.axoniq.example.workflow.fixture.SleepUtils.waitWithProgress;
 
 public class UserService {
 

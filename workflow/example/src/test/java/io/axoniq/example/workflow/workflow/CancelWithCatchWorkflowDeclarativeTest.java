@@ -55,7 +55,7 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
 
     @Override
     protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new io.axoniq.example.workflow.declarative.CancelWithCatchWorkflow();
+        var workflow = new CancelWithCatchWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
                 .workflowName("CancelWithCatch workflow in Java")

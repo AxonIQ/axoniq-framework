@@ -30,39 +30,35 @@ import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
+ * Demonstrates {@link io.axoniq.workflow.runtime.api.WorkflowContext#anyMatch} semantics: two steps are launched in
+ * parallel — a fast one (~500 ms) and a slow one (5 min). The first to complete wins.
+ *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public class FailWorkflow {
+public class AnyRaceWorkflow {
 
-    private static final Logger logger = LoggerFactory.getLogger(FailWorkflow.class);
+    private static final Logger logger = LoggerFactory.getLogger(AnyRaceWorkflow.class);
 
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
-        logger.info("Fail workflow started for {}", ctx.workflowPayload());
+        logger.info("anyMatch() workflow started for {}", ctx.workflowPayload());
 
-        // Launch 3 long-running steps (non-blocking, each simulates 5 min work)
-        Duration fiveMin = Duration.ofMinutes(5);
-        long fiveMinMs = fiveMin.toMillis();
-        var r1 = ctx.execute("stepA", Map.of(), (c, p) -> {
-            sleepQuietly(fiveMinMs);
-            return Map.of();
-        }, fiveMin, defaults());
-        var r2 = ctx.execute("stepB", Map.of(), (c, p) -> {
-            sleepQuietly(fiveMinMs);
-            return Map.of();
-        }, fiveMin, defaults());
-        var r3 = ctx.execute("stepC", Map.of(), (c, p) -> {
-            sleepQuietly(fiveMinMs);
-            return Map.of();
-        }, fiveMin, defaults());
+        var fast = ctx.execute("fastStep", Map.of(), (c, p) -> {
+            sleepQuietly(500);
+            return Map.of("winner", "fast");
+        }, Duration.ofSeconds(10), defaults());
 
-        // Combine results but don't block on them
-        ctx.allMatch(WorkflowStepResult::isCompleted, r1, r2, r3);
+        var slow = ctx.execute("slowStep", Map.of(), (c, p) -> {
+            sleepQuietly(Duration.ofMinutes(5));
+            return Map.of("winner", "slow");
+        }, Duration.ofMinutes(5), defaults());
 
-        // Wait 5 seconds then fail
-        sleepQuietly(5_000);
-        logger.info("Failing workflow after 5 seconds");
-        ctx.fail(new RuntimeException("Simulated failure"));
+        // anyMatch: first to reach a terminal state wins
+        var winner = ctx.anyMatch(WorkflowStepResult::isCompleted, fast, slow);
+
+        winner.await();
+        logger.info("Race won by: {}", winner.getStepName());
+        logger.info("All finishers: {}",
+                winner.matched().stream().map(WorkflowStepResult::getStepName).toList());
     }
-
 }

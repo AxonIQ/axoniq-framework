@@ -18,6 +18,7 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
+import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
@@ -54,17 +56,12 @@ public class CancelWorkflow {
             return Map.of();
         }, fiveMin, defaults());
 
+        // Combine results but don't block on them
+        ctx.allMatch(WorkflowStepResult::isCompleted, r1, r2, r3);
+
         // Wait 5 seconds then cancel
         sleepQuietly(5_000);
         logger.info("Cancelling workflow after 5 seconds");
         ctx.cancel("I dont want it anymore");
-    }
-
-    private static void sleepQuietly(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }

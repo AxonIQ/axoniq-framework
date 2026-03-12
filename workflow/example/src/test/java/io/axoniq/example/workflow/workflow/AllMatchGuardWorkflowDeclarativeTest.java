@@ -20,14 +20,12 @@ package io.axoniq.example.workflow.workflow;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -41,35 +39,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that no further steps can be executed after a workflow has been failed, even if the user code catches the
- * exception.
+ * Integration test for {@link AllMatchGuardWorkflow} — verifies that
+ * {@link io.axoniq.workflow.runtime.api.WorkflowContext#allMatch} semantics short-circuit on the first non-match.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+class AllMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
-    public FailWithCatchWorkflowDeclarativeTest() {
+    public AllMatchGuardWorkflowDeclarativeTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());
     }
 
     @Override
     protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new FailWithCatchWorkflow();
+        var workflow = new AllMatchGuardWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
-                .workflowName("FailWithCatch workflow in Java")
+                .workflowName("AllMatch guard workflow")
                 .on(EventConditions.fromType(RegistrationReceivedEvent.class))
                 .customized((c, w) -> w
-                        .eventNameCustomizer(namespace("io.axoniq.dsl.failcatch").workflowBaseName("Workflow"))
-                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "failcatch-" + id))
+                        .eventNameCustomizer(namespace("io.axoniq.dsl.allmatch").workflowBaseName("Workflow"))
+                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "guard-all-" + id))
                 );
     }
 
     @Test
-    void noFurtherStepsAfterFail() {
+    void failingStepViolatesGuard() {
         delayedPublisher.addSchedules(List.of(
-                ofMillis(500, new RegistrationReceivedEvent("user-001", "failcatch@test.com", "active"))
+                ofMillis(500, new RegistrationReceivedEvent("user-guard-all-1", "guard@test.com", "vip"))
         ));
 
         delayedPublisher.start();
@@ -81,8 +79,8 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
         workflowEngine.runWorkflows();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
-                    .allMatch(h -> h.state().workflowStatus().isTerminal());
+            assertThat(workflowEngine.workflowExecutions()).allMatch(e -> e.workflowContext().workflowStatus()
+                                                                           .isTerminal());
         });
 
         // Wait for async cleanup to settle
@@ -92,33 +90,12 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
-            var context = execution.workflowContext();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
-            assertThat(context.workflowStepNames()).contains("stepA");
-            assertThat(context.workflowStepNames()).doesNotContain("stepAfterFail");
+        for (WorkflowContext context : workflowEngine.workflowExecutions().stream()
+                                                     .map(WorkflowExecution::workflowContext).toList()) {
+            assertThat(context.workflowStatus().isTerminal()).isTrue();
+            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            // Both steps should be in history
+            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("successStep", "failingStep");
         }
-
-        // Verify no events were published after the workflow terminal event
-        var events = PrettyPrintingRecordingEventStore.lastInstance().getPublishedEvents().stream()
-                                                      .filter(e -> e.metadata().containsKey("workflowId"))
-                                                      .toList();
-
-        // Find index of the workflow FAILED event
-        int failedIndex = -1;
-        for (int i = 0; i < events.size(); i++) {
-            var wfStatus = MetadataUtils.getWorkflowStatus(events.get(i).metadata());
-            if (wfStatus.isPresent() && wfStatus.get() == WorkflowStatus.FAILED) {
-                failedIndex = i;
-                break;
-            }
-        }
-        assertThat(failedIndex).as("WorkflowFailed event should exist").isGreaterThanOrEqualTo(0);
-
-        // No workflow or step events should appear after the terminal workflow event
-        List<EventMessage> eventsAfterTerminal = events.subList(failedIndex + 1, events.size());
-        assertThat(eventsAfterTerminal)
-                .as("No events should be published after WorkflowFailed")
-                .isEmpty();
     }
 }
