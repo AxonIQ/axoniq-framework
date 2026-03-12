@@ -29,6 +29,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -116,6 +117,22 @@ public interface WorkflowState {
         return stepNames.stream()
                 .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
                 .min(Comparator.comparing(name -> getStep(name).timestamp()));
+    }
+
+    /**
+     * Returns the step names that reached a terminal state among the given candidates,
+     * sorted by event-sourced timestamps (earliest first). This is the plural counterpart
+     * of {@link #firstCompletedAmong(Set)}.
+     *
+     * @param stepNames the candidate step names to compare.
+     * @return step names with terminal states, sorted by earliest timestamp first.
+     */
+    @Nonnull
+    default List<String> sortedCompletedAmong(@Nonnull Set<String> stepNames) {
+        return stepNames.stream()
+                .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                .sorted(Comparator.comparing(name -> getStep(name).timestamp()))
+                .toList();
     }
 
     void registerRunningStep(@Nonnull String stepName, @Nonnull java.util.concurrent.CompletableFuture<?> future);

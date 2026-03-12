@@ -52,11 +52,20 @@ public interface NoneMatchCombinator {
      * <p>Similar to {@code .allMatch()} but with guard semantics: succeeds when <b>none</b> match, but
      * short-circuits on first match to avoid cascading errors.</p>
      *
+     * <h3>Result categorization</h3>
+     * <p>The returned {@link CombinatorWorkflowStepResult} provides {@code matched()} and {@code unmatched()}
+     * to access categorized sub-results. For {@code noneMatch(WorkflowStepResult::failure, stepA, stepB)}
+     * where stepA fails (short-circuits) and stepB succeeded before the violation:</p>
+     * <ul>
+     *   <li>{@code matched()}   → [stepA] — results that satisfied {@code failure()} (violators!)</li>
+     *   <li>{@code unmatched()} → [stepB] — results that did not satisfy {@code failure()} (clean)</li>
+     * </ul>
+     *
      * @param predicate the predicate that no result should match.
      * @param results   the step results to guard.
      * @return a composite result which succeeds when no result matches, or short-circuits on the first match.
      */
     @Nonnull
-    WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
+    CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
 
 }

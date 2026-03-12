@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -96,22 +97,22 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
 
     @Nonnull
     @Override
-    public WorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                       WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  WorkflowStepResult... results) {
         return workflowInstance.allMatch(predicate, results);
     }
 
     @Nonnull
     @Override
-    public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                       WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  WorkflowStepResult... results) {
         return workflowInstance.anyMatch(predicate, results);
     }
 
     @Nonnull
     @Override
-    public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                        WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                   WorkflowStepResult... results) {
         return workflowInstance.noneMatch(predicate, results);
     }
 

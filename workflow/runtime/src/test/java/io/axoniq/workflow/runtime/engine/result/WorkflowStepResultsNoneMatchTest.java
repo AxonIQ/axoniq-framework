@@ -17,12 +17,14 @@
  */
 package io.axoniq.workflow.runtime.engine.result;
 
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.impl.NoneMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -44,6 +46,7 @@ class WorkflowStepResultsNoneMatchTest {
     void setUp() {
         workflowState = mock(WorkflowState.class);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
+        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
     }
 
     // --- All complete without match → success ---
@@ -224,5 +227,57 @@ class WorkflowStepResultsNoneMatchTest {
 
         // Trigger resolution — violator should be stepB despite array order
         assertThat(result.failure()).isTrue();
+    }
+
+    // --- matched() / unmatched() ---
+
+    @Test
+    void noneMatch_matched_returnsViolators() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepA");
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepB");
+    }
+
+    @Test
+    void noneMatch_unmatched_returnsCleanResults() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactlyInAnyOrder("stepA", "stepB");
+        assertThat(result.matched()).isEmpty();
+    }
+
+    @Test
+    void noneMatch_matched_emptyWhenNoneMatched() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.matched()).isEmpty();
+    }
+
+    @Test
+    void noneMatch_categoriesSortedByTimestamp() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        // Event-sourced order: stepB before stepA
+        when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
+                .thenReturn(List.of("stepB", "stepA"));
+
+        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepB", "stepA");
     }
 }

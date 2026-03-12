@@ -62,11 +62,20 @@ public interface AnyMatchCombinator {
      * <h3>Cancellation</h3>
      * <p>{@code cancel()} and {@code cancel(reason)} propagate to <b>all</b> results.</p>
      *
+     * <h3>Result categorization</h3>
+     * <p>The returned {@link CombinatorWorkflowStepResult} provides {@code matched()} and {@code unmatched()}
+     * to access categorized sub-results. For {@code anyMatch(WorkflowStepResult::success, stepA, stepB)}
+     * where stepA succeeds and stepB fails:</p>
+     * <ul>
+     *   <li>{@code matched()}   → [stepA] — results that satisfied {@code success()} (winners)</li>
+     *   <li>{@code unmatched()} → [stepB] — results that did not satisfy {@code success()}</li>
+     * </ul>
+     *
      * @param predicate the predicate to match against completed results.
      * @param results   the competing step results.
      * @return a composite result that resolves to the first matching result, or fallback to first completed.
      */
     @Nonnull
-    WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
+    CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
 
 }

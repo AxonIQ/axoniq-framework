@@ -58,5 +58,7 @@ public class AnyRaceWorkflow {
 
         winner.await();
         logger.info("Race won by: {}", winner.getStepName());
+        logger.info("All finishers: {}",
+                winner.matched().stream().map(WorkflowStepResult::getStepName).toList());
     }
 }

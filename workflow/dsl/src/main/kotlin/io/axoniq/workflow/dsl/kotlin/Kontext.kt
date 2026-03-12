@@ -125,13 +125,13 @@ class Kontext(
     }
 
     fun allMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
-            : WorkflowStepResult = workflowKontext.allMatch(predicate, *results)
+            : CombinatorWorkflowStepResult = workflowKontext.allMatch(predicate, *results)
 
     fun noneMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
-            : WorkflowStepResult = workflowKontext.noneMatch(predicate, *results)
+            : CombinatorWorkflowStepResult = workflowKontext.noneMatch(predicate, *results)
 
     fun anyMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
-            : WorkflowStepResult = workflowKontext.anyMatch(predicate, *results)
+            : CombinatorWorkflowStepResult = workflowKontext.anyMatch(predicate, *results)
 
     fun execute(
         stepName: String,

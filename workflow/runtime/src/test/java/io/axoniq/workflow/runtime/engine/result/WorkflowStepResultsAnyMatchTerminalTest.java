@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.result;
 
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -46,6 +48,7 @@ class WorkflowStepResultsAnyMatchTerminalTest {
     void setUp() {
         workflowState = mock(WorkflowState.class);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
+        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
     }
 
     // --- getStepName ---
@@ -268,5 +271,19 @@ class WorkflowStepResultsAnyMatchTerminalTest {
         assertThat(race.<String>result()).contains("payload-A");
         assertThat(race.<String>result()).contains("payload-A");
         assertThat(race.success()).isTrue();
+    }
+
+    // --- matched() / unmatched() ---
+
+    @Test
+    void anyMatch_terminal_allCompletedGoToMatched() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactlyInAnyOrder("stepA", "stepB");
+        assertThat(result.unmatched()).isEmpty();
     }
 }

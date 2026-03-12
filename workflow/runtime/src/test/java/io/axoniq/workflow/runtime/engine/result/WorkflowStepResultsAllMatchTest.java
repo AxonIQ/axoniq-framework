@@ -17,12 +17,14 @@
  */
 package io.axoniq.workflow.runtime.engine.result;
 
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.impl.AllMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -44,6 +46,7 @@ class WorkflowStepResultsAllMatchTest {
     void setUp() {
         workflowState = mock(WorkflowState.class);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
+        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
     }
 
     // --- All complete and all match → success ---
@@ -224,5 +227,57 @@ class WorkflowStepResultsAllMatchTest {
 
         // Trigger resolution — violator should be stepB despite array order
         assertThat(result.failure()).isTrue();
+    }
+
+    // --- matched() / unmatched() ---
+
+    @Test
+    void allMatch_matched_returnsSuccessfulSteps() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactlyInAnyOrder("stepA", "stepB");
+        assertThat(result.unmatched()).isEmpty();
+    }
+
+    @Test
+    void allMatch_unmatched_returnsViolatorOnShortCircuit() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepA");
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepB");
+    }
+
+    @Test
+    void allMatch_unmatched_emptyWhenAllMatch() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.unmatched()).isEmpty();
+    }
+
+    @Test
+    void allMatch_categoriesSortedByEventSourcedTimestamp() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        // Event-sourced order: stepB before stepA
+        when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
+                .thenReturn(List.of("stepB", "stepA"));
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepB", "stepA");
     }
 }

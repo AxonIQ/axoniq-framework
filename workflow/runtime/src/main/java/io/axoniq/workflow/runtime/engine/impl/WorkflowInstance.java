@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
@@ -383,22 +384,22 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Nonnull
     @Override
-    public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                       WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  WorkflowStepResult... results) {
         return anyCombinatorDelegate.anyMatch(predicate, results);
     }
 
     @Nonnull
     @Override
-    public WorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                        WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                   WorkflowStepResult... results) {
         return noneCombinatorDelegate.noneMatch(predicate, results);
     }
 
     @Nonnull
     @Override
-    public WorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                       WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  WorkflowStepResult... results) {
         return allCombinatorDelegate.allMatch(predicate, results);
     }
 

@@ -1,12 +1,15 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.AnyMatchCombinator;
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -35,12 +38,14 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
     /** {@inheritDoc} */
     @Override
     @Nonnull
-    public WorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                       @Nonnull WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  @Nonnull WorkflowStepResult... results) {
 
-        return new WorkflowStepResult() {
+        return new CombinatorWorkflowStepResult() {
 
             private WorkflowStepResult winner;
+            private List<WorkflowStepResult> cachedMatched;
+            private List<WorkflowStepResult> cachedUnmatched;
 
             private WorkflowStepResult resolveWinner() {
                 if (winner != null) {
@@ -113,6 +118,55 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                                                     .filter(WorkflowStepResult::isCompleted)
                                                     .filter(matchPredicate)
                                                     .findFirst());
+            }
+
+            private void computeCategories() {
+                if (cachedMatched != null) {
+                    return;
+                }
+                var completed = Arrays.stream(results)
+                                      .filter(WorkflowStepResult::isCompleted)
+                                      .toList();
+
+                var matchedResults = completed.stream().filter(predicate).toList();
+                var unmatchedResults = completed.stream().filter(predicate.negate()).toList();
+
+                cachedMatched = sortByEventSourcedTimestamp(matchedResults);
+                cachedUnmatched = sortByEventSourcedTimestamp(unmatchedResults);
+            }
+
+            private List<WorkflowStepResult> sortByEventSourcedTimestamp(List<WorkflowStepResult> items) {
+                if (items.isEmpty()) {
+                    return List.of();
+                }
+                var names = items.stream()
+                                 .map(WorkflowStepResult::getStepName)
+                                 .collect(Collectors.toSet());
+                var sortedNames = workflowState.sortedCompletedAmong(names);
+                if (!sortedNames.isEmpty()) {
+                    return Collections.unmodifiableList(
+                            sortedNames.stream()
+                                       .flatMap(name -> items.stream()
+                                                             .filter(r -> r.getStepName().equals(name)))
+                                       .toList());
+                }
+                return Collections.unmodifiableList(items);
+            }
+
+            @Override
+            @Nonnull
+            public List<WorkflowStepResult> matched() {
+                resolveWinner();
+                computeCategories();
+                return cachedMatched;
+            }
+
+            @Override
+            @Nonnull
+            public List<WorkflowStepResult> unmatched() {
+                resolveWinner();
+                computeCategories();
+                return cachedUnmatched;
             }
 
             @Override

@@ -60,11 +60,20 @@ public interface AllMatchCombinator {
      *   <tr><td>noneMatch</td><td>All complete without a match, or short-circuit on first match</td><td>No (by default)</td></tr>
      * </table>
      *
+     * <h3>Result categorization</h3>
+     * <p>The returned {@link CombinatorWorkflowStepResult} provides {@code matched()} and {@code unmatched()}
+     * to access categorized sub-results. For {@code allMatch(WorkflowStepResult::success, stepA, stepB)}
+     * where stepA succeeded and stepB failed (short-circuits):</p>
+     * <ul>
+     *   <li>{@code matched()}   → [stepA] — results that satisfied {@code success()}</li>
+     *   <li>{@code unmatched()} → [stepB] — results that did not satisfy {@code success()} (violators!)</li>
+     * </ul>
+     *
      * @param predicate the predicate that all results should match.
      * @param results   the step results to guard.
      * @return a composite result which succeeds when all results match, or short-circuits on the first non-match.
      */
     @Nonnull
-    WorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
+    CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
 
 }

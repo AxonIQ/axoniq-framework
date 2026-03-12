@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.result;
 
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -46,6 +48,7 @@ class WorkflowStepResultsAnyMatchTest {
     void setUp() {
         workflowState = mock(WorkflowState.class);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
+        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
     }
 
     // --- anyMatch with failure predicate ---
@@ -162,5 +165,18 @@ class WorkflowStepResultsAnyMatchTest {
         result.await();
 
         verify(r2).await();
+    }
+
+    // --- matched() / unmatched() ---
+
+    @Test
+    void anyMatch_matched_withFailurePredicate() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepA");
     }
 }
