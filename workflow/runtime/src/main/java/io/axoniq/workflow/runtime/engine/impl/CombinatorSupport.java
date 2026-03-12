@@ -94,11 +94,10 @@ final class CombinatorSupport {
                          .collect(Collectors.toSet());
         var sortedNames = workflowState.sortedCompletedAmong(names);
         if (!sortedNames.isEmpty()) {
-            return Collections.unmodifiableList(
-                    sortedNames.stream()
-                               .flatMap(name -> items.stream()
-                                                     .filter(r -> r.getStepName().equals(name)))
-                               .toList());
+            return sortedNames.stream()
+                              .flatMap(name -> items.stream()
+                                                    .filter(r -> r.getStepName().equals(name)))
+                              .toList();
         }
         return Collections.unmodifiableList(items);
     }

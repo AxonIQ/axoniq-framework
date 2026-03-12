@@ -42,9 +42,12 @@ import java.util.List;
  * <h3>How {@code matched()} and {@code unmatched()} apply to each combinator</h3>
  *
  * <h4>{@code anyMatch(WorkflowStepResult::success, stepA, stepB, stepC)}</h4>
- * <p>Predicate: {@code success()}. Suppose stepA succeeded, stepB failed, stepC succeeded.</p>
+ * <p>Predicate: {@code success()}. Suppose stepA succeeded, stepB failed, stepC succeeded.
+ * The combinator resolves on the first success (the winner), but {@code matched()} returns
+ * <b>all</b> completed results that satisfy the predicate at the time of the call.
+ * The winner is always the first element.</p>
  * <ul>
- *   <li>{@code matched()}   → [stepA, stepC] — the successful steps (winners)</li>
+ *   <li>{@code matched()}   → [stepA, stepC] — all completed successes (winner first)</li>
  *   <li>{@code unmatched()} → [stepB]         — the unsuccessful steps</li>
  * </ul>
  *
@@ -62,22 +65,23 @@ import java.util.List;
  *   <li>{@code unmatched()} → [stepB, stepC] — the failed step (violator!) and the still-running step</li>
  * </ul>
  *
- * <h3>Short-circuit and race conditions</h3>
- * <p>{@code matched()} contains only the result(s) that <em>triggered</em> the predicate match.
- * Results in {@code unmatched()} may have any status — including a status that would satisfy the
- * predicate — if they were not the ones that triggered the combinator's resolution.</p>
+ * <h3>Short-circuit and non-completed results</h3>
+ * <p>{@code matched()} and {@code unmatched()} reflect a <b>snapshot</b> of each result's state
+ * at the time they are called — not the final outcome. Categorization is purely based on
+ * {@code isCompleted() && predicate.test()} at that moment.</p>
  *
- * <p>Example: {@code noneMatch(WorkflowStepResult::failure, failingStep1, failingStep2)} where both
- * steps fail, but failingStep1 had the earlier event-sourced timestamp:</p>
- * <ul>
- *   <li>{@code matched()}   → [failingStep1] — triggered the short-circuit</li>
- *   <li>{@code unmatched()} → [failingStep2] — also failed, but was not the trigger.
- *       {@code failingStep2.failure()} still returns {@code true}.</li>
- * </ul>
+ * <p>Because combinators short-circuit, some results may not have completed yet when
+ * {@code matched()}/{@code unmatched()} is called. Those not-yet-completed results always
+ * appear in {@code unmatched()}, even if they would satisfy the predicate once they complete.</p>
  *
- * <p>This is not a bug — the combinator short-circuits on the <em>first</em> match. Subsequent
- * results end up in {@code unmatched()} regardless of their actual status. Callers can always
- * query individual results directly (e.g. {@code r.failure()}, {@code r.isCompleted()}).</p>
+ * <p>Conversely, for {@code anyMatch}, the combinator resolves on the <em>first</em> match,
+ * but other results may complete and satisfy the predicate before {@code matched()} is called.
+ * In that case, {@code matched()} will contain multiple results — not just the winner.
+ * The winner (used for {@code success()}/{@code failure()}/{@code result()} delegation) is
+ * always the first element of {@code matched()}.</p>
+ *
+ * <p>Callers can always query individual results directly
+ * (e.g. {@code r.failure()}, {@code r.isCompleted()}) regardless of which list they are in.</p>
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -85,8 +89,9 @@ import java.util.List;
 public interface CombinatorWorkflowStepResult extends WorkflowStepResult {
 
     /**
-     * Returns sub-results that triggered/satisfied the combinator's predicate.
-     * Only completed results can appear here.
+     * Returns all completed sub-results that satisfy the combinator's predicate at the time of
+     * this call. For {@code anyMatch}, this may include more than just the winner if other results
+     * completed and matched between resolution and this call — the winner is always the first element.
      * <p>Blocks until the combinator has resolved. The returned list is unmodifiable
      * and sorted by event-sourced timestamps (earliest first).</p>
      *
