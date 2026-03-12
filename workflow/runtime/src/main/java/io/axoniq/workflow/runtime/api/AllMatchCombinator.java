@@ -24,6 +24,8 @@ import java.util.function.Predicate;
 /**
  * Guard combinator that succeeds when all completed results match the predicate.
  *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  * @see io.axoniq.workflow.runtime.engine.impl.AllMatchCombinatorDelegate
  */
 public interface AllMatchCombinator {

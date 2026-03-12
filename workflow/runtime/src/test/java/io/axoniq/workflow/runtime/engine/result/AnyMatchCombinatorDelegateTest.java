@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -33,13 +34,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link WorkflowStepResults#anyMatch(WorkflowState, java.util.function.Predicate, WorkflowStepResult...)}
- * with the {@link WorkflowStepResult#success()} predicate (formerly {@code anySuccessful()}).
+ * Tests for {@link AnyMatchCombinatorDelegate#anyMatch(java.util.function.Predicate, WorkflowStepResult...)}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class WorkflowStepResultsAnyMatchSuccessfulTest {
+class AnyMatchCombinatorDelegateTest {
 
     private WorkflowState workflowState;
 
@@ -292,7 +292,7 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
         assertThat(result.success()).isTrue();
     }
 
-    // --- matched() / unmatched() ---
+    // --- matched() / unmatched() with success predicate ---
 
     @Test
     void anyMatch_matched_returnsWinners() {
@@ -348,5 +348,133 @@ class WorkflowStepResultsAnyMatchSuccessfulTest {
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
                 .containsExactly("stepB", "stepA");
+    }
+
+    // --- anyMatch with failure predicate ---
+
+    @Test
+    void anyMatch_FAILED_firstToFailWins() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+        assertThat(result.failure()).isTrue();
+        assertThat(result.error()).isPresent();
+    }
+
+    @Test
+    void anyMatch_FAILED_successIgnoredWhileRunning() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        // stepA succeeded, stepB still running
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.failure()).thenReturn(false);
+        when(r1.success()).thenReturn(true);
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.failure()).thenReturn(false);
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.isCompleted()).isFalse();
+    }
+
+    @Test
+    void anyMatch_FAILED_allSucceedFallsBackToFirstCompleted() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+        // Fallback: first completed wins, which is a success
+        assertThat(result.success()).isTrue();
+        assertThat(result.<String>result()).contains("ok-A");
+    }
+
+    // --- anyMatch with timeout predicate ---
+
+    @Test
+    void anyMatch_TIMED_OUT_firstToTimeoutWins() {
+        var r1 = WorkflowStepResults.timeout("stepA", Duration.ofSeconds(5));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::timeout, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+        assertThat(result.timeout()).isTrue();
+    }
+
+    // --- anyMatch with canceled predicate ---
+
+    @Test
+    void anyMatch_canceled_firstcanceledWins() {
+        var r1 = WorkflowStepResults.canceled("stepA");
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::canceled, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+        assertThat(result.canceled()).isTrue();
+    }
+
+    // --- Step name format with non-success predicate ---
+
+    @Test
+    void anyMatch_stepNameFormat() {
+        var r1 = WorkflowStepResults.completed("stepA", null);
+        var r2 = WorkflowStepResults.completed("stepB", null);
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.getStepName()).isEqualTo("anyMatch(stepA, stepB)");
+    }
+
+    // --- Fallback uses event-sourced timestamp ordering ---
+
+    @Test
+    void anyMatch_fallbackUsesEventTimestampOrdering() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        // Both completed, none failed → fallback
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.failure()).thenReturn(false);
+        when(r1.success()).thenReturn(true);
+        when(r2.isCompleted()).thenReturn(true);
+        when(r2.failure()).thenReturn(false);
+        when(r2.success()).thenReturn(true);
+
+        // Event-sourced ordering says stepB completed first
+        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
+                .thenReturn(Optional.of("stepB"));
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        // The fallback winner should be stepB (event-ordered)
+        result.await();
+
+        verify(r2).await();
+    }
+
+    // --- matched() / unmatched() with failure predicate ---
+
+    @Test
+    void anyMatch_matched_withFailurePredicate() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::failure, r1, r2);
+
+        assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
+                .containsExactly("stepA");
     }
 }

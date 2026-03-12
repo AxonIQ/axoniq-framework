@@ -80,12 +80,12 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
 
     // primitive implementations
-    private final AllMatchCombinatorDelegate allCombinatorDelegate;
-    private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
-    private final NoneMatchCombinatorDelegate noneCombinatorDelegate;
     private final ExecuteDelegate executeDelegate;
     private final WaitForDelegate waitForDelegate;
     private final TerminateDelegate terminateDelegate;
+    private final AllMatchCombinatorDelegate allCombinatorDelegate;
+    private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
+    private final NoneMatchCombinatorDelegate noneCombinatorDelegate;
 
     private final BlockingQueue<Consumer<WorkflowState>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     // State variables

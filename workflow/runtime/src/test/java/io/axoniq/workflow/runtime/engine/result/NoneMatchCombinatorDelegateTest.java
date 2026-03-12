@@ -38,7 +38,7 @@ import static org.mockito.Mockito.*;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class WorkflowStepResultsNoneMatchTest {
+class NoneMatchCombinatorDelegateTest {
 
     private WorkflowState workflowState;
 

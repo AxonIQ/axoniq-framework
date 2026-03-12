@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
-import static io.axoniq.example.workflow.fixture.Waiter.sleepQuietly;
+import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**

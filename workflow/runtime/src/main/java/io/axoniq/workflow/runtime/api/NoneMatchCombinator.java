@@ -24,6 +24,8 @@ import java.util.function.Predicate;
 /**
  * Guard combinator that succeeds when no completed result matches the predicate.
  *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  * @see io.axoniq.workflow.runtime.engine.impl.NoneMatchCombinatorDelegate
  */
 public interface NoneMatchCombinator {

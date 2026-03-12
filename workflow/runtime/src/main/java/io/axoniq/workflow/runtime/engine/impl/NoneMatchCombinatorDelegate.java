@@ -17,6 +17,8 @@ import java.util.function.Predicate;
 /**
  * Default implementation of {@link NoneMatchCombinator}.
  *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  * @see NoneMatchCombinator
  */
 public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
@@ -32,7 +34,6 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
         this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
     }
 
-    /** {@inheritDoc} */
     @Nonnull
     public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
                                                    WorkflowStepResult... results) {

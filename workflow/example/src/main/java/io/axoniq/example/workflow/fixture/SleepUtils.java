@@ -22,9 +22,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 
-public class Waiter {
+public class SleepUtils {
 
-    static Logger logger = LoggerFactory.getLogger(Waiter.class);
+    static Logger logger = LoggerFactory.getLogger(SleepUtils.class);
 
     public static void waitWithProgress(long millis) {
         try {

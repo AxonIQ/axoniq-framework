@@ -17,6 +17,8 @@ import java.util.function.Predicate;
 /**
  * Default implementation of {@link AnyMatchCombinator}.
  *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  * @see AnyMatchCombinator
  */
 public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
@@ -32,7 +34,6 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
         this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
     }
 
-    /** {@inheritDoc} */
     @Override
     @Nonnull
     public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,

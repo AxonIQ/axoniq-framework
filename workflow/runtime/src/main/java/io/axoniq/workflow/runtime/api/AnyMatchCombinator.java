@@ -24,6 +24,8 @@ import java.util.function.Predicate;
 /**
  * Combinator that resolves when the first completed result matches a given predicate.
  *
+ * @author Stefan Dragisic
+ * @since 1.0.0
  * @see io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate
  */
 public interface AnyMatchCombinator {

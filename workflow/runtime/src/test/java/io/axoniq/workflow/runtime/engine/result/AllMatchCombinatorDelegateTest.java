@@ -38,7 +38,7 @@ import static org.mockito.Mockito.*;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-class WorkflowStepResultsAllMatchTest {
+class AllMatchCombinatorDelegateTest {
 
     private WorkflowState workflowState;
 

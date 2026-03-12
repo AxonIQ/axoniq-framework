@@ -22,9 +22,9 @@ import jakarta.annotation.Nonnull;
 import java.util.List;
 
 /**
- * Extended result type returned by all three combinator methods
- * ({@link AnyMatchCombinator#anyMatch}, {@link NoneMatchCombinator#noneMatch},
- * {@link AllMatchCombinator#allMatch}).
+ * Result type that all combinator methods ({@link AnyMatchCombinator#anyMatch},
+ * {@link NoneMatchCombinator#noneMatch}, {@link AllMatchCombinator#allMatch})
+ * are required to return.
  *
  * <p>In addition to the standard {@link WorkflowStepResult} queries ({@code success()},
  * {@code failure()}, {@code result()}, etc.), this interface exposes the categorized
