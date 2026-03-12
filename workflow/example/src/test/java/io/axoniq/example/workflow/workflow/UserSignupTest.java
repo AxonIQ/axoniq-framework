@@ -77,13 +77,15 @@ class UserSignupTest {
                             .eventNameCustomizer(namespace("io.axoniq.dsl.wf.workflow"))
                             .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "signup-" + id))
                             .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
-                                    new WorkflowStatusChangeListener() {
-                                        @Override
-                                        public <C extends WorkflowContext> void onWorkflowStatus(
-                                                @Nonnull WorkflowStatus state, @Nonnull C context) {
-                                            new UserSignupWorkflow().onFinish(state, (SimpleWorkflowContext) context);
-                                        }
-                                    }
+                                                                  new WorkflowStatusChangeListener() {
+                                                                      @Override
+                                                                      public <C extends WorkflowContext> void onWorkflowStatus(
+                                                                              @Nonnull WorkflowStatus state,
+                                                                              @Nonnull C context) {
+                                                                          new UserSignupWorkflow().onFinish(state,
+                                                                                                            (SimpleWorkflowContext) context);
+                                                                      }
+                                                                  }
                             )
                     );
         }
@@ -147,7 +149,7 @@ class UserSignupTest {
 
         // all started
         await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty();
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
         // simulate all-replayed and start workflows
@@ -155,23 +157,26 @@ class UserSignupTest {
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
+            assertThat(workflowEngine.workflowExecutions())
+                    .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
         // Verify that both workflows executed all steps
-        for (WorkflowContext context : workflowEngine.workflowInstances().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
-            assertThat(context.workflowStatus().isTerminal()).isTrue();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(
+        for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
+            var state = workflowExecution.state();
+            assertThat(state.workflowStatus().isTerminal()).isTrue();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder(
                     "createUser",
                     "activateUser",
                     "sendWelcomeEmail",
                     "waitASecond",
                     "waitForMagicToHappen"
             );
-            assertThat(context.workflowPayload().containsKey("magic"));
-            assertThat(context.workflowPayload().containsKey("__createUser"));
+
+            var payload = workflowExecution.workflowContext().workflowPayload();
+            assertThat(payload.containsKey("magic"));
+            assertThat(payload.containsKey("__createUser"));
         }
     }
 }

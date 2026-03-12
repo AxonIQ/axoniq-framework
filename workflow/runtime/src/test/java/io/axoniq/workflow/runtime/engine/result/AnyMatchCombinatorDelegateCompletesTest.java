@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.impl.AnyMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,7 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link WorkflowStepResults#anyMatch(WorkflowState, java.util.function.Predicate, WorkflowStepResult...)}
+ * Tests for {@link AnyMatchCombinatorDelegate#anyMatch(java.util.function.Predicate, WorkflowStepResult...)}
  * with the {@link WorkflowStepResult#isCompleted()} predicate (terminal semantics, formerly {@code race()}).
  *
  * @author Stefan Dragisic
@@ -43,10 +44,13 @@ import static org.mockito.Mockito.*;
 class AnyMatchCombinatorDelegateCompletesTest {
 
     private WorkflowState workflowState;
+    private WorkflowExecution workflowExecution;
 
     @BeforeEach
     void setUp() {
         workflowState = mock(WorkflowState.class);
+        workflowExecution = mock(WorkflowExecution.class);
+        when(workflowExecution.state()).thenReturn(workflowState);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
         when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
     }
@@ -59,7 +63,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var r2 = WorkflowStepResults.completed("stepB", null);
         var r3 = WorkflowStepResults.completed("stepC", null);
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2, r3);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2, r3);
 
         assertThat(race.getStepName()).isEqualTo("anyMatch(stepA, stepB, stepC)");
     }
@@ -71,7 +75,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(race.isCompleted()).isTrue();
         assertThat(race.success()).isTrue();
@@ -82,7 +86,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
     void singleResultBecomesWinnerImmediately() {
         var r1 = WorkflowStepResults.completed("onlyStep", "only-value");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1);
 
         assertThat(race.isCompleted()).isTrue();
         assertThat(race.success()).isTrue();
@@ -97,7 +101,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var r1 = WorkflowStepResults.completed("winner", "value");
         var r2 = WorkflowStepResults.completed("loser", "other");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(race.success()).isTrue();
         assertThat(race.failure()).isFalse();
@@ -112,7 +116,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var failed = WorkflowStepResults.failed("failStep", new RuntimeException("boom"));
         var success = WorkflowStepResults.completed("successStep", "value");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, failed, success);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, failed, success);
 
         assertThat(race.success()).isFalse();
         assertThat(race.failure()).isTrue();
@@ -124,7 +128,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var cancelled = WorkflowStepResults.canceled("cancelStep");
         var success = WorkflowStepResults.completed("successStep", "value");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, cancelled, success);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, cancelled, success);
 
         assertThat(race.success()).isFalse();
         assertThat(race.canceled()).isTrue();
@@ -135,7 +139,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var timedOut = WorkflowStepResults.timeout("timeoutStep", Duration.ofSeconds(5));
         var success = WorkflowStepResults.completed("successStep", "value");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, timedOut, success);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, timedOut, success);
 
         assertThat(race.success()).isFalse();
         assertThat(race.timeout()).isTrue();
@@ -147,7 +151,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
     void awaitDelegatesToWinner() {
         var r1 = WorkflowStepResults.completed("step", "value");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1);
 
         assertThat(race.isCompleted()).isTrue();
     }
@@ -161,7 +165,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         race.cancel();
 
@@ -176,7 +180,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         race.cancel("workflow shutdown");
 
@@ -195,7 +199,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(race.isCompleted()).isFalse();
     }
@@ -209,7 +213,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(race.isCompleted()).isTrue();
     }
@@ -225,12 +229,12 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(r1.isCompleted()).thenReturn(false, false, false, true);
         when(r1.success()).thenReturn(true);
 
-        doAnswer(invocation -> null).when(workflowState).awaitStateChange(any());
+        doAnswer(invocation -> null).when(workflowExecution).awaitStateChange(any());
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1);
 
         assertThat(race.success()).isTrue();
-        verify(workflowState).awaitStateChange(any());
+        verify(workflowExecution).awaitStateChange(any());
     }
 
     // --- Event-sourcing replay: winner determined by event order, not array order ---
@@ -252,7 +256,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         // stepB should be the winner despite being second in array order
         race.await();
@@ -265,7 +269,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var r1 = WorkflowStepResults.completed("stepA", "payload-A");
         var r2 = WorkflowStepResults.completed("stepB", "payload-B");
 
-        var race = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         // Call multiple times — same winner each time
         assertThat(race.<String>result()).contains("payload-A");
@@ -280,7 +284,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = new AnyMatchCombinatorDelegate(workflowState).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
+        var result = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
                 .containsExactlyInAnyOrder("stepA", "stepB");

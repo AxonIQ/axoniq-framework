@@ -24,7 +24,13 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 
-
+/**
+ * Primitive for executing actions within a workflow.
+ *
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
 public interface ExecutePrimitive {
 
     /**
@@ -52,6 +58,13 @@ public interface ExecutePrimitive {
             @Nonnull EventNameCustomizer eventNameCustomizer
     );
 
+    /**
+     * Execute primitive.
+     *
+     * @param command parameters object for the primitive.
+     * @param <T>     type of result.
+     * @return result of the action.
+     */
     @Nonnull
     default <T> T execute(@Nonnull ExecuteCommand<T> command) {
         Objects.requireNonNull(command, "Command is required");
@@ -66,29 +79,75 @@ public interface ExecutePrimitive {
                                 command.eventNameCustomizer()));
     }
 
+    /**
+     * PArameter object for the primitive.
+     *
+     * @param <T> type of result.
+     */
     interface ExecuteCommand<T> {
 
+        /**
+         * Name of the step.
+         *
+         * @return name of the step.
+         */
         @Nonnull
         String stepName();
 
+        /**
+         * Returns local payload passed to the action.
+         *
+         * @return payload.
+         */
         @Nonnull
         Map<String, Object> local();
 
+        /**
+         * Returns action to be executed.
+         *
+         * @return action.
+         */
         @Nonnull
         PayloadProcessor action();
 
+        /**
+         * Returns mapping to be used for the action parameters.
+         *
+         * @return parameter mapping.
+         */
         @Nonnull
         PayloadReducer parameterMapping();
 
+        /**
+         * Returns mapping to be used for the action result.
+         *
+         * @return result mapping.
+         */
         @Nonnull
         PayloadReducer resultMapping();
 
+        /**
+         * Returns timeout of the action.
+         *
+         * @return timeout.
+         */
         @Nonnull
         Duration timeout();
 
+        /**
+         * Returns event name customizer.
+         *
+         * @return event name customizer.
+         */
         @Nonnull
         EventNameCustomizer eventNameCustomizer();
 
+        /**
+         * Returns result of the action.
+         *
+         * @param result result of the action.
+         * @return result.
+         */
         T result(@Nonnull WorkflowStepResult result);
     }
 }

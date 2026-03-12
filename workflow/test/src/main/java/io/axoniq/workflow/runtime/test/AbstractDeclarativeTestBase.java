@@ -21,7 +21,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
@@ -62,7 +62,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
                                                                              WorkflowModule
                                                                                      .usingContext(dslType)
                                                                                      .workflowContextFactory(builder)
-                                                                                     .workflowStateFactory(c -> new DSLAdoptingStateFactory<>(dslType))
+                                                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
                                                                                      .definitions(
                                                                                              getDeclaredDefinitions()
                                                                                      )

@@ -69,13 +69,14 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
         delayedPublisher.start();
 
         await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty();
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
         workflowEngine.runWorkflows();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
+            assertThat(workflowEngine.workflowExecutions())
+                    .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
         // Wait 2 seconds before asserting to let async cleanup settle
@@ -85,11 +86,11 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowExecution execution : workflowEngine.workflowInstances()) {
-            var context = execution.workflowContext();
-            assertThat(context.workflowStatus().isTerminal()).isTrue();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
+        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
+            var state = execution.state();
+            assertThat(state.workflowStatus().isTerminal()).isTrue();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
         }
     }
 }

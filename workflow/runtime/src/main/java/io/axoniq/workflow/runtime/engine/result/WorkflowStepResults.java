@@ -18,7 +18,8 @@
 package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
@@ -37,11 +38,11 @@ public class WorkflowStepResults {
         // util class
     }
 
-    public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowState workflowState) {
+    public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowExecution workflowExecution) {
         return new StateBasedWorkflowStepResult(stepName, () -> {
-            workflowState.awaitStateChange(s -> true);
+            workflowExecution.awaitStateChange(s -> true);
             return null;
-        }, workflowState);
+        }, workflowExecution);
     }
 
     /**

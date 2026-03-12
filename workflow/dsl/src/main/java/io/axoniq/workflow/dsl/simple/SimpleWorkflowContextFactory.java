@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -26,9 +26,12 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 
 /**
- * Context factory for {@link SimpleWorkflowContext}.
- * @since 1.0.0
+ * A context factory is responsible for creation of the {@link SimpleWorkflowContext} instance passed into the worfkflow
+ * method as a callback for all interaction with the workflow engine. The methods of the {@link SimpleWorkflowContext}
+ * build a workflow DSL.
+ *
  * @author Simon Zambrovski
+ * @since 1.0.0
  */
 public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
@@ -38,12 +41,13 @@ public class SimpleWorkflowContextFactory implements WorkflowContextFactory<Simp
             @NotNull Map<String, Object> initialPayload,
             @Nonnull String workflowId,
             @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer eventNameCustomizer) {
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+    ) {
         return new SimpleWorkflowContext(
                 workflowId,
                 initialPayload,
                 processingContext,
-                eventNameCustomizer
+                workflowConfiguration
         );
     }
 }

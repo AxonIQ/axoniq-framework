@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.impl.NoneMatchCombinatorDelegate;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link WorkflowStepResults#noneMatch(WorkflowState, java.util.function.Predicate, WorkflowStepResult...)}.
+ * Tests for {@link NoneMatchCombinatorDelegate#noneMatch(java.util.function.Predicate, WorkflowStepResult...)}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -41,10 +42,13 @@ import static org.mockito.Mockito.*;
 class NoneMatchCombinatorDelegateTest {
 
     private WorkflowState workflowState;
+    private WorkflowExecution workflowExecution;
 
     @BeforeEach
     void setUp() {
         workflowState = mock(WorkflowState.class);
+        workflowExecution = mock(WorkflowExecution.class);
+        when(workflowExecution.state()).thenReturn(workflowState);
         when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
         when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
     }
@@ -56,7 +60,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.success()).isTrue();
@@ -70,7 +74,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.<Object>result()).isEmpty();
         assertThat(result.error()).isEmpty();
@@ -83,7 +87,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
         assertThat(result.failure()).isTrue();
@@ -95,7 +99,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.failure()).isTrue();
         assertThat(result.error()).isPresent();
@@ -117,7 +121,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.failure()).thenReturn(false);
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.isCompleted()).isFalse();
     }
@@ -135,7 +139,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.failure()).thenReturn(false);
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -153,7 +157,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.isCompleted()).thenReturn(true);
         when(r2.failure()).thenReturn(false);
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.isCompleted()).isTrue();
     }
@@ -167,7 +171,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         result.cancel();
 
@@ -182,7 +186,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r1.getStepName()).thenReturn("stepA");
         when(r2.getStepName()).thenReturn("stepB");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         result.cancel("workflow shutdown");
 
@@ -197,7 +201,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.completed("stepA", null);
         var r2 = WorkflowStepResults.completed("stepB", null);
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.getStepName()).isEqualTo("noneMatch(stepA, stepB)");
     }
@@ -223,7 +227,7 @@ class NoneMatchCombinatorDelegateTest {
         when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(Optional.of("stepB"));
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         // Trigger resolution — violator should be stepB despite array order
         assertThat(result.failure()).isTrue();
@@ -236,7 +240,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
                 .containsExactly("stepA");
@@ -249,7 +253,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
                 .containsExactlyInAnyOrder("stepA", "stepB");
@@ -261,7 +265,7 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A");
         var r2 = WorkflowStepResults.completed("stepB", "ok-B");
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.matched()).isEmpty();
     }
@@ -274,7 +278,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.failure()).thenReturn(false);
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
                 .containsExactly("failingStep");
@@ -300,7 +304,7 @@ class NoneMatchCombinatorDelegateTest {
         when(workflowState.sortedCompletedAmong(Set.of("failingStep1")))
                 .thenReturn(List.of("failingStep1"));
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         // failingStep1 triggered the predicate → matched
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
@@ -319,7 +323,7 @@ class NoneMatchCombinatorDelegateTest {
         when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
                 .thenReturn(List.of("stepB", "stepA"));
 
-        var result = new NoneMatchCombinatorDelegate(workflowState).noneMatch(WorkflowStepResult::failure, r1, r2);
+        var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
                 .containsExactly("stepB", "stepA");

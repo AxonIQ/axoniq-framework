@@ -30,6 +30,11 @@ import java.util.Objects;
  */
 public interface TerminatePrimitive {
 
+    /**
+     * Terminate a step or entire workflow.
+     *
+     * @param command termination command.
+     */
     void terminate(@Nonnull TerminateCommand command);
 
     record TerminateCommand(
@@ -37,9 +42,9 @@ public interface TerminatePrimitive {
             @Nullable Throwable cause,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nullable String workflowNameOverride,
-            @Nullable WorkflowConfiguration<?> configuration,
             @Nullable String stepName
     ) {
+
         public TerminateCommand {
             Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
         }
@@ -49,23 +54,23 @@ public interface TerminatePrimitive {
         }
 
         public static TerminateCommand cancel(@Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(false, null, eventNameCustomizer, null, null, null);
+            return new TerminateCommand(false, null, eventNameCustomizer, null, null);
         }
 
         public static TerminateCommand cancel(@Nullable Throwable cause,
                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(false, cause, eventNameCustomizer, null, null, null);
+            return new TerminateCommand(false, cause, eventNameCustomizer, null, null);
         }
 
         public static TerminateCommand fail(@Nullable Throwable cause,
                                             @Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(true, cause, eventNameCustomizer, null, null, null);
+            return new TerminateCommand(true, cause, eventNameCustomizer, null, null);
         }
 
         public static TerminateCommand cancelledStep(@Nonnull String stepName,
                                                      @Nullable Throwable cause,
                                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(false, cause, eventNameCustomizer, null, null, stepName);
+            return new TerminateCommand(false, cause, eventNameCustomizer, null, stepName);
         }
     }
 }

@@ -21,16 +21,16 @@ import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions
-import org.awaitility.Awaitility
+import org.awaitility.Awaitility.await
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
@@ -81,8 +81,8 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
 
 
         // all started
-        Awaitility.await().untilAsserted(ThrowingRunnable {
-            Assertions.assertThat(workflowEngine.workflowInstances()).isNotEmpty()
+        await().untilAsserted(ThrowingRunnable {
+            Assertions.assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         })
 
         // simulate all-replayed and start workflows
@@ -90,15 +90,15 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
 
 
         // run to the end
-        Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
-            Assertions.assertThat(workflowEngine.workflowInstances())
-                .allMatch(Predicate { h: WorkflowExecution -> h.workflowStatus().isTerminal })
+        await().atMost(10, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
+            Assertions.assertThat(workflowEngine.workflowExecutions())
+                .allMatch(Predicate { h: WorkflowExecution -> h.state().workflowStatus().isTerminal })
         })
 
 
         // Verify that both workflows executed all steps
-        for (context in workflowEngine.workflowInstances().stream()
-            .map(WorkflowExecution::workflowContext).toList()) {
+        for (context in workflowEngine.workflowExecutions().stream()
+            .map(WorkflowExecution::state).toList()) {
             Assertions.assertThat(context.workflowStatus().isTerminal).isTrue()
             Assertions.assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED)
             Assertions.assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(

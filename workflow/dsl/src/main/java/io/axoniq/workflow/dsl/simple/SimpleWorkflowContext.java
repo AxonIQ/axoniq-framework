@@ -22,13 +22,9 @@ import io.axoniq.workflow.dsl.Payload;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
-import io.axoniq.workflow.runtime.api.TerminatePrimitive;
-import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
-import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowInstance;
-import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.association.EqualsComparison;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
@@ -78,9 +74,9 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
             @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer parentCustomizer
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
     ) {
-        super(workflowId, payload, processingContext, parentCustomizer);
+        super(workflowId, payload, processingContext, workflowConfiguration);
         defaultTimeout = Duration.ofSeconds(5);
     }
 

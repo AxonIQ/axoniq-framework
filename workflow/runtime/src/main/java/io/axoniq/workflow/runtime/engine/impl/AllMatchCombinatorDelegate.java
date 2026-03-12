@@ -3,7 +3,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.AllMatchCombinator;
 import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
@@ -18,25 +18,26 @@ import java.util.function.Predicate;
  * Default implementation of {@link AllMatchCombinator}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  * @see AllMatchCombinator
+ * @since 1.0.0
  */
 public class AllMatchCombinatorDelegate implements AllMatchCombinator {
 
-    private final WorkflowState workflowState;
+    private final WorkflowExecution workflowExecution;
 
     /**
      * Creates a new delegate backed by the given workflow state.
      *
-     * @param workflowState the workflow state used for event-sourced timestamp resolution
+     * @param workflowExecution the workflow executor.
      */
-    public AllMatchCombinatorDelegate(@Nonnull WorkflowState workflowState) {
-        this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
+    public AllMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
+        this.workflowExecution = Objects.requireNonNull(workflowExecution,
+                                                        "Workflow Execution must not be null");
     }
 
     @Nonnull
     public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                                  WorkflowStepResult... results) {
+                                                 WorkflowStepResult... results) {
         return new CombinatorWorkflowStepResult() {
 
             private WorkflowStepResult violator;
@@ -48,7 +49,9 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
                     return;
                 }
 
-                var matched = CombinatorSupport.findFirstByPredicate(results, predicate.negate(), workflowState);
+                var matched = CombinatorSupport.findFirstByPredicate(results,
+                                                                     predicate.negate(),
+                                                                     workflowExecution.state());
                 if (matched.isPresent()) {
                     violator = matched.get();
                     return;
@@ -64,19 +67,21 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
 
             private void awaitAndResolve() {
                 try {
-                    workflowState.awaitStateChange(s ->
-                                                           Arrays.stream(results)
-                                                                 .filter(WorkflowStepResult::isCompleted)
-                                                                 .anyMatch(predicate.negate())
-                                                                   || Arrays.stream(results)
-                                                                            .allMatch(WorkflowStepResult::isCompleted)
+                    workflowExecution.awaitStateChange(s ->
+                                                               Arrays.stream(results)
+                                                                     .filter(WorkflowStepResult::isCompleted)
+                                                                     .anyMatch(predicate.negate())
+                                                                       || Arrays.stream(results)
+                                                                                .allMatch(
+                                                                                        WorkflowStepResult::isCompleted)
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Interrupted while awaiting allMatch result", e);
                 }
 
-                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results, predicate.negate(), workflowState);
+                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results, predicate.negate(),
+                                                                            workflowExecution.state());
                 if (matchAfterWait.isPresent()) {
                     violator = matchAfterWait.get();
                 } else {
@@ -86,7 +91,7 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
 
             private CombinatorSupport.Categories categories() {
                 if (categories == null) {
-                    categories = CombinatorSupport.computeCategories(results, predicate, workflowState);
+                    categories = CombinatorSupport.computeCategories(results, predicate, workflowExecution.state());
                 }
                 return categories;
             }
@@ -109,7 +114,7 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             @Nonnull
             public String getStepName() {
                 return "allMatch(" + String.join(", ",
-                                                  Arrays.stream(results).map(WorkflowStepResult::getStepName).toList())
+                                                 Arrays.stream(results).map(WorkflowStepResult::getStepName).toList())
                         + ")";
             }
 

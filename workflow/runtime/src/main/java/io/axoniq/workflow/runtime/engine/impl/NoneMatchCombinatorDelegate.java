@@ -3,7 +3,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.NoneMatchCombinator;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
@@ -18,25 +18,25 @@ import java.util.function.Predicate;
  * Default implementation of {@link NoneMatchCombinator}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  * @see NoneMatchCombinator
+ * @since 1.0.0
  */
 public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
 
-    private final WorkflowState workflowState;
+    private final WorkflowExecution workflowExecution;
 
     /**
      * Creates a new delegate backed by the given workflow state.
      *
-     * @param workflowState the workflow state used for event-sourced timestamp resolution
+     * @param workflowExecution the workflow execution.
      */
-    public NoneMatchCombinatorDelegate(@Nonnull WorkflowState workflowState) {
-        this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
+    public NoneMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow Execution must not be null");
     }
 
     @Nonnull
     public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                                   WorkflowStepResult... results) {
+                                                  WorkflowStepResult... results) {
         return new CombinatorWorkflowStepResult() {
 
             private WorkflowStepResult violator;
@@ -48,7 +48,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
                     return;
                 }
 
-                var matched = CombinatorSupport.findFirstByPredicate(results, predicate, workflowState);
+                var matched = CombinatorSupport.findFirstByPredicate(results, predicate, workflowExecution.state());
                 if (matched.isPresent()) {
                     violator = matched.get();
                     return;
@@ -64,19 +64,21 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
 
             private void awaitAndResolve() {
                 try {
-                    workflowState.awaitStateChange(s ->
-                                                           Arrays.stream(results)
-                                                                 .filter(WorkflowStepResult::isCompleted)
-                                                                 .anyMatch(predicate)
-                                                                   || Arrays.stream(results)
-                                                                            .allMatch(WorkflowStepResult::isCompleted)
+                    workflowExecution.awaitStateChange(s ->
+                                                               Arrays.stream(results)
+                                                                     .filter(WorkflowStepResult::isCompleted)
+                                                                     .anyMatch(predicate)
+                                                                       || Arrays.stream(results)
+                                                                                .allMatch(WorkflowStepResult::isCompleted)
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Interrupted while awaiting noneMatch result", e);
                 }
 
-                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results, predicate, workflowState);
+                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results,
+                                                                            predicate,
+                                                                            workflowExecution.state());
                 if (matchAfterWait.isPresent()) {
                     violator = matchAfterWait.get();
                 } else {
@@ -86,7 +88,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
 
             private CombinatorSupport.Categories categories() {
                 if (categories == null) {
-                    categories = CombinatorSupport.computeCategories(results, predicate, workflowState);
+                    categories = CombinatorSupport.computeCategories(results, predicate, workflowExecution.state());
                 }
                 return categories;
             }

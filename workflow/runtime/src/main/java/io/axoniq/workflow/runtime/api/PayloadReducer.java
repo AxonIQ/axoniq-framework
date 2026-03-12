@@ -21,9 +21,22 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 
+/**
+ * Payload reducer to combine two payloads into one.
+ *
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
 @FunctionalInterface
 public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
 
+    /**
+     * Combine two payloads into one. Takes all values from the first payload and adds the values of the second,
+     * overwriting any duplicates.
+     *
+     * @return result payload.
+     */
     static PayloadReducer all() {
         return (context, local) -> {
             var result = new HashMap<>(context);
@@ -32,14 +45,29 @@ public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<Stri
         };
     }
 
+    /**
+     * Combine two payloads into one. Takes only value from the first (context) payload.
+     *
+     * @return result payload.
+     */
     static PayloadReducer context() {
         return (context, local) -> context;
     }
 
+    /**
+     * Combine two payloads into one. Takes only value from the second (local) payload.
+     *
+     * @return result payload.
+     */
     static PayloadReducer local() {
         return (context, local) -> local;
     }
 
+    /**
+     * Combine two payloads into one. Takes no values.
+     *
+     * @return empty payload.
+     */
     static PayloadReducer none() {
         return (global, local) -> Map.of();
     }

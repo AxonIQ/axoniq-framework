@@ -18,6 +18,7 @@
 package io.axoniq.workflow.dsl.kotlin
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
@@ -32,11 +33,11 @@ class WorkflowKontextFactory : WorkflowContextFactory<WorkflowKontext> {
         initialPayload: Map<String, Any?>,
         workflowId: String,
         processingContext: ProcessingContext,
-        eventNameCustomizer: EventNameCustomizer
+        workflowConfiguration: WorkflowConfiguration<*>,
     ): WorkflowKontext = WorkflowKontext(
         initialPayload = initialPayload,
         workflowId = workflowId,
         processingContext = processingContext,
-        parentCustomizer = eventNameCustomizer
+        workflowConfiguration = workflowConfiguration,
     )
 }

@@ -3,7 +3,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 import io.axoniq.workflow.runtime.api.AnyMatchCombinator;
 import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
@@ -18,26 +18,26 @@ import java.util.function.Predicate;
  * Default implementation of {@link AnyMatchCombinator}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  * @see AnyMatchCombinator
+ * @since 1.0.0
  */
 public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
 
-    private final WorkflowState workflowState;
+    private final WorkflowExecution workflowExecution;
 
     /**
      * Creates a new delegate backed by the given workflow state.
      *
-     * @param workflowState the workflow state used for event-sourced timestamp resolution
+     * @param workflowExecution the workflow execution.
      */
-    public AnyMatchCombinatorDelegate(@Nonnull WorkflowState workflowState) {
-        this.workflowState = Objects.requireNonNull(workflowState, "workflowState must not be null");
+    public AnyMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "workflowState must not be null");
     }
 
     @Override
     @Nonnull
     public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                                  @Nonnull WorkflowStepResult... results) {
+                                                 @Nonnull WorkflowStepResult... results) {
 
         return new CombinatorWorkflowStepResult() {
 
@@ -49,16 +49,16 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                     return winner;
                 }
 
-                var matching = CombinatorSupport.findFirstByPredicate(results, predicate, workflowState);
+                var matching = CombinatorSupport.findFirstByPredicate(results, predicate, workflowExecution.state());
                 if (matching.isPresent()) {
-                    return setWinner(matching.get(), false);
+                    return setWinner(matching.get());
                 }
 
                 if (Arrays.stream(results).allMatch(WorkflowStepResult::isCompleted)) {
                     var fallback = CombinatorSupport.findFirstByPredicate(
-                            results, WorkflowStepResult::isCompleted, workflowState);
+                            results, WorkflowStepResult::isCompleted, workflowExecution.state());
                     if (fallback.isPresent()) {
-                        return setWinner(fallback.get(), false);
+                        return setWinner(fallback.get());
                     }
                 }
 
@@ -67,42 +67,37 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
 
             private WorkflowStepResult awaitAndResolve() {
                 try {
-                    workflowState.awaitStateChange(s ->
-                                                           Arrays.stream(results)
-                                                                 .filter(WorkflowStepResult::isCompleted)
-                                                                 .anyMatch(predicate)
-                                                                   || Arrays.stream(results)
-                                                                            .allMatch(WorkflowStepResult::isCompleted)
+                    workflowExecution.awaitStateChange(s ->
+                                                               Arrays.stream(results)
+                                                                     .filter(WorkflowStepResult::isCompleted)
+                                                                     .anyMatch(predicate)
+                                                                       || Arrays.stream(results)
+                                                                                .allMatch(WorkflowStepResult::isCompleted)
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Interrupted while awaiting anyMatch result", e);
                 }
 
-                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results, predicate, workflowState);
+                var matchAfterWait = CombinatorSupport.findFirstByPredicate(results,
+                                                                            predicate,
+                                                                            workflowExecution.state());
                 if (matchAfterWait.isPresent()) {
-                    return setWinner(matchAfterWait.get(), false);
+                    return setWinner(matchAfterWait.get());
                 }
                 var fallback = CombinatorSupport.findFirstByPredicate(
-                        results, WorkflowStepResult::isCompleted, workflowState);
-                return setWinner(fallback.orElse(results[0]), false);
+                        results, WorkflowStepResult::isCompleted, workflowExecution.state());
+                return setWinner(fallback.orElse(results[0]));
             }
 
-            private WorkflowStepResult setWinner(WorkflowStepResult winner, boolean cancelLosers) {
+            private WorkflowStepResult setWinner(WorkflowStepResult winner) {
                 this.winner = winner;
-                if (cancelLosers) {
-                    for (WorkflowStepResult r : results) {
-                        if (r != winner) {
-                            r.cancel("Superseded by " + winner.getStepName());
-                        }
-                    }
-                }
                 return winner;
             }
 
             private CombinatorSupport.Categories categories() {
                 if (categories == null) {
-                    categories = CombinatorSupport.computeCategories(results, predicate, workflowState);
+                    categories = CombinatorSupport.computeCategories(results, predicate, workflowExecution.state());
                 }
                 return categories;
             }

@@ -22,21 +22,21 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
- * Factory to create workflow state.
+ * Factory to create a workflow execution.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 @Internal
 @FunctionalInterface
-public interface WorkflowStateFactory {
+public interface WorkflowExecutionFactory {
 
     /**
-     * Creates state for given workflow context.
+     * Creates workflow execution for a given workflow context.
      *
-     * @param context context to create the workflow state for.
-     * @return workflow state.
+     * @param context context to create the workflow execution for.
+     * @return workflow execution.
      */
     @Nonnull
-    WorkflowState create(@Nonnull WorkflowContext context);
+    WorkflowExecution create(@Nonnull WorkflowContext context);
 }

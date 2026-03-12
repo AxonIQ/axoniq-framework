@@ -39,7 +39,7 @@ import java.util.Set;
 
 public class WorkflowEngine implements EventHandler {
 
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
@@ -61,17 +61,18 @@ public class WorkflowEngine implements EventHandler {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            workflowExecutionRepository.findById(workflowId)
-                                       .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId))
-                                       .workflowState().onEvent(eventMessage, processingContext);
+            var execution = workflowExecutionRepository.findById(workflowId)
+                                                      .orElseThrow(() -> new IllegalStateException(
+                                                              "No workflow found for id: " + workflowId));
+            execution.onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
-            for (var workflowExecution : workflowExecutionRepository.findAll()) {
+            for (var execution : workflowExecutionRepository.findAll()) {
                 // TODO: discussion regarding hibernating workflows ->
                 // TODO: is it safe to put an eventMessage in the queue?
-                workflowExecution.workflowState().onEvent(eventMessage, processingContext);
+                execution.onEvent(eventMessage, processingContext);
             }
         }
 
@@ -83,9 +84,9 @@ public class WorkflowEngine implements EventHandler {
      */
     public void runWorkflows() {
         logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
-        for (var workflowExecution : workflowExecutionRepository.findAll()) {
+        for (var execution : workflowExecutionRepository.findAll()) {
             try {
-                workflowExecution.workflowState().execute(workflowExecution.workflowConfiguration(), workflowExecution.workflowContext());
+                execution.execute();
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }
@@ -108,22 +109,24 @@ public class WorkflowEngine implements EventHandler {
                                     ), "Error converting initial payload");
                                     var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
 
-                                    var workflowContext = workflowConfiguration.workflowContextFactory()
-                                                                               .createContext(payload, workflowId, processingContext,
-                                                                                              workflowConfiguration.eventNameCustomizer());
+                                    var workflowContext = workflowConfiguration
+                                            .workflowContextFactory()
+                                            .createContext(payload,
+                                                           workflowId,
+                                                           processingContext,
+                                                           workflowConfiguration);
 
                                     // avoid multiple workflows for the same workflow id.
-                                    workflowExecutionRepository.save(() -> {
+                                    workflowExecutionRepository.save(workflowId, () -> {
                                         logger.info("Starting new workflow with '{}'", eventMessage.payload());
-                                        var workflowState = workflowConfiguration.workflowStateFactory().create(workflowContext);
-                                        return new WorkflowExecution(workflowId, workflowConfiguration, workflowContext, workflowState);
+                                        return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                     });
                                 }
                             }
         );
     }
 
-    public Set<WorkflowExecution> workflowInstances() {
+    public Set<WorkflowExecution> workflowExecutions() {
         return workflowExecutionRepository.findAll();
     }
 

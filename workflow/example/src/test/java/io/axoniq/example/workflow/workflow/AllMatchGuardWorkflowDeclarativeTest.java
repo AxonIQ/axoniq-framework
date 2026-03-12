@@ -21,12 +21,12 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -40,8 +40,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Integration test for {@link AllMatchGuardWorkflow} — verifies that
- * {@link io.axoniq.workflow.runtime.api.WorkflowContext#allMatch} semantics
- * short-circuit on the first non-match.
+ * {@link io.axoniq.workflow.runtime.api.WorkflowContext#allMatch} semantics short-circuit on the first non-match.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -74,13 +73,14 @@ class AllMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
         delayedPublisher.start();
 
         await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty();
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
         workflowEngine.runWorkflows();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
+            assertThat(workflowEngine.workflowExecutions()).allMatch(e -> e.workflowContext().workflowStatus()
+                                                                           .isTerminal());
         });
 
         // Wait for async cleanup to settle
@@ -90,7 +90,7 @@ class AllMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowContext context : workflowEngine.workflowInstances().stream()
+        for (WorkflowContext context : workflowEngine.workflowExecutions().stream()
                                                      .map(WorkflowExecution::workflowContext).toList()) {
             assertThat(context.workflowStatus().isTerminal()).isTrue();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);

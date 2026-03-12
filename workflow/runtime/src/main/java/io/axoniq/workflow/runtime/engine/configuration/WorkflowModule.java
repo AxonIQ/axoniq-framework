@@ -21,7 +21,7 @@ import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
@@ -66,7 +66,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         interface WorkflowContextFactoryPhase<C extends WorkflowContext> {
 
             /**
-             * Provide workflow context factory.
+             * Provides a workflow context factory.
              *
              * @param workflowContextFactory factory to create a new workflow context.
              * @return builder for the state factory.
@@ -78,13 +78,13 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         interface WorkflowStateFactoryPhase<C extends WorkflowContext> {
 
             /**
-             * Provide a workflow state factory.
+             * Provide a workflow execution factory.
              *
-             * @param workflowStateFactory factory to create a new workflow state from given context.
+             * @param workflowExecutionFactory factory to create a new workflow execution from the given context.
              * @return builder for workflow definition.
              */
-            WorkflowDefinitionPhase<C> workflowStateFactory(
-                    @Nonnull ComponentBuilder<WorkflowStateFactory> workflowStateFactory);
+            WorkflowDefinitionPhase<C> workflowExecutionFactory(
+                    @Nonnull ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory);
         }
     }
 

@@ -23,15 +23,15 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.sequencing.HierarchicalSequencingPolicy;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
+import org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy;
+import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
-import org.axonframework.messaging.core.sequencing.HierarchicalSequencingPolicy;
-import org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy;
-import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -64,6 +64,11 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     private final SequencingPolicy sequencingPolicy;
     private final EventHandler eventHandler;
 
+    /**
+     * Constructs the component.
+     *
+     * @param eventHandler event handler to wrap.
+     */
     public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy(

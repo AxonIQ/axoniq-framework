@@ -20,14 +20,12 @@ package io.axoniq.example.workflow.workflow;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.EventCondition;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -41,8 +39,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Integration test for {@link NoneMatchGuardWorkflow} — verifies that
- * {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics
- * short-circuit on the first failure.
+ * {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics short-circuit on the first failure.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -75,13 +72,14 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
         delayedPublisher.start();
 
         await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).isNotEmpty();
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
         workflowEngine.runWorkflows();
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowInstances()).allMatch(h -> h.workflowStatus().isTerminal());
+            assertThat(workflowEngine.workflowExecutions()).allMatch(e -> e.workflowContext().workflowStatus()
+                                                                           .isTerminal());
         });
 
         // Wait for async cleanup to settle
@@ -91,8 +89,8 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
             Thread.currentThread().interrupt();
         }
 
-        for (WorkflowContext context : workflowEngine.workflowInstances().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
+        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
+            var context = execution.workflowContext();
             assertThat(context.workflowStatus().isTerminal()).isTrue();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             // Both steps should be in history: failingStep (failed) and slowStep

@@ -19,7 +19,7 @@ package io.axoniq.workflow.runtime.engine.result;
 
 import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
 import jakarta.annotation.Nonnull;
 
@@ -40,12 +40,12 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     private final String stepName;
     private final Callable<Void> stateChangeTrigger;
-    private final WorkflowState workflowState;
+    private final WorkflowExecution workflowExecution;
 
-    public StateBasedWorkflowStepResult(String stepName, Callable<Void> stateChangeTrigger, WorkflowState state) {
+    public StateBasedWorkflowStepResult(String stepName, Callable<Void> stateChangeTrigger, WorkflowExecution state) {
         this.stepName = stepName;
         this.stateChangeTrigger = stateChangeTrigger;
-        this.workflowState = state;
+        this.workflowExecution = state;
     }
 
     @Override
@@ -56,20 +56,20 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public boolean isCompleted() {
-        return workflowState.getStep(stepName).status().isTerminal();
+        return workflowExecution.state().getStep(stepName).status().isTerminal();
     }
 
     @Override
     @Nonnull
     public <T> Optional<T> result() {
         //noinspection unchecked
-        return Optional.of(workflowState.getStep(stepName)).map(step -> (T) step.result());
+        return Optional.of(workflowExecution.state().getStep(stepName)).map(step -> (T) step.result());
     }
 
     @Override
     @Nonnull
     public Optional<StepFailedException> error() {
-        return Optional.of(workflowState.getStep(stepName)).map(step -> {
+        return Optional.of(workflowExecution.state().getStep(stepName)).map(step -> {
             var cause = step.error();
             if (cause instanceof StepFailedException) {
                 return (StepFailedException) cause;
@@ -82,31 +82,31 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     @Override
     public boolean success() {
         await();
-        return COMPLETED == workflowState.getStep(stepName).status();
+        return COMPLETED == workflowExecution.state().getStep(stepName).status();
     }
 
     @Override
     public boolean failure() {
         await();
-        return FAILED == workflowState.getStep(stepName).status();
+        return FAILED == workflowExecution.state().getStep(stepName).status();
     }
 
     @Override
     public boolean canceled() {
         await();
-        return CANCELLED == workflowState.getStep(stepName).status();
+        return CANCELLED == workflowExecution.state().getStep(stepName).status();
     }
 
     @Override
     public boolean timeout() {
         await();
-        return TIMED_OUT == workflowState.getStep(stepName).status();
+        return TIMED_OUT == workflowExecution.state().getStep(stepName).status();
     }
 
     @Override
     public void await() {
         do {
-            if (workflowState.getStep(stepName).status().isTerminal()) {
+            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
                 return;
             }
             try {
@@ -119,11 +119,11 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void cancel() {
-        workflowState.cancelRunningStep(stepName, new StepCancellationException("Step cancelled"));
+        workflowExecution.cancelRunningStep(stepName, new StepCancellationException("Step cancelled"));
     }
 
     @Override
     public void cancel(@Nonnull String reason) {
-        workflowState.cancelRunningStep(stepName, new StepCancellationException(reason));
+        workflowExecution.cancelRunningStep(stepName, new StepCancellationException(reason));
     }
 }

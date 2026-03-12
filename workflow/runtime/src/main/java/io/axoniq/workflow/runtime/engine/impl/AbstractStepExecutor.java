@@ -22,7 +22,7 @@ import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -51,7 +51,7 @@ public abstract class AbstractStepExecutor {
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
     protected final WorkflowContext workflowContext;
-    protected final WorkflowState workflowState;
+    protected final WorkflowExecution workflowExecution;
     protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
     protected final UnitOfWorkFactory unitOfWorkFactory;
@@ -60,7 +60,7 @@ public abstract class AbstractStepExecutor {
 
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowState workflowState,
+            @Nonnull WorkflowExecution workflowExecution,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -69,7 +69,7 @@ public abstract class AbstractStepExecutor {
     ) {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
-        this.workflowState = Objects.requireNonNull(workflowState, "Workflow state is mandatory");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
@@ -78,19 +78,19 @@ public abstract class AbstractStepExecutor {
     }
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
-        while ((!workflowState.containsStep(stepName) && !workflowState.hasTasks()) || !workflowState.isExecutable()) {
-            var poll = workflowState.getNextTask();
+        while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks()) || !workflowExecution.isExecutable()) {
+            var poll = workflowExecution.getNextTask();
             if (poll != null) { // FIXME forever?
-                poll.accept(this.workflowState);
+                poll.accept(this.workflowExecution);
             }
         }
     }
 
     @Nonnull
     protected Context getContext(@Nonnull String stepName) {
-        return workflowState.containsStep(stepName)
-                ? workflowState.getStep(stepName).context()
-                : workflowState.processingContext();
+        return workflowExecution.state().containsStep(stepName)
+                ? workflowExecution.state().getStep(stepName).context()
+                : workflowExecution.processingContext();
     }
 
     @Nonnull
@@ -158,11 +158,11 @@ public abstract class AbstractStepExecutor {
                     "Workflow is in terminal state " + workflowContext.workflowStatus()
                             + ", cannot publish step event " + eventMessage.type()));
         }
-        if (workflowState.containsStep(stepName) && workflowState.getStep(stepName).status().isTerminal()) {
+        if (workflowExecution.state().containsStep(stepName) && workflowExecution.state().getStep(stepName).status().isTerminal()) {
             logger.warn("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
-                        stepName, workflowState.getStep(stepName).status());
+                        stepName, workflowExecution.state().getStep(stepName).status());
             return CompletableFuture.failedFuture(new IllegalStateException(
-                    "Step '" + stepName + "' is in terminal state " + workflowState.getStep(stepName).status()
+                    "Step '" + stepName + "' is in terminal state " + workflowExecution.state().getStep(stepName).status()
                             + ", cannot publish step event " + eventMessage.type()));
         }
         logger.trace("Appending event {}", eventMessage.type());

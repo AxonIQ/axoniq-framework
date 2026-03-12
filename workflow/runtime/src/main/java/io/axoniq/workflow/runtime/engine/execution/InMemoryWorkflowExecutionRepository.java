@@ -15,10 +15,8 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.engine.repository;
+package io.axoniq.workflow.runtime.engine.execution;
 
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -37,8 +35,7 @@ import java.util.function.Supplier;
  * @since 1.0.0
  */
 @Internal
-public class InMemoryWorkflowExecutionRepository implements
-        WorkflowExecutionRepository {
+public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRepository {
 
     private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
 
@@ -57,10 +54,10 @@ public class InMemoryWorkflowExecutionRepository implements
 
     @Nonnull
     @Override
-    public WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory) {
+    public WorkflowExecution save(@Nonnull String workflowId, @Nonnull Supplier<WorkflowExecution> factory) {
         Objects.requireNonNull(factory, "factory must not be null");
-        WorkflowExecution workflowInstance = factory.get();
-        return workflowExecutions.computeIfAbsent(workflowInstance.workflowId(), s->workflowInstance);
+        var workflowInstance = factory.get();
+        return workflowExecutions.computeIfAbsent(workflowId, s -> workflowInstance);
     }
 
     @Override
