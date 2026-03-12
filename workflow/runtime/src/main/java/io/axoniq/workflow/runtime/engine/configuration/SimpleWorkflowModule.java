@@ -26,7 +26,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStateFactory;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
@@ -68,7 +68,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     private final Class<C> workflowContextType;
     private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurations;
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
-    private ComponentBuilder<WorkflowStateFactory> workflowStateFactory;
+    private ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory;
 
 
     record ConditionedWorkflowConfiguration<C extends WorkflowContext>(
@@ -79,7 +79,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     /**
-     * Constructs new workflow module.
+     * Constructs a new workflow module.
      *
      * @param workflowContextType workflow context class.
      */
@@ -89,7 +89,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     /**
-     * Constructs new workflow module with given name.
+     * Constructs a new workflow module with a given name.
      *
      * @param name                name of the workflow module.
      * @param workflowContextType workflow context class.
@@ -123,10 +123,10 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     @Override
-    public WorkflowDefinitionPhase<C> workflowStateFactory(
-            @NotNull ComponentBuilder<WorkflowStateFactory> workflowStateFactory) {
-        this.workflowStateFactory = Objects.requireNonNull(workflowStateFactory,
-                                                           "Workflow state factory must no be null");
+    public WorkflowDefinitionPhase<C> workflowExecutionFactory(
+            @NotNull ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory) {
+        this.workflowExecutionFactory = Objects.requireNonNull(workflowExecutionFactory,
+                                                               "Workflow execution factory must no be null");
         return this;
     }
 
@@ -248,8 +248,8 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
                                                 @NotNull
                                                 @Override
-                                                public WorkflowStateFactory workflowStateFactory() {
-                                                    return workflowStateFactory.build(configuration);
+                                                public WorkflowExecutionFactory workflowExecutionFactory() {
+                                                    return workflowExecutionFactory.build(configuration);
                                                 }
 
                                                 @NotNull
@@ -288,7 +288,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
     }
 
     /**
-     * Auto-detected component builder for workflow configuration list.
+     * Auto-detected component builder for a workflow configuration list.
      * <p>One builder operates on one class and can detect multiple workflow methods.</p>
      */
     class AutoDetectingBuilder implements DetectionPhase<C>,
@@ -340,8 +340,8 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
                                     @Nonnull
                                     @Override
-                                    public WorkflowStateFactory workflowStateFactory() {
-                                        return workflowStateFactory.build(config);
+                                    public WorkflowExecutionFactory workflowExecutionFactory() {
+                                        return workflowExecutionFactory.build(config);
                                     }
 
                                     @Nonnull

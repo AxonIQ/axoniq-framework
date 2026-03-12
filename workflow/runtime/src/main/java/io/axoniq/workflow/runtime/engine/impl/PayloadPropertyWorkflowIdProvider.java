@@ -83,7 +83,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     }
 
     @Override
-    public String apply(EventMessage eventMessage) {
+    public String apply(@Nonnull EventMessage eventMessage) {
         return idProcessor
                 .apply(Optional.ofNullable(eventMessage.payloadAs(
                                        new TypeReference<Map<String, Object>>() {

@@ -34,20 +34,50 @@ public interface WorkflowContext extends
         TerminatePrimitive,
         DescribableComponent {
 
+    /**
+     * Retrieves workflow id.
+     *
+     * @return the unique identifier of the workflow.
+     */
     @Nonnull
     String workflowId();
 
+    /**
+     * Retrieves the workflow payload.
+     *
+     * @return the payload of the workflow.
+     */
     @Nonnull
     Map<String, Object> workflowPayload();
 
+    /**
+     * Applies payload modification.
+     *
+     * @param payloadModification payload modification.
+     */
     void applyPayloadModification(@Nonnull PayloadModification payloadModification);
 
+    /**
+     * Retrieves workflow status.
+     *
+     * @return the status of the workflow.
+     */
     @Nonnull
     WorkflowStatus workflowStatus();
 
+    /**
+     * Retrieves workflow step names.
+     *
+     * @return the names of the workflow steps.
+     */
     @Nonnull
     List<String> workflowStepNames();
 
+    /**
+     * Retrieves processing context.
+     *
+     * @return the processing context.
+     */
     @Nonnull
     ProcessingContext processingContext();
 }

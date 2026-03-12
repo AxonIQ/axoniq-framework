@@ -26,17 +26,42 @@ import java.util.Map;
 
 /**
  * Customizes workflow event names.
+ *
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
  */
 public interface EventNameCustomizer {
 
+    /**
+     * Returns a customized event name based on the provided step name, parameters, and step status.
+     *
+     * @param stepName   the name of the step
+     * @param parameters the parameters associated with the step
+     * @param stepStatus the status of the step
+     * @return the customized event name.
+     */
     @Nonnull
     QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
                                @Nonnull StepStatus stepStatus);
 
+    /**
+     * Returns a customized event name based on the provided step name, parameters, and workflow status.
+     *
+     * @param stepName   the name of the step
+     * @param parameters the parameters associated with the step
+     * @param stepStatus the status of the step
+     * @return the customized event name.
+     */
     @Nonnull
     QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
                                @Nonnull WorkflowStatus stepStatus);
 
+    /**
+     * Returns a customized event name based on the provided step name, parameters, and workflow status.
+     *
+     * @return event name customizer that will use the namespace of the parent step.
+     */
     @Nonnull
     EventNameCustomizer forStepInheritance();
 }

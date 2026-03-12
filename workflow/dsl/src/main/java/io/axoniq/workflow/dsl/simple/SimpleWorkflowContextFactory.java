@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -27,8 +27,9 @@ import java.util.Map;
 
 /**
  * Context factory for {@link SimpleWorkflowContext}.
- * @since 1.0.0
+ *
  * @author Simon Zambrovski
+ * @since 1.0.0
  */
 public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
@@ -38,12 +39,13 @@ public class SimpleWorkflowContextFactory implements WorkflowContextFactory<Simp
             @NotNull Map<String, Object> initialPayload,
             @Nonnull String workflowId,
             @Nonnull ProcessingContext processingContext,
-            @Nonnull EventNameCustomizer eventNameCustomizer) {
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+    ) {
         return new SimpleWorkflowContext(
                 workflowId,
                 initialPayload,
                 processingContext,
-                eventNameCustomizer
+                workflowConfiguration
         );
     }
 }

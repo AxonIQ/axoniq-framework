@@ -26,10 +26,10 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Repository for retrieving workflow handles.
+ * Repository for retrieving workflow instances.
  * <p>
  * Each workflow instance is identified by a unique workflow identifier and is represented
- * as a {@link WorkflowExecution} bundling configuration, context, and execution state.
+ * as a {@link WorkflowInstance} bundling configuration, context, and execution state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -62,7 +62,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @return the existing or newly created workflow handle
      */
     @Nonnull
-    WorkflowExecution save(@Nonnull Supplier<WorkflowExecution> factory);
+    WorkflowExecution save(@Nonnull String workflowId, @Nonnull Supplier<WorkflowExecution> factory);
 
     /**
      * Removes the workflow handle associated with the given identifier.

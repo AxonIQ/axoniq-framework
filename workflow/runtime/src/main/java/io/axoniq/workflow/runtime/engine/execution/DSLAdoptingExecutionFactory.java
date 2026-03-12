@@ -25,25 +25,30 @@ import org.jetbrains.annotations.NotNull;
 import static io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils.requireIsAssignableFrom;
 
 /**
- * State factory adopting a DSL instance implementing {@link AbstractDSLWorkflowContext}.
+ * Workflow execution factory adopting a DSL instance implementing {@link AbstractDSLWorkflowContext}.
  *
  * @param <C> type of the implementation.
  * @author Simon Zambrovki
  * @since 1.0.0
  */
-public class DSLAdoptingStateFactory<C extends WorkflowContext> implements WorkflowStateFactory {
+public class DSLAdoptingExecutionFactory<C extends WorkflowContext> implements WorkflowExecutionFactory {
 
     private final Class<C> workflowContextType;
 
-    public DSLAdoptingStateFactory(@Nonnull Class<C> workflowContextType) {
+    /**
+     * Creates a new factory.
+     *
+     * @param workflowContextType type of the workflow context.
+     */
+    public DSLAdoptingExecutionFactory(@Nonnull Class<C> workflowContextType) {
         this.workflowContextType = requireIsAssignableFrom(AbstractDSLWorkflowContext.class, workflowContextType);
     }
 
     @Override
     @Nonnull
-    public WorkflowState create(@NotNull WorkflowContext context) {
+    public WorkflowExecution create(@NotNull WorkflowContext context) {
         if (workflowContextType.isAssignableFrom(context.getClass())) {
-            return ((AbstractDSLWorkflowContext) context).getWorkflowInstance();
+            return ((AbstractDSLWorkflowContext) context).execution();
         }
 
         throw new IllegalStateException("Unsupported context type " + context.getClass().getName());

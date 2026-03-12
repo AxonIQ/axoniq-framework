@@ -19,9 +19,10 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
+import io.axoniq.workflow.runtime.engine.util.EventMessageUtils;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -31,7 +32,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -54,7 +54,8 @@ import static org.mockito.Mockito.when;
 class TerminalStateGuardTest {
 
     private WorkflowContext workflowContext;
-    private WorkflowState workflowState;
+    private WorkflowExecution workflowExecution;
+    private EventSourcedWorkflowState workflowState;
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -66,10 +67,10 @@ class TerminalStateGuardTest {
      */
     private static class TestableStepExecutor extends AbstractStepExecutor {
 
-        TestableStepExecutor(WorkflowContext workflowContext, WorkflowState workflowState,
+        TestableStepExecutor(WorkflowContext workflowContext, WorkflowExecution workflowExecution,
                              EventNameCustomizer parentEventNameCustomizer, Clock clock,
                              UnitOfWorkFactory unitOfWorkFactory, EventSink eventSink, Executor executor) {
-            super(workflowContext, workflowState, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
+            super(workflowContext, workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
                   executor);
         }
 
@@ -95,11 +96,15 @@ class TerminalStateGuardTest {
     @BeforeEach
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
-        workflowState = mock(WorkflowState.class);
+        workflowExecution = mock(WorkflowExecution.class);
+        workflowState = new EventSourcedWorkflowState(workflowContext, Map.of());
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
+
+        when(workflowExecution.state()).thenReturn(workflowState);
+        when(workflowExecution.processingContext()).thenReturn(processingContext);
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -120,7 +125,7 @@ class TerminalStateGuardTest {
         eventNameCustomizer = new DefaultEventNameCustomizer();
 
         stepExecutor = new TestableStepExecutor(
-                workflowContext, workflowState, eventNameCustomizer,
+                workflowContext, workflowExecution, eventNameCustomizer,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }
@@ -167,9 +172,9 @@ class TerminalStateGuardTest {
     @Test
     void completedReturnsFailedFutureWhenStepIsTerminal() {
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        when(workflowState.containsStep("step-1")).thenReturn(true);
-        when(workflowState.getStep("step-1")).thenReturn(
-                WorkflowStep.completed("step-1", Map.of(), Instant.now(), processingContext));
+
+        workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "step-1", Map.of(), eventNameCustomizer),
+                              processingContext);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
 
@@ -182,9 +187,8 @@ class TerminalStateGuardTest {
 
     @Test
     void failedFutureContainsStepNameInMessage() {
-        when(workflowState.containsStep("my-step")).thenReturn(true);
-        when(workflowState.getStep("my-step")).thenReturn(
-                WorkflowStep.failed("my-step", new RuntimeException("err"), Instant.now(), processingContext));
+        workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(), eventNameCustomizer),
+                              processingContext);
 
         var future = stepExecutor.testCompleted("my-step", Map.of(), eventNameCustomizer);
 

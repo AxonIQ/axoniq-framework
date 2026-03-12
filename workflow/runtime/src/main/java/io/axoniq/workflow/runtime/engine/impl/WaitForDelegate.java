@@ -22,11 +22,10 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -39,7 +38,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
 
 
 /**
@@ -57,7 +55,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      * Constructs the delegate.
      *
      * @param workflowContext           workflow context.
-     * @param workflowState             workflow state.
+     * @param workflowExecution             workflow state.
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
@@ -66,14 +64,15 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      */
     public WaitForDelegate(
             @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowState workflowState,
+            @Nonnull WorkflowExecution workflowExecution,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
             @Nonnull Executor executor
     ) {
-        super(workflowContext, workflowState, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor);
+        super(workflowContext,
+              workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor);
     }
 
     @Override
@@ -88,40 +87,40 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
         acceptAllPendingTasksForStep(stepName);
 
-        if (!workflowState.containsStep(stepName)) {
-            workflowState.appendTask(i ->
+        if (!workflowExecution.state().containsStep(stepName)) {
+            workflowExecution.appendTask(i ->
                                              started(stepName,
                                                      Map.of("startTime", clock.instant()),
                                                      eventNameCustomizer)
             );
             try {
-                workflowState.awaitStateChange(s -> s.containsStep(stepName)
+                workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
                         && s.getStep(stepName).status() == StepStatus.STARTED);
             } catch (InterruptedException e) {
                 return WorkflowStepResults.failed(stepName, e);
             }
         }
 
-        if (workflowState.getStep(stepName).status() == StepStatus.STARTED) {
-            var actualStartTime = workflowState.getStep(stepName).timestamp();
+        if (workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED) {
+            var actualStartTime = workflowExecution.state().getStep(stepName).timestamp();
             var remainingTimeout = Duration.between(clock.instant(),
                                                     actualStartTime.plus(timeout));
 
             if (remainingTimeout.isNegative()) {
-                workflowState.appendTask(i -> {
-                    if (!i.getStep(stepName).status().isTerminal()) {
+                workflowExecution.appendTask(i -> {
+                    if (!i.state().getStep(stepName).status().isTerminal()) {
                         // FIXME - This is where we should publish using an append condition
                         timedOut(stepName, clock.instant(), eventNameCustomizer);
                     }
                 });
             } else {
                 // Register wait condition
-                workflowState.registerWaitCondition(stepName, eventCondition, eventNameCustomizer);
+                workflowExecution.registerWaitCondition(stepName, eventCondition, eventNameCustomizer);
                 var timeoutFuture = CompletableFuture.runAsync(() -> {
-                                               workflowState.removeWaitCondition(stepName);
-                                               workflowState.removeRunningStep(stepName);
-                                               workflowState.appendTask(i -> {
-                                                                            if (!i.getStep(stepName).status().isTerminal()) {
+                                               workflowExecution.removeWaitCondition(stepName);
+                                               workflowExecution.removeRunningStep(stepName);
+                                               workflowExecution.appendTask(i -> {
+                                                                            if (!i.state().getStep(stepName).status().isTerminal()) {
                                                                                 // only timeout if we are not completed yet
                                                                                 timedOut(stepName, eventNameCustomizer);
                                                                             }
@@ -129,28 +128,28 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                                );
                                            }, CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 ).exceptionally(e -> {
-                    workflowState.removeRunningStep(stepName);
+                    workflowExecution.removeRunningStep(stepName);
                     if (isCancellation(e)) {
                         var terminationCause = unwrapCancellation(e);
-                        workflowState.removeWaitCondition(stepName);
-                        workflowState.appendTask(i -> {
+                        workflowExecution.removeWaitCondition(stepName);
+                        workflowExecution.appendTask(i -> {
                             // FIXME - This is where we should publish using an append condition
-                            if (!i.getStep(stepName).status().isTerminal()) {
+                            if (!i.state().getStep(stepName).status().isTerminal()) {
                                 cancelled(stepName, terminationCause, eventNameCustomizer);
                             }
                         });
                     }
                     return null;
                 });
-                workflowState.registerRunningStep(stepName, timeoutFuture);
+                workflowExecution.registerRunningStep(stepName, timeoutFuture);
             }
         }
 
-        return WorkflowStepResults.stateBased(stepName, workflowState);
+        return WorkflowStepResults.stateBased(stepName, workflowExecution);
     }
 
     /**
-     * Receive event message (because of wait condition) to trigger the wait for continuation.
+     * Receives an event message (because of wait condition) to trigger the wait for continuation.
      *
      * @param eventMessage        message to deliver the event.
      * @param stepName            step name waiting for event.
@@ -159,10 +158,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     void eventReceived(@Nonnull EventMessage eventMessage, @Nonnull String stepName,
                        @Nonnull EventNameCustomizer eventNameCustomizer) {
         // Cancel the timeout future since the awaited event has arrived
-        workflowState.cancelAndRemoveRunningStep(stepName, false);
+        workflowExecution.cancelAndRemoveRunningStep(stepName, false);
         // TODO event should be mapped back based on result mapping
         var payload = eventMessagePayload(eventMessage);
-        workflowState.appendTask(state -> {
+        workflowExecution.appendTask(state -> {
             try {
                 completed(stepName, payload, eventNameCustomizer).join();
             } catch (Exception e) {

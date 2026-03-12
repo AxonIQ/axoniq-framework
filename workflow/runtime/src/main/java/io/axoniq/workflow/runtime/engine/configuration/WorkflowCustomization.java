@@ -59,6 +59,12 @@ public class WorkflowCustomization {
     }
 
 
+    /**
+     * Constructs new workflow customization.
+     *
+     * @param workflowName  name of the workflow.
+     * @param configuration configuration to use.
+     */
     @Internal
     WorkflowCustomization(
             @Nonnull String workflowName,
@@ -80,6 +86,11 @@ public class WorkflowCustomization {
         });
     }
 
+    /**
+     * Copy constructor.
+     *
+     * @param base base to copy.
+     */
     @Internal
     WorkflowCustomization(@Nonnull WorkflowCustomization base) {
         Objects.requireNonNull(base, "Base configuration must not be null");
