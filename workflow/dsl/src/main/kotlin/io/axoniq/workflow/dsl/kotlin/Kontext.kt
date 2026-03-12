@@ -124,8 +124,8 @@ class Kontext(
         )
     }
 
-    fun allMatch(vararg results: WorkflowStepResult)
-            : WorkflowStepResult = workflowKontext.all(*results)
+    fun allMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
+            : WorkflowStepResult = workflowKontext.allMatch(predicate, *results)
 
     fun noneMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
             : WorkflowStepResult = workflowKontext.noneMatch(predicate, *results)

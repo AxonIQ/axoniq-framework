@@ -18,7 +18,7 @@
 package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.workflow.dsl.kotlin.Kontext
-import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults
+import io.axoniq.workflow.runtime.api.WorkflowStepResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.time.Duration.Companion.minutes
 
@@ -40,7 +40,7 @@ class CancelWorkflow {
         val r3 = execute("stepC", { _, _ -> Thread.sleep(fiveMinMs); mapOf() }, timeout = 5.minutes)
 
         // Combine results but don't block on them
-        val all = allMatch(r1, r2, r3)
+        val all = allMatch({ it.isCompleted }, r1, r2, r3)
 
         // Wait 5 seconds then cancel
         Thread.sleep(5_000)

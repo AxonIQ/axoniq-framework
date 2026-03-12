@@ -32,7 +32,7 @@ public interface WorkflowContext extends
         ExecutePrimitive,
         WaitForPrimitive,
         TerminatePrimitive,
-        AllCompletedCombinator,
+        AllMatchCombinator,
         NoneMatchCombinator,
         AnyMatchCombinator,
         DescribableComponent {

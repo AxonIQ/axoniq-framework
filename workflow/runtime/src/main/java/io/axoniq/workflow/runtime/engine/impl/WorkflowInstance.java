@@ -79,7 +79,7 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowInstance.class);
 
     // primitive implementations
-    private final AllCompletedCombinatorDelegate allCombinatorDelegate = new AllCompletedCombinatorDelegate();
+    private final AllMatchCombinatorDelegate allCombinatorDelegate;
     private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
     private final NoneMatchCombinatorDelegate noneCombinatorDelegate;
     private final ExecuteDelegate executeDelegate;
@@ -152,6 +152,7 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
                                                        executor);
         this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(this);
         this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(this);
+        this.allCombinatorDelegate = new AllMatchCombinatorDelegate(this);
     }
 
 
@@ -396,8 +397,9 @@ public final class WorkflowInstance implements WorkflowState, WorkflowContext {
 
     @Nonnull
     @Override
-    public WorkflowStepResult all(WorkflowStepResult... results) {
-        return allCombinatorDelegate.all(results);
+    public WorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                       WorkflowStepResult... results) {
+        return allCombinatorDelegate.allMatch(predicate, results);
     }
 
     @Override

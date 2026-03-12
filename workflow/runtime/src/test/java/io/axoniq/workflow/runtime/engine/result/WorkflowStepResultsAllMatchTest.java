@@ -1,0 +1,228 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *
+ *
+ */
+package io.axoniq.workflow.runtime.engine.result;
+
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
+import io.axoniq.workflow.runtime.engine.impl.AllMatchCombinatorDelegate;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+/**
+ * Tests for {@link AllMatchCombinatorDelegate#allMatch(java.util.function.Predicate, WorkflowStepResult...)}.
+ *
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
+class WorkflowStepResultsAllMatchTest {
+
+    private WorkflowState workflowState;
+
+    @BeforeEach
+    void setUp() {
+        workflowState = mock(WorkflowState.class);
+        when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
+    }
+
+    // --- All complete and all match → success ---
+
+    @Test
+    void allMatch_allCompleteAndAllMatch_success() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+        assertThat(result.success()).isTrue();
+        assertThat(result.failure()).isFalse();
+        assertThat(result.canceled()).isFalse();
+        assertThat(result.timeout()).isFalse();
+    }
+
+    @Test
+    void allMatch_allCompleteAndAllMatch_resultIsEmpty() {
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.<Object>result()).isEmpty();
+        assertThat(result.error()).isEmpty();
+    }
+
+    // --- Short-circuit on first non-match ---
+
+    @Test
+    void allMatch_shortCircuitsOnFirstNonMatch() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+        assertThat(result.failure()).isTrue();
+        assertThat(result.success()).isFalse();
+    }
+
+    @Test
+    void allMatch_shortCircuit_delegatesToViolator() {
+        var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
+        var r2 = WorkflowStepResults.completed("stepB", "ok");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.failure()).isTrue();
+        assertThat(result.error()).isPresent();
+        assertThat(result.<Object>result()).isEmpty();
+    }
+
+    // --- isCompleted behavior ---
+
+    @Test
+    void allMatch_isCompletedFalseWhileRunningAndAllMatchSoFar() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.success()).thenReturn(true);
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.isCompleted()).isFalse();
+    }
+
+    @Test
+    void allMatch_isCompletedTrueOnShortCircuit() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.success()).thenReturn(false);
+        when(r2.isCompleted()).thenReturn(false);
+        when(r2.success()).thenReturn(false);
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+    }
+
+    @Test
+    void allMatch_isCompletedTrueWhenAllCompleteAllMatch() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.success()).thenReturn(true);
+        when(r2.isCompleted()).thenReturn(true);
+        when(r2.success()).thenReturn(true);
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.isCompleted()).isTrue();
+    }
+
+    // --- cancel propagation ---
+
+    @Test
+    void allMatch_cancelPropagatesToAll() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        result.cancel();
+
+        verify(r1).cancel();
+        verify(r2).cancel();
+    }
+
+    @Test
+    void allMatch_cancelWithReasonPropagatesToAll() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        result.cancel("workflow shutdown");
+
+        verify(r1).cancel("workflow shutdown");
+        verify(r2).cancel("workflow shutdown");
+    }
+
+    // --- Step name format ---
+
+    @Test
+    void allMatch_stepNameFormat() {
+        var r1 = WorkflowStepResults.completed("stepA", null);
+        var r2 = WorkflowStepResults.completed("stepB", null);
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        assertThat(result.getStepName()).isEqualTo("allMatch(stepA, stepB)");
+    }
+
+    // --- Event ordering determines violator ---
+
+    @Test
+    void allMatch_eventOrderDeterminesViolator() {
+        var r1 = mock(WorkflowStepResult.class);
+        var r2 = mock(WorkflowStepResult.class);
+
+        when(r1.getStepName()).thenReturn("stepA");
+        when(r2.getStepName()).thenReturn("stepB");
+
+        when(r1.isCompleted()).thenReturn(true);
+        when(r1.success()).thenReturn(false);
+        when(r1.failure()).thenReturn(true);
+        when(r2.isCompleted()).thenReturn(true);
+        when(r2.success()).thenReturn(false);
+        when(r2.failure()).thenReturn(true);
+
+        // Event-sourced state says stepB failed first
+        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
+                .thenReturn(Optional.of("stepB"));
+
+        var result = new AllMatchCombinatorDelegate(workflowState).allMatch(WorkflowStepResult::success, r1, r2);
+
+        // Trigger resolution — violator should be stepB despite array order
+        assertThat(result.failure()).isTrue();
+    }
+}

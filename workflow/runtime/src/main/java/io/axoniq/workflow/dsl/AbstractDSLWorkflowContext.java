@@ -96,8 +96,9 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
 
     @Nonnull
     @Override
-    public WorkflowStepResult all(WorkflowStepResult... results) {
-        return workflowInstance.all(results);
+    public WorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                       WorkflowStepResult... results) {
+        return workflowInstance.allMatch(predicate, results);
     }
 
     @Nonnull

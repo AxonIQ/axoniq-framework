@@ -49,7 +49,7 @@ public interface NoneMatchCombinator {
      * <p>{@code cancel()} and {@code cancel(reason)} propagate to <b>all</b> results.</p>
      *
      * <h3>Summary</h3>
-     * <p>Similar to {@code .all()} but with guard semantics: succeeds when <b>none</b> match, but
+     * <p>Similar to {@code .allMatch()} but with guard semantics: succeeds when <b>none</b> match, but
      * short-circuits on first match to avoid cascading errors.</p>
      *
      * @param predicate the predicate that no result should match.
