@@ -23,6 +23,8 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
@@ -92,7 +94,7 @@ class UserSignupTest {
 
         @Test
         void shouldExecuteAllStepsOnFirstRun() {
-            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine);
+            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine, workflowHistoryRepository);
         }
     }
 
@@ -116,13 +118,15 @@ class UserSignupTest {
 
         @Test
         void shouldExecuteAllStepsOnFirstRun() {
-            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine);
+            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine, workflowHistoryRepository);
         }
     }
 
 
     void shouldExecuteAllStepsOnFirstRun(
-            DelayedPublisher delayedPublisher, WorkflowEngine workflowEngine
+            DelayedPublisher delayedPublisher,
+            WorkflowEngine workflowEngine,
+            WorkflowHistoryRepository workflowHistoryRepository
     ) {
 
         delayedPublisher.addSchedules(List.of(
@@ -159,15 +163,16 @@ class UserSignupTest {
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
+            assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
         assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
         // Verify that both workflows executed all steps
-        for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
-            var state = workflowExecution.state();
+        for (WorkflowHistory workflowHistory : workflowHistoryRepository.findAll()) {
+            var state = workflowHistory.state();
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             assertThat(state.workflowStepNames()).containsExactlyInAnyOrder(
@@ -178,9 +183,10 @@ class UserSignupTest {
                     "waitForMagicToHappen"
             );
 
-            var payload = workflowExecution.workflowContext().workflowPayload();
-            assertThat(payload.containsKey("magic"));
-            assertThat(payload.containsKey("__createUser"));
+            // FIXME -> see #61
+            // var payload = workflowExecution.workflowContext().workflowPayload();
+            // assertThat(payload.containsKey("magic"));
+            // assertThat(payload.containsKey("__createUser"));
         }
     }
 }

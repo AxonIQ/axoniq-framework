@@ -22,6 +22,8 @@ import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
+import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
@@ -45,6 +47,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     protected WorkflowEngine workflowEngine;
     protected DelayedPublisher delayedPublisher;
     protected WorkflowConfigurationRegistry<?> workflowRegistry;
+    protected WorkflowHistoryRepository workflowHistoryRepository;
 
     public AbstractDeclarativeTestBase(@Nonnull Class<T> dslType,
                                        @Nonnull ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
@@ -74,6 +77,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
         workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         delayedPublisher = configuration.getComponent(DelayedPublisher.class);
+        workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
     }
 
     protected abstract UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
@@ -86,5 +90,6 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         logger.info(descriptor.describe());
         workflowEngine.shutdown();
         configuration.shutdown();
+        ((MutableWorkflowHistoryRepository)workflowHistoryRepository).clear();
     }
 }

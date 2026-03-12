@@ -54,6 +54,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private volatile Throwable terminationCause;
 
     private final WorkflowStateListenerSupport listenerSupport;
+
     /**
      * Creates a new workflow state without reference to a workflow context.
      */
@@ -101,7 +102,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
-    public void evolve(
+    public WorkflowState evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
@@ -165,6 +166,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             }
             setStatus(status, terminationCause);
         });
+        return this;
     }
 
     /**
