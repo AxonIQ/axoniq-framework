@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -102,14 +103,16 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
 
         this.contextDelegate = new WorkflowContextDelegation(
-                initial,
                 workflowConfiguration,
                 workflowContext,
                 () -> this,
                 processingContext
         );
-        this.workflowState = new EventSourcedWorkflowState(this.contextDelegate.typepWorkflowContext(),
-                                                           workflowConfiguration.workflowStatusChangeListeners());
+        this.workflowState = new EventSourcedWorkflowState(
+                initial,
+                this.contextDelegate.typepWorkflowContext(),
+                workflowConfiguration.workflowStatusChangeListeners()
+        );
     }
 
 
@@ -147,7 +150,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                              Thread.currentThread());
 
                                 this.workflowConfiguration.workflowDefinition()
-                                                    .accept(this.contextDelegate.typepWorkflowContext());
+                                                          .accept(this.contextDelegate.typepWorkflowContext());
                                 logger.trace("Workflow executed. Resulting workflow payload {}.",
                                              this.workflowContext().workflowPayload());
 
@@ -282,8 +285,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void registerWaitCondition(@Nonnull String stepName,
                                       @Nonnull EventCondition eventCondition,
+                                      @Nonnull PayloadReducer resultMapping,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        eventWaitConditions.add(stepName, eventCondition, eventNameCustomizer);
+        eventWaitConditions.add(stepName, eventCondition, resultMapping, eventNameCustomizer);
     }
 
     @Override

@@ -101,11 +101,11 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
             .map(WorkflowExecution::state).toList()) {
             Assertions.assertThat(context.workflowStatus().isTerminal).isTrue()
             Assertions.assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED)
-            Assertions.assertThat(context.workflowStepNames()).containsExactlyInAnyOrder(
+            Assertions.assertThat(context.workflowStepNames()).containsExactly(
                 "createUser",
                 "activateUser",
-                "sendWelcomeEmail",
                 "waitASecond",
+                "sendWelcomeEmail",
                 "waitForMagicToHappen"
             )
         }

@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
@@ -27,7 +28,6 @@ import io.axoniq.workflow.runtime.engine.result.WorkflowStepResults;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +55,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      * Constructs the delegate.
      *
      * @param workflowContext           workflow context.
-     * @param workflowExecution             workflow state.
+     * @param workflowExecution         workflow state.
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
@@ -80,6 +80,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     public WorkflowStepResult waitFor(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultMapping,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
@@ -89,9 +90,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
         if (!workflowExecution.state().containsStep(stepName)) {
             workflowExecution.appendTask(i ->
-                                             started(stepName,
-                                                     Map.of("startTime", clock.instant()),
-                                                     eventNameCustomizer)
+                                                 started(stepName,
+                                                         Map.of("startTime", clock.instant()),
+                                                         eventNameCustomizer)
             );
             try {
                 workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
@@ -115,18 +116,20 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 });
             } else {
                 // Register wait condition
-                workflowExecution.registerWaitCondition(stepName, eventCondition, eventNameCustomizer);
-                var timeoutFuture = CompletableFuture.runAsync(() -> {
-                                               workflowExecution.removeWaitCondition(stepName);
-                                               workflowExecution.removeRunningStep(stepName);
-                                               workflowExecution.appendTask(i -> {
-                                                                            if (!i.state().getStep(stepName).status().isTerminal()) {
-                                                                                // only timeout if we are not completed yet
-                                                                                timedOut(stepName, eventNameCustomizer);
-                                                                            }
-                                                                        }
-                                               );
-                                           }, CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                workflowExecution.registerWaitCondition(stepName, eventCondition, resultMapping, eventNameCustomizer);
+                var timeoutFuture = CompletableFuture.runAsync(
+                        () -> {
+                            workflowExecution.removeWaitCondition(stepName);
+                            workflowExecution.removeRunningStep(stepName);
+                            workflowExecution.appendTask(i -> {
+                                                             if (!i.state().getStep(stepName).status().isTerminal()) {
+                                                                 // only timeout if we are not completed yet
+                                                                 timedOut(stepName, eventNameCustomizer);
+                                                             }
+                                                         }
+                            );
+                        },
+                        CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 ).exceptionally(e -> {
                     workflowExecution.removeRunningStep(stepName);
                     if (isCancellation(e)) {
@@ -151,21 +154,28 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     /**
      * Receives an event message (because of wait condition) to trigger the wait for continuation.
      *
-     * @param eventMessage        message to deliver the event.
-     * @param stepName            step name waiting for event.
-     * @param eventNameCustomizer customizer for the step name.
+     * @param eventArrival event arrival information.
      */
-    void eventReceived(@Nonnull EventMessage eventMessage, @Nonnull String stepName,
-                       @Nonnull EventNameCustomizer eventNameCustomizer) {
+    void eventReceived(@Nonnull EventWaitConditions.EventArrival eventArrival) {
         // Cancel the timeout future since the awaited event has arrived
-        workflowExecution.cancelAndRemoveRunningStep(stepName, false);
-        // TODO event should be mapped back based on result mapping
-        var payload = eventMessagePayload(eventMessage);
+        workflowExecution.cancelAndRemoveRunningStep(eventArrival.stepName(), false);
+        var payload = eventMessagePayload(eventArrival.eventMessage());
+        final String resultMappingName;
+        if (PayloadReducer.isDefault(eventArrival.payloadReducer())) {
+            resultMappingName = PayloadReducer.name(eventArrival.payloadReducer());
+        } else {
+            resultMappingName = null;
+        }
         workflowExecution.appendTask(state -> {
             try {
-                completed(stepName, payload, eventNameCustomizer).join();
+                completed(eventArrival.stepName(),
+                          payload,
+                          resultMappingName,
+                          eventArrival.eventNameCustomizer()).join();
             } catch (Exception e) {
-                logger.warn("Failed to publish completed event for step '{}': {}", stepName, e.getMessage());
+                logger.warn("Failed to publish completed event for step '{}': {}",
+                            eventArrival.stepName(),
+                            e.getMessage());
             }
         });
     }

@@ -20,15 +20,16 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
-import org.apache.commons.lang3.function.TriConsumer;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
@@ -51,7 +52,9 @@ public class EventWaitConditions implements DescribableComponent {
     @Internal
     record EventConditionWithStepNameCustomizer(
             @Nonnull EventCondition eventCondition,
-            @Nonnull EventNameCustomizer eventNameCustomizer) {
+            @Nonnull PayloadReducer resultMapping,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
 
     }
 
@@ -61,16 +64,19 @@ public class EventWaitConditions implements DescribableComponent {
      * @param stepName       step waiting for event.
      * @param eventCondition await condition
      */
-    public void add(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
+    public void add(@Nonnull String stepName,
+                    @Nonnull EventCondition eventCondition,
+                    @Nonnull PayloadReducer resultMapping,
                     @Nullable EventNameCustomizer eventNameCustomizer) {
         waitConditions.put(stepName,
                            new EventConditionWithStepNameCustomizer(eventCondition,
+                                                                    resultMapping,
                                                                     eventNameCustomizer
                                                                             != null ? eventNameCustomizer : defaults()));
     }
 
     /**
-     * Removes condition for given step.
+     * Removes condition for a given step.
      *
      * @param stepName step name waiting for event.
      */
@@ -90,16 +96,39 @@ public class EventWaitConditions implements DescribableComponent {
      *
      */
     public void evaluateAndApply(@Nonnull EventMessage eventMessage,
-                                 @Nonnull TriConsumer<EventMessage, String, EventNameCustomizer> action) {
+                                 @Nonnull Consumer<EventArrival> action) {
         // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
-            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
+            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(
+                    eventMessage)) {
                 remove(stepName);
-                action.accept(eventMessage, stepName, entry.getValue().eventNameCustomizer());
+                action.accept(
+                        new EventArrival(eventMessage,
+                                         stepName,
+                                         entry.getValue().resultMapping(),
+                                         entry.getValue().eventNameCustomizer())
+                );
             }
         }
+    }
+
+    /**
+     * Payload arrival event.
+     *
+     * @param eventMessage        event message.
+     * @param payloadReducer      payload reducer.
+     * @param stepName            step name.
+     * @param eventNameCustomizer event name customizer.
+     */
+    public record EventArrival(
+            @Nonnull EventMessage eventMessage,
+            @Nonnull String stepName,
+            @Nonnull PayloadReducer payloadReducer,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+
     }
 
 

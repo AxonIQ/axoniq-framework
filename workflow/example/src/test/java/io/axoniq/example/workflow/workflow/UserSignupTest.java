@@ -23,7 +23,6 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
@@ -161,22 +160,25 @@ class UserSignupTest {
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
         // Verify that both workflows executed all steps
         for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
             var state = workflowExecution.state();
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder(
+            assertThat(state.workflowStepNames()).containsExactly(
                     "createUser",
                     "activateUser",
                     "sendWelcomeEmail",
                     "waitASecond",
-                    "waitForMagicToHappen"
+                    "waitForMagicToHappen",
+                    "modifyPayload1"
             );
 
             var payload = workflowExecution.workflowContext().workflowPayload();
-            assertThat(payload.containsKey("magic"));
-            assertThat(payload.containsKey("__createUser"));
+            assertThat(payload.containsKey("status")).isTrue(); // part of intial payload
+            assertThat(payload.containsKey("magician")).isTrue(); // explicit set
+            assertThat(payload.containsKey("__createUser")).isFalse(); // not set because simple has CONTEXT result mapping
         }
     }
 }

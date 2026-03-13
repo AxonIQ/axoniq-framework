@@ -32,6 +32,7 @@ public interface WorkflowContext extends
         ExecutePrimitive,
         WaitForPrimitive,
         TerminatePrimitive,
+        PayloadPrimitive,
         DescribableComponent {
 
     /**
@@ -49,13 +50,6 @@ public interface WorkflowContext extends
      */
     @Nonnull
     Map<String, Object> workflowPayload();
-
-    /**
-     * Applies payload modification.
-     *
-     * @param payloadModification payload modification.
-     */
-    void applyPayloadModification(@Nonnull PayloadModification payloadModification);
 
     /**
      * Retrieves workflow status.

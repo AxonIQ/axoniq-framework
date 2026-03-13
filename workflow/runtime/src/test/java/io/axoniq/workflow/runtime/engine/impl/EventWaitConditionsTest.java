@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -31,6 +32,7 @@ import org.mockito.*;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -51,7 +53,7 @@ class EventWaitConditionsTest {
     void testAddAndRemove() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
-        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
+        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
         eventWaitConditions.describeTo(descriptor);
@@ -66,13 +68,13 @@ class EventWaitConditionsTest {
     void testEvaluateAndApplyMatches() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
-        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
+        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
 
         EventMessage message = mock(EventMessage.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
-        eventWaitConditions.evaluateAndApply(message, (m, s, c) -> appliedMessage.set(m));
+        eventWaitConditions.evaluateAndApply(message, (m) -> appliedMessage.set(m.eventMessage()));
 
         assertThat(appliedMessage.get()).isEqualTo(message);
 
@@ -84,13 +86,13 @@ class EventWaitConditionsTest {
     void testEvaluateAndApplyNoMatch() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.never(qName);
-        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
+        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
 
         EventMessage message = mock(EventMessage.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
-        eventWaitConditions.evaluateAndApply(message, (m, s, c) -> appliedMessage.set(m));
+        eventWaitConditions.evaluateAndApply(message, (m) -> appliedMessage.set(m.eventMessage()));
 
         assertThat(appliedMessage.get()).isNull();
 
@@ -102,11 +104,11 @@ class EventWaitConditionsTest {
     void testDescribeTo() {
         QualifiedName qName1 = new QualifiedName("ns", "Event1");
         EventCondition condition = EventConditions.fromQualifiedName(qName1);
-        eventWaitConditions.add("step1", condition, new DefaultEventNameCustomizer());
+        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
 
         QualifiedName qName2 = new QualifiedName("ns", "Event2");
         EventCondition condition2 = EventConditions.fromQualifiedName(qName2);
-        eventWaitConditions.add("step2", condition2, new DefaultEventNameCustomizer());
+        eventWaitConditions.add("step2", condition2, PayloadReducer.CONTEXT, defaults());
 
 
         Collection<?> list = getDescribedConditions();

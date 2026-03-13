@@ -41,7 +41,8 @@ import java.util.Objects;
 /**
  * Base class for DSL implementations.
  * <p>Implementors of DSLs have to provide their version of a {@link WorkflowContext} class and
- * are intended to subclass this class and delegate their calls to the methods available in the {@link WorkflowContext}.
+ * are intended to subclass this class and delegate their calls to the methods available in the
+ * {@link WorkflowContext}.
  * </p>
  *
  * @author Simon Zambrovski
@@ -53,7 +54,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     private final SimpleWorkflowExecution workflowExecution;
 
     /**
-     * Constructs new DSL context.
+     * Constructs a new DSL context.
      *
      * @param workflowId            workflow id.
      * @param payload               initial payload.
@@ -78,9 +79,12 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
 
     @Nonnull
     @Override
-    public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
-                                      @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return delegate.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
+    public WorkflowStepResult waitFor(@Nonnull String stepName,
+                                      @Nonnull EventCondition eventCondition,
+                                      @Nonnull PayloadReducer resultMapping,
+                                      @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return delegate.waitFor(stepName, eventCondition, resultMapping, timeout, eventNameCustomizer);
     }
 
     @Nonnull
@@ -123,8 +127,10 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     }
 
     @Override
-    public void applyPayloadModification(@Nonnull PayloadModification payloadModification) {
-        delegate.applyPayloadModification(payloadModification);
+    public void modifyPayload(@Nonnull String stepName,
+                              @Nonnull PayloadModification payloadModification,
+                              @Nonnull EventNameCustomizer eventNameCustomizer) {
+        delegate.modifyPayload(stepName, payloadModification, eventNameCustomizer);
     }
 
     @Nonnull

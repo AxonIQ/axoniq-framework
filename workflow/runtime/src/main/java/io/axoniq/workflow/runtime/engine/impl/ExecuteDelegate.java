@@ -139,10 +139,14 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                             workflowExecution.removeRunningStep(stepName);
                             if (r != null) {
                                 workflowExecution.appendTask(i -> {
-                                    workflowContext.applyPayloadModification(p -> resultMapping.apply(p,
-                                                                                                      r)); // write back payload
                                     // FIXME - This is where we should publish using an append condition
-                                    completed(stepName, r, eventNameCustomizer);
+                                    final String resultMappingName;
+                                    if (PayloadReducer.isDefault(resultMapping)) {
+                                        resultMappingName = PayloadReducer.name(resultMapping);
+                                    } else {
+                                        resultMappingName = null;
+                                    }
+                                    completed(stepName, r, resultMappingName, eventNameCustomizer);
                                 });
                             } else {
                                 if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {

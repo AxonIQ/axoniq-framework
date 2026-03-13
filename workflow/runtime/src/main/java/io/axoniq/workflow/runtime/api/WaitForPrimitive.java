@@ -37,6 +37,7 @@ public interface WaitForPrimitive {
     WorkflowStepResult waitFor(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     );
@@ -47,6 +48,7 @@ public interface WaitForPrimitive {
                 waitFor(
                         command.stepName(),
                         command.eventCondition(),
+                        command.resultReducer(),
                         command.timeout(),
                         command.eventNameCustomizer()
                 )
@@ -68,6 +70,14 @@ public interface WaitForPrimitive {
 
         @Nonnull
         Duration timeout();
+
+        /**
+         * Returns the result reducer.
+         *
+         * @return result reducer.
+         */
+        @Nonnull
+        PayloadReducer resultReducer();
 
         @Nonnull
         EventNameCustomizer eventNameCustomizer();

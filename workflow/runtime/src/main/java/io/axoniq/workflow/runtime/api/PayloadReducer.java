@@ -17,8 +17,11 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import jakarta.annotation.Nonnull;
+
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 
 /**
@@ -32,43 +35,92 @@ import java.util.function.BiFunction;
 public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
 
     /**
-     * Combine two payloads into one. Takes all values from the first payload and adds the values of the second,
-     * overwriting any duplicates.
-     *
-     * @return result payload.
+     * Name of {@link #COMBINE} reducer.
      */
-    static PayloadReducer all() {
-        return (context, local) -> {
-            var result = new HashMap<>(context);
-            result.putAll(local);
-            return result;
+    String NAME_COMBINE = "combine";
+    /**
+     * Name of {@link #CONTEXT} reducer.
+     */
+    String NAME_CONTEXT = "context";
+    /**
+     * Name of {@link #LOCAL} reducer.
+     */
+    String NAME_LOCAL = "local";
+    /**
+     * Combines two payloads into one. Takes all values from the first payload and adds the values of the second,
+     * overwriting any duplicates. Usage of this reducer as a parameter reducer allows accessing all workflow context
+     * variables directly. Usage of this reducer as a result reducer writes all results back into the workflow context.
+     */
+    PayloadReducer COMBINE = (context, local) -> {
+        var result = new HashMap<>(context);
+        result.putAll(local);
+        return result;
+    };
+
+    /**
+     * Combines two payloads into one. Takes only value from the first (context) payload. This is a reducer used as
+     * default as a result reducer, responsible for not modifying the workflow context payload.
+     */
+    PayloadReducer CONTEXT = (context, local) -> context;
+
+
+    /**
+     * Combines two payloads into one. Takes only value from the second (local) payload. This is a reducer used as
+     * default as a parameter reducer, responsible for not modifying passed parameters with the values from the workflow
+     * context.
+     */
+    PayloadReducer LOCAL = (context, local) -> local;
+
+    /**
+     * Constructs standard reducer by name.
+     *
+     * @param name reducer name.
+     * @return payload reducer.
+     */
+    static PayloadReducer byName(@Nonnull String name) {
+        return switch (Objects.requireNonNull(name, "Reducer name must not be null")) {
+            case NAME_COMBINE -> COMBINE;
+            case NAME_CONTEXT -> CONTEXT;
+            case NAME_LOCAL -> LOCAL;
+            default -> throw new IllegalArgumentException("Unknown reducer name: " + name);
         };
     }
 
     /**
-     * Combine two payloads into one. Takes only value from the first (context) payload.
+     * Returns a name of the reducer.
      *
-     * @return result payload.
+     * @param reducer reducer to get name for.
+     * @return reducer name.
      */
-    static PayloadReducer context() {
-        return (context, local) -> context;
+    static String name(@Nonnull PayloadReducer reducer) {
+        if (COMBINE == reducer) {
+            return NAME_COMBINE;
+        } else if (CONTEXT == reducer) {
+            return NAME_CONTEXT;
+        } else if (LOCAL == reducer) {
+            return NAME_LOCAL;
+        } else {
+            throw new IllegalArgumentException("Unknown reducer: " + reducer);
+        }
     }
 
     /**
-     * Combine two payloads into one. Takes only value from the second (local) payload.
+     * Checks if a standard reducer is used.
      *
-     * @return result payload.
+     * @param reducer reducer to check.
+     * @return true, if a standard reducer is used.
      */
-    static PayloadReducer local() {
-        return (context, local) -> local;
+    static boolean isDefault(@Nonnull PayloadReducer reducer) {
+        return CONTEXT == reducer || LOCAL == reducer || COMBINE == reducer;
     }
 
     /**
-     * Combine two payloads into one. Takes no values.
+     * Checks if a standard reducer name is used.
      *
-     * @return empty payload.
+     * @param name name of the reducer.
+     * @return true, if a standard reducer is used.
      */
-    static PayloadReducer none() {
-        return (global, local) -> Map.of();
+    static boolean isDefault(@Nonnull String name) {
+        return NAME_CONTEXT.equals(name) || NAME_LOCAL.equals(name) || NAME_COMBINE.equals(name);
     }
 }
