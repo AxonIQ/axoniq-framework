@@ -37,7 +37,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -161,7 +160,7 @@ class TerminateDelegateFailTest {
                 new TerminateCommand(true, cause, eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        state.onEvent(io.axoniq.workflow.runtime.engine.util.EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, eventNameCustomizer), processingContext);
+        state.evolve(io.axoniq.workflow.runtime.engine.util.EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, eventNameCustomizer), processingContext);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));
     }

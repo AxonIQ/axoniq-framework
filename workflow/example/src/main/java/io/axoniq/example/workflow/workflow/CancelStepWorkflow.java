@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
+import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
@@ -67,13 +68,5 @@ public class CancelStepWorkflow {
 
         //finish
         sleepQuietly(1_000);
-    }
-
-    private static void sleepQuietly(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }

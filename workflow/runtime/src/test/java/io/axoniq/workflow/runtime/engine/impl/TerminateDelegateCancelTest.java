@@ -38,7 +38,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -162,7 +161,7 @@ class TerminateDelegateCancelTest {
                 new TerminateCommand(false, null, eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        state.onEvent(io.axoniq.workflow.runtime.engine.util.EventMessageUtils.cancelledWorkflow(workflowContext, "test-workflow", null, eventNameCustomizer), processingContext);
+        state.evolve(io.axoniq.workflow.runtime.engine.util.EventMessageUtils.cancelledWorkflow(workflowContext, "test-workflow", null, eventNameCustomizer), processingContext);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
     }

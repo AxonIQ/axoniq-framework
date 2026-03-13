@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
+import org.testcontainers.shaded.com.google.common.base.Predicate
 import kotlin.reflect.KClass
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -125,6 +126,14 @@ class Kontext(
         )
     }
 
+    fun allMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
+            : CombinatorWorkflowStepResult = workflowKontext.allMatch(predicate, *results)
+
+    fun noneMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
+            : CombinatorWorkflowStepResult = workflowKontext.noneMatch(predicate, *results)
+
+    fun anyMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
+            : CombinatorWorkflowStepResult = workflowKontext.anyMatch(predicate, *results)
 
     fun execute(
         stepName: String,

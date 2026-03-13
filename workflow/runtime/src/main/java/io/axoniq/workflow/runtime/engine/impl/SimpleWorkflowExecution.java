@@ -105,7 +105,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
                 workflowContext,
-                () -> this,
+                this,
                 processingContext
         );
         this.workflowState = new EventSourcedWorkflowState(
@@ -218,7 +218,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
-        appendTask(i -> state().onEvent(eventMessage, processingContext));
+        appendTask(i -> state().evolve(eventMessage, processingContext));
     }
 
     @Override

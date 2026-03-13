@@ -175,7 +175,7 @@ class TerminalStateGuardTest {
     void completedReturnsFailedFutureWhenStepIsTerminal() {
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
 
-        workflowState.onEvent(EventMessageUtils.completedStep(workflowContext,
+        workflowState.evolve(EventMessageUtils.completedStep(workflowContext,
                                                               "step-1",
                                                               Map.of(),
                                                               PayloadReducer.NAME_CONTEXT,
@@ -193,7 +193,7 @@ class TerminalStateGuardTest {
 
     @Test
     void failedFutureContainsStepNameInMessage() {
-        workflowState.onEvent(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(),
+        workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(),
                                                               PayloadReducer.NAME_CONTEXT, eventNameCustomizer),
                               processingContext);
 

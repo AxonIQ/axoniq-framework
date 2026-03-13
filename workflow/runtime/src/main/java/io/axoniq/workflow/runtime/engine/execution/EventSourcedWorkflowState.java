@@ -43,7 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.getStepName;
 
 /**
- * Holds the current state of a workflow and modified by the {@link #onEvent} method receiving messages.
+ * Holds the current state of a workflow and modified by the {@link #evolve} method receiving messages.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -117,13 +117,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
         return Map.copyOf(payload);
     }
 
-    /**
-     * Applies changes carried by the event message to a given workflow
-     *
-     * @param eventMessage      event message.
-     * @param processingContext processing context opf message delivery.
-     */
-    public void onEvent(
+    @Override
+    public void evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
@@ -252,10 +247,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
             descriptor.describeProperty("terminationCause", terminationCause.getMessage());
         }
         descriptor.describeProperty("steps", List.copyOf(steps.keySet()));
+        descriptor.describeProperty("payload", payload);
     }
 
     /**
-     * Offload the safe usage of listeners from the state implementation.
+     * Offload the safe usage of listeners from the state implementation and makes it safe to operate with.
      *
      * @param listeners       map of status listeners or null.
      * @param workflowContext workflow context or null.

@@ -26,7 +26,9 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 
 /**
- * Context factory for {@link SimpleWorkflowContext}.
+ * A context factory is responsible for creation of the {@link SimpleWorkflowContext} instance passed into the worfkflow
+ * method as a callback for all interaction with the workflow engine. The methods of the {@link SimpleWorkflowContext}
+ * build a workflow DSL.
  *
  * @author Simon Zambrovski
  * @since 1.0.0

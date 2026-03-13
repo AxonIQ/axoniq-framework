@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
+import io.axoniq.workflow.runtime.api.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
@@ -44,7 +45,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Supplier;
+import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.merge;
@@ -64,9 +65,14 @@ public class WorkflowContextDelegation implements WorkflowContext {
     private final TerminateDelegate terminateDelegate;
     private final PayloadDelegate payloadDelegate;
 
+    // Combinators
+    private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
+    private final NoneMatchCombinatorDelegate noneCombinatorDelegate;
+    private final AllMatchCombinatorDelegate allCombinatorDelegate;
+
     // Execution
     private final ProcessingContext processingContext;
-    private final Supplier<WorkflowExecution> workflowExecutionSupplier;
+    private final WorkflowExecution workflowExecution;
     private final WorkflowContext workflowContext;
 
     // Services
@@ -79,18 +85,18 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Creates the context delegation.
      *
-     * @param workflowContext           workflow context created by the factory.
-     * @param workflowExecutionSupplier workflow execution supplier.
-     * @param processingContext         processing context.
+     * @param workflowContext   workflow context created by the factory.
+     * @param workflowExecution workflow execution.
+     * @param processingContext processing context.
      */
     public WorkflowContextDelegation(
             @Nonnull WorkflowConfiguration<?> workflowConfiguration,
             @Nonnull WorkflowContext workflowContext,
-            @Nonnull Supplier<WorkflowExecution> workflowExecutionSupplier,
+            @Nonnull WorkflowExecution workflowExecution,
             @Nonnull ProcessingContext processingContext
     ) {
-        this.workflowExecutionSupplier = Objects.requireNonNull(workflowExecutionSupplier,
-                                                                "Workflow execution supplier must not be null");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution,
+                                                        "Workflow execution supplier must not be null");
 
         var stepParent = workflowConfiguration.eventNameCustomizer().forStepInheritance();
 
@@ -107,43 +113,47 @@ public class WorkflowContextDelegation implements WorkflowContext {
 
 
         this.executeDelegate = new ExecuteDelegate(workflowContext,
-                                                   workflowExecutionSupplier.get(),
+                                                   workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
                                                    executor);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
-                                                   workflowExecutionSupplier.get(),
+                                                   workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
                                                    executor);
         this.terminateDelegate = new TerminateDelegate(workflowContext,
-                                                       workflowExecutionSupplier.get(),
+                                                       workflowExecution,
                                                        unitOfWorkFactory,
                                                        eventSink,
                                                        executor);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
-                                                   workflowExecutionSupplier.get(),
+                                                   workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
                                                    executor);
+
+        this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(workflowExecution);
+        this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(workflowExecution);
+        this.allCombinatorDelegate = new AllMatchCombinatorDelegate(workflowExecution);
     }
 
     @Nonnull
     @Override
     public String workflowId() {
-        return workflowExecutionSupplier.get().workflowId();
+        return workflowExecution.workflowId();
     }
 
     @Nonnull
     @Override
     public Map<String, Object> workflowPayload() {
-        return workflowExecutionSupplier.get().state().payload();
+        return workflowExecution.state().payload();
     }
 
     @Override
@@ -156,25 +166,19 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     @Override
     public WorkflowStatus workflowStatus() {
-        return workflowExecutionSupplier.get().state().workflowStatus();
+        return workflowExecution.state().workflowStatus();
     }
 
     @Nonnull
     @Override
     public List<String> workflowStepNames() {
-        return workflowExecutionSupplier.get().state().workflowStepNames();
+        return workflowExecution.state().workflowStepNames();
     }
 
     @Nonnull
     @Override
     public ProcessingContext processingContext() {
         return this.processingContext;
-    }
-
-    @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-        descriptor.describeProperty("workflowId", workflowExecutionSupplier.get().workflowId());
-        descriptor.describeProperty("workflowName", workflowExecutionSupplier.get().workflowName());
     }
 
     // delegation
@@ -185,7 +189,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
                                       @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        workflowExecutionSupplier.get().state().throwTerminalCause();
+        workflowExecution.state().throwTerminalCause();
         return executeDelegate.execute(stepName,
                                        local,
                                        action,
@@ -202,7 +206,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                       @Nonnull PayloadReducer resultMapping,
                                       @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        workflowExecutionSupplier.get().state().throwTerminalCause();
+        workflowExecution.state().throwTerminalCause();
         return waitForDelegate.waitFor(stepName, eventCondition, resultMapping, timeout, eventNameCustomizer);
     }
 
@@ -212,16 +216,38 @@ public class WorkflowContextDelegation implements WorkflowContext {
             terminateDelegate.terminate(command);
             return;
         }
-        workflowExecutionSupplier.get().state().throwTerminalCause();
+        workflowExecution.state().throwTerminalCause();
         terminateDelegate.terminate(new TerminatePrimitive.TerminateCommand(
                 command.error(),
                 command.cause(),
-                merge(workflowExecutionSupplier.get().workflowConfiguration().eventNameCustomizer(),
+                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(),
                       command.eventNameCustomizer()),
-                workflowExecutionSupplier.get().workflowName(),
+                workflowExecution.workflowName(),
                 null
         ));
     }
+
+    @Nonnull
+    @Override
+    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                 WorkflowStepResult... results) {
+        return allCombinatorDelegate.allMatch(predicate, results);
+    }
+
+    @Nonnull
+    @Override
+    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                 WorkflowStepResult... results) {
+        return anyCombinatorDelegate.anyMatch(predicate, results);
+    }
+
+    @Nonnull
+    @Override
+    public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+                                                  WorkflowStepResult... results) {
+        return noneCombinatorDelegate.noneMatch(predicate, results);
+    }
+
 
     @Nonnull
     public CompletableFuture<Void> publishEvent(ProcessingContext processingContext, EventMessage eventMessage) {
@@ -266,5 +292,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
         } catch (ClassCastException e) {
             throw new WorkflowFailedException("Failed to cast workflow context", e);
         }
+    }
+
+    @Override
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        descriptor.describeProperty("workflowId", workflowExecution.workflowId());
+        descriptor.describeProperty("workflowName", workflowExecution.workflowName());
     }
 }

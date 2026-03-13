@@ -33,6 +33,9 @@ public interface WorkflowContext extends
         WaitForPrimitive,
         TerminatePrimitive,
         PayloadPrimitive,
+        AllMatchCombinator,
+        NoneMatchCombinator,
+        AnyMatchCombinator,
         DescribableComponent {
 
     /**
