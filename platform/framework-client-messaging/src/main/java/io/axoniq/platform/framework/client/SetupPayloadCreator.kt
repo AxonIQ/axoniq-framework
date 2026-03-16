@@ -44,8 +44,6 @@ import org.axonframework.conversion.Converter
 import org.axonframework.messaging.commandhandling.CommandBus
 import org.axonframework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector
 import org.axonframework.messaging.commandhandling.interception.InterceptingCommandBus
-import org.axonframework.messaging.core.MessageDispatchInterceptor
-import org.axonframework.messaging.core.MessageHandlerInterceptor
 import org.axonframework.messaging.core.SubscribableEventSource
 import org.axonframework.messaging.eventhandling.EventSink
 import org.axonframework.messaging.eventhandling.processing.EventProcessor
@@ -83,6 +81,7 @@ class SetupPayloadCreator(
                         heartbeat = true,
                         threadDump = true,
                         clientStatusUpdates = true,
+                        licenseEntitlement = hasEntitlementManager()
                 )
         )
     }
@@ -339,6 +338,18 @@ class SetupPayloadCreator(
         ))?.javaClass?.simpleName?.let { SerializerInformation(type = it, false) }
     }
 
+
+    /**
+     * Checks whether the PlatformLicenseSource have been configured, in which case we want updates of licenses from Platform.
+     */
+    private fun hasEntitlementManager(): Boolean {
+        try {
+            val entitlementManagerClazz = Class.forName("io.axoniq.license.entitlement.source.LicenseSource")
+            return configuration.getComponents(entitlementManagerClazz).any { it.value::class.java.name == "io.axoniq.license.entitlement.source.PlatformLicenseSource" }
+        } catch (_: ClassNotFoundException) {
+            return false
+        }
+    }
 }
 
 
