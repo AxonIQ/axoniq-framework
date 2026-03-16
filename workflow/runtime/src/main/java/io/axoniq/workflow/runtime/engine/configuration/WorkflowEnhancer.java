@@ -19,11 +19,14 @@ package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.engine.execution.InMemoryWorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.history.InMemoryWorkflowHistoryRepository;
+import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.engine.execution.InMemoryWorkflowExecutionRepository;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -50,14 +53,15 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
     /**
      * {@inheritDoc}
      * <p>
-     * Registers the workflow engine, definition registry, execution repository, and event
-     * processing module into the given {@link ComponentRegistry}.
+     * Registers the workflow engine, definition registry, execution repository, and event processing module into the
+     * given {@link ComponentRegistry}.
      */
     @Override
     public void enhance(@NotNull ComponentRegistry componentRegistry) {
 
         componentRegistry
-                .registerComponent(WorkflowConfigurationRegistry.class, cfg -> new SimpleWorkflowConfigurationRegistry());
+                .registerComponent(WorkflowConfigurationRegistry.class,
+                                   cfg -> new SimpleWorkflowConfigurationRegistry());
 
         componentRegistry
                 .registerComponent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.defaults());
@@ -74,18 +78,32 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(WorkflowExecutionRepository.class, cfg -> new InMemoryWorkflowExecutionRepository());
 
         componentRegistry
+                .registerComponent(MutableWorkflowHistoryRepository.class,
+                                   cfg -> new InMemoryWorkflowHistoryRepository());
+
+        componentRegistry
                 .registerComponent(WorkflowEngine.class, cfg ->
                         new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class)
                         )
                 );
+        componentRegistry
+                .registerComponent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(
+                        cfg.getComponent(MutableWorkflowHistoryRepository.class)
+                ));
+
         componentRegistry.registerModule(
                 EventProcessorModule
                         .pooledStreaming(WORKFLOW_ENGINE_EVENT_MODULE)
-                        .eventHandlingComponents(req -> req.declarative(cfg -> new AllEventEventHandlingComponent(
-                                cfg.getComponent(WorkflowEngine.class)
-                        )))
+                        .eventHandlingComponents(req -> req
+                                .declarative(cfg -> new AllEventEventHandlingComponent(
+                                                     cfg.getComponent(WorkflowEngine.class)
+                                             )
+                                ).declarative(cfg -> new AllEventEventHandlingComponent(
+                                        cfg.getComponent(WorkflowHistoryProjector.class)
+                                ))
+                        )
                         .customized(ANY_EVENT_IN_ONE_SEGMENT)
                         .build()
         );

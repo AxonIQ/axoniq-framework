@@ -31,7 +31,7 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
      * @param workflowExecution the workflow execution.
      */
     public AnyMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
-        this.workflowExecution = Objects.requireNonNull(workflowExecution, "workflowState must not be null");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "state must not be null");
     }
 
     @Override
