@@ -110,6 +110,8 @@ data class SupportedFeatures(
         val domainEventsInsights: DomainEventAccessMode = DomainEventAccessMode.NONE,
         /* Whether the client supports client status updates .*/
         val clientStatusUpdates: Boolean? = false,
+        /* Whether the application has the entitlement manager configured, allowing it to receive licenses */
+        val licenseEntitlement: Boolean? = false,
 )
 
 data class Versions(
