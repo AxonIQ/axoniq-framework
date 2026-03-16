@@ -153,13 +153,17 @@ class UserSignupTest {
         });
 
         // simulate all-replayed and start workflows
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
+
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
+
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         // Verify that both workflows executed all steps
         for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {

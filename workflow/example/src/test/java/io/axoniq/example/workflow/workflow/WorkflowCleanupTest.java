@@ -20,50 +20,53 @@ package io.axoniq.example.workflow.workflow;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * @author Stefan Dragisic
- * @since 1.0.0
+ * Test making sure that after the execution of a workflow, its execution is not present on the workflow engine
+ * anymore.
  */
-class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+class WorkflowCleanupTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
-    public CancelWorkflowDeclarativeTest() {
+    public WorkflowCleanupTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());
     }
 
     @Override
     protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-        var workflow = new CancelWorkflow();
         return d -> d
-                .declarative(c -> workflow::execute)
-                .workflowName("Cancel workflow in Java")
+                .declarative(c -> (SimpleWorkflowContext ctx) -> {
+                    if (ctx.workflowId().contains("fail")) {
+                        throw new WorkflowFailedException("Forced failure");
+                    }
+                    ctx.awaitExecute("step1", Map.of(), (context, payload) -> Map.of("result", "done"));
+                })
+                .workflowName("CleanupWorkflow")
                 .on(EventConditions.fromType(RegistrationReceivedEvent.class))
                 .customized((c, w) -> w
-                        .eventNameCustomizer(namespace("io.axoniq.dsl.cancel").workflowBaseName("Workflow"))
-                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "cancel-" + id))
+                        .workflowIdProvider(fromPayloadAttribute(c, "id", id -> "cleanup-" + id))
                 );
     }
 
     @Test
-    void workflowIsCancelled() {
+    void workflowIsRemovedFromEngineAfterCompletion() {
+        String workflowId = "cleanup-user-001";
         delayedPublisher.addSchedules(List.of(
-                ofMillis(500, new RegistrationReceivedEvent("user-789", "cancel@test.com", "vip"))
+                ofMillis(100, new RegistrationReceivedEvent("user-001", "cleanup@test.com", "active"))
         ));
 
         delayedPublisher.start();
@@ -72,27 +75,32 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows(false);
+        workflowEngine.runWorkflows(true);
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions())
-                    .allMatch(h -> h.state().workflowStatus().isTerminal());
+                    .noneMatch(e -> e.workflowId().equals(workflowId));
+        });
+    }
+
+    @Test
+    void workflowIsRemovedFromEngineAfterFailure() {
+        String workflowId = "cleanup-user-fail-002";
+        delayedPublisher.addSchedules(List.of(
+                ofMillis(100, new RegistrationReceivedEvent("user-fail-002", "fail@test.com", "active"))
+        ));
+
+        delayedPublisher.start();
+
+        await().untilAsserted(() -> {
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        // Wait 2 seconds before asserting to let async cleanup settle
-        try {
-            Thread.sleep(2_000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        workflowEngine.runWorkflows(true);
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
-
-        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
-            var state = execution.state();
-            assertThat(state.workflowStatus().isTerminal()).isTrue();
-            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
-            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
-        }
+        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(workflowEngine.workflowExecutions())
+                    .noneMatch(e -> e.workflowId().equals(workflowId));
+        });
     }
 }

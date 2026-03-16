@@ -86,7 +86,7 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         })
 
         // simulate all-replayed and start workflows
-        workflowEngine.runWorkflows()
+        workflowEngine.runWorkflows(false)
 
 
         // run to the end

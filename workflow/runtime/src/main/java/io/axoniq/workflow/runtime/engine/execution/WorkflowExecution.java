@@ -47,11 +47,10 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Execute workflow.
      *
-     * @param <T> type of the workflow context.
-     * @return workflow context.
+     * @param terminationHandler termination handler, which is executed after the execution has reached a terminal
+     *                           {@link WorkflowStatus}.
      */
-    @Nonnull
-    <T extends WorkflowContext> T execute();
+    void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler);
 
     /**
      * Returns workflow context of the current execution.
