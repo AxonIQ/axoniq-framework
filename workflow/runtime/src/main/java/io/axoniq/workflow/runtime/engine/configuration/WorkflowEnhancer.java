@@ -21,6 +21,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.engine.history.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
@@ -29,6 +30,7 @@ import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.jetbrains.annotations.NotNull;
 
@@ -106,6 +108,11 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                         )
                         .customized(ANY_EVENT_IN_ONE_SEGMENT)
                         .build()
+        );
+
+        ParameterResolverFactoryUtils.registerToComponentRegistry(
+                componentRegistry,
+                WorkflowStateParameterResolverFactory::new
         );
     }
 }
