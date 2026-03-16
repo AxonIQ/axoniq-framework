@@ -179,7 +179,6 @@ public class DefaultEventStoreTransaction implements EventStoreTransaction {
                         AppendCondition overridden = override.apply(appendCondition);
                         logger.debug("AppendCondition overridden from [{}] to [{}]", appendCondition, overridden);
                         appendCondition = overridden;
-                        context.updateResource(appendConditionKey, current -> overridden);
                     }
 
                     context.putResource(prepareCommitExecuted, true);
