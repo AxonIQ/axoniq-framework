@@ -378,7 +378,7 @@ class AxoniqConsoleRSocketClient(
                     }
                 }
                 .doOnError {
-                    logger.error(it.message)
+                    logger.error("Could not connect to Axoniq Platform", it)
                 }
     }
 
