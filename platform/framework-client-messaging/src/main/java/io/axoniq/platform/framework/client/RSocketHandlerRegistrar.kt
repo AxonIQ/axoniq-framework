@@ -53,8 +53,6 @@ class RSocketHandlerRegistrar(
         override fun requestResponse(payload: Payload): Mono<Payload> {
             val route = routeFromPayload(payload)
             if (route == "authentication_failed") {
-                logger.warn("Authentication to Axoniq Platform failed. Are your properties set correctly?")
-                rSocket.dispose()
                 return Mono.empty()
             }
             val matchingHandler = handlers.firstOrNull { it.route == route }

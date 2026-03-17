@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,20 +26,28 @@ import static io.axoniq.platform.framework.AxoniqPlatformConfigurerEnhancer.PLAT
 
 public class AxoniqPlatformEventsourcingConfigurerEnhancer implements ConfigurationEnhancer {
 
+    /**
+     * This enhancer should be configured after the platform enhancer, to have the HandlerMetricRegistry component
+     * available.
+     */
+    public static final int EVENTSOURCING_ENHANCER_ORDER = PLATFORM_ENHANCER_ORDER + 1;
+
     @Override
     public void enhance(ComponentRegistry registry) {
-        registry
-                .registerDecorator(DecoratorDefinition.forType(EventStorageEngine.class)
-                                                      .with((c, name, delegate) ->
-                                                                    new AxoniqPlatformEventStorageEngine(
-                                                                            delegate, c.getComponent(
-                                                                            HandlerMetricsRegistry.class)))
-                                                      .order(Integer.MAX_VALUE));
+        if (!registry.hasComponent(HandlerMetricsRegistry.class)) {
+            return;
+        }
+        registry.registerDecorator(
+                DecoratorDefinition.forType(EventStorageEngine.class)
+                                   .with((c, name, delegate) -> {
+                                       HandlerMetricsRegistry metricsRegistry = c.getComponent(HandlerMetricsRegistry.class);
+                                       return new AxoniqPlatformEventStorageEngine(delegate, metricsRegistry);
+                                   }).order(Integer.MAX_VALUE));
     }
 
 
     @Override
     public int order() {
-        return PLATFORM_ENHANCER_ORDER;
+        return EVENTSOURCING_ENHANCER_ORDER;
     }
 }
