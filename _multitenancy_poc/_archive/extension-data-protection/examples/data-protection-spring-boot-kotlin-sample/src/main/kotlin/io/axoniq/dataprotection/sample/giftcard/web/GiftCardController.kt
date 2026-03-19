@@ -70,6 +70,7 @@ import java.util.concurrent.CompletableFuture
  * - Queries return HTTP 200 with data or HTTP 404 for missing resources
  * - Streaming endpoints return continuous data streams with proper content types
  * - Error scenarios return appropriate 4xx/5xx status codes
+ *
  */
 @RestController
 @RequestMapping("/api/giftcards")

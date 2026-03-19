@@ -22,6 +22,11 @@ import lombok.Value;
 
 import java.lang.reflect.Field;
 
+/**
+ * Model class representing a Serialized Personal Data field.
+ *
+ * @author Frans van Buul
+ */
 @Value
 public class SPDField implements PDField {
     @NonNull Class<?> clazz;

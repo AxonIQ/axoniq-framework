@@ -19,6 +19,11 @@ package io.axoniq.framework.dataprotection.internal.model;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Registry that caches field encryption models for classes.
+ *
+ * @author Frans van Buul
+ */
 public class ModelRegistry {
 
     private final ModelInspector modelInspector = new ModelInspector();

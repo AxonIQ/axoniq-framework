@@ -27,6 +27,7 @@ import scala.beans.BeanProperty
 
 /**
  * Read model representation of a gift card's current state.
+ *
  */
 class GiftCardSummary {
 

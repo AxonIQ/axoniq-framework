@@ -22,6 +22,11 @@ import lombok.Value;
 
 import java.lang.reflect.Field;
 
+/**
+ * Model class representing a Deep Personal Data field.
+ *
+ * @author Frans van Buul
+ */
 @Value
 public class DPDField implements MapKeyField, MapValueField {
     @NonNull Field field;

@@ -29,6 +29,8 @@ import java.lang.annotation.Target;
  * <p>
  * For use in Scala programs, there is a <code>personalDataType</code> type alias for this annotation, defined
  * in the package object of the api package.
+ *
+ * @author Frans van Buul
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.ANNOTATION_TYPE, ElementType.TYPE})

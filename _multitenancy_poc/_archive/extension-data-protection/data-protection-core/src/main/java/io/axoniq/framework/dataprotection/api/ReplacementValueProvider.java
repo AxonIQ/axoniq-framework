@@ -34,6 +34,8 @@ import java.lang.reflect.Type;
  * each encryption. This is to provide a partial, clear to be included in the storage. By default, nothing is stored.
  * This allows functionality such as keeping the year of a full date even if the date itself gets deleted, or keeping
  * the last 4 digits of a credit card number.
+ *
+ * @author Frans van Buul
  */
 public class ReplacementValueProvider {
 

@@ -44,6 +44,7 @@ import java.math.BigDecimal;
  *   <li>Redemptions cannot exceed the remaining balance</li>
  *   <li>Gift cards maintain their remaining value after redemptions</li>
  * </ul>
+ *
  */
 @EventSourced(tagKey = "giftCardId")
 public class GiftCard {

@@ -31,6 +31,8 @@ import java.util.Set;
  * This class can take an object and encrypt and decrypt its fields, including the fields of any objects deeper in
  * the object tree, according to the configuration of the various Axon Data Protection Module annotations.
  * To accomplish this, it needs the capabilities of a {@link CryptoEngine}.
+ *
+ * @author Frans van Buul
  */
 public final class FieldEncrypter {
     private final EncryptionProcessor encryptionProcessor;

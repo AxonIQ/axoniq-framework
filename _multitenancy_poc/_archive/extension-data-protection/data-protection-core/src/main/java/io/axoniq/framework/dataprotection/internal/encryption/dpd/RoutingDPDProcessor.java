@@ -27,6 +27,12 @@ import java.util.Collection;
 
 import static io.axoniq.framework.dataprotection.internal.utils.ScalaDetector.isScalaPresent;
 
+/**
+ * Routes deep personal data processing to the appropriate type-specific processor based on the input data type.
+ * Supports arrays, collections, Scala types, and regular objects.
+ *
+ * @author Frans van Buul
+ */
 public class RoutingDPDProcessor implements DPDProcessor<Object> {
 
     private final ArrayDPDProcessor arrayDPDProcessor;

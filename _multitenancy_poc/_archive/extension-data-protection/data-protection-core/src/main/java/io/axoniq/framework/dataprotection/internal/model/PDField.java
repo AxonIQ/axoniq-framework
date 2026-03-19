@@ -21,6 +21,8 @@ import java.lang.reflect.Field;
 
 /**
  * Interface for fields that are encrypted directly rather than deeply (both IPD and SPD).
+ *
+ * @author Frans van Buul
  */
 public interface PDField {
     Class<?> getClazz();

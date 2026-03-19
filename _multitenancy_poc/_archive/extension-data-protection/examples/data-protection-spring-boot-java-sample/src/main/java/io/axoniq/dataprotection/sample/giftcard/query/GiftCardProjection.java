@@ -36,6 +36,7 @@ import java.time.ZoneOffset;
 
 /**
  * Event-driven projection that maintains a read model of gift card data.
+ *
  */
 @Component
 public class GiftCardProjection {

@@ -33,6 +33,7 @@ import java.util.function.Predicate
 
 /**
  * Event-driven projection that maintains a read model of gift card data.
+ *
  */
 @Component
 class GiftCardProjection(private val giftCardRepository: GiftCardRepository) {

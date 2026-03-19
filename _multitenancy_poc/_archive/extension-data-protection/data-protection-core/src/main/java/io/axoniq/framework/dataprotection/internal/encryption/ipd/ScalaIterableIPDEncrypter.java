@@ -27,6 +27,12 @@ import java.util.List;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 
+/**
+ * Implementation of {@link Encrypter} for Scala Iterable data. Processes each element of the iterable
+ * through the routing encrypter, preserving the original collection type where possible.
+ *
+ * @author Frans van Buul
+ */
 class ScalaIterableIPDEncrypter implements Encrypter<scala.collection.Iterable> {
 
     private RoutingIPDEncrypter routingIPDEncrypter;

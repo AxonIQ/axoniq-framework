@@ -22,6 +22,12 @@ import io.axoniq.framework.dataprotection.internal.model.PDField;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 
+/**
+ * Interface for field encryption operations.
+ *
+ * @param <T> the type of data to encrypt/decrypt
+ * @author Frans van Buul
+ */
 public interface Encrypter<T> {
 
     T process(PDField pdField, T input, Optional<SecretKey> key, Operation operation);

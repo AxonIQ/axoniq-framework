@@ -21,6 +21,12 @@ import io.axoniq.framework.dataprotection.internal.encryption.core.Operation;
 
 import java.util.Collection;
 
+/**
+ * Implementation of {@link DPDProcessor} for Collection data. Processes each element of the collection
+ * through the routing processor.
+ *
+ * @author Frans van Buul
+ */
 class CollectionDPDProcessor implements DPDProcessor<Collection> {
 
     private final RoutingDPDProcessor routingDPDProcessor;

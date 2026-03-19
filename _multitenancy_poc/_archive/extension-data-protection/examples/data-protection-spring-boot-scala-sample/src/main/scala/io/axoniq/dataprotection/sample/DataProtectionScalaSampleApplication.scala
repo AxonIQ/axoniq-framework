@@ -34,6 +34,7 @@ import org.springframework.context.annotation.ComponentScan
  * - Field-level encryption with Scala case classes
  * - Cryptographic erasure (right to be forgotten)
  * - Integration of Scala with Spring Boot and Axon Framework
+ *
  */
 @SpringBootApplication
 @EntityScan(basePackages = Array(

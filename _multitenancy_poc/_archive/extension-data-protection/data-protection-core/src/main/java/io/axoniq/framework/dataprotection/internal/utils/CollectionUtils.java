@@ -48,6 +48,12 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.function.Function;
 
+/**
+ * Utility class for working with Java Collections. Provides methods to modify
+ * immutable and wrapped collections through reflection.
+ *
+ * @author Frans van Buul
+ */
 public abstract class CollectionUtils {
 
     /* Intentionally choosing a different class for naming the logger. */

@@ -30,6 +30,7 @@ import java.util.Objects;
 
 /**
  * Read model representation of a gift card's current state.
+ *
  */
 public class GiftCardSummary {
 

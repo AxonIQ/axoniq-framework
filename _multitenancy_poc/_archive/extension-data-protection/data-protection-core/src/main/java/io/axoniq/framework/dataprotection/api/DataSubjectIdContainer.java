@@ -25,6 +25,8 @@ import java.lang.annotation.Target;
 /**
  * Container annotation defined to support the use of multiple {@link DataSubjectId} annotations on the
  * same field. This annotation should never be used directly.
+ *
+ * @author Frans van Buul
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.ANNOTATION_TYPE, ElementType.FIELD})

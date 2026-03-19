@@ -31,6 +31,7 @@ import scala.jdk.OptionConverters._
 
 /**
  * Event-driven projection that maintains a read model of gift card data.
+ *
  */
 @Component
 class GiftCardProjection(giftCardRepository: GiftCardRepository) {

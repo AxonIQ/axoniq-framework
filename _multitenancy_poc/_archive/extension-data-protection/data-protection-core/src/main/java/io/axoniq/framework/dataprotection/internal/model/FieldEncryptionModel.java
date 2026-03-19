@@ -22,6 +22,11 @@ import lombok.NonNull;
 
 import java.util.List;
 
+/**
+ * Model class containing all personal data field information for a class.
+ *
+ * @author Frans van Buul
+ */
 @Getter
 public class FieldEncryptionModel {
     @NonNull final List<DataSubjIdField> dataSubjIdFields;
