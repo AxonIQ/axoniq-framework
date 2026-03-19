@@ -82,6 +82,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
 .ev.completed{border-left-color:var(--steel);color:var(--teal)}
 .ev.failed{border-left-color:var(--orange);color:var(--orange)}
 .ev.cancelled{border-left-color:var(--muted-lt);color:var(--muted)}
+.ev.retrying{border-left-color:#C03010;color:#C03010;font-style:italic}
 .ev.wf{font-weight:bold}
 .ev .t{color:var(--muted-lt);font-size:9px}
 .ev.glow{animation:rpulse .6s ease;box-shadow:0 0 12px rgba(74,143,168,.4)}
@@ -102,6 +103,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
 #cpanel::-webkit-scrollbar-thumb{background:var(--steel);border-radius:0}
 #cc{font-size:12px;line-height:1.7;white-space:pre;color:var(--fg)}
 .ck{color:var(--steel)}.ccs{color:#B07010}.ccm{color:var(--muted-lt);font-style:italic}.cct{color:var(--teal)}.ccn{color:var(--fg)}
+.cline{display:block;padding:0 4px;border-left:3px solid transparent;transition:all .3s}
+.cline.active{background:rgba(232,82,26,.08);border-left-color:var(--orange)}
 
 /* Lesson bar */
 #lbar{padding:12px 24px;border-top:2px solid var(--border);background:var(--card);min-height:48px;flex-shrink:0}
@@ -414,6 +417,15 @@ function applyInput(p){
   p.x+=p.vx;
   if(p.x<p.w/2)p.x=p.w/2;
   if(level&&p.x>level.totalWidth-p.w/2)p.x=level.totalWidth-p.w/2;
+  // Bounce off completed zones (can't go back)
+  if(level)for(const z of level.zones){
+    if(z.exited&&p.vx<0){
+      const zy=z.zy||GY;const rightEdge=z.x+z.w;
+      if(p.x-p.w/2<rightEdge&&p.x+p.w/2>rightEdge-5&&p.y+p.h>=zy-10&&p.y+p.h<=zy+50){
+        p.x=rightEdge+p.w/2;p.vx=Math.abs(p.vx)*0.5; // bounce
+      }
+    }
+  }
 }
 function colXFor(p){if(!level)return;for(const pl of level.platforms){if(p.x+p.w/2>pl.x&&p.x-p.w/2<pl.x+pl.w&&p.y+p.h>pl.y+2&&p.y<pl.y+pl.h){if(p.vx>0)p.x=pl.x-p.w/2;else if(p.vx<0)p.x=pl.x+pl.w+p.w/2;p.vx=0}}}
 function colYFor(p){if(!level)return;for(const pl of level.platforms){if(p.x+p.w/2>pl.x&&p.x-p.w/2<pl.x+pl.w){if(p.vy>=0&&p.y+p.h>=pl.y&&p.y+p.h<=pl.y+pl.h+p.vy+1){p.y=pl.y-p.h;p.vy=0;p.grounded=true}else if(p.vy<0&&p.y<=pl.y+pl.h&&p.y>=pl.y){p.y=pl.y+pl.h;p.vy=0}}}}
@@ -457,7 +469,7 @@ function updatePlayer(){
       showLesson('<span class="hl">allMatch resolved!</span> Both parallel steps completed. Clones merged. Continue to the final step.');
     }
   }
-  checkZones();checkObs();
+  checkZones();checkObs();updateCodeHighlight();
 }
 // Legacy wrappers removed — using colXFor/colYFor with player param
 
@@ -467,9 +479,13 @@ function checkZonesFor(p){
   for(const z of level.zones){
     const zy=z.zy||GY;
     const inZ=p.x>z.x&&p.x<z.x+z.w&&p.y+p.h>=zy-10&&p.y+p.h<=zy+50;
-    if(inZ&&!z.entered){z.entered=true;fireGE(z.name,StepStatus.STARTED)}
+    if(inZ&&!z.entered){z.entered=true;
+      const existing=engine.state.getStep(z.name);
+      if(!existing)fireGE(z.name,StepStatus.STARTED)}
     if(z.entered&&!z.exited&&p.x>z.x+z.w&&!inZ){
-      z.exited=true;fireGE(z.name,StepStatus.COMPLETED);
+      z.exited=true;
+      const existing=engine.state.getStep(z.name);
+      if(!existing||existing.status!==StepStatus.COMPLETED)fireGE(z.name,StepStatus.COMPLETED);
       if(z.idx>lastCP)lastCP=z.idx;
       if(level.fork&&(z.name==='fastPath'||z.name==='safePath')){
         const other=z.name==='fastPath'?'safePath':'fastPath';
@@ -562,6 +578,17 @@ function triggerCrash(){
     particles.push({x:P.x,y:P.y+P.h/2,vx:Math.cos(a)*s,vy:Math.sin(a)*s-3,life:1,decay:0.015+Math.random()*0.01,size:3+Math.random()*4,col:i%2?'#E8521A':'#F0A030',type:'frag'})}
   if(splitActive){for(let i=0;i<15;i++){const a=Math.random()*Math.PI*2,s=2+Math.random()*3;
     particles.push({x:P2.x,y:P2.y+P2.h/2,vx:Math.cos(a)*s,vy:Math.sin(a)*s-3,life:1,decay:0.015+Math.random()*0.01,size:3+Math.random()*4,col:i%2?'#E8521A':'#8C4AA8',type:'frag'})}}
+  // Fire Retrying event — active step, or next step if between zones
+  if(level){
+    let az=level.zones.find(z=>z.entered&&!z.exited);
+    if(!az){
+      // Between zones: find next uncompleted zone
+      az=level.zones.find(z=>!z.entered);
+      // Or fall back to last completed
+      if(!az)for(let i=level.zones.length-1;i>=0;i--){if(level.zones[i].exited){az=level.zones[i];break}}
+    }
+    if(az)addRetryEvt(az.name)
+  }
   showLesson(level.crashLesson||'<span class="hl">CRASH!</span> Events survived. Respawning...');
   document.getElementById('esbox').classList.add('glow');
   if(level.hasScore)addScore(50);
@@ -590,6 +617,15 @@ function finishRespawn(){
 
 /* ═══ EVENT & UI ═══ */
 function fireGE(sn,ss){const e=engine.fireEvent(null,sn,ss);if(e)addEvt(e);if(level.hasScore&&ss===StepStatus.COMPLETED)addScore(100)}
+function addRetryEvt(stepName){
+  const ev=createEvent(stepName.charAt(0).toUpperCase()+stepName.slice(1)+'Retrying',{},{[META.WORKFLOW_ID]:engine.workflowId,[META.STEP_NAME]:stepName});
+  ev.sequence=engine.eventStore.length;engine.eventStore.append(ev);
+  const log=document.getElementById('elog'),el=document.createElement('div');
+  el.className='ev retrying';
+  const t=new Date(ev.timestamp).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+  el.innerHTML='<span class="t">'+t+'</span> '+stepName.charAt(0).toUpperCase()+stepName.slice(1)+'Retrying';
+  el.dataset.seq=ev.sequence;log.appendChild(el);log.scrollTop=log.scrollHeight;updEC();
+}
 function fireWE(ws){const e=engine.fireEvent(null,null,null,ws);if(e)addEvt(e)}
 function addEvt(ev){
   const log=document.getElementById('elog'),el=document.createElement('div');el.className='ev';
@@ -606,6 +642,41 @@ function updEC(){const n=engine.eventStore.length;document.getElementById('ecnt'
 function hlReplay(seq){document.querySelectorAll('.ev').forEach(e=>{if(parseInt(e.dataset.seq)===seq){e.classList.add('glow');setTimeout(()=>e.classList.remove('glow'),500)}})}
 function showLesson(t){document.getElementById('ltxt').innerHTML=t}
 function addScore(p){score+=p;document.getElementById('sval').textContent=score}
+
+// Code panel: wrap lines and tag with step names
+function initCodePanel(code){
+  const el=document.getElementById('cc');
+  const lines=code.split('\n');
+  el.innerHTML=lines.map(line=>{
+    // Extract step name from this line if it contains one
+    const m=line.match(/"([^"]+)"/);
+    const step=m?m[1]:'';
+    return '<span class="cline" data-step="'+step+'">'+line+'</span>';
+  }).join('\n');
+}
+let activeCodeStep='';
+function highlightCodeStep(stepName){
+  if(activeCodeStep===stepName)return;
+  activeCodeStep=stepName;
+  const lines=document.querySelectorAll('.cline');
+  let target=null;
+  lines.forEach(l=>{
+    if(l.dataset.step===stepName){l.classList.add('active');target=l}
+    else l.classList.remove('active');
+  });
+  if(target){const panel=document.getElementById('cpanel');
+    const top=target.offsetTop-panel.offsetTop-40;
+    panel.scrollTo({top:Math.max(0,top),behavior:'smooth'})}
+}
+function updateCodeHighlight(){
+  if(!level)return;
+  // Find the currently active step (entered but not exited)
+  let active='';
+  for(const z of level.zones){if(z.entered&&!z.exited){active=z.name;break}}
+  if(!active){// Show last completed
+    for(let i=level.zones.length-1;i>=0;i--){if(level.zones[i].exited){active=level.zones[i].name;break}}}
+  highlightCodeStep(active);
+}
 
 /* ═══ RENDERER ═══ */
 function initCanvas(){canvas=document.getElementById('gc');ctx2=canvas.getContext('2d');window.addEventListener('resize',resizeCanvas)}
@@ -908,7 +979,7 @@ function startLevel(idx){
   document.getElementById('level-select').style.display='none';
   document.getElementById('game-screen').style.display='flex';
   document.getElementById('lvl-title').textContent=level.title+' \u2014 '+level.subtitle;
-  document.getElementById('cc').innerHTML=level.code;
+  initCodePanel(level.code);activeCodeStep='';
   document.getElementById('elog').innerHTML='';
   document.getElementById('ltxt').innerHTML='Use <span class="hl">arrow keys</span> to move, <span class="hl">up/space</span> to jump. Run right through the zones!';
   document.getElementById('score-hdr').style.display=level.hasScore?'block':'none';
