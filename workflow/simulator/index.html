@@ -253,13 +253,12 @@ function mkLevel(cfg){
   plats.push({x,y:GY,w:200,h:PH,c:'#8A9BAA'});
   return{zones,platforms:plats,obstacles:obs,checkpoints:cps,totalWidth:x+200,spawn:{x:60,y:GY-28},...cfg};
 }
-function hO(rx,s){return{type:'h',rx,w:28,h:28,spd:s||2}}
-function vO(rx,s,a){return{type:'v',rx,w:24,h:24,spd:s||2,amp:a||70}}
-function fO(rx,s,iv){return{type:'f',rx,w:22,h:22,spd:s||3,interval:iv||110}}
-// Zone obstacles: patrol inside a zone. rx = fraction within zone width
-function zhO(rx,s){return{type:'zh',rx,w:26,h:26,spd:s||1.5}}     // horizontal patrol in zone
-function zvO(rx,s,a){return{type:'zv',rx,w:22,h:22,spd:s||2,amp:a||50}} // vertical bounce in zone
-function zfO(rx,s,iv){return{type:'zf',rx,w:20,h:20,spd:s||2.5,interval:iv||130}} // falling inside zone
+function hO(rx,s){return{type:'h',rx,w:34,h:30,spd:s||2}}
+function vO(rx,s,a){return{type:'v',rx,w:30,h:28,spd:s||2,amp:a||70}}
+function fO(rx,s,iv){return{type:'f',rx,w:28,h:26,spd:s||3,interval:iv||110}}
+function zhO(rx,s){return{type:'zh',rx,w:32,h:28,spd:s||1.5}}
+function zvO(rx,s,a){return{type:'zv',rx,w:28,h:26,spd:s||2,amp:a||50}}
+function zfO(rx,s,iv){return{type:'zf',rx,w:26,h:24,spd:s||2.5,interval:iv||130}}
 
 const LEVELS=[
   mkLevel({steps:['analyzeRequest','generateResponse','deliverResult'],title:'First Steps',subtitle:'THE HAPPY PATH',gap:120,zw:420,obs:{},
@@ -369,7 +368,7 @@ function checkZones(){
     const zy=z.zy||GY;
     const inZ=P.x>z.x&&P.x<z.x+z.w&&P.y+P.h>=zy-10&&P.y+P.h<=zy+50;
     if(inZ&&!z.entered){z.entered=true;fireGE(z.name,StepStatus.STARTED)}
-    if(z.entered&&!z.exited&&P.x>z.x+z.w-50&&inZ){
+    if(z.entered&&!z.exited&&P.x>z.x+z.w&&!inZ){
       z.exited=true;fireGE(z.name,StepStatus.COMPLETED);
       if(z.idx>lastCP)lastCP=z.idx;
       if(level.fork&&(z.name==='fastPath'||z.name==='safePath')){
@@ -402,15 +401,35 @@ function checkWin(){
 }
 
 /* ═══ OBSTACLES ═══ */
+const ZONE_BUGS=[
+  {lbl:'NullPtr',bg:'#3A1A4A',fg:'#6A3A8A',txt:'#D8B0F0',spark:'#6A3A8A',icon:'null'},
+  {lbl:'OOM',bg:'#4A1A1A',fg:'#8A3A3A',txt:'#F0B0B0',spark:'#8A3A3A',icon:'mem'},
+  {lbl:'Deadlock',bg:'#1A3A1A',fg:'#3A6A3A',txt:'#B0F0B0',spark:'#3A6A3A',icon:'lock'},
+  {lbl:'StackOverflow',bg:'#4A3A1A',fg:'#7A6A2A',txt:'#F0E0A0',spark:'#7A6A2A',icon:'stack'},
+  {lbl:'ClassCast',bg:'#1A2A4A',fg:'#3A5A8A',txt:'#B0D0F0',spark:'#3A5A8A',icon:'cast'},
+  {lbl:'IOException',bg:'#4A2A1A',fg:'#8A5A2A',txt:'#F0D0A0',spark:'#8A5A2A',icon:'io'},
+];
+const GAP_BUGS=[
+  {lbl:'CRASH',bg:'#8A1A0A',fg:'#C03010',txt:'#FFF',spark:'#E8521A',icon:'boom'},
+  {lbl:'TIMEOUT',bg:'#6A4A0A',fg:'#A08010',txt:'#FFF',spark:'#F0A030',icon:'clock'},
+  {lbl:'ConnReset',bg:'#1A3A4A',fg:'#2A6A7A',txt:'#D0F0F8',spark:'#4A8FA8',icon:'plug'},
+  {lbl:'DNS Fail',bg:'#3A1A3A',fg:'#6A3A6A',txt:'#E0C0E0',spark:'#6A3A6A',icon:'dns'},
+  {lbl:'TLS Err',bg:'#4A3A0A',fg:'#8A7020',txt:'#F0E8C0',spark:'#8A7020',icon:'shield'},
+  {lbl:'CRASH',bg:'#8A1A0A',fg:'#C03010',txt:'#FFF',spark:'#E8521A',icon:'boom'},
+  {lbl:'ECONNREFUSED',bg:'#4A1A1A',fg:'#8A3030',txt:'#F0C0C0',spark:'#8A3030',icon:'block'},
+  {lbl:'CRASH',bg:'#8A1A0A',fg:'#C03010',txt:'#FFF',spark:'#E8521A',icon:'boom'},
+];
 function initObs(){
   liveObs=[];if(!level)return;
+  let zi=0,gi=0;
   for(const o of level.obstacles){
     const gw=o.gw||250;const zt=o.type.startsWith('z');
     let bx,by;
     if(zt){bx=o.bx+o.rx*gw;by=(o.by||GY)-40}
     else if(o.type==='f'){bx=o.bx+o.rx*gw;by=(o.by||GY)-300}
     else{bx=o.bx+o.rx*gw;by=(o.by||GY)-55}
-    liveObs.push({...o,baseX:bx,baseY:by,
+    const bug=zt?ZONE_BUGS[zi++%ZONE_BUGS.length]:GAP_BUGS[gi++%GAP_BUGS.length];
+    liveObs.push({...o,baseX:bx,baseY:by,bug,
       ox:0,oy:0,phase:Math.random()*Math.PI*2,timer:Math.random()*100|0,active:true,falling:false,fy:0});
   }
 }
@@ -429,8 +448,8 @@ function updateObs(){
 function checkObs(){
   for(const o of liveObs){
     if(!o.active)continue;
-    const ox=o.baseX+o.ox,oy=o.baseY+o.oy;
-    if(P.x+P.w/2>ox&&P.x-P.w/2<ox+(o.w||24)&&P.y+P.h>oy&&P.y<oy+(o.h||24)){triggerCrash();return}
+    const ox=o.baseX+o.ox,oy=o.baseY+o.oy,ow=o.w||24,oh=o.h||24;
+    if(P.x+P.w/2>ox&&P.x-P.w/2<ox+ow&&P.y+P.h>oy&&P.y<oy+oh){triggerCrash();return}
   }
 }
 
@@ -550,31 +569,87 @@ function drawCPs(){
   }
 }
 function drawObsR(){
+  const f=getComputedStyle(document.body).fontFamily;
   for(const o of liveObs){
     if(!o.active)continue;const ox=(o.baseX+o.ox-cam.x)|0,oy=(o.baseY+o.oy)|0,ow=o.w||24,oh=o.h||24;
     if(ox+ow<-50||ox>cw+50||oy>ch+50||oy<-50)continue;
+    const b=o.bug||{lbl:'ERR',bg:'#E8521A',fg:'#FF6A30',txt:'#FFF',spark:'#E8521A',icon:'boom'};
     const isZone=o.inZone||o.type.startsWith('z');
-    if(isZone){
-      // Zone enemies: glitchy pixel bugs (darker, pixelated)
-      ctx2.save();ctx2.shadowColor='#1C4A5A';ctx2.shadowBlur=8;
-      ctx2.fillStyle='#1C4A5A';ctx2.fillRect(ox,oy,ow,oh);ctx2.restore();
-      ctx2.fillStyle='#2A6A7A';ctx2.fillRect(ox+2,oy+2,ow-4,oh-4);
-      // Pixel "eye"
-      const ex=ox+ow/2+(Math.sin(frame*0.06+o.phase)*3)|0,ey=oy+oh/2-2;
-      ctx2.fillStyle='#E8521A';ctx2.fillRect(ex-2,ey,4,4);
-      ctx2.fillStyle='#F0A030';ctx2.fillRect(ex-1,ey+1,2,2);
-      // Pixel legs
-      ctx2.fillStyle='#14384A';
-      const lw=Math.sin(frame*0.12+o.phase)*2|0;
-      ctx2.fillRect(ox+3,oy+oh,2,3+lw);ctx2.fillRect(ox+ow-5,oy+oh,2,3-lw);
-      // Spark trail
-      if(Math.random()<0.15)particles.push({x:ox+cam.x+ow/2,y:oy+oh/2,vx:(Math.random()-0.5)*0.3,vy:-0.3-Math.random()*0.5,life:1,decay:0.05,size:1.5+Math.random()*1.5,col:'#1C4A5A',type:'spark'});
-    } else {
-      // Gap obstacles: orange hazards
-      ctx2.save();ctx2.shadowColor='#E8521A';ctx2.shadowBlur=12;ctx2.fillStyle='#E8521A';ctx2.fillRect(ox,oy,ow,oh);ctx2.restore();
-      ctx2.fillStyle='#FF6A30';ctx2.fillRect(ox+2,oy+2,ow-4,oh-4);
-      if(Math.random()<0.3)particles.push({x:ox+cam.x+ow/2,y:oy+oh/2,vx:(Math.random()-0.5)*0.5,vy:-0.5-Math.random(),life:1,decay:0.04,size:2+Math.random()*2,col:'#E8521A',type:'spark'});
+    // Size box to fit label
+    ctx2.font='bold 8px '+f;const tw=ctx2.measureText(b.lbl).width;
+    const bw=Math.max(ow,tw+12),bh=Math.max(oh,22);
+    const bx2=ox-(bw-ow)/2,by2=oy-(bh-oh)/2;
+    const glitch=isZone?(Math.sin(frame*0.15+o.phase)*2)|0:0;
+    const cx=bx2+bw/2+glitch,cy=by2+bh/2;
+    // Shadow/glow
+    ctx2.save();ctx2.shadowColor=b.bg;ctx2.shadowBlur=8;
+    ctx2.fillStyle=b.bg;ctx2.fillRect(bx2+glitch,by2,bw,bh);ctx2.restore();
+    // Inner fill
+    ctx2.fillStyle=b.fg;ctx2.fillRect(bx2+2+glitch,by2+2,bw-4,bh-4);
+    // Pixel icon (top area) + label (bottom)
+    const ix=cx,iy=cy-3;
+    ctx2.fillStyle=b.txt;
+    switch(b.icon){
+      case'null': // null pointer: "0" with slash
+        ctx2.fillRect(ix-4,iy-4,8,2);ctx2.fillRect(ix-4,iy+2,8,2);
+        ctx2.fillRect(ix-4,iy-4,2,8);ctx2.fillRect(ix+2,iy-4,2,8);
+        ctx2.fillRect(ix-2,iy-2,4,1);ctx2.fillRect(ix,iy,2,1); // slash
+        break;
+      case'mem': // OOM: stacked bars overflowing
+        ctx2.fillRect(ix-4,iy+1,8,2);ctx2.fillRect(ix-3,iy-1,6,2);
+        ctx2.fillRect(ix-2,iy-3,4,2);ctx2.fillRect(ix-1,iy-5,2,2);
+        ctx2.fillStyle=b.spark;ctx2.fillRect(ix-5,iy-5,2,2);ctx2.fillRect(ix+4,iy-4,2,2); // overflow sparks
+        break;
+      case'lock': // deadlock: two interlocking squares
+        ctx2.fillRect(ix-5,iy-3,5,6);ctx2.fillStyle=b.bg;ctx2.fillRect(ix-4,iy-2,3,4);
+        ctx2.fillStyle=b.txt;ctx2.fillRect(ix,iy-3,5,6);ctx2.fillStyle=b.bg;ctx2.fillRect(ix+1,iy-2,3,4);
+        break;
+      case'stack': // stack overflow: tilted stack of blocks
+        ctx2.fillStyle=b.txt;
+        for(let i=0;i<4;i++)ctx2.fillRect(ix-3+i,iy+3-i*3,6,2);
+        ctx2.fillStyle=b.spark;ctx2.fillRect(ix-1,iy-9,4,2); // top one falling
+        break;
+      case'cast': // class cast: two mismatched puzzle pieces
+        ctx2.fillRect(ix-5,iy-2,4,5);ctx2.fillRect(ix-1,iy,2,2);
+        ctx2.fillStyle=b.spark;ctx2.fillRect(ix+1,iy-3,4,5);ctx2.fillRect(ix-1,iy-2,2,2);
+        break;
+      case'io': // IOException: broken arrow
+        ctx2.fillRect(ix-4,iy,8,2);ctx2.fillRect(ix+2,iy-2,2,2);ctx2.fillRect(ix+2,iy+2,2,2);
+        ctx2.fillStyle=b.spark;ctx2.fillRect(ix-1,iy-1,2,4); // break gap
+        break;
+      case'boom': // crash: explosion star
+        ctx2.fillRect(ix-1,iy-5,2,10);ctx2.fillRect(ix-5,iy-1,10,2);
+        ctx2.fillRect(ix-4,iy-4,2,2);ctx2.fillRect(ix+2,iy-4,2,2);
+        ctx2.fillRect(ix-4,iy+2,2,2);ctx2.fillRect(ix+2,iy+2,2,2);
+        break;
+      case'clock': // timeout: clock face
+        ctx2.fillRect(ix-4,iy-1,8,2);ctx2.fillRect(ix-1,iy-4,2,8);
+        ctx2.fillRect(ix,iy-3,1,3);ctx2.fillRect(ix,iy,3,1); // hands
+        break;
+      case'plug': // conn reset: broken plug
+        ctx2.fillRect(ix-4,iy-1,3,2);ctx2.fillRect(ix+1,iy-1,3,2);
+        ctx2.fillRect(ix-4,iy-3,2,2);ctx2.fillRect(ix-4,iy+1,2,2);
+        ctx2.fillStyle=b.spark;ctx2.fillRect(ix-1,iy-2,2,1);ctx2.fillRect(ix,iy+1,1,2); // sparks
+        break;
+      case'dns': // DNS: question mark
+        ctx2.fillRect(ix-2,iy-5,4,2);ctx2.fillRect(ix+1,iy-3,2,2);
+        ctx2.fillRect(ix-1,iy-1,2,2);ctx2.fillRect(ix-1,iy+2,2,2);
+        break;
+      case'shield': // TLS: broken shield
+        ctx2.fillRect(ix-3,iy-4,6,2);ctx2.fillRect(ix-4,iy-2,2,4);ctx2.fillRect(ix+2,iy-2,2,4);
+        ctx2.fillRect(ix-2,iy+2,4,2);
+        ctx2.fillStyle=b.spark;ctx2.fillRect(ix-1,iy-2,2,3); // crack
+        break;
+      case'block': // ECONNREFUSED: X
+        ctx2.fillRect(ix-4,iy-4,2,2);ctx2.fillRect(ix-2,iy-2,2,2);ctx2.fillRect(ix,iy,2,2);ctx2.fillRect(ix+2,iy+2,2,2);
+        ctx2.fillRect(ix+2,iy-4,2,2);ctx2.fillRect(ix,iy-2,2,2);ctx2.fillRect(ix-2,iy,2,2);ctx2.fillRect(ix-4,iy+2,2,2);
+        break;
     }
+    // Label below icon
+    ctx2.fillStyle=b.txt;ctx2.font='bold 8px '+f;ctx2.textAlign='center';ctx2.textBaseline='top';
+    ctx2.fillText(b.lbl,cx,cy+3);
+    // Sparks
+    if(Math.random()<(isZone?0.1:0.2))particles.push({x:ox+cam.x+ow/2,y:oy+oh/2,vx:(Math.random()-0.5)*0.4,vy:-0.4-Math.random()*0.6,life:1,decay:0.04,size:1.5+Math.random()*2,col:b.spark,type:'spark'});
   }
 }
 function drawPlayer(){
