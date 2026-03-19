@@ -648,8 +648,8 @@ function initCodePanel(code){
   const el=document.getElementById('cc');
   const lines=code.split('\n');
   el.innerHTML=lines.map(line=>{
-    // Extract step name from this line if it contains one
-    const m=line.match(/"([^"]+)"/);
+    // Extract step name from ccs span: class="ccs">"stepName"</span>
+    const m=line.match(/class="ccs">&quot;([^&]+)&quot;/) || line.match(/class="ccs">"([^"<]+)"/);
     const step=m?m[1]:'';
     return '<span class="cline" data-step="'+step+'">'+line+'</span>';
   }).join('\n');
