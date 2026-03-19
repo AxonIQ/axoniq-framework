@@ -136,11 +136,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
       <div class="cd">Dodge obstacles or get hit. Experience crash recovery firsthand.</div>
       <span class="ctag">Crash Recovery</span><span class="cdiff">Medium</span>
     </div>
-    <div class="lcard w" onclick="startLevel(2)">
-      <span class="ci" style="color:var(--orange)">&#9763; &#9763;</span>
-      <div class="ct">Gauntlet</div><div class="cs">DENSE OBSTACLES</div>
-      <div class="cd">4 zones of increasing danger. Crashes are inevitable. Survive them.</div>
-      <span class="ctag">Durable Execution</span><span class="cdiff">Hard</span>
+    <div class="lcard" onclick="startLevel(2)">
+      <span class="ci" style="color:#8C4AA8">&#9672; &#9672;</span>
+      <div class="ct">Portals</div><div class="cs">PARALLEL EXECUTION</div>
+      <div class="cd">Step through the portal and split into two. Both clones must finish for allMatch.</div>
+      <span class="ctag">allMatch</span><span class="cdiff">Medium</span>
     </div>
     <div class="lcard" onclick="startLevel(3)">
       <span class="ci" style="color:var(--steel)">&#8649; &#9671;</span>
@@ -305,12 +305,38 @@ const LEVELS=[
     code:'<span class="ccm">// Fulfillment Workflow — crashes lurk everywhere</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callAuthService"</span>, AuthGateway::verify);\n    <span class="ccm">// *** network errors ahead ***</span>\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callInventoryAPI"</span>, InventoryClient::reserve);\n    <span class="ccm">// On crash, evolve() replays all events</span>\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"sendEmail"</span>, NotificationSvc::send);\n}',
     lesson:'The engine crashed. But <span class="hl">the events survived.</span> evolve() replayed your state. No progress lost. That\'s durable execution.',
     crashLesson:'<span class="hl">CRASH!</span> Events survived. evolve() replayed your state. Respawning at last checkpoint...'}),
-  mkLevel({steps:['classifyRequest','callPricingEngine','updateOrderStatus','publishEvent'],title:'Gauntlet',subtitle:'DENSE OBSTACLES',gap:300,zw:380,
-    obs:{0:[hO(.3,2.5),hO(.7,2),fO(.5,3,90)],1:[hO(.2,3),vO(.5,2.5,70),hO(.8,2.5),fO(.4,3.5,80)],2:[hO(.15,3),hO(.5,3.5),vO(.7,3,90),fO(.3,4,70),fO(.85,3,65)]},
-    zobs:{1:[zhO(.5,1.5)],2:[zhO(.4,1.8)],3:[zhO(.5,2)]},
-    code:'<span class="ccm">// Pricing Pipeline — 4 steps of danger</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"classifyRequest"</span>, Router::classify);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callPricingEngine"</span>, PricingClient::quote);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"updateOrderStatus"</span>, OrderRepo::update);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"publishEvent"</span>, EventBus::emit);\n}',
-    lesson:'No matter how many crashes, <span class="hl">completed work is never lost.</span> That\'s durable execution.',
-    crashLesson:'Crashed again! But all completed zones preserved. <span class="hl">That\'s durable execution.</span>'}),
+  // Level 3: Portals — parallel execution with allMatch (custom layout)
+  {title:'Portals',subtitle:'PARALLEL EXECUTION',portal:true,
+    steps:['validateInput','callPricingEngine','callInventoryAPI','publishEvent'],
+    zones:[
+      {x:100,w:400,name:'validateInput',...stepMeta('validateInput'),entered:false,exited:false,idx:0},
+      {x:680,w:400,name:'callPricingEngine',...stepMeta('callPricingEngine'),entered:false,exited:false,idx:1,zy:GY-140,clone:'upper'},
+      {x:680,w:400,name:'callInventoryAPI',...stepMeta('callInventoryAPI'),entered:false,exited:false,idx:2,clone:'lower'},
+      {x:1260,w:400,name:'publishEvent',...stepMeta('publishEvent'),entered:false,exited:false,idx:3},
+    ],
+    platforms:[
+      {x:0,y:GY,w:510,h:PH,c:'#8A9BAA'},
+      // upper path
+      {x:680,y:GY-140,w:400,h:PH,c:'#8A9BAA'},
+      // lower path
+      {x:680,y:GY,w:400,h:PH,c:'#8A9BAA'},
+      // merge bridge
+      {x:1100,y:GY-100,w:50,h:12,c:'#A0B0BE'},{x:1160,y:GY-60,w:50,h:12,c:'#A0B0BE'},
+      // final zone
+      {x:1220,y:GY,w:50,h:PH,c:'#8A9BAA'},
+      {x:1260,y:GY,w:400,h:PH,c:'#8A9BAA'},
+      {x:1660,y:GY,w:200,h:PH,c:'#8A9BAA'},
+    ],
+    obstacles:[
+      {type:'zh',bx:680,by:GY-140,rx:0.5,w:32,h:28,spd:1.5,gw:400,inZone:true},
+      {type:'zh',bx:680,by:GY,rx:0.5,w:32,h:28,spd:1.3,gw:400,inZone:true},
+    ],
+    portalX:550, // x position of the portal
+    checkpoints:[{x:470,y:GY-28,zi:0},{x:1200,y:GY-28,zi:2},{x:1630,y:GY-28,zi:3}],
+    totalWidth:1860,spawn:{x:60,y:GY-28},
+    code:'<span class="ccm">// Parallel pricing + inventory — both must complete</span>\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"validateInput"</span>, OrderService::validate);\n\n<span class="ck">var</span> pricing = ctx.<span class="ccn">execute</span>(<span class="ccs">"callPricingEngine"</span>, ...);\n<span class="ck">var</span> inventory = ctx.<span class="ccn">execute</span>(<span class="ccs">"callInventoryAPI"</span>, ...);\nctx.<span class="ccn">allMatch</span>(\n    <span class="cct">WorkflowStepResult</span>::isCompleted,\n    pricing, inventory);\n\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"publishEvent"</span>, EventBus::emit);',
+    lesson:'<span class="hl">allMatch</span> waits for ALL parallel steps to complete. Both pricing and inventory had to finish before the workflow could continue.',
+    crashLesson:'Crashed in parallel! Events from both clones survived. <span class="hl">Respawning...</span>'},
   // Level 4: The Fork (custom layout)
   {title:'The Fork',subtitle:'PARALLEL PATHS',fork:true,
     steps:['enrichPayload','fastPath','safePath','persistAuditLog'],
@@ -362,6 +388,8 @@ let canvas,ctx2,cw,ch,engine=new SimulatedWorkflowEngine();
 let currentLevel=-1,level=null,frame=0,score=0,crashCount=0;
 let gamePhase='select',lastCP=-1,victoryTimer=0,victoryCountdown=0;
 const P={x:0,y:0,vx:0,vy:0,w:18,h:26,grounded:false,facing:1,state:'idle',af:0};
+const P2={x:0,y:0,vx:0,vy:0,w:18,h:26,grounded:false,facing:1,state:'idle',af:0};
+let splitActive=false;
 const cam={x:0,tx:0};
 const keys={};
 let particles=[],liveObs=[],grainCV=null,grainI=0.06,shake=0,cflash=0;
@@ -377,32 +405,70 @@ const inJ=()=>keys.ArrowUp||keys.KeyW||keys.Space;
 
 /* ═══ PHYSICS ═══ */
 const GRAV=0.55,JMPF=-11.5,SPD=5,FRIC=0.92;
+function applyInput(p){
+  if(inL()){p.vx-=0.8;p.facing=-1}
+  if(inR()){p.vx+=0.8;p.facing=1}
+  p.vx*=FRIC;if(Math.abs(p.vx)>SPD)p.vx=Math.sign(p.vx)*SPD;if(Math.abs(p.vx)<0.1)p.vx=0;
+  if(inJ()&&p.grounded){p.vy=JMPF;p.grounded=false}
+  p.vy+=GRAV;if(p.vy>12)p.vy=12;
+  p.x+=p.vx;
+  if(p.x<p.w/2)p.x=p.w/2;
+  if(level&&p.x>level.totalWidth-p.w/2)p.x=level.totalWidth-p.w/2;
+}
+function colXFor(p){if(!level)return;for(const pl of level.platforms){if(p.x+p.w/2>pl.x&&p.x-p.w/2<pl.x+pl.w&&p.y+p.h>pl.y+2&&p.y<pl.y+pl.h){if(p.vx>0)p.x=pl.x-p.w/2;else if(p.vx<0)p.x=pl.x+pl.w+p.w/2;p.vx=0}}}
+function colYFor(p){if(!level)return;for(const pl of level.platforms){if(p.x+p.w/2>pl.x&&p.x-p.w/2<pl.x+pl.w){if(p.vy>=0&&p.y+p.h>=pl.y&&p.y+p.h<=pl.y+pl.h+p.vy+1){p.y=pl.y-p.h;p.vy=0;p.grounded=true}else if(p.vy<0&&p.y<=pl.y+pl.h&&p.y>=pl.y){p.y=pl.y+pl.h;p.vy=0}}}}
+function tickPlayer(p){
+  applyInput(p);colXFor(p);p.y+=p.vy;p.grounded=false;colYFor(p);
+  if(p.y>GY+200)triggerCrash();
+  p.state=!p.grounded?(p.vy<0?'jumping':'falling'):(Math.abs(p.vx)>0.5?'running':'idle');
+  p.af++;
+}
 function updatePlayer(){
   if(gamePhase!=='playing')return;
-  if(inL()){P.vx-=0.8;P.facing=-1}
-  if(inR()){P.vx+=0.8;P.facing=1}
-  P.vx*=FRIC;if(Math.abs(P.vx)>SPD)P.vx=Math.sign(P.vx)*SPD;if(Math.abs(P.vx)<0.1)P.vx=0;
-  if(inJ()&&P.grounded){P.vy=JMPF;P.grounded=false}
-  P.vy+=GRAV;if(P.vy>12)P.vy=12;
-  P.x+=P.vx;
-  if(P.x<P.w/2)P.x=P.w/2;
-  if(level&&P.x>level.totalWidth-P.w/2)P.x=level.totalWidth-P.w/2;
-  colX();P.y+=P.vy;P.grounded=false;colY();
-  if(P.y>GY+200)triggerCrash();
-  P.state=!P.grounded?(P.vy<0?'jumping':'falling'):(Math.abs(P.vx)>0.5?'running':'idle');
-  P.af++;checkZones();checkObs();
+  tickPlayer(P);
+  // Portal detection
+  if(level&&level.portal&&!splitActive&&P.x>level.portalX&&P.x<level.portalX+40){
+    splitActive=true;
+    // Teleport P to upper path, P2 to lower path
+    const upperZ=level.zones.find(z=>z.clone==='upper');
+    const lowerZ=level.zones.find(z=>z.clone==='lower');
+    if(upperZ&&lowerZ){
+      P.x=upperZ.x+30;P.y=(upperZ.zy||GY)-P.h;P.vx=0;P.vy=0;P.grounded=true;
+      P2.x=lowerZ.x+30;P2.y=GY-P2.h;P2.vx=0;P2.vy=0;P2.grounded=true;P2.facing=1;P2.af=0;
+      // Spawn split particles
+      for(let i=0;i<15;i++){const a=Math.random()*Math.PI*2,s=2+Math.random()*3;
+        particles.push({x:level.portalX+20,y:GY-60,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:0.02,size:3+Math.random()*3,col:i%2?'#8C4AA8':'#4A8FA8',type:'frag'})}
+      showLesson('You split into two! <span class="hl">Both clones share the same controls.</span> Both must exit their zone for allMatch to resolve.');
+    }
+  }
+  // Update clone
+  if(splitActive){
+    tickPlayer(P2);
+    checkZonesFor(P2);checkObsFor(P2);
+    // Check if both parallel zones done → merge
+    const upperZ=level.zones.find(z=>z.clone==='upper');
+    const lowerZ=level.zones.find(z=>z.clone==='lower');
+    if(upperZ&&lowerZ&&upperZ.exited&&lowerZ.exited&&splitActive){
+      splitActive=false;
+      // Merge: teleport P to merge point, despawn P2
+      P.x=1230;P.y=GY-P.h;P.vx=2;P.vy=0;P.grounded=true;
+      for(let i=0;i<12;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*2;
+        particles.push({x:P.x,y:P.y+P.h/2,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:0.025,size:3,col:i%2?'#8C4AA8':'#4A8FA8',type:'frag'})}
+      showLesson('<span class="hl">allMatch resolved!</span> Both parallel steps completed. Clones merged. Continue to the final step.');
+    }
+  }
+  checkZones();checkObs();
 }
-function colX(){if(!level)return;for(const p of level.platforms){if(P.x+P.w/2>p.x&&P.x-P.w/2<p.x+p.w&&P.y+P.h>p.y+2&&P.y<p.y+p.h){if(P.vx>0)P.x=p.x-P.w/2;else if(P.vx<0)P.x=p.x+p.w+P.w/2;P.vx=0}}}
-function colY(){if(!level)return;for(const p of level.platforms){if(P.x+P.w/2>p.x&&P.x-P.w/2<p.x+p.w){if(P.vy>=0&&P.y+P.h>=p.y&&P.y+P.h<=p.y+p.h+P.vy+1){P.y=p.y-P.h;P.vy=0;P.grounded=true}else if(P.vy<0&&P.y<=p.y+p.h&&P.y>=p.y){P.y=p.y+p.h;P.vy=0}}}}
+// Legacy wrappers removed — using colXFor/colYFor with player param
 
 /* ═══ ZONES & CHECKPOINTS ═══ */
-function checkZones(){
+function checkZonesFor(p){
   if(!level)return;
   for(const z of level.zones){
     const zy=z.zy||GY;
-    const inZ=P.x>z.x&&P.x<z.x+z.w&&P.y+P.h>=zy-10&&P.y+P.h<=zy+50;
+    const inZ=p.x>z.x&&p.x<z.x+z.w&&p.y+p.h>=zy-10&&p.y+p.h<=zy+50;
     if(inZ&&!z.entered){z.entered=true;fireGE(z.name,StepStatus.STARTED)}
-    if(z.entered&&!z.exited&&P.x>z.x+z.w&&!inZ){
+    if(z.entered&&!z.exited&&p.x>z.x+z.w&&!inZ){
       z.exited=true;fireGE(z.name,StepStatus.COMPLETED);
       if(z.idx>lastCP)lastCP=z.idx;
       if(level.fork&&(z.name==='fastPath'||z.name==='safePath')){
@@ -412,6 +478,14 @@ function checkZones(){
       }
       checkWin();
     }
+  }
+}
+function checkZones(){checkZonesFor(P)}
+function checkObsFor(p){
+  for(const o of liveObs){
+    if(!o.active)continue;
+    const ox=o.baseX+o.ox,oy=o.baseY+o.oy,ow=o.w||24,oh=o.h||24;
+    if(p.x+p.w/2>ox&&p.x-p.w/2<ox+ow&&p.y+p.h>oy&&p.y<oy+oh){triggerCrash();return}
   }
 }
 function checkWin(){
@@ -479,19 +553,15 @@ function updateObs(){
     else if(o.type==='zf'){const cyc=o.timer%(o.interval||130);if(cyc<55){o.oy=cyc*o.spd;o.falling=true}else{o.oy=-300;o.falling=false}}
   }
 }
-function checkObs(){
-  for(const o of liveObs){
-    if(!o.active)continue;
-    const ox=o.baseX+o.ox,oy=o.baseY+o.oy,ow=o.w||24,oh=o.h||24;
-    if(P.x+P.w/2>ox&&P.x-P.w/2<ox+ow&&P.y+P.h>oy&&P.y<oy+oh){triggerCrash();return}
-  }
-}
+function checkObs(){checkObsFor(P)}
 
 /* ═══ CRASH & RESPAWN ═══ */
 function triggerCrash(){
   if(gamePhase!=='playing')return;gamePhase='dead';crashCount++;cflash=1;shake=20;grainI=0.18;
   for(let i=0;i<20;i++){const a=Math.random()*Math.PI*2,s=2+Math.random()*4;
     particles.push({x:P.x,y:P.y+P.h/2,vx:Math.cos(a)*s,vy:Math.sin(a)*s-3,life:1,decay:0.015+Math.random()*0.01,size:3+Math.random()*4,col:i%2?'#E8521A':'#F0A030',type:'frag'})}
+  if(splitActive){for(let i=0;i<15;i++){const a=Math.random()*Math.PI*2,s=2+Math.random()*3;
+    particles.push({x:P2.x,y:P2.y+P2.h/2,vx:Math.cos(a)*s,vy:Math.sin(a)*s-3,life:1,decay:0.015+Math.random()*0.01,size:3+Math.random()*4,col:i%2?'#E8521A':'#8C4AA8',type:'frag'})}}
   showLesson(level.crashLesson||'<span class="hl">CRASH!</span> Events survived. Respawning...');
   document.getElementById('esbox').classList.add('glow');
   if(level.hasScore)addScore(50);
@@ -513,6 +583,7 @@ function finishRespawn(){
   for(let i=0;i<12;i++){const a=(i/12)*Math.PI*2;
     particles.push({x:sx+Math.cos(a)*50,y:sy+Math.sin(a)*50,tx:sx,ty:sy+P.h/2,life:1,decay:0.02,size:4,col:i%2?'#4A8FA8':'#E8521A',type:'conv'})}
   P.x=sx;P.y=sy;P.vx=0;P.vy=0;P.grounded=true;
+  splitActive=false;
   for(const z of level.zones)if(z.idx>lastCP){z.entered=false;z.exited=false}
   setTimeout(()=>{if(gamePhase==='replaying')gamePhase='playing'},500);
 }
@@ -552,7 +623,7 @@ function genGrain(){
   gc.putImageData(img,0,0);
 }
 function genStars(){stars=[];for(let i=0;i<40;i++)stars.push({x:Math.random()*4000,y:60+Math.random()*200,s:1+Math.random()*2,sp:0.1+Math.random()*0.3,b:0.15+Math.random()*0.2,col:['#4A8FA8','#C8D0D8','#D0D8E0'][Math.random()*3|0]})}
-function updCam(){if(!level)return;cam.tx=P.x-cw*0.35;cam.tx=Math.max(0,Math.min(cam.tx,level.totalWidth-cw));cam.x+=(cam.tx-cam.x)*0.08}
+function updCam(){if(!level)return;const fx=splitActive?Math.max(P.x,P2.x):P.x;cam.tx=fx-cw*0.35;cam.tx=Math.max(0,Math.min(cam.tx,level.totalWidth-cw));cam.x+=(cam.tx-cam.x)*0.08}
 
 function drawBG(){
   // Light gradient sky
@@ -724,38 +795,69 @@ function drawObsR(){
     if(Math.random()<(isZone?0.1:0.2))particles.push({x:ox+cam.x+ow/2,y:oy+oh/2,vx:(Math.random()-0.5)*0.4,vy:-0.4-Math.random()*0.6,life:1,decay:0.04,size:1.5+Math.random()*2,col:b.spark,type:'spark'});
   }
 }
-function drawPlayer(){
-  if(gamePhase==='dead'||gamePhase==='replaying')return;
-  const px=P.x-cam.x,py=P.y,s=P.facing;
+function drawPortal(){
+  if(!level||!level.portal||splitActive)return;
+  const px=(level.portalX-cam.x)|0,py=GY-140;
+  // Swirling portal
+  const pulse=Math.sin(frame*0.06)*0.15;
+  ctx2.save();
+  // Outer glow
+  ctx2.globalAlpha=0.3+pulse;
+  ctx2.fillStyle='#8C4AA8';ctx2.fillRect(px+5,py,30,140);
+  // Inner
+  ctx2.globalAlpha=0.5+pulse;
+  ctx2.fillStyle='#B06AD0';ctx2.fillRect(px+10,py+5,20,130);
+  // Core shimmer
+  ctx2.globalAlpha=0.7+pulse;
+  ctx2.fillStyle='#D0A0F0';
+  const sy=(Math.sin(frame*0.08)*60)|0;
+  ctx2.fillRect(px+14,py+30+sy,12,12);
+  ctx2.fillRect(px+14,py+90-sy,12,12);
+  // Label
+  ctx2.globalAlpha=0.8;ctx2.fillStyle='#6A2A8A';
+  ctx2.font='bold 10px '+getComputedStyle(document.body).fontFamily;
+  ctx2.textAlign='center';ctx2.fillText('PORTAL',px+20,py-8);
+  ctx2.fillText('allMatch',px+20,py+150);
+  ctx2.restore();
+  // Portal particles
+  if(Math.random()<0.3)particles.push({x:px+cam.x+20,y:py+Math.random()*140,vx:(Math.random()-0.5)*1.5,vy:(Math.random()-0.5)*1.5,life:1,decay:0.03,size:2+Math.random()*2,col:Math.random()>.5?'#8C4AA8':'#D0A0F0',type:'spark'});
+}
+function drawPlayerSprite(p,tint){
+  const px=p.x-cam.x,py=p.y,s=p.facing;
+  const bodyCol=tint||'#1C4A5A',headCol=tint?tint+'CC':'#1C4A5A',darkCol=tint?tint+'88':'#14384A';
   ctx2.save();ctx2.translate(px,py);
-  ctx2.beginPath();ctx2.ellipse(0,P.h+2,P.w*0.5,3,0,0,Math.PI*2);ctx2.fillStyle='rgba(0,0,0,0.15)';ctx2.fill();
-  const bob=P.state==='running'?Math.sin(P.af*0.3)*2:0;
-  // Body (pixel blocks)
-  ctx2.fillStyle='#1C4A5A';ctx2.fillRect((-P.w/2)|0,(4+bob)|0,P.w|0,(P.h-8)|0);
-  ctx2.fillStyle='#245A6A';ctx2.fillRect((-P.w/2)|0,(4+bob)|0,P.w|0,2); // highlight
-  ctx2.fillStyle='#14384A';ctx2.fillRect((-P.w/2)|0,(P.h-6+bob)|0,P.w|0,2); // shadow
-  // Head
-  ctx2.fillStyle='#1C4A5A';ctx2.fillRect((-P.w/2+2)|0,(-6+bob)|0,(P.w-4)|0,12);
-  // Eye
+  ctx2.beginPath();ctx2.ellipse(0,p.h+2,p.w*0.5,3,0,0,Math.PI*2);ctx2.fillStyle='rgba(0,0,0,0.15)';ctx2.fill();
+  const bob=p.state==='running'?Math.sin(p.af*0.3)*2:0;
+  ctx2.fillStyle=bodyCol;ctx2.fillRect((-p.w/2)|0,(4+bob)|0,p.w|0,(p.h-8)|0);
+  ctx2.fillStyle=headCol;ctx2.fillRect((-p.w/2)|0,(4+bob)|0,p.w|0,2);
+  ctx2.fillStyle=darkCol;ctx2.fillRect((-p.w/2)|0,(p.h-6+bob)|0,p.w|0,2);
+  ctx2.fillStyle=headCol;ctx2.fillRect((-p.w/2+2)|0,(-6+bob)|0,(p.w-4)|0,12);
   const ep=0.7+Math.sin(frame*0.08)*0.3;ctx2.fillStyle='rgba(240,160,48,'+ep+')';ctx2.fillRect((s*2-2)|0,(-3+bob)|0,4,4);
   ctx2.fillStyle='#FFF';ctx2.fillRect((s*2-1)|0,(-2+bob)|0,2,2);
-  // Antenna
-  const aw=P.state==='idle'?Math.sin(frame*0.05)*2:Math.sin(frame*0.15)*4;
-  ctx2.strokeStyle='#1C4A5A';ctx2.lineWidth=2;ctx2.beginPath();ctx2.moveTo(0,(-6+bob)|0);ctx2.lineTo(aw|0,(-14+bob)|0);ctx2.stroke();
-  ctx2.fillStyle=gamePhase==='victory'?'#E8521A':'#4A8FA8';ctx2.fillRect((aw-2)|0,(-16+bob)|0,4,4);
-  // Arms
-  const aa=P.state==='jumping'?-0.5:P.state==='running'?Math.sin(P.af*0.3)*0.3:0;
-  ctx2.strokeStyle='#1C4A5A';ctx2.lineWidth=2;
-  ctx2.beginPath();ctx2.moveTo(-P.w/2,10+bob);ctx2.lineTo(-P.w/2-6,14+bob+aa*8);ctx2.stroke();
-  ctx2.beginPath();ctx2.moveTo(P.w/2,10+bob);ctx2.lineTo(P.w/2+6,14+bob-aa*8);ctx2.stroke();
-  // Legs
-  const lo=P.state==='running'?Math.sin(P.af*0.3)*4:0;
-  ctx2.strokeStyle='#14384A';ctx2.lineWidth=2.5;
-  ctx2.beginPath();ctx2.moveTo(-3,P.h-4);ctx2.lineTo(-4,P.h+2+lo);ctx2.stroke();
-  ctx2.beginPath();ctx2.moveTo(3,P.h-4);ctx2.lineTo(4,P.h+2-lo);ctx2.stroke();
-  // Victory glow
-  if(gamePhase==='victory'){ctx2.beginPath();ctx2.arc(0,P.h/2,30+Math.sin(frame*0.06)*8,0,Math.PI*2);const vg=ctx2.createRadialGradient(0,P.h/2,5,0,P.h/2,35);vg.addColorStop(0,'rgba(232,82,26,0.15)');vg.addColorStop(1,'transparent');ctx2.fillStyle=vg;ctx2.fill()}
+  const aw=p.state==='idle'?Math.sin(frame*0.05)*2:Math.sin(frame*0.15)*4;
+  ctx2.strokeStyle=bodyCol;ctx2.lineWidth=2;ctx2.beginPath();ctx2.moveTo(0,(-6+bob)|0);ctx2.lineTo(aw|0,(-14+bob)|0);ctx2.stroke();
+  ctx2.fillStyle=gamePhase==='victory'?'#E8521A':bodyCol;ctx2.fillRect((aw-2)|0,(-16+bob)|0,4,4);
+  const aa=p.state==='jumping'?-0.5:p.state==='running'?Math.sin(p.af*0.3)*0.3:0;
+  ctx2.strokeStyle=bodyCol;ctx2.lineWidth=2;
+  ctx2.beginPath();ctx2.moveTo(-p.w/2,10+bob);ctx2.lineTo(-p.w/2-6,14+bob+aa*8);ctx2.stroke();
+  ctx2.beginPath();ctx2.moveTo(p.w/2,10+bob);ctx2.lineTo(p.w/2+6,14+bob-aa*8);ctx2.stroke();
+  const lo=p.state==='running'?Math.sin(p.af*0.3)*4:0;
+  ctx2.strokeStyle=darkCol;ctx2.lineWidth=2.5;
+  ctx2.beginPath();ctx2.moveTo(-3,p.h-4);ctx2.lineTo(-4,p.h+2+lo);ctx2.stroke();
+  ctx2.beginPath();ctx2.moveTo(3,p.h-4);ctx2.lineTo(4,p.h+2-lo);ctx2.stroke();
+  if(gamePhase==='victory'){ctx2.beginPath();ctx2.arc(0,p.h/2,30+Math.sin(frame*0.06)*8,0,Math.PI*2);const vg=ctx2.createRadialGradient(0,p.h/2,5,0,p.h/2,35);vg.addColorStop(0,'rgba(232,82,26,0.15)');vg.addColorStop(1,'transparent');ctx2.fillStyle=vg;ctx2.fill()}
   ctx2.restore();
+}
+function drawPlayer(){
+  if(gamePhase==='dead'||gamePhase==='replaying')return;
+  drawPlayerSprite(P,null);
+  if(splitActive)drawPlayerSprite(P2,'#6A2A8A');
+  // Connection line between clones
+  if(splitActive){
+    ctx2.save();ctx2.setLineDash([3,3]);ctx2.strokeStyle='rgba(140,74,168,0.3)';ctx2.lineWidth=1;
+    ctx2.beginPath();ctx2.moveTo(P.x-cam.x,P.y+P.h/2);ctx2.lineTo(P2.x-cam.x,P2.y+P2.h/2);ctx2.stroke();
+    ctx2.setLineDash([]);ctx2.restore();
+  }
 }
 function updParts(){
   for(const p of particles){p.life-=p.decay;if(p.type==='conv'&&p.tx!==undefined){p.x+=(p.tx-p.x)*0.06;p.y+=(p.ty-p.y)*0.06}else{p.x+=p.vx;p.y+=p.vy;if(p.type==='frag')p.vy+=0.1}}
@@ -791,7 +893,7 @@ function render(){
   if(currentLevel<0||!cw||!ch)return;
   ctx2.save();
   if(shake>0.5){ctx2.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);shake*=0.92}else shake=0;
-  drawBG();updCam();drawZones();drawPlats();drawCPs();updateObs();drawObsR();drawPlayer();updParts();drawParts();drawGrain();drawFlash();drawHUD();
+  drawBG();updCam();drawZones();drawPlats();drawCPs();drawPortal();updateObs();drawObsR();drawPlayer();updParts();drawParts();drawGrain();drawFlash();drawHUD();
   ctx2.restore();frame++;
 }
 
@@ -800,7 +902,7 @@ function gameLoop(){if(currentLevel>=0){updatePlayer();render()}requestAnimation
 
 /* ═══ LEVEL MANAGEMENT ═══ */
 function startLevel(idx){
-  currentLevel=idx;level=LEVELS[idx];score=0;crashCount=0;lastCP=-1;gamePhase='playing';particles=[];liveObs=[];
+  currentLevel=idx;level=LEVELS[idx];score=0;crashCount=0;lastCP=-1;gamePhase='playing';particles=[];liveObs=[];splitActive=false;
   engine.reset();
   for(const z of level.zones){z.entered=false;z.exited=false}
   document.getElementById('level-select').style.display='none';
