@@ -224,15 +224,49 @@ class SimulatedWorkflowEngine{
 
 /* ═══ LEVEL DEFINITIONS ═══ */
 const GY=420,PH=40,ZH=180;
-const ZCOLS=['rgba(74,143,168,.12)','rgba(42,168,100,.12)','rgba(74,100,168,.12)','rgba(140,74,168,.12)','rgba(168,130,42,.12)','rgba(42,168,130,.12)'];
-const ZBORDS=['#4A8FA8','#2AA864','#4A64A8','#8C4AA8','#A8821A','#2AA882'];
+// Step registry: domain-aware step metadata
+const STEPS={
+  // Service calls (teal)
+  callPaymentService: {label:'callPaymentService',icon:'svc',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+  callInventoryAPI:   {label:'callInventoryAPI',icon:'svc',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+  callNotificationSvc:{label:'callNotificationSvc',icon:'svc',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+  callShippingAPI:    {label:'callShippingAPI',icon:'svc',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+  callAuthService:    {label:'callAuthService',icon:'svc',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+  callPricingEngine:  {label:'callPricingEngine',icon:'svc',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+  // Database (green)
+  saveToDatabase:     {label:'saveToDatabase',icon:'db',col:'rgba(42,168,100,.12)',bord:'#2AA864',iconCol:'#2AA864'},
+  loadFromCache:      {label:'loadFromCache',icon:'db',col:'rgba(42,168,100,.12)',bord:'#2AA864',iconCol:'#2AA864'},
+  updateOrderStatus:  {label:'updateOrderStatus',icon:'db',col:'rgba(42,168,100,.12)',bord:'#2AA864',iconCol:'#2AA864'},
+  persistAuditLog:    {label:'persistAuditLog',icon:'db',col:'rgba(42,168,100,.12)',bord:'#2AA864',iconCol:'#2AA864'},
+  // Validation / logic (blue)
+  validateInput:      {label:'validateInput',icon:'check',col:'rgba(74,100,168,.12)',bord:'#4A64A8',iconCol:'#4A64A8'},
+  enrichPayload:      {label:'enrichPayload',icon:'check',col:'rgba(74,100,168,.12)',bord:'#4A64A8',iconCol:'#4A64A8'},
+  transformResponse:  {label:'transformResponse',icon:'check',col:'rgba(74,100,168,.12)',bord:'#4A64A8',iconCol:'#4A64A8'},
+  classifyRequest:    {label:'classifyRequest',icon:'check',col:'rgba(74,100,168,.12)',bord:'#4A64A8',iconCol:'#4A64A8'},
+  // Messaging / events (purple)
+  publishEvent:       {label:'publishEvent',icon:'msg',col:'rgba(140,74,168,.12)',bord:'#8C4AA8',iconCol:'#8C4AA8'},
+  sendEmail:          {label:'sendEmail',icon:'msg',col:'rgba(140,74,168,.12)',bord:'#8C4AA8',iconCol:'#8C4AA8'},
+  emitDomainEvent:    {label:'emitDomainEvent',icon:'msg',col:'rgba(140,74,168,.12)',bord:'#8C4AA8',iconCol:'#8C4AA8'},
+  // Await / external (amber)
+  awaitApproval:      {label:'awaitApproval',icon:'wait',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A'},
+  waitForCallback:    {label:'waitForCallback',icon:'wait',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A'},
+  // HTTP / gateway (teal-green)
+  httpGetRequest:     {label:'httpGetRequest',icon:'http',col:'rgba(42,168,130,.12)',bord:'#2AA882',iconCol:'#2AA882'},
+  httpPostOrder:      {label:'httpPostOrder',icon:'http',col:'rgba(42,168,130,.12)',bord:'#2AA882',iconCol:'#2AA882'},
+  // Fork paths
+  fastPath:           {label:'fastPath',icon:'svc',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A'},
+  safePath:           {label:'safePath',icon:'db',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'},
+};
+const STEP_DEFAULT={icon:'check',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8'};
+function stepMeta(name){return STEPS[name]||{...STEP_DEFAULT,label:name}}
 
 function mkLevel(cfg){
   const zones=[],plats=[],obs=[],cps=[];
   let x=100;const gap=cfg.gap||200,zw=cfg.zw||450;
   plats.push({x:0,y:GY,w:x+10,h:PH,c:'#8A9BAA'});
   for(let i=0;i<cfg.steps.length;i++){
-    zones.push({x,w:zw,name:cfg.steps[i],col:ZCOLS[i%6],bord:ZBORDS[i%6],entered:false,exited:false,idx:i});
+    const sm=stepMeta(cfg.steps[i]);
+    zones.push({x,w:zw,name:cfg.steps[i],col:sm.col,bord:sm.bord,iconCol:sm.iconCol,icon:sm.icon,entered:false,exited:false,idx:i});
     plats.push({x,y:GY,w:zw,h:PH,c:'#8A9BAA'});
     cps.push({x:x+zw-30,y:GY-28,zi:i});
     // Zone obstacles (enemies inside the zone)
@@ -261,30 +295,30 @@ function zvO(rx,s,a){return{type:'zv',rx,w:28,h:26,spd:s||2,amp:a||50}}
 function zfO(rx,s,iv){return{type:'zf',rx,w:26,h:24,spd:s||2.5,interval:iv||130}}
 
 const LEVELS=[
-  mkLevel({steps:['analyzeRequest','generateResponse','deliverResult'],title:'First Steps',subtitle:'THE HAPPY PATH',gap:120,zw:420,obs:{},
-    code:'<span class="ccm">// AI Agent Workflow</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"analyzeRequest"</span>, AgentService::analyze);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"generateResponse"</span>, AgentService::generate);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"deliverResult"</span>, AgentService::deliver);\n}',
+  mkLevel({steps:['validateInput','callPaymentService','saveToDatabase'],title:'First Steps',subtitle:'THE HAPPY PATH',gap:120,zw:420,obs:{},
+    code:'<span class="ccm">// Order Processing Workflow</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"validateInput"</span>, OrderService::validate);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callPaymentService"</span>, PaymentGateway::charge);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"saveToDatabase"</span>, OrderRepo::persist);\n}',
     lesson:'3 steps = 8 events. <span class="hl">Your audit trail, for free.</span> WorkflowStarted, then Started+Completed for each step, plus WorkflowCompleted.',
     crashLesson:''}),
-  mkLevel({steps:['analyzeRequest','generateResponse','deliverResult'],title:'Crash Course',subtitle:'INTRODUCTION TO CRASHES',gap:250,zw:420,
+  mkLevel({steps:['callAuthService','callInventoryAPI','sendEmail'],title:'Crash Course',subtitle:'INTRODUCTION TO CRASHES',gap:250,zw:420,
     obs:{0:[hO(.5,1.5)],1:[hO(.3,2),vO(.7,2.5,55)]},
     zobs:{2:[zhO(.5,1.2)]},
-    code:'<span class="ccm">// Same workflow — but obstacles lurk between zones</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"analyzeRequest"</span>, AgentService::analyze);\n    <span class="ccm">// *** CRASH OBSTACLES ***</span>\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"generateResponse"</span>, AgentService::generate);\n    <span class="ccm">// On crash, evolve() replays all events</span>\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"deliverResult"</span>, AgentService::deliver);\n}',
+    code:'<span class="ccm">// Fulfillment Workflow — crashes lurk everywhere</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callAuthService"</span>, AuthGateway::verify);\n    <span class="ccm">// *** network errors ahead ***</span>\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callInventoryAPI"</span>, InventoryClient::reserve);\n    <span class="ccm">// On crash, evolve() replays all events</span>\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"sendEmail"</span>, NotificationSvc::send);\n}',
     lesson:'The engine crashed. But <span class="hl">the events survived.</span> evolve() replayed your state. No progress lost. That\'s durable execution.',
     crashLesson:'<span class="hl">CRASH!</span> Events survived. evolve() replayed your state. Respawning at last checkpoint...'}),
-  mkLevel({steps:['classify','research','validate','deliver'],title:'Gauntlet',subtitle:'DENSE OBSTACLES',gap:300,zw:380,
+  mkLevel({steps:['classifyRequest','callPricingEngine','updateOrderStatus','publishEvent'],title:'Gauntlet',subtitle:'DENSE OBSTACLES',gap:300,zw:380,
     obs:{0:[hO(.3,2.5),hO(.7,2),fO(.5,3,90)],1:[hO(.2,3),vO(.5,2.5,70),hO(.8,2.5),fO(.4,3.5,80)],2:[hO(.15,3),hO(.5,3.5),vO(.7,3,90),fO(.3,4,70),fO(.85,3,65)]},
     zobs:{1:[zhO(.5,1.5)],2:[zhO(.4,1.8)],3:[zhO(.5,2)]},
-    code:'<span class="ccm">// 4-step gauntlet</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"classify"</span>, AgentService::classify);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"research"</span>, AgentService::research);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"validate"</span>, AgentService::validate);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"deliver"</span>, AgentService::deliver);\n}',
+    code:'<span class="ccm">// Pricing Pipeline — 4 steps of danger</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"classifyRequest"</span>, Router::classify);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callPricingEngine"</span>, PricingClient::quote);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"updateOrderStatus"</span>, OrderRepo::update);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"publishEvent"</span>, EventBus::emit);\n}',
     lesson:'No matter how many crashes, <span class="hl">completed work is never lost.</span> That\'s durable execution.',
     crashLesson:'Crashed again! But all completed zones preserved. <span class="hl">That\'s durable execution.</span>'}),
   // Level 4: The Fork (custom layout)
   {title:'The Fork',subtitle:'PARALLEL PATHS',fork:true,
-    steps:['classify','fastPath','safePath','processResult'],
+    steps:['enrichPayload','fastPath','safePath','persistAuditLog'],
     zones:[
-      {x:100,w:400,name:'classify',col:ZCOLS[0],bord:ZBORDS[0],entered:false,exited:false,idx:0},
-      {x:650,w:280,name:'fastPath',col:'rgba(168,130,42,.12)',bord:'#A8821A',entered:false,exited:false,idx:1,zy:GY-130,pathLabel:'FAST PATH (anyMatch)'},
-      {x:650,w:480,name:'safePath',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',entered:false,exited:false,idx:2,pathLabel:'SAFE PATH (anyMatch)'},
-      {x:1280,w:380,name:'processResult',col:ZCOLS[3],bord:ZBORDS[3],entered:false,exited:false,idx:3},
+      {x:100,w:400,name:'enrichPayload',col:'rgba(74,100,168,.12)',bord:'#4A64A8',iconCol:'#4A64A8',icon:'check',entered:false,exited:false,idx:0},
+      {x:650,w:280,name:'fastPath',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A',icon:'svc',entered:false,exited:false,idx:1,zy:GY-130,pathLabel:'fastPath (anyMatch)'},
+      {x:650,w:480,name:'safePath',col:'rgba(74,143,168,.12)',bord:'#4A8FA8',iconCol:'#4A8FA8',icon:'db',entered:false,exited:false,idx:2,pathLabel:'safePath (anyMatch)'},
+      {x:1280,w:380,name:'persistAuditLog',col:'rgba(42,168,100,.12)',bord:'#2AA864',iconCol:'#2AA864',icon:'db',entered:false,exited:false,idx:3},
     ],
     platforms:[
       {x:0,y:GY,w:510,h:PH,c:'#8A9BAA'},
@@ -312,13 +346,13 @@ const LEVELS=[
     ],
     checkpoints:[{x:470,y:GY-28,zi:0},{x:900,y:GY-130-28,zi:1},{x:1100,y:GY-28,zi:2},{x:1630,y:GY-28,zi:3}],
     totalWidth:1860,spawn:{x:60,y:GY-28},
-    code:'<span class="ccm">// Two paths race — first wins</span>\n<span class="ck">var</span> fast = ctx.<span class="ccn">execute</span>(<span class="ccs">"fastPath"</span>, ...);\n<span class="ck">var</span> safe = ctx.<span class="ccn">execute</span>(<span class="ccs">"safePath"</span>, ...);\n<span class="ck">var</span> winner = ctx.<span class="ccn">anyMatch</span>(\n    <span class="cct">WorkflowStepResult</span>::isCompleted, fast, safe);\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"processResult"</span>, ...);',
+    code:'<span class="ccm">// Two data sources race — first wins</span>\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"enrichPayload"</span>, Enricher::transform);\n<span class="ck">var</span> fast = ctx.<span class="ccn">execute</span>(<span class="ccs">"fastPath"</span>, CacheClient::lookup);\n<span class="ck">var</span> safe = ctx.<span class="ccn">execute</span>(<span class="ccs">"safePath"</span>, DatabaseRepo::query);\n<span class="ck">var</span> winner = ctx.<span class="ccn">anyMatch</span>(\n    <span class="cct">WorkflowStepResult</span>::isCompleted, fast, safe);\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"persistAuditLog"</span>, AuditRepo::save);',
     lesson:'<span class="hl">anyMatch</span> resolves on the FIRST path completed. The winner was determined by which zone you crossed first.',
     crashLesson:'Crashed on the fork! Events survive. Respawning at last checkpoint.'},
-  mkLevel({steps:['init','classify','research','validate','approve','deliver'],title:'Chaos Run',subtitle:'FINAL CHALLENGE',gap:270,zw:340,hasScore:true,
+  mkLevel({steps:['httpGetRequest','classifyRequest','callShippingAPI','saveToDatabase','awaitApproval','emitDomainEvent'],title:'Chaos Run',subtitle:'FINAL CHALLENGE',gap:270,zw:340,hasScore:true,
     obs:{0:[hO(.4,3),fO(.7,3.5,80)],1:[hO(.2,3.5),vO(.5,3,80),fO(.8,4,60)],2:[hO(.15,3.5),hO(.55,3.5),vO(.35,3,70),fO(.7,4,55)],3:[hO(.2,4),hO(.6,4),vO(.4,3.5,90),fO(.3,4,50),fO(.85,4,55)],4:[hO(.1,4.5),hO(.4,4.5),vO(.25,3.5,90),vO(.65,4,100),fO(.5,5,40)]},
     zobs:{1:[zhO(.5,1.5)],3:[zhO(.5,1.8)],4:[zhO(.4,2)],5:[zhO(.5,2.2),zvO(.3,2,40)]},
-    code:'<span class="ccm">// Full chaos workflow</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"init"</span>, ...);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"classify"</span>, ...);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"research"</span>, ...);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"validate"</span>, ...);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"approve"</span>, ...);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"deliver"</span>, ...);\n}',
+    code:'<span class="ccm">// Full Order Lifecycle — under chaos</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"httpGetRequest"</span>, Gateway::fetch);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"classifyRequest"</span>, Router::classify);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callShippingAPI"</span>, ShippingClient::ship);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"saveToDatabase"</span>, OrderRepo::persist);\n    ctx.<span class="ccn">awaitEvent</span>(<span class="ccs">"awaitApproval"</span>, ApprovalEvent.class);\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"emitDomainEvent"</span>, EventBus::emit);\n}',
     lesson:'You survived chaos! <span class="hl">Event sourcing + durable execution = resilient workflows.</span> Every event persisted, every state recoverable.',
     crashLesson:'Crash! But the event store holds. <span class="hl">Respawning...</span>'})
 ];
@@ -532,15 +566,53 @@ function drawBG(){
     ctx2.fillRect((sx<0?sx+cw:sx)+s.s|0,(s.y+s.s*0.5)|0,(s.s*0.7)|0,(s.s*0.7)|0)}
   ctx2.globalAlpha=1;
 }
+function drawZoneIcon(x,y,icon,col){
+  ctx2.fillStyle=col;
+  switch(icon){
+    case'svc': // service call: two arrows
+      ctx2.fillRect(x-6,y-1,8,2);ctx2.fillRect(x,y-4,2,2);ctx2.fillRect(x,y+2,2,2); // arrow right
+      ctx2.fillRect(x-2,y+4,8,2);ctx2.fillRect(x,y+2,2,2);ctx2.fillRect(x,y+6,2,2); // arrow left
+      break;
+    case'db': // database: cylinder
+      ctx2.fillRect(x-5,y-3,10,8);
+      ctx2.fillRect(x-6,y-4,12,2);ctx2.fillRect(x-6,y+4,12,2); // top/bottom caps
+      ctx2.fillRect(x-6,y,12,2); // middle line
+      break;
+    case'check': // validation: checkmark
+      ctx2.fillRect(x-4,y,2,2);ctx2.fillRect(x-2,y+2,2,2);ctx2.fillRect(x,y,2,2);
+      ctx2.fillRect(x+2,y-2,2,2);ctx2.fillRect(x+4,y-4,2,2);
+      break;
+    case'msg': // messaging: envelope
+      ctx2.fillRect(x-6,y-3,12,8);
+      ctx2.fillStyle=col+'40';ctx2.fillRect(x-5,y-2,10,6); // inner
+      ctx2.fillStyle=col;ctx2.fillRect(x-5,y-3,2,2);ctx2.fillRect(x+3,y-3,2,2);
+      ctx2.fillRect(x-3,y-1,2,2);ctx2.fillRect(x+1,y-1,2,2);ctx2.fillRect(x-1,y+1,2,2);
+      break;
+    case'wait': // await: hourglass
+      ctx2.fillRect(x-4,y-5,8,2);ctx2.fillRect(x-4,y+3,8,2); // top/bottom
+      ctx2.fillRect(x-3,y-3,6,2);ctx2.fillRect(x-1,y-1,2,2);ctx2.fillRect(x-3,y+1,6,2); // middle
+      break;
+    case'http': // HTTP: globe
+      ctx2.fillRect(x-5,y-1,10,2);ctx2.fillRect(x-1,y-5,2,10);// cross
+      ctx2.fillRect(x-4,y-4,2,2);ctx2.fillRect(x+2,y-4,2,2);
+      ctx2.fillRect(x-4,y+2,2,2);ctx2.fillRect(x+2,y+2,2,2);
+      break;
+  }
+}
 function drawZones(){
   if(!level)return;
+  const f=getComputedStyle(document.body).fontFamily;
   for(const z of level.zones){
     const zx=z.x-cam.x,zy=(z.zy||GY)-ZH;
     ctx2.fillStyle=z.col;ctx2.globalAlpha=0.5;ctx2.fillRect(zx,zy,z.w,ZH);ctx2.globalAlpha=1;
     ctx2.strokeStyle=z.bord;ctx2.lineWidth=2;ctx2.setLineDash([4,4]);ctx2.strokeRect(zx,zy,z.w,ZH);ctx2.setLineDash([]);
+    // Icon
+    drawZoneIcon(zx+z.w/2,zy+50,z.icon||'check',z.iconCol||z.bord);
+    // Label
     ctx2.fillStyle=z.exited?'#1C4A5A':z.entered?'#B07010':'#8A96A2';
-    ctx2.font='bold 11px '+getComputedStyle(document.body).fontFamily;ctx2.textAlign='center';
+    ctx2.font='bold 11px '+f;ctx2.textAlign='center';
     ctx2.fillText(z.pathLabel||z.name,zx+z.w/2,zy+14);
+    // Status
     if(z.exited){ctx2.fillStyle='#1C4A5A';ctx2.fillText('\u2713 COMPLETED',zx+z.w/2,zy+28)}
     else if(z.entered){ctx2.fillStyle='#B07010';ctx2.fillText('RUNNING...',zx+z.w/2,zy+28)}
   }
