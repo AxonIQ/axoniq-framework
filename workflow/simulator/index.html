@@ -151,7 +151,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
       <div class="cd">Two paths diverge. Take the fast dangerous route or the safe long one.</div>
       <span class="ctag">anyMatch</span><span class="cdiff">Medium</span>
     </div>
-    <div class="lcard w" onclick="startLevel(4)">
+    <div class="lcard" onclick="startLevel(4)">
+      <span class="ci" style="color:#7864A8">&#9719; &#8943;</span>
+      <div class="ct">Signals</div><div class="cs">AWAIT EVENT & SLEEP</div>
+      <div class="cd">Your agent freezes, waits for external events, and sleeps. Durable timers and correlation.</div>
+      <span class="ctag">awaitEvent + sleep</span><span class="cdiff">Medium</span>
+    </div>
+    <div class="lcard w" onclick="startLevel(5)">
       <span class="ci" style="color:var(--amber)">&#9733; &#9733; &#9733;</span>
       <div class="ct">Chaos Run</div><div class="cs">FINAL CHALLENGE</div>
       <div class="cd">6 zones, constant hazards. The ultimate test of durable execution.</div>
@@ -253,6 +259,9 @@ const STEPS={
   // Await / external (amber)
   awaitApproval:      {label:'awaitApproval',icon:'wait',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A'},
   waitForCallback:    {label:'waitForCallback',icon:'wait',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A'},
+  waitForUserConfirmation:{label:'waitForUserConfirmation',icon:'wait',col:'rgba(168,130,42,.12)',bord:'#A8821A',iconCol:'#A8821A'},
+  // Sleep (dark amber)
+  sleepCooldown:      {label:'sleepCooldown',icon:'sleep',col:'rgba(120,100,168,.12)',bord:'#7864A8',iconCol:'#7864A8'},
   // HTTP / gateway (teal-green)
   httpGetRequest:     {label:'httpGetRequest',icon:'http',col:'rgba(42,168,130,.12)',bord:'#2AA882',iconCol:'#2AA882'},
   httpPostOrder:      {label:'httpPostOrder',icon:'http',col:'rgba(42,168,130,.12)',bord:'#2AA882',iconCol:'#2AA882'},
@@ -378,6 +387,35 @@ const LEVELS=[
     code:'<span class="ccm">// Two data sources race — first wins</span>\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"enrichPayload"</span>, Enricher::transform);\n<span class="ck">var</span> fast = ctx.<span class="ccn">execute</span>(<span class="ccs">"fastPath"</span>, CacheClient::lookup);\n<span class="ck">var</span> safe = ctx.<span class="ccn">execute</span>(<span class="ccs">"safePath"</span>, DatabaseRepo::query);\n<span class="ck">var</span> winner = ctx.<span class="ccn">anyMatch</span>(\n    <span class="cct">WorkflowStepResult</span>::isCompleted, fast, safe);\nctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"persistAuditLog"</span>, AuditRepo::save);',
     lesson:'<span class="hl">anyMatch</span> resolves on the FIRST path completed. The winner was determined by which zone you crossed first.',
     crashLesson:'Crashed on the fork! Events survive. Respawning at last checkpoint.'},
+  // Level 5: Signals — awaitEvent + sleep
+  {title:'Signals',subtitle:'AWAIT EVENT & SLEEP',
+    steps:['validateInput','sleepCooldown','callPaymentService','waitForUserConfirmation','saveToDatabase'],
+    zones:[
+      {x:100,w:400,name:'validateInput',...stepMeta('validateInput'),entered:false,exited:false,idx:0},
+      {x:600,w:350,name:'sleepCooldown',...stepMeta('sleepCooldown'),entered:false,exited:false,idx:1,freeze:'sleep'},
+      {x:1050,w:400,name:'callPaymentService',...stepMeta('callPaymentService'),entered:false,exited:false,idx:2},
+      {x:1550,w:400,name:'waitForUserConfirmation',...stepMeta('waitForUserConfirmation'),entered:false,exited:false,idx:3,freeze:'await',meteorLabel:'UserConfirmation'},
+      {x:2050,w:400,name:'saveToDatabase',...stepMeta('saveToDatabase'),entered:false,exited:false,idx:4},
+    ],
+    platforms:[
+      {x:0,y:GY,w:510,h:PH,c:'#8A9BAA'},
+      {x:600,y:GY,w:350,h:PH,c:'#8A9BAA'},
+      {x:960,y:GY-20,w:50,h:12,c:'#A0B0BE'},{x:1010,y:GY,w:40,h:PH,c:'#8A9BAA'},
+      {x:1050,y:GY,w:400,h:PH,c:'#8A9BAA'},
+      {x:1460,y:GY-20,w:50,h:12,c:'#A0B0BE'},{x:1510,y:GY,w:40,h:PH,c:'#8A9BAA'},
+      {x:1550,y:GY,w:400,h:PH,c:'#8A9BAA'},
+      {x:1960,y:GY-20,w:50,h:12,c:'#A0B0BE'},{x:2010,y:GY,w:40,h:PH,c:'#8A9BAA'},
+      {x:2050,y:GY,w:400,h:PH,c:'#8A9BAA'},
+      {x:2450,y:GY,w:200,h:PH,c:'#8A9BAA'},
+    ],
+    obstacles:[
+      {type:'zh',bx:1050,by:GY,rx:0.5,w:32,h:28,spd:1.3,gw:400,inZone:true},
+    ],
+    checkpoints:[{x:470,y:GY-28,zi:0},{x:920,y:GY-28,zi:1},{x:1420,y:GY-28,zi:2},{x:1920,y:GY-28,zi:3},{x:2420,y:GY-28,zi:4}],
+    totalWidth:2650,spawn:{x:60,y:GY-28},
+    code:'<span class="ccm">// Order with sleep + external approval</span>\n<span class="ck">public void</span> <span class="ccn">execute</span>(<span class="cct">SimpleWorkflowContext</span> ctx) {\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"validateInput"</span>, OrderService::validate);\n\n    ctx.<span class="ccn">sleep</span>(<span class="ccs">"sleepCooldown"</span>, Duration.ofSeconds(2));\n\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"callPaymentService"</span>, PaymentGateway::charge);\n\n    <span class="ck">var</span> approval = ctx.<span class="ccn">awaitEvent</span>(\n        <span class="ccs">"waitForUserConfirmation"</span>,\n        <span class="cct">ConfirmationEvent</span>.<span class="ck">class</span>,\n        Duration.ofSeconds(3));\n\n    ctx.<span class="ccn">awaitExecute</span>(<span class="ccs">"saveToDatabase"</span>, OrderRepo::persist);\n}',
+    lesson:'<span class="hl">sleep()</span> pauses execution durably — the timer survives crashes. <span class="hl">awaitEvent()</span> blocks until an external event arrives via correlation. Both are first-class workflow primitives.',
+    crashLesson:'<span class="hl">CRASH!</span> Events survived. Sleep timers and await correlations are durable too.'},
   mkLevel({steps:['httpGetRequest','classifyRequest','callShippingAPI','saveToDatabase','awaitApproval','emitDomainEvent'],title:'Chaos Run',subtitle:'FINAL CHALLENGE',gap:270,zw:340,hasScore:true,
     obs:{0:[hO(.4,3),fO(.7,3.5,80)],1:[hO(.2,3.5),vO(.5,3,80),fO(.8,4,60)],2:[hO(.15,3.5),hO(.55,3.5),vO(.35,3,70),fO(.7,4,55)],3:[hO(.2,4),hO(.6,4),vO(.4,3.5,90),fO(.3,4,50),fO(.85,4,55)],4:[hO(.1,4.5),hO(.4,4.5),vO(.25,3.5,90),vO(.65,4,100),fO(.5,5,40)]},
     zobs:{1:[zhO(.5,1.5)],3:[zhO(.5,1.8)],4:[zhO(.4,2)],5:[zhO(.5,2.2),zvO(.3,2,40)]},
@@ -393,6 +431,7 @@ let gamePhase='select',lastCP=-1,victoryTimer=0,victoryCountdown=0;
 const P={x:0,y:0,vx:0,vy:0,w:18,h:26,grounded:false,facing:1,state:'idle',af:0};
 const P2={x:0,y:0,vx:0,vy:0,w:18,h:26,grounded:false,facing:1,state:'idle',af:0};
 let splitActive=false;
+let frozen=false,frozenType='',frozenZone=null,frozenTimer=0,meteorActive=false,meteorY=0,meteorLabel='';
 const cam={x:0,tx:0};
 const keys={};
 let particles=[],liveObs=[],grainCV=null,grainI=0.06,shake=0,cflash=0;
@@ -409,6 +448,7 @@ const inJ=()=>keys.ArrowUp||keys.KeyW||keys.Space;
 /* ═══ PHYSICS ═══ */
 const GRAV=0.55,JMPF=-11.5,SPD=5,FRIC=0.92;
 function applyInput(p){
+  if(frozen&&p===P){p.vx*=0.8;p.vy+=GRAV;if(p.vy>12)p.vy=12;return} // frozen: no input, just gravity
   if(inL()){p.vx-=0.8;p.facing=-1}
   if(inR()){p.vx+=0.8;p.facing=1}
   p.vx*=FRIC;if(Math.abs(p.vx)>SPD)p.vx=Math.sign(p.vx)*SPD;if(Math.abs(p.vx)<0.1)p.vx=0;
@@ -437,6 +477,38 @@ function tickPlayer(p){
 }
 function updatePlayer(){
   if(gamePhase!=='playing')return;
+  // Freeze logic (await / sleep)
+  if(frozen&&frozenZone){
+    frozenTimer++;
+    if(frozenType==='sleep'){
+      // Sleep: unfreeze after ~120 frames (2s)
+      if(frozenTimer>=120){
+        frozen=false;frozenZone.freezeDone=true;
+        const existing=engine.state.getStep(frozenZone.name);
+        if(!existing||existing.status!==StepStatus.COMPLETED)fireGE(frozenZone.name,StepStatus.COMPLETED);
+        frozenZone.exited=true;if(frozenZone.idx>lastCP)lastCP=frozenZone.idx;
+        showLesson('Sleep completed! The agent woke up and can proceed.');checkWin();
+      }
+    } else if(frozenType==='await'){
+      // Await: meteor starts falling after ~90 frames (1.5s), takes ~90 more to land
+      if(frozenTimer>=90)meteorActive=true;
+      if(meteorActive){
+        meteorY+=3.5;
+        const targetY=(frozenZone.zy||GY)-30;
+        if(meteorY>=targetY){
+          // Meteor landed — unfreeze
+          meteorActive=false;frozen=false;frozenZone.freezeDone=true;
+          shake=8;
+          for(let i=0;i<12;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*3;
+            particles.push({x:P.x,y:targetY,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2,life:1,decay:0.025,size:2+Math.random()*3,col:i%2?'#A8821A':'#F0A030',type:'frag'})}
+          const existing=engine.state.getStep(frozenZone.name);
+          if(!existing||existing.status!==StepStatus.COMPLETED)fireGE(frozenZone.name,StepStatus.COMPLETED);
+          frozenZone.exited=true;if(frozenZone.idx>lastCP)lastCP=frozenZone.idx;
+          showLesson('<span class="hl">Event received!</span> The external confirmation arrived and unblocked the agent.');checkWin();
+        }
+      }
+    }
+  }
   tickPlayer(P);
   // Portal detection
   if(level&&level.portal&&!splitActive&&P.x>level.portalX&&P.x<level.portalX+40){
@@ -481,8 +553,19 @@ function checkZonesFor(p){
     const inZ=p.x>z.x&&p.x<z.x+z.w&&p.y+p.h>=zy-10&&p.y+p.h<=zy+50;
     if(inZ&&!z.entered){z.entered=true;
       const existing=engine.state.getStep(z.name);
-      if(!existing)fireGE(z.name,StepStatus.STARTED)}
+      if(!existing)fireGE(z.name,StepStatus.STARTED);
+      // Freeze zones: await or sleep
+      if(z.freeze&&!frozen&&!z.freezeDone){
+        frozen=true;frozenType=z.freeze;frozenZone=z;frozenTimer=0;
+        meteorActive=false;meteorY=-60;
+        if(z.freeze==='await')meteorLabel=z.meteorLabel||'ExternalEvent';
+      }}
+    // Freeze zones: block exit until freeze completes
+    if(z.freeze&&z.entered&&!z.freezeDone&&!z.exited&&p===P){
+      if(p.x>z.x+z.w-p.w){p.x=z.x+z.w-p.w;p.vx=0} // wall at right edge
+    }
     if(z.entered&&!z.exited&&p.x>z.x+z.w&&!inZ){
+      if(z.freeze&&!z.freezeDone)continue; // don't exit until freeze done
       z.exited=true;
       const existing=engine.state.getStep(z.name);
       if(!existing||existing.status!==StepStatus.COMPLETED)fireGE(z.name,StepStatus.COMPLETED);
@@ -610,8 +693,8 @@ function finishRespawn(){
   for(let i=0;i<12;i++){const a=(i/12)*Math.PI*2;
     particles.push({x:sx+Math.cos(a)*50,y:sy+Math.sin(a)*50,tx:sx,ty:sy+P.h/2,life:1,decay:0.02,size:4,col:i%2?'#4A8FA8':'#E8521A',type:'conv'})}
   P.x=sx;P.y=sy;P.vx=0;P.vy=0;P.grounded=true;
-  splitActive=false;
-  for(const z of level.zones)if(z.idx>lastCP){z.entered=false;z.exited=false}
+  splitActive=false;frozen=false;frozenZone=null;meteorActive=false;
+  for(const z of level.zones)if(z.idx>lastCP){z.entered=false;z.exited=false;z.freezeDone=false}
   setTimeout(()=>{if(gamePhase==='replaying')gamePhase='playing'},500);
 }
 
@@ -738,6 +821,11 @@ function drawZoneIcon(x,y,icon,col){
       ctx2.fillRect(x-5,y-1,10,2);ctx2.fillRect(x-1,y-5,2,10);// cross
       ctx2.fillRect(x-4,y-4,2,2);ctx2.fillRect(x+2,y-4,2,2);
       ctx2.fillRect(x-4,y+2,2,2);ctx2.fillRect(x+2,y+2,2,2);
+      break;
+    case'sleep': // sleep: Zzz
+      ctx2.font='bold 14px '+getComputedStyle(document.body).fontFamily;ctx2.textAlign='center';ctx2.textBaseline='middle';
+      ctx2.fillText('Z',x-4,y-2);ctx2.font='bold 10px '+getComputedStyle(document.body).fontFamily;
+      ctx2.fillText('z',x+4,y-6);ctx2.font='bold 8px '+getComputedStyle(document.body).fontFamily;ctx2.fillText('z',x+8,y-10);
       break;
   }
 }
@@ -930,6 +1018,60 @@ function drawPlayer(){
     ctx2.setLineDash([]);ctx2.restore();
   }
 }
+function drawFreezeEffects(){
+  if(!frozen||!frozenZone)return;
+  const f=getComputedStyle(document.body).fontFamily;
+  const px=P.x-cam.x,py=P.y;
+  if(frozenType==='sleep'){
+    // zZzZ floating animation
+    ctx2.save();ctx2.fillStyle='#7864A8';
+    const t=frozenTimer*0.05;
+    ctx2.font='bold 16px '+f;ctx2.textAlign='center';
+    ctx2.globalAlpha=0.7+Math.sin(t)*0.3;
+    ctx2.fillText('Z',px+10,py-20+Math.sin(t)*5);
+    ctx2.font='bold 12px '+f;ctx2.globalAlpha=0.6+Math.sin(t+1)*0.3;
+    ctx2.fillText('z',px+20,py-32+Math.sin(t+1)*4);
+    ctx2.font='bold 9px '+f;ctx2.globalAlpha=0.5+Math.sin(t+2)*0.3;
+    ctx2.fillText('z',px+28,py-42+Math.sin(t+2)*3);
+    // Progress bar
+    const prog=Math.min(1,frozenTimer/120);
+    const bw=60,bx=px-bw/2,by=py-55;
+    ctx2.globalAlpha=0.6;ctx2.fillStyle='#B0B8C0';ctx2.fillRect(bx,by,bw,6);
+    ctx2.fillStyle='#7864A8';ctx2.fillRect(bx,by,bw*prog,6);
+    ctx2.globalAlpha=0.8;ctx2.font='bold 9px '+f;ctx2.fillStyle='#7864A8';
+    ctx2.fillText('sleep('+(((120-frozenTimer)/60)|0)+'s)',px,by-4);
+    ctx2.restore();
+  } else if(frozenType==='await'){
+    // Waiting indicator
+    ctx2.save();
+    const dots='.'.repeat((frozenTimer/20|0)%4);
+    ctx2.font='bold 10px '+f;ctx2.textAlign='center';ctx2.fillStyle='#A8821A';ctx2.globalAlpha=0.8;
+    ctx2.fillText('awaitEvent'+dots,px,py-50);
+    // Hourglass animation
+    const spin=frozenTimer*0.03;
+    ctx2.globalAlpha=0.5+Math.sin(spin)*0.3;
+    ctx2.font='bold 18px '+f;ctx2.fillText('\u231B',px,py-30);
+    // Meteor falling
+    if(meteorActive){
+      const mx=(frozenZone.x+frozenZone.w/2-cam.x)|0,my=meteorY|0;
+      const mw=80,mh=28;
+      // Glow trail
+      ctx2.globalAlpha=0.3;ctx2.fillStyle='#F0A030';
+      ctx2.fillRect(mx-mw/2,my-60,mw,60);
+      // Meteor body
+      ctx2.globalAlpha=0.9;
+      ctx2.save();ctx2.shadowColor='#F0A030';ctx2.shadowBlur=15;
+      ctx2.fillStyle='#A8821A';ctx2.fillRect(mx-mw/2,my,mw,mh);ctx2.restore();
+      ctx2.fillStyle='#D0A020';ctx2.fillRect(mx-mw/2+3,my+3,mw-6,mh-6);
+      // Label on meteor
+      ctx2.fillStyle='#FFF';ctx2.font='bold 10px '+f;ctx2.textAlign='center';ctx2.textBaseline='middle';
+      ctx2.fillText(meteorLabel,mx,my+mh/2);
+      // Spark particles
+      if(Math.random()<0.4)particles.push({x:mx+cam.x+(Math.random()-0.5)*mw,y:my,vx:(Math.random()-0.5)*2,vy:-1-Math.random()*2,life:1,decay:0.04,size:2+Math.random()*2,col:'#F0A030',type:'spark'});
+    }
+    ctx2.restore();
+  }
+}
 function updParts(){
   for(const p of particles){p.life-=p.decay;if(p.type==='conv'&&p.tx!==undefined){p.x+=(p.tx-p.x)*0.06;p.y+=(p.ty-p.y)*0.06}else{p.x+=p.vx;p.y+=p.vy;if(p.type==='frag')p.vy+=0.1}}
   particles=particles.filter(p=>p.life>0);
@@ -964,7 +1106,7 @@ function render(){
   if(currentLevel<0||!cw||!ch)return;
   ctx2.save();
   if(shake>0.5){ctx2.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);shake*=0.92}else shake=0;
-  drawBG();updCam();drawZones();drawPlats();drawCPs();drawPortal();updateObs();drawObsR();drawPlayer();updParts();drawParts();drawGrain();drawFlash();drawHUD();
+  drawBG();updCam();drawZones();drawPlats();drawCPs();drawPortal();updateObs();drawObsR();drawPlayer();drawFreezeEffects();updParts();drawParts();drawGrain();drawFlash();drawHUD();
   ctx2.restore();frame++;
 }
 
@@ -973,7 +1115,7 @@ function gameLoop(){if(currentLevel>=0){updatePlayer();render()}requestAnimation
 
 /* ═══ LEVEL MANAGEMENT ═══ */
 function startLevel(idx){
-  currentLevel=idx;level=LEVELS[idx];score=0;crashCount=0;lastCP=-1;gamePhase='playing';particles=[];liveObs=[];splitActive=false;
+  currentLevel=idx;level=LEVELS[idx];score=0;crashCount=0;lastCP=-1;gamePhase='playing';particles=[];liveObs=[];splitActive=false;frozen=false;frozenZone=null;meteorActive=false;
   engine.reset();
   for(const z of level.zones){z.entered=false;z.exited=false}
   document.getElementById('level-select').style.display='none';
