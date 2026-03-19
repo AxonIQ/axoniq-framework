@@ -5,6 +5,7 @@ package io.axoniq.dataprotection.sample.giftcard.event
  *
  * Defines the group name and prefix used for GDPR key management,
  * allowing selective deletion of encrypted fields.
+ *
  */
 object GiftPersonalDataGroup {
     const val GROUP_NAME = "gift"

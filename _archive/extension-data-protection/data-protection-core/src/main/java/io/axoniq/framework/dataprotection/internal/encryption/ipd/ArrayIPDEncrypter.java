@@ -24,6 +24,12 @@ import io.axoniq.framework.dataprotection.internal.model.PDField;
 import java.util.Optional;
 import javax.crypto.SecretKey;
 
+/**
+ * Implementation of {@link Encrypter} for array data. Processes each element of the array
+ * through the routing encrypter.
+ *
+ * @author Frans van Buul
+ */
 class ArrayIPDEncrypter implements Encrypter<Object[]> {
 
     private RoutingIPDEncrypter routingIPDEncrypter;

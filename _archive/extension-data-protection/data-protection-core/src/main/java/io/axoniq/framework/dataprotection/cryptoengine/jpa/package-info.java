@@ -19,5 +19,7 @@
 /**
  * Contains a JPA-based implementation of {@link io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine} and some associated
  * classes.
+ *
+ * @author Frans van Buul
  */
 package io.axoniq.framework.dataprotection.cryptoengine.jpa;

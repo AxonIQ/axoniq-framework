@@ -36,6 +36,8 @@ import javax.crypto.spec.SecretKeySpec;
 
 /**
  * HashiCorp Vault-based implementation of the {@link CryptoEngine} interface.
+ *
+ * @author Frans van Buul
  */
 public class VaultCryptoEngine extends DatabaseBackedCryptoEngine {
 

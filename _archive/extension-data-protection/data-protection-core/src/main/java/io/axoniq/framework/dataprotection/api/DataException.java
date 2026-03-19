@@ -20,6 +20,8 @@ package io.axoniq.framework.dataprotection.api;
 /**
  * Runtime exception that is thrown when something unexpected happens with a single data
  * record, but the system should be able to continue functioning with other data entries.
+ *
+ * @author Frans van Buul
  */
 public final class DataException extends RuntimeException {
 

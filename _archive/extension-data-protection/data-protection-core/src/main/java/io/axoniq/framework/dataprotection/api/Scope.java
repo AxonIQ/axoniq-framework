@@ -22,6 +22,8 @@ package io.axoniq.framework.dataprotection.api;
  * value will always be <code>DEFAULT</code>. The reason that this enum exists, is that scope may be different
  * on {@link java.util.Map} fields - in this case, an annotation may apply to the key, value or both sides
  * of the {@link java.util.Map}.
+ *
+ * @author Frans van Buul
  */
 public enum Scope {
 

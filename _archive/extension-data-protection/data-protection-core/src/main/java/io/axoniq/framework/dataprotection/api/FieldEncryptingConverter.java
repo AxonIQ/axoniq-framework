@@ -33,7 +33,7 @@ import org.axonframework.conversion.Converter;
  * This class implements {@link Converter} and can be used as a drop-in replacement for standard converters
  * in Axon Framework 5.x applications.
  *
- * @since 5.0.0
+ * @author Frans van Buul
  */
 public class FieldEncryptingConverter implements Converter {
 

@@ -27,6 +27,7 @@ import java.time.LocalDate
 
 /**
  * Read model representation of a gift card's current state.
+ *
  */
 class GiftCardSummary() {
 

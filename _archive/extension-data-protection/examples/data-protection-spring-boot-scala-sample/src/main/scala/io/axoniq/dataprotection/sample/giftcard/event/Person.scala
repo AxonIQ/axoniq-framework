@@ -22,6 +22,10 @@ import io.axoniq.framework.dataprotection.api.{DeepPersonalData, PersonalData}
 
 import scala.annotation.meta.field
 
+/**
+ * Person case class containing personal data and deep personal data fields.
+ *
+ */
 case class Person(
   @(PersonalData @field)(group = GiftPersonalDataGroup.GROUP_NAME, replacement = "removed")
   name: String,

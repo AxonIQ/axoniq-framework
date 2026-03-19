@@ -32,6 +32,8 @@ import javax.sql.DataSource;
 /**
  * JDBC-based implementation of the {@link CryptoEngine} interface, included for users who wish to store keys
  * in a relational database but do not wish to use JPA.
+ *
+ * @author Frans van Buul
  */
 public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
 

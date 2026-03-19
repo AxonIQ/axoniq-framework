@@ -26,6 +26,12 @@ import java.util.Optional;
 import java.util.Set;
 import javax.crypto.SecretKey;
 
+/**
+ * Holds the encryption context during processing, including the encryption keys for each group
+ * and the set of groups to process.
+ *
+ * @author Frans van Buul
+ */
 public class EncryptionContext {
 
     private static class Entry {

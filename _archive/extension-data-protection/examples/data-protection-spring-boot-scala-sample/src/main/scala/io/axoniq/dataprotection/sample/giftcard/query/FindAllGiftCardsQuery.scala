@@ -19,5 +19,6 @@ package io.axoniq.dataprotection.sample.giftcard.query
 
 /**
  * Query for retrieving all gift cards from the system.
+ *
  */
 case class FindAllGiftCardsQuery()

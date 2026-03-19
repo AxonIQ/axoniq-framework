@@ -37,6 +37,7 @@ import java.util.Objects;
 
 /**
  * JPA entity representing a gift card in the query/read model.
+ *
  */
 @Entity
 @Table(name = "gift_card", schema = "dataprotection")

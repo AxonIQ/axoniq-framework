@@ -23,6 +23,11 @@ import lombok.Value;
 import java.lang.reflect.Field;
 import java.util.List;
 
+/**
+ * Model class representing a Map Personal Data field.
+ *
+ * @author Frans van Buul
+ */
 @Value
 public class MPDField {
     @NonNull Field field;

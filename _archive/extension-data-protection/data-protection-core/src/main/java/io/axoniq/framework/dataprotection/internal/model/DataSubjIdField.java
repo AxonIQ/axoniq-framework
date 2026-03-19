@@ -22,6 +22,11 @@ import lombok.Value;
 
 import java.lang.reflect.Field;
 
+/**
+ * Model class representing a Data Subject ID field.
+ *
+ * @author Frans van Buul
+ */
 @Value
 public class DataSubjIdField  {
     @NonNull Field field;

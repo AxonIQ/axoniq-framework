@@ -21,6 +21,11 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NonNull;
 
+/**
+ * Holds a value and its encrypted storage representation.
+ *
+ * @author Frans van Buul
+ */
 @Data
 @AllArgsConstructor
 public class ValuePair {

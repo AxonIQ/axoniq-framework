@@ -17,6 +17,11 @@
  */
 package io.axoniq.framework.dataprotection.internal.encryption.core;
 
+/**
+ * Enum defining the operations that can be performed on personal data fields.
+ *
+ * @author Frans van Buul
+ */
 public enum Operation {
 
     ENCRYPT,

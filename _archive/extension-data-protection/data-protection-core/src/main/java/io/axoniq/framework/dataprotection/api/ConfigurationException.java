@@ -24,6 +24,8 @@ package io.axoniq.framework.dataprotection.api;
  * <p>
  * In most cases, there is no way to recover from this exception without fixing the application code
  * or environment.
+ *
+ * @author Frans van Buul
  */
 public final class ConfigurationException extends RuntimeException {
 
