@@ -21,6 +21,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.step.StepRetryInfo;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -262,6 +263,26 @@ public class EventMessageUtils {
         Object payload = cause != null ? cause : Map.of();
         return new GenericEventMessage(new MessageType(name), payload,
                                        MetadataUtils.create(context.workflowId(), stepName, StepStatus.CANCELLED)
+        );
+    }
+
+    /**
+     * Creates a new event message stating that a workflow step is retrying.
+     *
+     * @param context    workflow context.
+     * @param stepName   name of the step.
+     * @param retryInfo  retry information payload.
+     * @param customizer event name customizer.
+     * @return event message.
+     */
+    @Nonnull
+    public static EventMessage retryingStep(@Nonnull WorkflowContext context,
+                                            @Nonnull String stepName,
+                                            @Nonnull StepRetryInfo retryInfo,
+                                            @Nonnull EventNameCustomizer customizer) {
+        var name = customizer.getEventName(stepName, Map.of(), StepStatus.RETRYING);
+        return new GenericEventMessage(new MessageType(name), retryInfo,
+                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.RETRYING)
         );
     }
 

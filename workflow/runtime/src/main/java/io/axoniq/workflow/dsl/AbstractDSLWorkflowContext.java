@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.RetryPolicy;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
@@ -102,6 +103,23 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
                                 resultPayloadReducer,
                                 timeout,
                                 eventNameCustomizer);
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
+                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer,
+                                      @Nonnull RetryPolicy retryPolicy) {
+        return delegate.execute(stepName,
+                                local,
+                                action,
+                                parameterMapping,
+                                resultMapping,
+                                timeout,
+                                eventNameCustomizer,
+                                retryPolicy);
     }
 
     @Nonnull

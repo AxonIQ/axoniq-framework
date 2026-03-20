@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.RetryPolicy;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -198,6 +199,25 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                        resultPayloadReducer,
                                        timeout,
                                        eventNameCustomizer);
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult execute(@Nonnull String stepName,
+                                      @org.jetbrains.annotations.Nullable Map<String, Object> local,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
+                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer,
+                                      @Nonnull RetryPolicy retryPolicy) {
+        workflowExecution.state().throwTerminalCause();
+        return executeDelegate.execute(stepName,
+                                       local,
+                                       action,
+                                       parameterMapping,
+                                       resultMapping,
+                                       timeout,
+                                       eventNameCustomizer,
+                                       retryPolicy);
     }
 
     @Override

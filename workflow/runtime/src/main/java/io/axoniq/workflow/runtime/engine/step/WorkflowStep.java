@@ -64,4 +64,8 @@ public record WorkflowStep(
     public static WorkflowStep cancelled(String name, Instant timestamp, Context context) {
         return new WorkflowStep(name, StepStatus.CANCELLED, null, null, timestamp, context);
     }
+
+    public static WorkflowStep retrying(String name, StepRetryInfo retryInfo, Instant timestamp, Context context) {
+        return new WorkflowStep(name, StepStatus.RETRYING, retryInfo, retryInfo.error(), timestamp, context);
+    }
 }

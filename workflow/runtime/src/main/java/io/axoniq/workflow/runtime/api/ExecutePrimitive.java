@@ -24,6 +24,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 
+import static io.axoniq.workflow.runtime.api.RetryPolicy.NONE;
+
 /**
  * Primitive for executing actions within a workflow.
  *
@@ -59,6 +61,33 @@ public interface ExecutePrimitive {
     );
 
     /**
+     * Execute primitive with retry support.
+     *
+     * @param stepName            name of the step.
+     * @param local               local context passed to the call.
+     * @param action              action to execute.
+     * @param parameterMapping    reducer for parameters.
+     * @param resultMapping       reducer for result.
+     * @param timeout             timeout of the action.
+     * @param eventNameCustomizer event name customizer.
+     * @param retryPolicy         retry policy for the step.
+     * @return result.
+     */
+    @Nonnull
+    default WorkflowStepResult execute(
+            @Nonnull String stepName,
+            @Nullable Map<String, Object> local,
+            @Nonnull PayloadProcessor action,
+            @Nonnull PayloadReducer parameterMapping,
+            @Nonnull PayloadReducer resultMapping,
+            @Nonnull Duration timeout,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy
+    ) {
+        return execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
+    }
+
+    /**
      * Execute primitive.
      *
      * @param command parameters object for the primitive.
@@ -76,7 +105,8 @@ public interface ExecutePrimitive {
                                 command.parameterPayloadReducer(),
                                 command.resultPayloadReducer(),
                                 command.timeout(),
-                                command.eventNameCustomizer()));
+                                command.eventNameCustomizer(),
+                                command.retryPolicy()));
     }
 
     /**
@@ -141,6 +171,16 @@ public interface ExecutePrimitive {
          */
         @Nonnull
         EventNameCustomizer eventNameCustomizer();
+
+        /**
+         * Returns retry policy for the action.
+         *
+         * @return retry policy.
+         */
+        @Nonnull
+        default RetryPolicy retryPolicy() {
+            return NONE;
+        }
 
         /**
          * Returns result of the action.

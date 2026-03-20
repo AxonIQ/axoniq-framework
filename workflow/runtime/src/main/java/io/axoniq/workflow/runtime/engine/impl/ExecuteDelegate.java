@@ -89,6 +89,29 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
+        return execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout,
+                       eventNameCustomizer,
+                       // default failure handler — publish FAILED
+                       (name, error, enc) ->
+                               workflowExecution.appendTask(i -> failed(name, error, enc)),
+                       // default timeout handler — publish TIMED_OUT
+                       (name, enc) ->
+                               workflowExecution.appendTask(i -> timedOut(name, clock.instant(), enc))
+        );
+    }
+
+    @Nonnull
+    WorkflowStepResult execute(
+            @Nonnull String stepName,
+            @Nullable Map<String, Object> local,
+            @Nonnull PayloadProcessor action,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
+            @Nonnull Duration timeout,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull FailureHandler failureHandler,
+            @Nonnull TimeoutHandler timeoutHandler
+    ) {
         logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
         acceptAllPendingTasksForStep(stepName);
@@ -106,8 +129,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         // FIXME -> consider to use QOS (at least once/at most once)
-        if (workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED) {
-            var actualStartTime = workflowExecution.state().getStep(stepName).timestamp();
+        var step = workflowExecution.state().getStep(stepName);
+        if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRYING) {
+            var actualStartTime = step.timestamp();
             var remainingTimeout = Duration.between(Instant.now(clock),
                                                     actualStartTime.plus(timeout));
             // FIXME - This is where we capture our current consistency marker
@@ -130,7 +154,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 workflowExecution.appendTask(i -> {
                     // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
                     // FIXME - This is where we should publish using an append condition
-                    timedOut(stepName, clock.instant(), eventNameCustomizer);
+                    timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                 });
             } else {
                 result
@@ -151,9 +175,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                             } else {
                                 if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                                     // FIXME - This is where we should publish using an append condition
-                                    workflowExecution.appendTask(i -> {
-                                        timedOut(stepName, clock.instant(), eventNameCustomizer);
-                                    });
+                                    timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                                 } else if (isCancellation(e)) {
                                     var terminationCause = unwrapCancellation(e);
                                     // FIXME - This is where we should publish using an append condition
@@ -162,9 +184,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                     });
                                 } else {
                                     // FIXME - This is where we should publish using an append condition
-                                    workflowExecution.appendTask(i -> {
-                                        failed(stepName, e, eventNameCustomizer);
-                                    });
+                                    failureHandler.onFailure(stepName, e, eventNameCustomizer);
                                 }
                             }
                         });

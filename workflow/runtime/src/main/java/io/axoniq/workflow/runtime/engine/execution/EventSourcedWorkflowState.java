@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.step.StepRetryInfo;
 import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -170,6 +171,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     addStep(WorkflowStep.cancelled(stepName,
                                                    eventMessage.timestamp(),
                                                    processingContext)); // TODO copy resources of the context
+                    break;
+                case RETRYING:
+                    addStep(WorkflowStep.retrying(stepName,
+                                                  (StepRetryInfo) eventPayload,
+                                                  eventMessage.timestamp(),
+                                                  processingContext)); // TODO copy resources of the context
                     break;
                 default:
                     break;
