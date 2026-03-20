@@ -17,20 +17,30 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import java.util.function.Predicate;
+
 /**
  * Retry policy for execute steps. {@code maxRetries} is the number of retry attempts
  * (not counting the initial attempt). {@code maxRetries=3} means up to 4 total executions.
  *
  * @param maxRetries     maximum number of retry attempts.
  * @param onRetryHandler handler invoked before each retry event is published.
+ * @param backoffStrategy backoff strategy between retry attempts.
+ * @param retryUntil     predicate evaluated on each retry; returns {@code true} to continue retrying,
+ *                       {@code false} to stop. Checked in addition to {@code maxRetries}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffStrategy backoffStrategy) {
+public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffStrategy backoffStrategy,
+                           Predicate<RetryContext> retryPredicate) {
+
+    public RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffStrategy backoffStrategy) {
+        this(maxRetries, onRetryHandler, backoffStrategy, ctx -> true);
+    }
 
     public RetryPolicy(int maxRetries, RetryHandler onRetryHandler) {
-        this(maxRetries, onRetryHandler, BackoffStrategy.NONE);
+        this(maxRetries, onRetryHandler, BackoffStrategy.NONE, ctx -> true);
     }
 
     public static final RetryPolicy NONE = new RetryPolicy(0, RetryHandler.NOOP);
@@ -40,14 +50,18 @@ public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffSt
     }
 
     public RetryPolicy onRetry(RetryHandler handler) {
-        return new RetryPolicy(this.maxRetries, handler, this.backoffStrategy);
+        return new RetryPolicy(this.maxRetries, handler, this.backoffStrategy, this.retryPredicate);
     }
 
     public RetryPolicy withBackoff(BackoffStrategy strategy) {
-        return new RetryPolicy(this.maxRetries, this.onRetryHandler, strategy);
+        return new RetryPolicy(this.maxRetries, this.onRetryHandler, strategy, this.retryPredicate);
     }
 
-    public boolean shouldRetry(int currentAttempt) {
-        return currentAttempt < maxRetries;
+    public RetryPolicy retryUntil(Predicate<RetryContext> predicate) {
+        return new RetryPolicy(this.maxRetries, this.onRetryHandler, this.backoffStrategy, predicate);
+    }
+
+    public boolean shouldRetry(RetryContext context) {
+        return context.attempt() < maxRetries && retryPredicate.test(context);
     }
 }

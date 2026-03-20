@@ -99,7 +99,7 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
             // Workflow completes normally (steps 4-6 use execute() which doesn't propagate step failures)
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
 
-            // All 7 steps present
+            // All 8 steps present
             assertThat(state.workflowStepNames()).containsExactlyInAnyOrder(
                     "normalStep",
                     "retryThenSucceed",
@@ -107,7 +107,8 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
                     "cancelDuringRetry",
                     "timeoutDuringRetry",
                     "retryExhaustion",
-                    "retryWithBackoff"
+                    "retryWithBackoff",
+                    "retryUntilStop"
             );
 
             // Step 1: Normal step — COMPLETED
@@ -130,6 +131,9 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
 
             // Step 7: Retry with backoff — COMPLETED (failed 2x with 200ms backoff, succeeded on attempt 3)
             assertThat(state.getStep("retryWithBackoff").status()).isEqualTo(StepStatus.COMPLETED);
+
+            // Step 8: retryUntil — FAILED (predicate stopped retrying after attempt 2)
+            assertThat(state.getStep("retryUntilStop").status()).isEqualTo(StepStatus.FAILED);
 
         }
 
