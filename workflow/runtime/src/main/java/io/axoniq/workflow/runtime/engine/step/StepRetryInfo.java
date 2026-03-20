@@ -17,17 +17,14 @@
  */
 package io.axoniq.workflow.runtime.engine.step;
 
-import java.time.Instant;
-
 /**
  * Payload for the RETRYING event. Contains retry state for event sourcing and crash recovery.
  *
- * @param attempt           current retry attempt number (1-based).
- * @param maxRetries        maximum number of retries configured.
- * @param error             the error that triggered the retry.
- * @param originalStartTime the timestamp of the original STARTED event, used for timeout calculation.
+ * @param attempt    current retry attempt number (1-based).
+ * @param maxRetries maximum number of retries configured.
+ * @param error      the error that triggered the retry.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public record StepRetryInfo(int attempt, int maxRetries, Throwable error, Instant originalStartTime) {}
+public record StepRetryInfo(int attempt, int maxRetries, Throwable error) {}

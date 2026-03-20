@@ -46,6 +46,7 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
  *   <li>Cancel during retry</li>
  *   <li>Timeout during retry</li>
  *   <li>Retry exhaustion</li>
+ *   <li>Retry with backoff</li>
  * </ol>
  *
  * @author Stefan Dragisic
@@ -61,8 +62,6 @@ public class RetryWorkflow {
     private final AtomicInteger timeoutDuringRetryAttempts = new AtomicInteger(0);
     private final AtomicInteger retryExhaustionAttempts = new AtomicInteger(0);
     private final AtomicInteger retryWithBackoffAttempts = new AtomicInteger(0);
-    private final AtomicInteger backoffExceedsTimeoutAttempts = new AtomicInteger(0);
-
     private final CopyOnWriteArrayList<RetryContext> handlerCalls = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<Instant> backoffTimestamps = new CopyOnWriteArrayList<>();
 
@@ -116,15 +115,14 @@ public class RetryWorkflow {
         }, RetryPolicy.maxRetries(3));
         r4.await();
 
-        // Step 5: Timeout during retry — each attempt sleeps 500ms then fails; total timeout 800ms
-        // Attempt 1 completes (~500ms), attempt 2 is killed by timeout (~300ms remaining)
+        // Step 5: Timeout during retry — each attempt sleeps 500ms; per-attempt timeout 300ms → TIMED_OUT
         WorkflowStepResult r5 = ctx.execute("timeoutDuringRetry", Map.of(), (c, p) -> {
             int attempt = timeoutDuringRetryAttempts.incrementAndGet();
             logger.info("timeoutDuringRetry: attempt {}", attempt);
             sleepQuietly(500);
             throw new RuntimeException("timeoutDuringRetry failure on attempt " + attempt);
-        }, Duration.ofMillis(800), defaults(), RetryPolicy.maxRetries(5)); //todo combine as ExecutionProperties/Parametars (param object)
-        r5.await();//todo timeout bounded to an attempt not whole execution
+        }, Duration.ofMillis(300), defaults(), RetryPolicy.maxRetries(5));
+        r5.await();
 
         // Step 6: Retry exhaustion — always throws, retries exhausted after 2 retries
         WorkflowStepResult r6 = ctx.execute("retryExhaustion", Map.of(), (c, p) -> {
@@ -144,15 +142,6 @@ public class RetryWorkflow {
             }
             return Map.of("retryWithBackoff", "done");
         }, RetryPolicy.maxRetries(3).withBackoff(BackoffStrategy.fixed(Duration.ofMillis(200))));
-
-        // Step 8: Backoff exceeds timeout — always fails, fixed 1s backoff, 500ms timeout → TIMED_OUT
-        WorkflowStepResult r8 = ctx.execute("backoffExceedsTimeout", Map.of(), (c, p) -> {
-            int attempt = backoffExceedsTimeoutAttempts.incrementAndGet();
-            logger.info("backoffExceedsTimeout: attempt {}", attempt);
-            throw new RuntimeException("backoffExceedsTimeout failure on attempt " + attempt);
-        }, Duration.ofMillis(500), defaults(),
-                RetryPolicy.maxRetries(3).withBackoff(BackoffStrategy.fixed(Duration.ofSeconds(1))));
-        r8.await();
 
         logger.info("Retry workflow completed");
     }

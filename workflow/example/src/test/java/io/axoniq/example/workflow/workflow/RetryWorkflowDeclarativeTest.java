@@ -99,7 +99,7 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
             // Workflow completes normally (steps 4-6 use execute() which doesn't propagate step failures)
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
 
-            // All 8 steps present
+            // All 7 steps present
             assertThat(state.workflowStepNames()).containsExactlyInAnyOrder(
                     "normalStep",
                     "retryThenSucceed",
@@ -107,8 +107,7 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
                     "cancelDuringRetry",
                     "timeoutDuringRetry",
                     "retryExhaustion",
-                    "retryWithBackoff",
-                    "backoffExceedsTimeout"
+                    "retryWithBackoff"
             );
 
             // Step 1: Normal step — COMPLETED
@@ -123,7 +122,7 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
             // Step 4: Cancel during retry — CANCELLED (StepCancellationException on attempt 2)
             assertThat(state.getStep("cancelDuringRetry").status()).isEqualTo(StepStatus.CANCELLED);
 
-            // Step 5: Timeout during retry — TIMED_OUT (total 800ms timeout spans all retries)
+            // Step 5: Timeout during retry — TIMED_OUT (per-attempt 300ms timeout, attempt sleeps 500ms)
             assertThat(state.getStep("timeoutDuringRetry").status()).isEqualTo(StepStatus.TIMED_OUT);
 
             // Step 6: Retry exhaustion — FAILED (all retries exhausted)
@@ -132,8 +131,6 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
             // Step 7: Retry with backoff — COMPLETED (failed 2x with 200ms backoff, succeeded on attempt 3)
             assertThat(state.getStep("retryWithBackoff").status()).isEqualTo(StepStatus.COMPLETED);
 
-            // Step 8: Backoff exceeds timeout — TIMED_OUT (1s backoff > 500ms timeout)
-            assertThat(state.getStep("backoffExceedsTimeout").status()).isEqualTo(StepStatus.TIMED_OUT);
         }
 
         // Retry handler was invoked exactly once, for the retryWithHandler step
