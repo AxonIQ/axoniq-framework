@@ -64,9 +64,7 @@ public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<Stri
 
 
     /**
-     * Combines two payloads into one. Takes only value from the second (local) payload. This is a reducer used as
-     * default as a parameter reducer, responsible for not modifying passed parameters with the values from the workflow
-     * context.
+     * Simple {@code PayloadReducer} that will only pass along the `local` payload, ignoring the `context` payload, without modification.
      */
     PayloadReducer LOCAL = (context, local) -> local;
 
