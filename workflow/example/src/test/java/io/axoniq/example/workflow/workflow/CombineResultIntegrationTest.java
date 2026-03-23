@@ -19,19 +19,18 @@ package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
@@ -40,8 +39,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.LOCAL;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.LOCAL_ONLY;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
@@ -50,9 +49,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test for COMBINE result mapping.
+ * Integration test for COMBINE_LOCAL_AND_CONTEXT result reducer.
  */
-class CombineResultIntegrationTest extends AbstractDeclarativeTestBase<CombineResultIntegrationTest.CombineWorkflowContext> {
+class CombineResultIntegrationTest
+        extends AbstractDeclarativeTestBase<CombineResultIntegrationTest.CombineWorkflowContext> {
 
     public CombineResultIntegrationTest() {
         super(CombineWorkflowContext.class, c -> new CombineWorkflowContextFactory());
@@ -78,7 +78,7 @@ class CombineResultIntegrationTest extends AbstractDeclarativeTestBase<CombineRe
 
         await().untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).isNotEmpty());
 
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
 
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions())
@@ -98,47 +98,56 @@ class CombineResultIntegrationTest extends AbstractDeclarativeTestBase<CombineRe
     }
 
     public static class CombineWorkflow {
+
         public void execute(CombineWorkflowContext ctx) {
-            // This call uses the overridden execute method which uses COMBINE for result mapping
+            // This call uses the overridden execute method which uses COMBINE_LOCAL_AND_CONTEXT for result reducer
             var result = ctx.execute("combineStep", Map.of(), (c, p) -> Map.of("stepResult", "combinedValue"));
             result.await();
         }
     }
 
     public static class CombineWorkflowContext extends SimpleWorkflowContext {
-        public CombineWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext, WorkflowConfiguration<?> workflowConfiguration) {
+
+        public CombineWorkflowContext(String workflowId, Map<String, Object> payload,
+                                      ProcessingContext processingContext,
+                                      WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
 
         @Override
         @Nonnull
-        public io.axoniq.workflow.runtime.api.WorkflowStepResult execute(
+        public WorkflowStepResult execute(
                 @Nonnull String stepName,
                 @Nonnull Map<String, Object> payload,
                 @Nonnull PayloadProcessor action
         ) {
-            return super.execute(stepName, payload, action, LOCAL, COMBINE, Duration.ofMinutes(5), defaults());
+            return super.execute(stepName, payload, action, LOCAL_ONLY,
+                                 COMBINE_GLOBAL_AND_LOCAL, Duration.ofMinutes(5), defaults());
         }
 
         @Override
         @Nonnull
-        public io.axoniq.workflow.runtime.api.WorkflowStepResult execute(
+        public WorkflowStepResult execute(
                 @Nonnull String stepName,
                 @Nonnull Map<String, Object> payload,
                 @Nonnull PayloadProcessor action,
                 @Nonnull Duration duration,
                 @Nonnull EventNameCustomizer eventNameCustomizer
         ) {
-            // Force COMBINE as result mapping
+            // Force COMBINE_LOCAL_AND_CONTEXT as result reducer
             // Note: SimpleWorkflowContext.execute delegates to the internal delegate which is a WorkflowContextDelegation
-            return super.execute(stepName, payload, action, LOCAL, COMBINE, duration, eventNameCustomizer);
+            return super.execute(stepName, payload, action, LOCAL_ONLY,
+                                 COMBINE_GLOBAL_AND_LOCAL, duration, eventNameCustomizer);
         }
     }
 
     public static class CombineWorkflowContextFactory implements WorkflowContextFactory<CombineWorkflowContext> {
+
         @Override
         @Nonnull
-        public CombineWorkflowContext createContext(@Nonnull Map<String, Object> payload, @Nonnull String workflowId, @Nonnull ProcessingContext processingContext, @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public CombineWorkflowContext createContext(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
+                                                    @Nonnull ProcessingContext processingContext,
+                                                    @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
             return new CombineWorkflowContext(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

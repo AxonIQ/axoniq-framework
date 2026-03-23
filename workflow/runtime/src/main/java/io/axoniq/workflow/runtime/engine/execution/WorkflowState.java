@@ -91,8 +91,9 @@ public interface WorkflowState extends DescribableComponent {
      *
      * @param eventMessage      the event message received.
      * @param processingContext the processing context for the event.
+     * @return new evolved state.
      */
-    void evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
+    WorkflowState evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 
     /**
      * Returns the step name that reached a terminal state first among the given candidates, determined by event-sourced

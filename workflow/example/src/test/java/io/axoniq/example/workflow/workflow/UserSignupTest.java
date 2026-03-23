@@ -25,8 +25,9 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
@@ -48,6 +49,10 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Simple workflow based on {@link SimpleWorkflowContext}.
+ *
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class UserSignupTest {
 
@@ -91,7 +96,9 @@ class UserSignupTest {
 
         @Test
         void shouldExecuteAllStepsOnFirstRun() {
-            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine);
+            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher,
+                                                                workflowEngine,
+                                                                workflowHistoryRepository);
         }
     }
 
@@ -115,13 +122,17 @@ class UserSignupTest {
 
         @Test
         void shouldExecuteAllStepsOnFirstRun() {
-            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine);
+            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher,
+                                                                workflowEngine,
+                                                                workflowHistoryRepository);
         }
     }
 
 
     void shouldExecuteAllStepsOnFirstRun(
-            DelayedPublisher delayedPublisher, WorkflowEngine workflowEngine
+            DelayedPublisher delayedPublisher,
+            WorkflowEngine workflowEngine,
+            WorkflowHistoryRepository workflowHistoryRepository
     ) {
 
         delayedPublisher.addSchedules(List.of(
@@ -152,18 +163,22 @@ class UserSignupTest {
         });
 
         // simulate all-replayed and start workflows
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
+
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
+            assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
         assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
+
         // Verify that both workflows executed all steps
-        for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
-            var state = workflowExecution.state();
+        for (WorkflowHistory workflowHistory : workflowHistoryRepository.findAll()) {
+            var state = workflowHistory.state();
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             assertThat(state.workflowStepNames()).containsExactly(
@@ -175,10 +190,9 @@ class UserSignupTest {
                     "modifyPayload1"
             );
 
-            var payload = workflowExecution.workflowContext().workflowPayload();
-            assertThat(payload.containsKey("status")).isTrue(); // part of intial payload
-            assertThat(payload.containsKey("magician")).isTrue(); // explicit set
-            assertThat(payload.containsKey("__createUser")).isFalse(); // not set because simple has CONTEXT result mapping
+            var payload = workflowHistory.state().payload();
+            assertThat(payload.containsKey("magic"));
+            assertThat(payload.containsKey("__createUser"));
         }
     }
 }

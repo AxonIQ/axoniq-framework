@@ -53,7 +53,7 @@ class EventWaitConditionsTest {
     void testAddAndRemove() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
-        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
+        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
         eventWaitConditions.describeTo(descriptor);
@@ -68,7 +68,7 @@ class EventWaitConditionsTest {
     void testEvaluateAndApplyMatches() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
-        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
+        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
 
         EventMessage message = mock(EventMessage.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
@@ -86,7 +86,7 @@ class EventWaitConditionsTest {
     void testEvaluateAndApplyNoMatch() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.never(qName);
-        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
+        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
 
         EventMessage message = mock(EventMessage.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
@@ -104,11 +104,11 @@ class EventWaitConditionsTest {
     void testDescribeTo() {
         QualifiedName qName1 = new QualifiedName("ns", "Event1");
         EventCondition condition = EventConditions.fromQualifiedName(qName1);
-        eventWaitConditions.add("step1", condition, PayloadReducer.CONTEXT, defaults());
+        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
 
         QualifiedName qName2 = new QualifiedName("ns", "Event2");
         EventCondition condition2 = EventConditions.fromQualifiedName(qName2);
-        eventWaitConditions.add("step2", condition2, PayloadReducer.CONTEXT, defaults());
+        eventWaitConditions.add("step2", condition2, PayloadReducer.GLOBAL_ONLY, defaults());
 
 
         Collection<?> list = getDescribedConditions();

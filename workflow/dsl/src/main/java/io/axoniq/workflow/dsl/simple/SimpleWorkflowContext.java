@@ -45,8 +45,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.CONTEXT;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.LOCAL;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.GLOBAL_ONLY;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.LOCAL_ONLY;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
@@ -85,11 +85,11 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
-        return awaitEvent(stepName, eventType, predicate, CONTEXT, timeout);
+        return awaitEvent(stepName, eventType, predicate, GLOBAL_ONLY, timeout);
     }
 
     public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate,
-                            PayloadReducer resultMapping, Duration timeout) {
+                            PayloadReducer resultPayloadReducer, Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
@@ -97,7 +97,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         e -> predicate.test(e.payloadAs(eventType))
                 ),
-                resultMapping,
+                resultPayloadReducer,
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(Converter.class),
@@ -107,11 +107,11 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
                             Duration timeout) {
-        return awaitEvent(stepName, eventType, associationsUtils, CONTEXT, timeout);
+        return awaitEvent(stepName, eventType, associationsUtils, GLOBAL_ONLY, timeout);
     }
 
     public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
-                            PayloadReducer resultMapping, Duration timeout) {
+                            PayloadReducer resultPayloadReducer, Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
@@ -119,7 +119,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         e -> associationsUtils.build(super.processingContext()).test(e)
                 ),
-                resultMapping,
+                resultPayloadReducer,
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(Converter.class),
@@ -138,7 +138,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @param timeout  timeout to wait.
      */
     public void sleep(String stepName, Duration timeout) {
-        var result = waitFor(stepName, EventConditions.never(), PayloadReducer.CONTEXT, timeout, defaults());
+        var result = waitFor(stepName, EventConditions.never(), PayloadReducer.GLOBAL_ONLY, timeout, defaults());
         if (result.failure() && result.error().isPresent()) {
             throw result.error().get();
         }
@@ -165,7 +165,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-        return execute(stepName, payload, action, LOCAL, CONTEXT, duration, eventNameCustomizer);
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, duration, eventNameCustomizer);
     }
 
     /**
@@ -185,7 +185,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Map<String, Object> payload,
             @Nonnull PayloadProcessor action
     ) {
-        return execute(stepName, payload, action, LOCAL, CONTEXT, defaultTimeout, defaults());
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, defaultTimeout, defaults());
     }
 
 

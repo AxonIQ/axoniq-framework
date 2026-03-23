@@ -80,7 +80,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     public WorkflowStepResult waitFor(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
@@ -116,7 +116,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 });
             } else {
                 // Register wait condition
-                workflowExecution.registerWaitCondition(stepName, eventCondition, resultMapping, eventNameCustomizer);
+                workflowExecution.registerWaitCondition(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer);
                 var timeoutFuture = CompletableFuture.runAsync(
                         () -> {
                             workflowExecution.removeWaitCondition(stepName);
@@ -154,27 +154,27 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     /**
      * Receives an event message (because of wait condition) to trigger the wait for continuation.
      *
-     * @param eventArrival event arrival information.
+     * @param awaited event arrival information.
      */
-    void eventReceived(@Nonnull EventWaitConditions.EventArrival eventArrival) {
+    void eventReceived(@Nonnull EventWaitConditions.Awaited awaited) {
         // Cancel the timeout future since the awaited event has arrived
-        workflowExecution.cancelAndRemoveRunningStep(eventArrival.stepName(), false);
-        var payload = eventMessagePayload(eventArrival.eventMessage());
+        workflowExecution.cancelAndRemoveRunningStep(awaited.stepName(), false);
+        var payload = eventMessagePayload(awaited.eventMessage());
         final String resultMappingName;
-        if (PayloadReducer.isDefault(eventArrival.payloadReducer())) {
-            resultMappingName = PayloadReducer.name(eventArrival.payloadReducer());
+        if (PayloadReducer.isDefault(awaited.payloadReducer())) {
+            resultMappingName = PayloadReducer.name(awaited.payloadReducer());
         } else {
             resultMappingName = null;
         }
         workflowExecution.appendTask(state -> {
             try {
-                completed(eventArrival.stepName(),
+                completed(awaited.stepName(),
                           payload,
                           resultMappingName,
-                          eventArrival.eventNameCustomizer()).join();
+                          awaited.eventNameCustomizer()).join();
             } catch (Exception e) {
                 logger.warn("Failed to publish completed event for step '{}': {}",
-                            eventArrival.stepName(),
+                            awaited.stepName(),
                             e.getMessage());
             }
         });

@@ -60,6 +60,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private final WorkflowStateListenerSupport listenerSupport;
 
     /**
+     * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
+     */
+    public EventSourcedWorkflowState() {
+        this(Map.of());
+    }
+    /**
      * Creates a new workflow state without reference to a workflow context.
      */
     public EventSourcedWorkflowState(
@@ -118,7 +124,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
-    public void evolve(
+    public WorkflowState evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
@@ -177,7 +183,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
         });
         // Apply workflow-level state changes — ignore transitions once already terminal
         MetadataUtils.getWorkflowStatus(metadata).
-
                      ifPresent(status ->
 
                                {
@@ -195,6 +200,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                    }
                                    setStatus(status, terminationCause);
                                });
+        return this;
     }
 
     /**

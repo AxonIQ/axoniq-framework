@@ -48,11 +48,10 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Execute workflow.
      *
-     * @param <T> type of the workflow context.
-     * @return workflow context.
+     * @param terminationHandler termination handler, which is executed after the execution has reached a terminal
+     *                           {@link WorkflowStatus}.
      */
-    @Nonnull
-    <T extends WorkflowContext> T execute();
+    void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler);
 
     /**
      * Returns workflow context of the current execution.
@@ -109,14 +108,14 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Registers a new wait condition.
      *
-     * @param stepName            waiting step name.
-     * @param eventCondition      event condition.
-     * @param resultMapping       result mapping.
-     * @param eventNameCustomizer event name customizer.
+     * @param stepName             waiting step name.
+     * @param eventCondition       event condition.
+     * @param resultPayloadReducer step result payload reducer.
+     * @param eventNameCustomizer  event name customizer.
      */
     void registerWaitCondition(@Nonnull String stepName,
                                @Nonnull EventCondition eventCondition,
-                               @Nonnull PayloadReducer resultMapping,
+                               @Nonnull PayloadReducer resultPayloadReducer,
                                @Nonnull EventNameCustomizer eventNameCustomizer);
 
     /**

@@ -46,31 +46,36 @@ public class EventWaitConditions implements DescribableComponent {
     /**
      * Internal representation.
      *
-     * @param eventCondition      condition to match.
-     * @param eventNameCustomizer customizer.
+     * @param eventCondition       condition to match.
+     * @param resultPayloadReducer payload reducer to combine payload delivered by the event (result of the step) with
+     *                             the workflow payload.
+     * @param eventNameCustomizer  customizer.
      */
     @Internal
     record EventConditionWithStepNameCustomizer(
             @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
 
     }
 
     /**
-     * Adds a new event wait condition for specified workflow step.
      *
-     * @param stepName       step waiting for event.
-     * @param eventCondition await condition
+     * Adds a new event wait condition for the specified workflow step.
+     *
+     * @param stepName             step waiting for event.
+     * @param resultPayloadReducer payload reducer to combine payload delivered by the event (result of the step) with
+     *                             the workflow payload.
+     * @param eventCondition       await condition
      */
     public void add(@Nonnull String stepName,
                     @Nonnull EventCondition eventCondition,
-                    @Nonnull PayloadReducer resultMapping,
+                    @Nonnull PayloadReducer resultPayloadReducer,
                     @Nullable EventNameCustomizer eventNameCustomizer) {
         waitConditions.put(stepName,
                            new EventConditionWithStepNameCustomizer(eventCondition,
-                                                                    resultMapping,
+                                                                    resultPayloadReducer,
                                                                     eventNameCustomizer
                                                                             != null ? eventNameCustomizer : defaults()));
     }
@@ -85,18 +90,19 @@ public class EventWaitConditions implements DescribableComponent {
     }
 
     /**
-     * Evaluates existing conditions on provided event message and applies the provided action, if the match is found.
+     * Evaluates existing conditions on the provided event message and applies the provided action if the match is
+     * found.
      * <p>
-     * If the condition is met on provided message, it will be removed from wait conditions and the message will be
+     * If the condition is met on the provided message, it will be removed from wait conditions and the message will be
      * passed to the action.
      * </p>
      *
      * @param eventMessage event message to execute evaluation on.
-     * @param action       action executed on event message, stepName and condition, if the condition is met.
+     * @param action       action executed on an event message, step name and condition if the condition is met.
      *
      */
     public void evaluateAndApply(@Nonnull EventMessage eventMessage,
-                                 @Nonnull Consumer<EventArrival> action) {
+                                 @Nonnull Consumer<Awaited> action) {
         // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
@@ -105,30 +111,37 @@ public class EventWaitConditions implements DescribableComponent {
                     eventMessage)) {
                 remove(stepName);
                 action.accept(
-                        new EventArrival(eventMessage,
-                                         stepName,
-                                         entry.getValue().resultMapping(),
-                                         entry.getValue().eventNameCustomizer())
+                        new Awaited(eventMessage,
+                                    stepName,
+                                    entry.getValue().resultPayloadReducer(),
+                                    entry.getValue().eventNameCustomizer())
                 );
             }
         }
     }
 
     /**
-     * Payload arrival event.
+     * Expresses the arrival of the event message passed to the {@link #evaluateAndApply(EventMessage, Consumer)}.
      *
      * @param eventMessage        event message.
      * @param payloadReducer      payload reducer.
      * @param stepName            step name.
      * @param eventNameCustomizer event name customizer.
      */
-    public record EventArrival(
+    public record Awaited(
             @Nonnull EventMessage eventMessage,
             @Nonnull String stepName,
             @Nonnull PayloadReducer payloadReducer,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
 
+    }
+
+    /**
+     * Clears all event wait conditions.
+     */
+    public void clear() {
+        this.waitConditions.clear();
     }
 
 

@@ -39,14 +39,31 @@ public class RunningSteps implements DescribableComponent {
 
     private final ConcurrentHashMap<String, CompletableFuture<?>> runningFutures = new ConcurrentHashMap<>();
 
+    /**
+     * Register a new running step.
+     *
+     * @param stepName step name.
+     * @param future   future to register.
+     */
     public void register(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
         runningFutures.put(stepName, future);
     }
 
+    /**
+     * Remove a running step.
+     *
+     * @param stepName step name.
+     */
     public void remove(@Nonnull String stepName) {
         runningFutures.remove(stepName);
     }
 
+    /**
+     * Cancel and remove a running step.
+     *
+     * @param stepName              step name.
+     * @param mayInterruptIfRunning whether to interrupt the step if it is running.
+     */
     public void cancelAndRemove(@Nonnull String stepName, boolean mayInterruptIfRunning) {
         var future = runningFutures.remove(stepName);
         if (future != null) {
@@ -54,6 +71,13 @@ public class RunningSteps implements DescribableComponent {
         }
     }
 
+    /**
+     * Cancel a running step providing a cause to be used for the cancellation as a failed future cause.
+     *
+     * @param stepName step name.
+     * @param cause    a cause for the cancellation.
+     * @return true, if the future was cancelled successfully.
+     */
     public boolean cancelWithCause(@Nonnull String stepName, @Nullable Throwable cause) {
         var future = runningFutures.remove(stepName);
         if (future == null) {
@@ -63,6 +87,13 @@ public class RunningSteps implements DescribableComponent {
         return future.completeExceptionally(ex);
     }
 
+    /**
+     * Cancel all running steps, waiting for them to complete and passing the cancelled step names to the given
+     * consumer.
+     *
+     * @param cause            the cause of the cancellation.
+     * @param awaitTermination consumer of cancelled step names.
+     */
     public void cancelAll(@Nullable Throwable cause, @Nonnull Consumer<Set<String>> awaitTermination) {
         var stepNames = new HashSet<>(runningFutures.keySet());
         var ex = cause != null ? cause : new StepCancellationException("Workflow terminated");

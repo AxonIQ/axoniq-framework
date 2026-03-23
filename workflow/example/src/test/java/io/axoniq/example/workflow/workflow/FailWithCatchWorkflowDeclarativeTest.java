@@ -78,7 +78,7 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
 
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions())
@@ -92,6 +92,8 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
             Thread.currentThread().interrupt();
         }
 
+        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+
         for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
             var context = execution.workflowContext();
             assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
@@ -100,7 +102,7 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
         }
 
         // Verify no events were published after the workflow terminal event
-        var events = PrettyPrintingRecordingEventStore.lastInstance().getPublishedEvents().stream()
+        var events = PrettyPrintingRecordingEventStore.lastInstance().recorded().stream()
                                                       .filter(e -> e.metadata().containsKey("workflowId"))
                                                       .toList();
 

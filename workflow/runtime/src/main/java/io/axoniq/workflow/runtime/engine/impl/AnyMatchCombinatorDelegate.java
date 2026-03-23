@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *
+ *
+ */
+
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.AnyMatchCombinator;
@@ -31,7 +49,7 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
      * @param workflowExecution the workflow execution.
      */
     public AnyMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
-        this.workflowExecution = Objects.requireNonNull(workflowExecution, "workflowState must not be null");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "state must not be null");
     }
 
     @Override

@@ -76,8 +76,8 @@ class Kontext(
         stepName: String,
         action: (payload: Map<String, Any?>) -> T,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.LOCAL,
-        resultMapping: PayloadReducer = PayloadReducer.CONTEXT,
+        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
@@ -103,7 +103,7 @@ class Kontext(
     fun <T : Any> awaitEvent(
         stepName: String,
         type: KClass<T>,
-        resultMapping: PayloadReducer = PayloadReducer.CONTEXT,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
@@ -139,8 +139,8 @@ class Kontext(
         stepName: String,
         action: PayloadProcessor,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.LOCAL,
-        resultMapping: PayloadReducer = PayloadReducer.CONTEXT,
+        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.execute(
@@ -158,7 +158,7 @@ class Kontext(
     fun waitFor(
         stepName: String,
         qualifiedName: QualifiedName,
-        resultMapping: PayloadReducer = PayloadReducer.CONTEXT,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.waitFor(

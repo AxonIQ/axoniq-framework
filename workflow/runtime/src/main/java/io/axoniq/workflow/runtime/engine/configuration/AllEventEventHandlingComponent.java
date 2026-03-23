@@ -53,14 +53,15 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
             pcepc.eventCriteria(
-                    set -> {
-                        if (set.isEmpty()) {
-                            return EventCriteria.havingAnyTag();
-                        } else {
-                            return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-                        }
-                    }
-            ).initialSegmentCount(1);
+                         set -> {
+                             if (set.isEmpty()) {
+                                 return EventCriteria.havingAnyTag();
+                             } else {
+                                 return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+                             }
+                         }
+                 ).initialSegmentCount(1)
+                 .batchSize(1);
     private final SequencingPolicy sequencingPolicy;
     private final EventHandler eventHandler;
 

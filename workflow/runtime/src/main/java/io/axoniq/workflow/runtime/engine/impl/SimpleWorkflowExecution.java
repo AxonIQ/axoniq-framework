@@ -117,12 +117,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
 
     @Override
-    @Nonnull
-    public <T extends WorkflowContext> T execute() {
+    public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
         // TODO: discuss when we switch to the executable
         this.executable = true;
-        //noinspection unchecked
-        return (T) ProcessingContextUtils
+        ProcessingContextUtils
                 .executeWithResult(
                         contextDelegate.workflowId(),
                         contextDelegate.unitOfWorkFactory(),
@@ -134,7 +132,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                             if (this.state().workflowStatus().isTerminal()) {
                                 logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
                                              this.state().workflowStatus());
-                                return CompletableFuture.completedFuture(this);
+                                return CompletableFuture.completedFuture(this.contextDelegate);
                             }
 
                             if (this.state().workflowStatus() == WorkflowStatus.NONE) {
@@ -162,8 +160,24 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                             5,
                                             TimeUnit.SECONDS); // FIXME constant?
                                 }
-                            } catch (WorkflowFailedException | WorkflowCancelledException e) {
-                                // Events already sent by TerminateDelegate, just let it propagate
+                            } catch (WorkflowFailedException e) {
+                                // if Events are already sent by TerminateDelegate, just let it propagate
+                                if (!this.state().workflowStatus().isTerminal()) {
+                                    sendWorkflowEvent(failedWorkflow(this.workflowContext(),
+                                                                     workflowName,
+                                                                     e,
+                                                                     eventNameCustomizer),
+                                                      pc).join(); // FIXME join without timeout
+                                }
+                            } catch (WorkflowCancelledException e) {
+                                // if Events are already sent by TerminateDelegate, just let it propagate
+                                if (!this.state().workflowStatus().isTerminal()) {
+                                    sendWorkflowEvent(cancelledWorkflow(this.workflowContext(),
+                                                                        workflowName,
+                                                                        e,
+                                                                        eventNameCustomizer),
+                                                      pc).join(); // FIXME join without timeout
+                                }
                             } catch (Throwable e) {
                                 if (e instanceof TimeoutException) {
                                     sendWorkflowEvent(timeoutWorkflow(this.workflowContext(),
@@ -177,7 +191,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                         eventNameCustomizer),
                                                       pc).join(); // FIXME join without timeout
                                 } else {
-                                    logger.error("Error occurred in workflow {}", this.contextDelegate.workflowId(), e);
+                                    logger.error("Error occurred in workflow {}", workflowId, e);
                                     sendWorkflowEvent(failedWorkflow(this.workflowContext(),
                                                                      workflowName,
                                                                      e instanceof Exception ? (Exception) e
@@ -185,25 +199,35 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                      eventNameCustomizer),
                                                       pc).join(); // FIXME join without timeout
                                 }
-                                if (e instanceof RuntimeException) {
-                                    throw (RuntimeException) e;
-                                } else {
-                                    throw new RuntimeException(e);
-                                }
                             }
 
                             return CompletableFuture.completedFuture(this.contextDelegate);
                         }
-                ).thenApply(wc -> {
+                ).handle((wc, te) -> {
                     try {
-                        // FIXME -> tell the coordinator to clean up and wait for terminal workflow status.
                         awaitStateChange(s -> s.workflowStatus().isTerminal());
-                    } catch (Exception te) {
-                        logger.error("Error waiting for workflow instance termination", te);
+                    } catch (Exception e) {
+                        logger.error(
+                                "Error waiting for termination of workflow instance {}", workflowId,
+                                e
+                        );
                     }
-                    return wc;
+                    cleanup();
+                    terminationHandler.accept(this);
+                    return null;
                 })
                 .join();
+    }
+
+    /**
+     * Performs internal cleanup of the execution. Everything related to the execution is removed, and only the
+     * execution state remains present.
+     */
+    private void cleanup() {
+        this.taskQueue.clear();
+        this.eventWaitConditions.clear();
+        this.runningSteps.cancelAll(null, s -> {
+        });
     }
 
     @Override
@@ -285,9 +309,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void registerWaitCondition(@Nonnull String stepName,
                                       @Nonnull EventCondition eventCondition,
-                                      @Nonnull PayloadReducer resultMapping,
+                                      @Nonnull PayloadReducer resultPayloadReducer,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
-        eventWaitConditions.add(stepName, eventCondition, resultMapping, eventNameCustomizer);
+        eventWaitConditions.add(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer);
     }
 
     @Override

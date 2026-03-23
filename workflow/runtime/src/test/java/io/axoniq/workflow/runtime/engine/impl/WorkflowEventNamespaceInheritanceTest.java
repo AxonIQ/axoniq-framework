@@ -51,7 +51,7 @@ class WorkflowEventNamespaceInheritanceTest {
         EventMessage evt = EventMessageUtils.completedStep(ctx,
                                                            "myStep",
                                                            Map.of(),
-                                                           PayloadReducer.NAME_CONTEXT,
+                                                           PayloadReducer.NAME_GLOBAL_ONLY,
                                                            merged);
 
         // Then the namespace should be inherited from the workflow customizer
@@ -75,7 +75,7 @@ class WorkflowEventNamespaceInheritanceTest {
         EventMessage evt = EventMessageUtils.completedStep(ctx,
                                                            "myStep",
                                                            Map.of(),
-                                                           PayloadReducer.NAME_CONTEXT,
+                                                           PayloadReducer.NAME_GLOBAL_ONLY,
                                                            merged);
 
         // Then the step-level namespace should win

@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.api;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,48 +26,55 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 
 /**
- * Payload reducer to combine two payloads into one.
+ * Payload reducer to combine two payloads into one. In general, there is a global payload (part of the state of the
+ * workflow instance) and a local payload (part of the step execution). On the step invocation, the global and local
+ * form the invocation parameters. After the step execution, the local result any global for, the resulting workflow
+ * instance payload.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@Internal
 @FunctionalInterface
 public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
 
     /**
-     * Name of {@link #COMBINE} reducer.
+     * Name of {@link #COMBINE_GLOBAL_AND_LOCAL} reducer.
      */
-    String NAME_COMBINE = "combine";
+    String NAME_COMBINE_LOCAL_AND_GLOBAL = "combine_local_and_global";
     /**
-     * Name of {@link #CONTEXT} reducer.
+     * Name of {@link #GLOBAL_ONLY} reducer.
      */
-    String NAME_CONTEXT = "context";
+    String NAME_GLOBAL_ONLY = "global_only";
     /**
-     * Name of {@link #LOCAL} reducer.
+     * Name of {@link #LOCAL_ONLY} reducer.
      */
-    String NAME_LOCAL = "local";
+    String NAME_LOCAL_ONLY = "local_only";
     /**
-     * Combines two payloads into one. Takes all values from the first payload and adds the values of the second,
-     * overwriting any duplicates. Usage of this reducer as a parameter reducer allows accessing all workflow context
-     * variables directly. Usage of this reducer as a result reducer writes all results back into the workflow context.
+     * Combines two payloads into one. Takes all values from the first payload (workflow context) and adds the values of
+     * the second (local), overwriting any duplicates. Usage of this reducer as a parameter reducer allows accessing all
+     * workflow context variables directly. Usage of this reducer as a result reducer writes all results back into the
+     * workflow context.
      */
-    PayloadReducer COMBINE = (context, local) -> {
-        var result = new HashMap<>(context);
+    PayloadReducer COMBINE_GLOBAL_AND_LOCAL = (global, local) -> {
+        var result = new HashMap<>(global);
         result.putAll(local);
         return result;
     };
 
     /**
-     * Simple {@code PayloadReducer} that will only pass along the `context` payload, ignoring the `local` payload, without modification.
+     * Simple {@code PayloadReducer} that will only pass along the `global` payload, ignoring the `local` payload,
+     * without modification.
      */
-    PayloadReducer CONTEXT = (context, local) -> context;
+    PayloadReducer GLOBAL_ONLY = (global, local) -> global;
 
 
     /**
-     * Simple {@code PayloadReducer} that will only pass along the `local` payload, ignoring the `context` payload, without modification.
+     * Simple {@code PayloadReducer} that will only pass along the `local` payload, ignoring the `global` payload,
+     * without modification.
      */
-    PayloadReducer LOCAL = (context, local) -> local;
+    PayloadReducer LOCAL_ONLY = (global, local) -> local;
 
     /**
      * Constructs standard reducer by name.
@@ -76,9 +84,9 @@ public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<Stri
      */
     static PayloadReducer byName(@Nonnull String name) {
         return switch (Objects.requireNonNull(name, "Reducer name must not be null")) {
-            case NAME_COMBINE -> COMBINE;
-            case NAME_CONTEXT -> CONTEXT;
-            case NAME_LOCAL -> LOCAL;
+            case NAME_COMBINE_LOCAL_AND_GLOBAL -> COMBINE_GLOBAL_AND_LOCAL;
+            case NAME_GLOBAL_ONLY -> GLOBAL_ONLY;
+            case NAME_LOCAL_ONLY -> LOCAL_ONLY;
             default -> throw new IllegalArgumentException("Unknown reducer name: " + name);
         };
     }
@@ -90,12 +98,12 @@ public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<Stri
      * @return reducer name.
      */
     static String name(@Nonnull PayloadReducer reducer) {
-        if (COMBINE == reducer) {
-            return NAME_COMBINE;
-        } else if (CONTEXT == reducer) {
-            return NAME_CONTEXT;
-        } else if (LOCAL == reducer) {
-            return NAME_LOCAL;
+        if (COMBINE_GLOBAL_AND_LOCAL == reducer) {
+            return NAME_COMBINE_LOCAL_AND_GLOBAL;
+        } else if (GLOBAL_ONLY == reducer) {
+            return NAME_GLOBAL_ONLY;
+        } else if (LOCAL_ONLY == reducer) {
+            return NAME_LOCAL_ONLY;
         } else {
             throw new IllegalArgumentException("Unknown reducer: " + reducer);
         }
@@ -108,7 +116,7 @@ public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<Stri
      * @return true, if a standard reducer is used.
      */
     static boolean isDefault(@Nonnull PayloadReducer reducer) {
-        return CONTEXT == reducer || LOCAL == reducer || COMBINE == reducer;
+        return GLOBAL_ONLY == reducer || LOCAL_ONLY == reducer || COMBINE_GLOBAL_AND_LOCAL == reducer;
     }
 
     /**
@@ -118,6 +126,7 @@ public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<Stri
      * @return true, if a standard reducer is used.
      */
     static boolean isDefault(@Nonnull String name) {
-        return NAME_CONTEXT.equals(name) || NAME_LOCAL.equals(name) || NAME_COMBINE.equals(name);
+        return NAME_GLOBAL_ONLY.equals(name) || NAME_LOCAL_ONLY.equals(name) || NAME_COMBINE_LOCAL_AND_GLOBAL.equals(
+                name);
     }
 }

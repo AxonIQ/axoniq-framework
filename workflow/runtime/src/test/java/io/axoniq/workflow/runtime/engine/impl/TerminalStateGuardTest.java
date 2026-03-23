@@ -178,7 +178,7 @@ class TerminalStateGuardTest {
         workflowState.evolve(EventMessageUtils.completedStep(workflowContext,
                                                               "step-1",
                                                               Map.of(),
-                                                              PayloadReducer.NAME_CONTEXT,
+                                                              PayloadReducer.NAME_GLOBAL_ONLY,
                                                               eventNameCustomizer),
                               processingContext);
 
@@ -194,7 +194,7 @@ class TerminalStateGuardTest {
     @Test
     void failedFutureContainsStepNameInMessage() {
         workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(),
-                                                              PayloadReducer.NAME_CONTEXT, eventNameCustomizer),
+                                                             PayloadReducer.NAME_GLOBAL_ONLY, eventNameCustomizer),
                               processingContext);
 
         var future = stepExecutor.testCompleted("my-step", Map.of(), eventNameCustomizer);

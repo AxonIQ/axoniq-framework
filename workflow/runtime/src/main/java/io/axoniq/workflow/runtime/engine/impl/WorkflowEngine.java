@@ -62,8 +62,8 @@ public class WorkflowEngine implements EventHandler {
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
             var execution = workflowExecutionRepository.findById(workflowId)
-                                                      .orElseThrow(() -> new IllegalStateException(
-                                                              "No workflow found for id: " + workflowId));
+                                                       .orElseThrow(() -> new IllegalStateException(
+                                                               "No workflow found for id: " + workflowId));
             execution.onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
@@ -82,11 +82,24 @@ public class WorkflowEngine implements EventHandler {
     /**
      * This is a place to be called from Event Processor
      */
-    public void runWorkflows() {
+    public void runWorkflows(boolean removeFinished) {
         logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
         for (var execution : workflowExecutionRepository.findAll()) {
             try {
-                execution.execute();
+                execution.execute(
+                        finished -> {
+                            if (removeFinished) {
+                                logger.debug("Workflow {} finished with status {}, removing it from repository",
+                                            execution.workflowId(),
+                                            finished.state().workflowStatus());
+                                this.workflowExecutionRepository.remove(execution.workflowId());
+                            } else {
+                                logger.debug("Workflow {} finished with status {}",
+                                            execution.workflowId(),
+                                            finished.state().workflowStatus());
+                            }
+                        }
+                );
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }

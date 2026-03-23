@@ -19,9 +19,9 @@ package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
@@ -40,16 +40,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test for COMBINE result mapping for WaitFor primitive.
+ * Integration test for COMBINE result reducer for WaitFor primitive.
  */
 class WaitForCombineResultIntegrationTest extends AbstractDeclarativeTestBase<WaitForCombineResultIntegrationTest.WaitForCombineWorkflowContext> {
 
@@ -78,7 +77,7 @@ class WaitForCombineResultIntegrationTest extends AbstractDeclarativeTestBase<Wa
 
         await().untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).isNotEmpty());
 
-        workflowEngine.runWorkflows();
+        workflowEngine.runWorkflows(false);
 
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowEngine.workflowExecutions())
@@ -99,7 +98,7 @@ class WaitForCombineResultIntegrationTest extends AbstractDeclarativeTestBase<Wa
             // Using the new overload of awaitEvent with COMBINE
             ctx.awaitEvent("waitStep", RegistrationReceivedEvent.class,
                            associate(payloadProperty("status"), equalsTo("arrived")),
-                           COMBINE,
+                           COMBINE_GLOBAL_AND_LOCAL,
                            Duration.ofSeconds(5));
         }
     }
@@ -114,12 +113,11 @@ class WaitForCombineResultIntegrationTest extends AbstractDeclarativeTestBase<Wa
         public WorkflowStepResult waitFor(
                 @Nonnull String stepName,
                 @Nonnull EventCondition eventCondition,
-                @Nonnull io.axoniq.workflow.runtime.api.PayloadReducer resultMapping,
+                @Nonnull PayloadReducer resultPayloadReducer,
                 @Nonnull Duration timeout,
                 @Nonnull EventNameCustomizer eventNameCustomizer
         ) {
-            // Force COMBINE as result mapping
-            return super.waitFor(stepName, eventCondition, COMBINE, timeout, eventNameCustomizer);
+            return super.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
         }
     }
 

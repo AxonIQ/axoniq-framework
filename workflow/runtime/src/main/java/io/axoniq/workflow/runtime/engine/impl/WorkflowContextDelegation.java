@@ -186,15 +186,15 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public WorkflowStepResult execute(@Nonnull String stepName,
                                       @org.jetbrains.annotations.Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
-                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
+                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         workflowExecution.state().throwTerminalCause();
         return executeDelegate.execute(stepName,
                                        local,
                                        action,
-                                       parameterMapping,
-                                       resultMapping,
+                                       parameterPayloadReducer,
+                                       resultPayloadReducer,
                                        timeout,
                                        eventNameCustomizer);
     }
@@ -203,11 +203,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public WorkflowStepResult waitFor(@Nonnull String stepName,
                                       @Nonnull EventCondition eventCondition,
-                                      @Nonnull PayloadReducer resultMapping,
+                                      @Nonnull PayloadReducer resultPayloadReducer,
                                       @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         workflowExecution.state().throwTerminalCause();
-        return waitForDelegate.waitFor(stepName, eventCondition, resultMapping, timeout, eventNameCustomizer);
+        return waitForDelegate.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
     }
 
     @Override
@@ -272,11 +272,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Event dispatching to the "wait for primitive".
      *
-     * @param eventArrival event arrival wrapper object.
+     * @param awaited event arrival wrapper object.
      */
     @Internal
-    public void eventReceived(@Nonnull EventWaitConditions.EventArrival eventArrival) {
-        waitForDelegate.eventReceived(eventArrival);
+    public void eventReceived(@Nonnull EventWaitConditions.Awaited awaited) {
+        waitForDelegate.eventReceived(awaited);
     }
 
     /**

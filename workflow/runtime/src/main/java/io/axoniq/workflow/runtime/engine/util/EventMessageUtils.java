@@ -185,9 +185,9 @@ public class EventMessageUtils {
      * @param stepName                 name of the step.
      * @param result                   result of the step.
      * @param resultPayloadReducerName name of the result payload reducer, or {@code null} if no reducer is used, see
-     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_LOCAL},
-     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_CONTEXT},
-     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_COMBINE}
+     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_LOCAL_ONLY},
+     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_GLOBAL_ONLY},
+     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_COMBINE_LOCAL_AND_GLOBAL}
      * @param customizer               event name customizer.
      * @return event message.
      */
