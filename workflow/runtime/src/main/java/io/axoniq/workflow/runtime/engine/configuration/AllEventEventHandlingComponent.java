@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
+import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -32,6 +33,8 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
+import org.axonframework.messaging.eventhandling.replay.ResetContext;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -61,7 +64,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                         }
                     }
             ).initialSegmentCount(1);
-    private final SequencingPolicy sequencingPolicy;
+    private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
 
     /**
@@ -71,13 +74,13 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
      */
     public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
-        this.sequencingPolicy = new HierarchicalSequencingPolicy(
+        this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
     }
 
-    @NotNull
+    @Nonnull
     @Override
     public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
         logger.debug("Handling event {}", event);
@@ -85,6 +88,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     }
 
     @Override
+    @Nonnull
     public Set<QualifiedName> supportedEvents() {
         return Set.of();
     }
@@ -94,10 +98,30 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
         return true;
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public Object sequenceIdentifierFor(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    public Object sequenceIdentifierFor(@Nonnull EventMessage event,
+                                        @Nonnull ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
+    }
+
+
+    // TODO: Question on Steven: why do I need to override this method and there is no default implementation in the interface?
+    @Override
+    @Nonnull
+    public MessageStream.Empty<Message> handle(@Nonnull ResetContext resetContext,
+                                               @Nonnull ProcessingContext context) {
+        return MessageStream.empty();
+    }
+
+    @Override
+    @Nonnull
+    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
+                                               @Nonnull ProcessingContext context) {
+        if (!statusChange.status().isReplay()) {
+            context.component(WorkflowEngine.class).replayFinished();
+        }
+        return MessageStream.empty();
     }
 
     @Override

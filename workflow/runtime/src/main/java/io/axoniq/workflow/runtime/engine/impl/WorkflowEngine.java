@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -37,6 +38,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Main workflow component responsible for managing and executing workflows.
+ *
+ * @author Allard Buijze
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @author Steven van Beelen
+ * @since 1.0.0
+ */
+@Internal
 public class WorkflowEngine implements EventHandler {
 
     private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
@@ -90,13 +101,13 @@ public class WorkflowEngine implements EventHandler {
                         finished -> {
                             if (removeFinished) {
                                 logger.debug("Workflow {} finished with status {}, removing it from repository",
-                                            execution.workflowId(),
-                                            finished.state().workflowStatus());
+                                             execution.workflowId(),
+                                             finished.state().workflowStatus());
                                 this.workflowExecutionRepository.remove(execution.workflowId());
                             } else {
                                 logger.debug("Workflow {} finished with status {}",
-                                            execution.workflowId(),
-                                            finished.state().workflowStatus());
+                                             execution.workflowId(),
+                                             finished.state().workflowStatus());
                             }
                         }
                 );
@@ -104,6 +115,13 @@ public class WorkflowEngine implements EventHandler {
                 throw new RuntimeException("Error during workflow execution", t);
             }
         }
+    }
+
+    /**
+     * Replay finished, start workflow executions.
+     */
+    public void replayFinished() {
+        runWorkflows(true);
     }
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
@@ -139,10 +157,18 @@ public class WorkflowEngine implements EventHandler {
         );
     }
 
+    /**
+     * Retrieve all workflow executions.
+     *
+     * @return set of currently running workflow executions.
+     */
     public Set<WorkflowExecution> workflowExecutions() {
         return workflowExecutionRepository.findAll();
     }
 
+    /**
+     * Shuts downs the engine and removes all running workflow executions.
+     */
     public void shutdown() {
         workflowExecutionRepository.clear();
     }
