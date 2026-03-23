@@ -74,7 +74,7 @@ class EventWaitConditionsTest {
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
-        eventWaitConditions.evaluateAndApply(message, (m) -> appliedMessage.set(m.eventMessage()));
+        eventWaitConditions.evaluateAndApply(message, awaited -> appliedMessage.set(awaited.eventMessage()));
 
         assertThat(appliedMessage.get()).isEqualTo(message);
 
