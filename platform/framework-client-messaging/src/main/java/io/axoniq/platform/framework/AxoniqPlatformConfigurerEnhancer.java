@@ -58,7 +58,8 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        if (!registry.hasComponent(AxoniqPlatformConfiguration.class)) {
+        if (!registry.hasComponent(AxoniqPlatformConfiguration.class)
+                || registry.hasComponent(AxoniqConsoleRSocketClient.class)) {
             return;
         }
         registry
