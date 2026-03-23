@@ -324,6 +324,8 @@ class AxoniqConsoleRSocketClient(
         }
 
         override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+            this.heartbeatSendTask?.cancel(true)
+            this.heartbeatCheckTask?.cancel(true)
             lastReceivedHeartbeat = Instant.now()
             this.heartbeatSendTask = executor.scheduleWithFixedDelay(
                     { sendHeartbeat().subscribe({}, { e -> logger.debug("Heartbeat failed", e) }) },
