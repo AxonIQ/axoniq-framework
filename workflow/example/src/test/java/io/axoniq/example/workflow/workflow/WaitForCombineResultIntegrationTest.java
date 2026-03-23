@@ -94,11 +94,10 @@ class WaitForCombineResultIntegrationTest extends AbstractDeclarativeTestBase<Wa
     }
 
     public static class WaitForCombineWorkflow {
-        public void execute(SimpleWorkflowContext ctx) {
+        public void execute(WaitForCombineWorkflowContext ctx) {
             // Using the new overload of awaitEvent with COMBINE
             ctx.awaitEvent("waitStep", RegistrationReceivedEvent.class,
                            associate(payloadProperty("status"), equalsTo("arrived")),
-                           COMBINE_GLOBAL_AND_LOCAL,
                            Duration.ofSeconds(5));
         }
     }
@@ -117,7 +116,7 @@ class WaitForCombineResultIntegrationTest extends AbstractDeclarativeTestBase<Wa
                 @Nonnull Duration timeout,
                 @Nonnull EventNameCustomizer eventNameCustomizer
         ) {
-            return super.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
+            return super.waitFor(stepName, eventCondition, COMBINE_GLOBAL_AND_LOCAL, timeout, eventNameCustomizer);
         }
     }
 

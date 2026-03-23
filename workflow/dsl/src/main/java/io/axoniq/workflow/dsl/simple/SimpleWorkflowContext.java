@@ -85,11 +85,6 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
-        return awaitEvent(stepName, eventType, predicate, GLOBAL_ONLY, timeout);
-    }
-
-    public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate,
-                            PayloadReducer resultPayloadReducer, Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
@@ -97,7 +92,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         e -> predicate.test(e.payloadAs(eventType))
                 ),
-                resultPayloadReducer,
+                GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(Converter.class),
@@ -105,13 +100,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         ));
     }
 
-    public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
-                            Duration timeout) {
-        return awaitEvent(stepName, eventType, associationsUtils, GLOBAL_ONLY, timeout);
-    }
-
-    public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
-                            PayloadReducer resultPayloadReducer, Duration timeout) {
+    public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils, Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
@@ -119,7 +108,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         e -> associationsUtils.build(super.processingContext()).test(e)
                 ),
-                resultPayloadReducer,
+                GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(Converter.class),

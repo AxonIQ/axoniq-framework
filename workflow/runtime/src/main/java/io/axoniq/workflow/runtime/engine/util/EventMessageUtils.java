@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -40,6 +41,7 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@Internal
 public class EventMessageUtils {
 
     private EventMessageUtils() {
