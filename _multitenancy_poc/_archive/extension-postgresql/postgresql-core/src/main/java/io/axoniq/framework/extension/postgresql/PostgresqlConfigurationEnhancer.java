@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.postgresql;
+package io.axoniq.framework.extension.postgresql;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ApplicationConfigurer;

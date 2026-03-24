@@ -16,4 +16,4 @@
 #
 #
 
-io.axoniq.framework.postgresql.PostgresqlConfigurationEnhancer
+io.axoniq.framework.extension.postgresql.PostgresqlConfigurationEnhancer
