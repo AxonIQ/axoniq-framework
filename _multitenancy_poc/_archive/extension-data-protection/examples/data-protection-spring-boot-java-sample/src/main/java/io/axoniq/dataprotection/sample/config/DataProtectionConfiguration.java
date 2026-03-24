@@ -22,11 +22,8 @@ import io.axoniq.framework.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.dataprotection.cryptoengine.jpa.JpaCryptoEngine;
-import io.axoniq.license.entitlement.EntitlementConfiguration;
 import io.axoniq.license.entitlement.EntitlementManager;
-import io.axoniq.license.entitlement.source.AxonServerLicenseSource;
 import jakarta.persistence.EntityManagerFactory;
-import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -60,39 +57,6 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfigureBefore(name = "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration")
 @Order(0)
 public class DataProtectionConfiguration {
-
-
-    /**
-     * Disables the {@link AxonServerLicenseSource} to prevent license fetching via Axon Server's gRPC
-     * {@code LicenseService} endpoint.
-     * <p>
-     * This is required for backward compatibility when connecting to <strong>Axon Server 2025.x or earlier</strong>,
-     * which does not expose the {@code LicenseService} endpoint. Without this configuration, the
-     * {@code AxonServerLicenseSource} (priority 100) would be selected as the active license source, fail to
-     * fetch a license, and trigger a grace period that eventually blocks all licensed features.
-     * <p>
-     * When disabled, the next highest-priority configured source will be used instead (e.g.,
-     * {@code PlatformLicenseSource} at priority 70, {@code EnvLicenseSource} at priority 50,
-     * or {@code FileLicenseSource} at priority 10).
-     * <p>
-     * <strong>Note:</strong> This bean is not needed when connecting to Axon Server 2026.x or later.
-     *
-     * @return a {@link ConfigurationEnhancer} that registers an {@link EntitlementConfiguration} with
-     *         {@code AxonServerLicenseSource} disabled
-     * @see EntitlementConfiguration#disableLicenseSource(Class)
-     */
-//    @Bean
-//    public ConfigurationEnhancer disableAxonServerLicenseSource() {
-//        return registry -> registry.registerComponent(
-//                EntitlementConfiguration.class,
-//                c -> {
-//                    EntitlementConfiguration config = new EntitlementConfiguration();
-//                    config.disableLicenseSource(PlatformLicenseSource.class);
-//                    return config;
-//                }
-//        );
-//    }
-
 
     /**
      * Provides a JPA-based CryptoEngine that stores encryption keys in H2 database.
