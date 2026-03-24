@@ -39,7 +39,8 @@
         <module>dsl</module>
         <module>runtime</module>
         <module>test</module>
-        <module>example</module>
+        <module>examples/simple</module>
+        <module>examples/bike-rental</module>
     </modules>
 
     <dependencyManagement>
@@ -51,6 +52,20 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>org.axonframework.extensions.spring</groupId>
+                <artifactId>axon-spring-boot-starter</artifactId>
+                <version>${axon.version}</version>
+            </dependency>
+            <!--
+            <dependency>
+                <groupId>org.axonframework.extensions.spring</groupId>
+                <artifactId>axon-spring-boot-starter-test</artifactId>
+                <version>${axon.version}</version>
+                <scope>test</scope>
+            </dependency>
+            -->
+
         </dependencies>
     </dependencyManagement>
     <dependencies>
