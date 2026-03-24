@@ -59,10 +59,11 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.0.2</axon-framework.version>
-        <axonserver-connector.version>2026.0.0-SNAPSHOT</axonserver-connector.version>
+        <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
+        <axonserver-connector.version>2026.0.0</axonserver-connector.version>
         <!-- Conversion -->
-        <jackson.version>2.18.2</jackson.version>
+        <jackson.version>2.21.1</jackson.version>
+        <jackson3.version>3.1.0</jackson3.version>
         <!-- Persistence -->
         <jakarta.persistence-api.version>3.2.0</jakarta.persistence-api.version>
         <eclipselink.version>4.0.4</eclipselink.version>
@@ -141,11 +142,19 @@
                 <version>${axon-framework.version}</version>
                 <classifier>tests</classifier>
             </dependency>
-            <!-- Conversion -->
+            <!-- Conversion (Jackson 2) -->
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Conversion (Jackson 3) -->
+            <dependency>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson3.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

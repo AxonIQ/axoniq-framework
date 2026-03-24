@@ -36,23 +36,24 @@ unrecoverable without the key.
 ### License
 
 The Data Protection Extension is commercial software provided by Axoniq B.V. and requires a valid Axoniq license
-with `framework.data_protection.enabled=true`. The license is delivered through an automatic **license source**
-system — the highest-priority available source is selected at startup.
+with `framework.data_protection.enabled=true`. The license is delivered through an automatic **multi-source**
+system that tries all configured sources in priority order.
 
 #### License Sources
 
 | Source | Priority | Use Case | Configuration |
 |--------|----------|----------|---------------|
-| **Axon Server** (gRPC) | 100 | Apps connected to Axon Server 2026.x+ | Automatic (no config needed) |
-| **Axoniq Platform** (RSocket) | 70 | Apps connected to Axoniq Platform | `axoniq.platform.*` properties |
+| **Axoniq Platform** (RSocket) | 200 | Apps connected to Axoniq Platform | `axoniq.platform.*` properties |
+| **Axon Server** (gRPC) | 70 | Apps connected to Axon Server 2026.x+ | Automatic (no config needed) |
 | **Environment Variable** | 50 | Containers, Kubernetes, CI/CD | `AXONIQ_LICENSE` env var |
 | **File** | 10 | Development, on-premise | `axoniq.license` file (default) |
 
-At startup, all available sources are checked. The one with the **highest priority** that is configured
-(e.g., env var is set, file exists, Axon Server is reachable) is selected as the active source. Only one
-source is active at a time.
+At startup, a `MultiLicenseSource` is created containing all available sources. The source with the
+**highest priority** is tried first. If it fails to provide a license (e.g., server unreachable), the system
+automatically **falls back** to the next highest-priority source. The license is re-evaluated whenever a
+source pushes an update or becomes reachable/unreachable.
 
-#### Axon Server License Source (priority 100)
+#### Axon Server License Source (priority 70)
 
 When Axon Server connector is on the classpath and Axon Server **2026.x or later** is used, the license is
 fetched automatically via gRPC `LicenseService`. The source polls for updates every 60 seconds.
@@ -77,10 +78,11 @@ fetched automatically via gRPC `LicenseService`. The source polls for updates ev
 > }
 > ```
 
-#### Axoniq Platform License Source (priority 70)
+#### Axoniq Platform License Source (priority 200)
 
 When the application is connected to Axoniq Platform (via `framework-client-spring-boot-starter`), the license
 is fetched via RSocket. The Platform also pushes license updates in real-time when the license changes.
+This is the highest-priority source — when available, it takes precedence over all other sources.
 
 Configuration example (`application.properties`):
 ```properties

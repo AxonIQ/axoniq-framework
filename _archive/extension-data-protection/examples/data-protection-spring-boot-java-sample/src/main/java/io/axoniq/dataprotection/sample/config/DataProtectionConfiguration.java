@@ -18,9 +18,6 @@
 
 package io.axoniq.dataprotection.sample.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.axoniq.framework.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
@@ -32,7 +29,7 @@ import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.json.JacksonConverter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -40,6 +37,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.annotation.Order;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Configuration for field-level encryption in Axon Framework 5.x.
@@ -82,17 +81,17 @@ public class DataProtectionConfiguration {
      *         {@code AxonServerLicenseSource} disabled
      * @see EntitlementConfiguration#disableLicenseSource(Class)
      */
-    @Bean
-    public ConfigurationEnhancer disableAxonServerLicenseSource() {
-        return registry -> registry.registerComponent(
-                EntitlementConfiguration.class,
-                c -> {
-                    EntitlementConfiguration config = new EntitlementConfiguration();
-                    config.disableLicenseSource(AxonServerLicenseSource.class);
-                    return config;
-                }
-        );
-    }
+//    @Bean
+//    public ConfigurationEnhancer disableAxonServerLicenseSource() {
+//        return registry -> registry.registerComponent(
+//                EntitlementConfiguration.class,
+//                c -> {
+//                    EntitlementConfiguration config = new EntitlementConfiguration();
+//                    config.disableLicenseSource(PlatformLicenseSource.class);
+//                    return config;
+//                }
+//        );
+//    }
 
 
     /**
@@ -111,14 +110,14 @@ public class DataProtectionConfiguration {
     }
 
     /**
-     * Provides the default ObjectMapper if not already configured.
+     * Provides the default ObjectMapper (Jackson 3) if not already configured.
      */
     @Bean("defaultAxonObjectMapper")
     @ConditionalOnMissingBean(name = "defaultAxonObjectMapper")
     public ObjectMapper defaultAxonObjectMapper() {
-        return new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return JsonMapper.builder()
+                .findAndAddModules()
+                .build();
     }
 
     /**
