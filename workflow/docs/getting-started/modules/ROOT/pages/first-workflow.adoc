@@ -1,20 +1,127 @@
 = Your First Workflow
 :navtitle: First Workflow
 
-In this step, you will create a minimal workflow that executes a single action using the `execute` primitive.
+A workflow definition is just imperative Java code.
+You write the business logic; the engine records every step as a durable event.
+If the application crashes, the engine replays those events and resumes exactly where it left off.
 
-== Defining a Workflow
+== Defining a workflow
 
-// TODO: Show a minimal WorkflowDefinition using SimpleWorkflowContext with a single awaitExecute call
+Let's create our order fulfillment workflow with a single step — reserving stock:
 
-== The Execute Primitive
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
+----
+public class OrderFulfillmentWorkflow {
 
-// TODO: Explain what happens under the hood -- the engine records STARTED and COMPLETED events for the step
+    Logger logger = LoggerFactory.getLogger(OrderFulfillmentWorkflow.class);
 
-== Registering with WorkflowModule
+    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    public void execute(SimpleWorkflowContext ctx) {
 
-// TODO: Show how to register the workflow definition using WorkflowModule.usingContext()
+        var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
+                                         InventoryService::reserveStock); // <1>
+        if (!reserved) {
+            ctx.cancel("Stock unavailable"); // <2>
+            return;
+        }
 
-== Running It
+        logger.info("Stock reserved for order {}", ctx.workflowPayload().get("orderId"));
+    }
+}
+----
 
-// TODO: Show how to trigger the workflow by publishing the start event
+<.> `awaitExecute` runs the action synchronously and returns the typed result.
+The engine records a STARTED event when the step begins and a COMPLETED event when it finishes.
+<.> If stock reservation fails, we cancel the workflow gracefully.
+Standard Java control flow — `if`, loops, try/catch — all work exactly as you'd expect.
+
+== The @Workflow annotation
+
+The `@Workflow` annotation tells the engine how to wire up your workflow:
+
+[horizontal]
+`idProperty = "orderId"`:: Extracts the workflow instance ID from the triggering event's payload.
+Each unique `orderId` gets its own workflow instance.
+`startOnEvent = "OrderPlaced"`:: The qualified event name that triggers a new workflow instance.
+
+[TIP]
+====
+You can also use `startOnConditions` to filter which events trigger the workflow.
+For example, `startOnConditions = {"amount>100"}` would only process high-value orders.
+====
+
+== What happens under the hood
+
+Each `awaitExecute` call produces two durable events: a STARTED event when the step begins, and a COMPLETED (or FAILED, TIMED_OUT) event when it finishes.
+
+The engine records everything.
+On crash recovery, it replays those events and resumes execution from where it left off — no manual state management needed.
+
+[NOTE]
+====
+You write simple imperative code.
+The engine translates each primitive call into durable events.
+This gives you event sourcing, audit trails, and crash recovery for free.
+====
+
+== Adding more steps
+
+Let's extend our workflow to initiate payment after reserving stock:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+public void execute(SimpleWorkflowContext ctx) {
+
+    var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
+                                     InventoryService::reserveStock);
+    if (!reserved) {
+        ctx.cancel("Stock unavailable");
+        return;
+    }
+
+    ctx.awaitExecute("initiatePayment",              // <1>
+                     ctx.workflowPayload(),           // <2>
+                     PaymentService::initiatePayment,
+                     Duration.ofSeconds(30),           // <3>
+                     defaults());
+}
+----
+
+<.> A second step that initiates payment processing.
+<.> Passes the current workflow payload (containing `orderId`, `customerId`, `email`, `amount`) as input to the payment service.
+<.> Times out after 30 seconds if the payment service doesn't respond.
+
+Notice the two flavors of `awaitExecute`:
+
+* `awaitExecute(stepName, returnType, supplier)` — the simplest form, for actions that don't need input
+* `awaitExecute(stepName, payload, action, timeout, eventNameCustomizer)` — the full form, when you need to pass data and configure timeouts
+
+== Kotlin DSL
+
+If you prefer Kotlin, the same workflow looks like this:
+
+[source,kotlin]
+.src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
+----
+class OrderFulfillmentWorkflow {
+
+    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    fun Kontext.onExecute() {
+        val reserved = awaitExecute("reserveStock") {
+            InventoryService.reserveStock()
+        }
+        if (!reserved) {
+            cancel("Stock unavailable")
+            return
+        }
+    }
+}
+----
+
+The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with default parameters and `kotlin.time.Duration` support.
+
+Our workflow can execute actions, but after initiating payment we need to wait for an external confirmation.
+Let's see how to do that.

@@ -1,13 +1,49 @@
 = Getting Started
 :navtitle: Introduction
 
-The Axon Workflow Engine is an extension for Axon Framework 5 that lets you write simple, imperative business logic while the engine handles event sourcing, state persistence, and crash recovery automatically.
+Welcome to the Axon Workflow Engine Getting Started Guide!
 
-In this tutorial, you will build a workflow step by step, learning each core concept along the way:
+Building reliable business workflows is hard.
+Order fulfillment, loan applications, employee onboarding — these processes need audit trails, crash recovery, and scalability.
+Event sourcing delivers all of that, but comes with significant complexity: command handlers, event handlers, saga patterns, and manual state management.
 
-. **xref:project-setup.adoc[Project Setup]** -- Add dependencies and understand the module structure
-. **xref:first-workflow.adoc[Your First Workflow]** -- Create a minimal workflow that executes actions
-. **xref:waiting-for-events.adoc[Waiting for Events]** -- Suspend a workflow until an external event arrives
-. **xref:payload-and-state.adoc[Payload and State]** -- Manage durable workflow state across steps
-. **xref:parallel-steps.adoc[Parallel Steps]** -- Run concurrent steps and coordinate their results
-. **xref:testing-workflows.adoc[Testing Workflows]** -- Write integration tests for your workflow definitions
+The Axon Workflow Engine bridges that gap.
+You write simple, imperative business logic, and the engine handles event sourcing, state persistence, and crash recovery automatically.
+
+The engine is built on four *primitives* and three *composables*:
+
+*Primitives* — the four core building blocks:
+
+* *Execute* — Run actions and tasks (synchronous or asynchronous)
+* *WaitFor* — Suspend until an external event arrives
+* *Payload* — Modify workflow state durably
+* *Terminate* — End a workflow or cancel individual steps
+
+*Composables* — higher-level combinators for parallel work:
+
+* *allMatch* — Guard ensuring all results match a predicate
+* *anyMatch* — Race combinator where the first matching result wins
+* *noneMatch* — Guard ensuring no results match a predicate
+
+== About this tutorial
+
+In this tutorial, you will build an *Order Fulfillment* workflow step by step.
+The workflow will reserve stock, initiate payment, wait for payment confirmation, store transaction details, and then ship the order and notify the customer in parallel.
+
+Along the way, you will learn each core concept:
+
+. *xref:project-setup.adoc[Project Setup]* — Add dependencies and define domain events
+. *xref:first-workflow.adoc[Your First Workflow]* — Create a minimal workflow that executes actions
+. *xref:waiting-for-events.adoc[Waiting for Events]* — Suspend the workflow until payment is confirmed
+. *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
+. *xref:parallel-steps.adoc[Parallel Steps]* — Ship and notify the customer concurrently
+. *xref:testing-workflows.adoc[Testing Workflows]* — Write integration tests for your workflow
+
+[TIP]
+.Looking for more examples?
+====
+The project repository includes an `example/` module with several workflow implementations demonstrating all features, including Kotlin DSL usage, cancellation handling, and combinator patterns.
+====
+
+Are you ready?
+Let's get started!

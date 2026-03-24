@@ -1,24 +1,150 @@
 = Parallel Steps
 :navtitle: Parallel Steps
 
-In this step, you will run multiple steps concurrently and coordinate their results using composables.
+Real-world workflows often need to run steps concurrently.
+You might want to ship the order and send a confirmation email at the same time, or call multiple services and take the first response.
 
-== Non-blocking Execution
+== Non-blocking execution
 
-// TODO: Show ctx.execute() returning WorkflowStepResult for async execution
+So far we've used `awaitExecute`, which blocks until the step completes.
+The `execute` method starts a step without waiting and returns a `WorkflowStepResult`:
 
-== anyMatch -- First Match Wins
+[source,java]
+----
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(), // <1>
+        ShippingService::shipOrder,
+        Duration.ofMinutes(5), defaults());
 
-// TODO: Show anyMatch(WorkflowStepResult::isCompleted, step1, step2) for race semantics
+var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(), // <2>
+        (c, p) -> {
+            NotificationService.sendConfirmation(payload(p).get("email"));
+            return Map.of();
+        },
+        Duration.ofSeconds(30), defaults());
+----
 
-== allMatch -- All Must Succeed
+<.> Starts shipping — returns immediately with a `WorkflowStepResult`.
+<.> Starts notification — also returns immediately.
+Both steps run concurrently.
 
-// TODO: Show allMatch(WorkflowStepResult::success, step1, step2, step3) for guard semantics
+== anyMatch — first match wins
 
-== noneMatch -- No Failures Allowed
+`anyMatch` resolves as soon as the first step reaches a terminal state that matches the predicate:
 
-// TODO: Show noneMatch(WorkflowStepResult::failure, step1, step2) for negative guard
+[source,java]
+----
+var winner = ctx.anyMatch(WorkflowStepResult::isCompleted, shipping, notification); // <1>
 
-== CombinatorWorkflowStepResult
+winner.await(); // <2>
+logger.info("First to finish: {}", winner.getStepName()); // <3>
+----
 
-// TODO: Explain matched() and unmatched() for inspecting sub-results
+<.> Resolves when the first result reaches a terminal state matching the predicate.
+<.> Blocks until the winner is determined.
+<.> Inspect which step won the race.
+
+Use case: race two payment providers, take whichever confirms first.
+
+[NOTE]
+====
+Losers are NOT auto-cancelled.
+If you want to clean up, call `loser.cancel()` explicitly.
+====
+
+== allMatch — all must succeed
+
+`allMatch` succeeds only when _all_ steps match the predicate.
+It short-circuits on the first non-match:
+
+[source,java]
+----
+var guard = ctx.allMatch(WorkflowStepResult::success, shipping, notification); // <1>
+guard.await();
+----
+
+<.> Blocks until all steps complete successfully, or one fails (short-circuit).
+
+Use case: proceed only after both shipping and notification have completed successfully.
+
+== noneMatch — no failures allowed
+
+`noneMatch` succeeds when _no_ step matches the predicate.
+It short-circuits on the first match:
+
+[source,java]
+----
+var check = ctx.noneMatch(WorkflowStepResult::failure, shipping, notification);
+check.await();
+----
+
+Use case: proceed only if none of the steps failed.
+
+== Inspecting sub-results
+
+All three composables return a `CombinatorWorkflowStepResult` with `matched()` and `unmatched()` methods:
+
+[source,java]
+----
+guard.matched();   // steps that matched the predicate
+guard.unmatched(); // steps that didn't
+----
+
+[NOTE]
+====
+Sub-results are ordered by event-sourced timestamps, not array order.
+This ensures deterministic behavior during replay.
+====
+
+== The complete workflow
+
+Here's our order fulfillment workflow with all the pieces together:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+public void execute(SimpleWorkflowContext ctx) {
+
+    // Reserve stock
+    var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
+                                     InventoryService::reserveStock);
+    if (!reserved) {
+        ctx.cancel("Stock unavailable");
+        return;
+    }
+
+    // Initiate and await payment
+    ctx.awaitExecute("initiatePayment", ctx.workflowPayload(),
+                     PaymentService::initiatePayment,
+                     Duration.ofSeconds(30), defaults());
+
+    var confirmation = ctx.awaitEvent("awaitPayment",
+            PaymentConfirmed.class,
+            associate(payloadProperty("orderId"),
+                      equalsTo(ctx.workflowPayload().get("orderId"))),
+            Duration.ofMinutes(15));
+
+    ctx.setPayload("storePaymentDetails", confirmation);
+
+    // Ship and notify in parallel
+    var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
+            ShippingService::shipOrder,
+            Duration.ofMinutes(5), defaults());
+
+    var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
+            (c, p) -> {
+                NotificationService.sendConfirmation(payload(p).get("email"));
+                return Map.of();
+            },
+            Duration.ofSeconds(30), defaults());
+
+    ctx.allMatch(WorkflowStepResult::success, shipping, notification).await();
+
+    logger.info("Order {} fulfilled!", ctx.workflowPayload().get("orderId"));
+}
+----
+
+Six steps, one method, and the engine handles event sourcing, crash recovery, and audit trails for all of them.
+
+Our order fulfillment workflow is complete!
+Let's make sure it works with automated tests.

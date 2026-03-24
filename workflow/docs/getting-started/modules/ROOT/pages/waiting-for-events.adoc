@@ -1,24 +1,137 @@
 = Waiting for Events
 :navtitle: Waiting for Events
 
-In this step, you will extend your workflow to wait for an external event before continuing.
+Many business processes need to pause and wait for something external — a payment confirmation, an approval decision, a callback from a third-party system.
+The `awaitEvent` method lets your workflow suspend until a matching event arrives.
 
-== The WaitFor Primitive
+== The awaitEvent method
 
-// TODO: Explain awaitEvent -- the workflow suspends until a matching event arrives or the timeout expires
+After initiating payment, we need to wait for a `PaymentConfirmed` event before continuing:
 
-== Event Conditions
+[source,java]
+----
+var confirmation = ctx.awaitEvent("awaitPayment",
+                                   PaymentConfirmed.class,   // <1>
+                                   Duration.ofMinutes(15));   // <2>
+----
 
-// TODO: Show EventConditions.fromType() for matching by event class
+<.> The event type to wait for.
+The engine subscribes to the event bus and watches for events of this type.
+<.> Maximum time to wait.
+After 15 minutes, the step completes with `StepStatus.TIMED_OUT`.
 
-== Association-based Matching
+When a matching event arrives, the workflow resumes and `awaitEvent` returns the deserialized event object.
 
-// TODO: Show how to use associate(payloadProperty("field"), equalsTo("value")) for fine-grained filtering
+== Filtering with associations
+
+There's a problem with the code above.
+Without filtering, _any_ `PaymentConfirmed` event would wake up _every_ waiting workflow.
+That's clearly not what we want.
+
+Associations let you correlate events to specific workflow instances:
+
+[source,java]
+----
+var confirmation = ctx.awaitEvent("awaitPayment",
+        PaymentConfirmed.class,
+        associate(                                 // <1>
+            payloadProperty("orderId"),            // <2>
+            equalsTo(ctx.workflowPayload().get("orderId"))  // <3>
+        ),
+        Duration.ofMinutes(15));
+----
+
+<.> `associate(...)` combines a value extractor and a matcher into an event predicate.
+<.> `payloadProperty("orderId")` extracts the `orderId` field from the incoming event's payload.
+<.> `equalsTo(...)` creates an equality matcher.
+Only `PaymentConfirmed` events whose `orderId` equals this workflow's `orderId` will match.
+
+You'll need these imports:
+
+[source,java]
+----
+import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
+----
+
+[NOTE]
+====
+Without associations, event matching is based solely on the event type.
+For production workflows, you will almost always want to use associations to ensure events reach the correct workflow instance.
+====
 
 == Timeouts
 
-// TODO: Explain what happens when a waitFor times out (StepStatus.TIMED_OUT)
+When a `waitFor` step times out, it completes with `StepStatus.TIMED_OUT`.
+You can use this to implement fallback logic:
 
-== Sleep
+[source,java]
+----
+var confirmation = ctx.awaitEvent("awaitPayment",
+        PaymentConfirmed.class,
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),
+        Duration.ofMinutes(15));
+----
 
-// TODO: Show ctx.sleep() as a special case of waitFor with no matching event
+[TIP]
+====
+You can branch on the timeout outcome — cancel the order, retry payment, or escalate to manual review.
+The right strategy depends on your business requirements.
+====
+
+== Sleep — a simple delay
+
+Sometimes you just need to pause for a while.
+The `sleep` method provides a durable delay:
+
+[source,java]
+----
+ctx.sleep("cooldownPeriod", Duration.ofSeconds(30)); // <1>
+----
+
+<.> Pauses the workflow for 30 seconds.
+Under the hood, this is a `waitFor` with an event condition that never matches — so it always times out after the specified duration.
+
+== Updated workflow
+
+Here's our workflow with the payment wait step added:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+public void execute(SimpleWorkflowContext ctx) {
+
+    var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
+                                     InventoryService::reserveStock);
+    if (!reserved) {
+        ctx.cancel("Stock unavailable");
+        return;
+    }
+
+    ctx.awaitExecute("initiatePayment", ctx.workflowPayload(),
+                     PaymentService::initiatePayment,
+                     Duration.ofSeconds(30), defaults());
+
+    var confirmation = ctx.awaitEvent("awaitPayment",      // <1>
+            PaymentConfirmed.class,
+            associate(payloadProperty("orderId"),
+                      equalsTo(ctx.workflowPayload().get("orderId"))),
+            Duration.ofMinutes(15));
+
+    logger.info("Payment confirmed: {}", confirmation.transactionId());
+}
+----
+
+<.> The workflow suspends here until a `PaymentConfirmed` event with a matching `orderId` arrives, or 15 minutes pass.
+
+In Kotlin, waiting for an event is even more concise:
+
+[source,kotlin]
+----
+val confirmation = awaitEvent("awaitPayment", PaymentConfirmed::class)
+----
+
+Now that we can wait for external events, let's see how to store the payment details and manage data flowing through our workflow.
