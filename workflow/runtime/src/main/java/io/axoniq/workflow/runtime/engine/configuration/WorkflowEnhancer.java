@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -45,6 +46,7 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@RegistrationScope
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 
     public static final String WORKFLOW_ENGINE_EVENT_MODULE = "WorkflowEngine";
@@ -97,10 +99,10 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 EventProcessorModule
                         .pooledStreaming(WORKFLOW_ENGINE_EVENT_MODULE)
                         .eventHandlingComponents(req -> req
-                                .declarative(cfg -> new AllEventEventHandlingComponent(
+                                .declarative("workflowEngineComponent", cfg -> new AllEventEventHandlingComponent(
                                                      cfg.getComponent(WorkflowEngine.class)
                                              )
-                                ).declarative(cfg -> new AllEventEventHandlingComponent(
+                                ).declarative("workflowHistoryProjector", cfg -> new AllEventEventHandlingComponent(
                                         cfg.getComponent(WorkflowHistoryProjector.class)
                                 ))
                         )

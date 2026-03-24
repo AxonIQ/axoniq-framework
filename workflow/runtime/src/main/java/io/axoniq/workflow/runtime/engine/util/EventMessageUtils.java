@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.engine.util;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
@@ -71,8 +72,9 @@ public class EventMessageUtils {
                                                @Nonnull String workflowName,
                                                @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
-        return new GenericEventMessage(new MessageType(name), Map.of(),
+        return new GenericEventMessage(new MessageType(name), context.workflowPayload(),
                                        MetadataUtils.create(context.workflowId(), WorkflowStatus.STARTED)
+                                               .and(METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL)
         );
     }
 

@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -33,7 +32,10 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventhandling.replay.ResetContext;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jetbrains.annotations.NotNull;
@@ -43,6 +45,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+
+import static java.util.concurrent.CompletableFuture.completedFuture;
 
 /**
  * Event handling component handling all events.
@@ -64,9 +68,12 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                              }
                          }
                  ).initialSegmentCount(1)
-                 .batchSize(1);
+                 .batchSize(1)
+                 .initialToken(s -> completedFuture(ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(1))))
+            ;
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
+    private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
      * Constructs the component.
@@ -79,6 +86,11 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
+        if (eventHandler instanceof ReplayStatusChangedHandler) {
+            replayStatusChangedHandler = (ReplayStatusChangedHandler) eventHandler;
+        } else {
+            replayStatusChangedHandler = null;
+        }
     }
 
     @Nonnull
@@ -119,8 +131,8 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
-        if (!statusChange.status().isReplay()) {
-            context.component(WorkflowEngine.class).replayFinished();
+        if (replayStatusChangedHandler != null) { // just forward
+            return replayStatusChangedHandler.handle(statusChange, context);
         }
         return MessageStream.empty();
     }

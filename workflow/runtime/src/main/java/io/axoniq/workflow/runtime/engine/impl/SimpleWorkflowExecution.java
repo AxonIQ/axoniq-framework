@@ -126,12 +126,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         contextDelegate.unitOfWorkFactory(),
                         contextDelegate.executor(),
                         this.processingContext(),
-                        pc -> {
-
+                        ctx -> {
+                            logger.trace("Thread: {}, ProcessingContext {}", Thread.currentThread(), ctx);
                             var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
                             if (this.state().workflowStatus().isTerminal()) {
-                                logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
-                                             this.state().workflowStatus());
+                                logger.info("Workflow instance has reached terminal state {}, skipping execution.",
+                                            this.state().workflowStatus());
                                 return CompletableFuture.completedFuture(this.contextDelegate);
                             }
 
@@ -139,24 +139,25 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                 sendWorkflowEvent(startedWorkflow(this.workflowContext(),
                                                                   workflowName,
                                                                   eventNameCustomizer),
-                                                  pc).join(); // FIXME join without timeout?
+                                                  ctx)
+                                        .join(); // FIXME join without timeout?
                             }
 
                             try {
-                                logger.trace("Executing workflow with initial payload {} from thread {}",
-                                             this.workflowContext().workflowPayload(),
-                                             Thread.currentThread());
+                                logger.info("Executing workflow with initial payload {} from thread {}",
+                                            this.workflowContext().workflowPayload(),
+                                            Thread.currentThread());
 
                                 this.workflowConfiguration.workflowDefinition()
                                                           .accept(this.contextDelegate.typepWorkflowContext());
-                                logger.trace("Workflow executed. Resulting workflow payload {}.",
-                                             this.workflowContext().workflowPayload());
+                                logger.info("Workflow executed. Resulting workflow payload {}.",
+                                            this.workflowContext().workflowPayload());
 
                                 if (!this.state().workflowStatus().isTerminal()) {
                                     sendWorkflowEvent(completedWorkflow(this.workflowContext(),
                                                                         workflowName,
                                                                         eventNameCustomizer),
-                                                      pc).get(
+                                                      ctx).get(
                                             5,
                                             TimeUnit.SECONDS); // FIXME constant?
                                 }
@@ -167,7 +168,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                      workflowName,
                                                                      e,
                                                                      eventNameCustomizer),
-                                                      pc).join(); // FIXME join without timeout
+                                                      ctx).join(); // FIXME join without timeout
                                 }
                             } catch (WorkflowCancelledException e) {
                                 // if Events are already sent by TerminateDelegate, just let it propagate
@@ -176,7 +177,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                         workflowName,
                                                                         e,
                                                                         eventNameCustomizer),
-                                                      pc).join(); // FIXME join without timeout
+                                                      ctx).join(); // FIXME join without timeout
                                 }
                             } catch (Throwable e) {
                                 if (e instanceof TimeoutException) {
@@ -184,12 +185,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                       workflowName,
                                                                       contextDelegate.clock().instant(),
                                                                       eventNameCustomizer),
-                                                      pc).join(); // FIXME join without timeout
+                                                      ctx).join(); // FIXME join without timeout
                                 } else if (e instanceof InterruptedException) {
                                     sendWorkflowEvent(cancelledWorkflow(this.workflowContext(),
                                                                         workflowName,
                                                                         eventNameCustomizer),
-                                                      pc).join(); // FIXME join without timeout
+                                                      ctx).join(); // FIXME join without timeout
                                 } else {
                                     logger.error("Error occurred in workflow {}", workflowId, e);
                                     sendWorkflowEvent(failedWorkflow(this.workflowContext(),
@@ -197,7 +198,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                      e instanceof Exception ? (Exception) e
                                                                              : new RuntimeException(e),
                                                                      eventNameCustomizer),
-                                                      pc).join(); // FIXME join without timeout
+                                                      ctx).join(); // FIXME join without timeout
                                 }
                             }
 
@@ -235,7 +236,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             @Nonnull Predicate<WorkflowState> predicate
     ) throws InterruptedException {
         do {
-            taskQueue.take().accept(this);
+            var taken = taskQueue.take();
+            taken.accept(this);
         } while (!predicate.test(this.state()));
     }
 

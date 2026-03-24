@@ -22,12 +22,15 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.test.fixture.RecordingEventStore;
 import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
@@ -88,7 +91,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
                                           .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))
                                           .orElse("none");
                 var name = event.type().qualifiedName().toString();
-                return String.format("%s (%s): %s", name, status, event.payload());
+                return String.format("%s (%s): %s, %s", name, status, event.payload(), event.metadata());
             }).toList());
         }
     }

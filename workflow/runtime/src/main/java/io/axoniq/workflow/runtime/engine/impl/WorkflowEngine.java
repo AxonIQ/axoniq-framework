@@ -30,6 +30,8 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +39,11 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -48,12 +55,13 @@ import java.util.Set;
  * @since 1.0.0
  */
 @Internal
-public class WorkflowEngine implements EventHandler {
+public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler {
 
     private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
@@ -67,7 +75,10 @@ public class WorkflowEngine implements EventHandler {
     @Override
     public MessageStream.Empty<Message> handle(@NotNull EventMessage eventMessage,
                                                @NotNull ProcessingContext processingContext) {
-        logger.trace("Received eventMessage {}", eventMessage.type());
+        logger.trace("Received eventMessage {} {} by thread {}",
+                     eventMessage.identifier(),
+                     eventMessage.type(),
+                     Thread.currentThread());
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
@@ -87,41 +98,71 @@ public class WorkflowEngine implements EventHandler {
             }
         }
 
+        logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
         return MessageStream.empty();
     }
 
     /**
      * This is a place to be called from Event Processor
      */
-    public void runWorkflows(boolean removeFinished) {
-        logger.debug("Executing {} workflows.", workflowExecutionRepository.findAll().size());
-        for (var execution : workflowExecutionRepository.findAll()) {
+    public void runWorkflows() {
+        var running = isRunning.getAndSet(true);
+        if (!running) {
+            logger.info("Starting Workflow Execution.");
+            for (var execution : workflowExecutionRepository.findAll()) {
+                executeInstance(execution);
+            }
+            logger.info("Starting completed.");
+        } else {
+            logger.warn("Workflow Execution is already started.");
+        }
+    }
+
+    void executeInstance(@Nonnull WorkflowExecution execution) {
+
+        boolean runInNewThread = true; // FIXME -> this is the only way to run it currently.
+        if (runInNewThread) {
+            execution.workflowContext().processingContext().component(Executor.class, WORKFLOW_ENGINE_EXECUTOR).execute(
+                    () -> {
+                        this.execute(execution).accept(execution.workflowContext().processingContext());
+                    });
+        } else {
+            execution.workflowContext()
+                     .processingContext()
+                     .whenComplete(this.execute(execution));
+        }
+    }
+
+    private Consumer<ProcessingContext> execute(@Nonnull WorkflowExecution execution) {
+        return pc -> {
             try {
+                logger.info("Executing workflow {}", execution.workflowId());
                 execution.execute(
                         finished -> {
-                            if (removeFinished) {
-                                logger.debug("Workflow {} finished with status {}, removing it from repository",
-                                             execution.workflowId(),
-                                             finished.state().workflowStatus());
-                                this.workflowExecutionRepository.remove(execution.workflowId());
-                            } else {
-                                logger.debug("Workflow {} finished with status {}",
-                                             execution.workflowId(),
-                                             finished.state().workflowStatus());
-                            }
+                            logger.debug("Workflow {} finished with status {}, removing it from repository",
+                                         execution.workflowId(),
+                                         finished.state().workflowStatus());
+                            this.workflowExecutionRepository.remove(execution.workflowId());
                         }
                 );
             } catch (Throwable t) {
                 throw new RuntimeException("Error during workflow execution", t);
             }
-        }
+        };
     }
 
+
     /**
-     * Replay finished, start workflow executions.
+     * If the replay is finished, start workflow executions.
      */
-    public void replayFinished() {
-        runWorkflows(true);
+    @Override
+    @Nonnull
+    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
+                                               @Nonnull ProcessingContext context) {
+        if (!statusChange.status().isReplay()) {
+            runWorkflows();
+        }
+        return MessageStream.empty();
     }
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
@@ -148,10 +189,13 @@ public class WorkflowEngine implements EventHandler {
                                                            workflowConfiguration);
 
                                     // avoid multiple workflows for the same workflow id.
-                                    workflowExecutionRepository.save(workflowId, () -> {
+                                    var execution = workflowExecutionRepository.save(workflowId, () -> {
                                         logger.info("Starting new workflow with '{}'", eventMessage.payload());
                                         return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                     });
+                                    if (isRunning.get()) {
+                                        executeInstance(execution);
+                                    }
                                 }
                             }
         );

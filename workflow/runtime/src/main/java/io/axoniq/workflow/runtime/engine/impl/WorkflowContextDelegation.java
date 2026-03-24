@@ -107,7 +107,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                         "Could not retrieve UoW factory");
         this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
         this.executor = Objects.requireNonNull(processingContext.component(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
-                                               "Could not retrieve EventSink");
+                                               "Could not retrieve workflow engine executor");
         this.eventSink = Objects.requireNonNull(processingContext.component(EventSink.class),
                                                 "Could not retrieve EventSink");
 
