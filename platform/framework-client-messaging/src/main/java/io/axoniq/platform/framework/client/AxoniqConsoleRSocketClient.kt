@@ -222,14 +222,14 @@ class AxoniqConsoleRSocketClient(
         getOrConnectRSocket().subscribe(
                 { /* success — logged inside buildConnectionMono */ },
                 { e ->
-                    if (retryCount == 2) {
+                    if (retryCount == 4) {
                         if (suppressConnectMessage) {
                             logger.warn("Lost connection to Axoniq Platform. Will keep trying to reconnect...")
                         } else {
                             logger.warn("Unable to connect to Axoniq Platform. Will keep trying to reconnect...")
                         }
                         suppressConnectMessage = false
-                    } else if (retryCount > 2 && retryCount % 10 == 0) {
+                    } else if (retryCount > 4 && retryCount % 10 == 0) {
                         logger.error("Still unable to reconnect to Axoniq Platform after $retryCount attempts. Reason: ${e.message}")
                     }
                     logger.debug("Failed to connect to Axoniq Platform", e)
