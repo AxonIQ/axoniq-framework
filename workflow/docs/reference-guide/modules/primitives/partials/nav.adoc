@@ -1,0 +1,5 @@
+* xref:primitives:index.adoc[]
+** xref:primitives:execute.adoc[]
+** xref:primitives:wait-for.adoc[]
+** xref:primitives:payload.adoc[]
+** xref:primitives:terminate.adoc[]

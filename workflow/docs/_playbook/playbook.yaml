@@ -1,0 +1,33 @@
+site:
+  title: Axon Workflow Engine docs PREVIEW
+  start_page: axon-workflow-getting-started::index.adoc
+
+content:
+  sources:
+  - url: ../..
+    start_paths: ['docs/*', '!docs/_*']
+
+asciidoc:
+  attributes:
+    experimental: true
+    page-pagination: true
+  extensions:
+  - '@asciidoctor/tabs'
+
+antora:
+  extensions:
+  - id: lunr
+    require: '@antora/lunr-extension'
+    enabled: true
+    index_latest_only: true
+
+runtime:
+  fetch: false
+  log:
+    level: info
+    failure_level: error
+
+ui:
+  bundle:
+    url: https://gitlab.com/antora/antora-ui-default/-/jobs/artifacts/HEAD/raw/build/ui-bundle.zip?job=bundle-stable
+    snapshot: true

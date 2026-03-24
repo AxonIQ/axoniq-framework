@@ -1,0 +1,26 @@
+= Project Setup
+:navtitle: Project Setup
+
+This page covers how to add the Axon Workflow Engine to your project and explains the module structure.
+
+== Prerequisites
+
+// TODO: Java 21+, Axon Framework 5, Maven or Gradle
+
+== Adding Dependencies
+
+// TODO: Maven and Gradle dependency snippets for runtime, dsl, and test modules
+
+== Module Overview
+
+The Axon Workflow Engine consists of four modules:
+
+[cols="<,<"]
+|===
+|Module |Purpose
+
+|`runtime` |Core engine: primitives, combinators, execution, configuration
+|`dsl` |DSL layers for Java (`SimpleWorkflowContext`) and Kotlin (`Kontext`)
+|`test` |Testing utilities: `AbstractDeclarativeTestBase`, `DelayedPublisher`
+|`example` |Example workflows demonstrating all features
+|===

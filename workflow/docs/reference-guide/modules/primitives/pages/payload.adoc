@@ -1,0 +1,17 @@
+= Payload Primitive
+:navtitle: Payload
+
+The `PayloadPrimitive` interface provides durable modification of the workflow instance payload.
+Changes are recorded as events, ensuring payload state survives crashes and replays.
+
+== Overview
+
+// TODO: Describe modifyPayload parameters: stepName, PayloadModification, eventNameCustomizer
+
+== Setting Payload
+
+// TODO: Document setPayload convenience methods in SimpleWorkflowContext
+
+== Payload Modification Function
+
+// TODO: Document PayloadModification functional interface

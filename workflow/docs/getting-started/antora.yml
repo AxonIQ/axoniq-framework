@@ -1,0 +1,12 @@
+name: axon-workflow-getting-started
+title: Getting Started with Axon Workflow Engine
+version: ~
+
+asciidoc:
+  attributes:
+    component_description: Getting started with building workflow definitions using the Axon Workflow Engine.
+    type: tutorial
+    group: beginner
+
+nav:
+  - modules/ROOT/nav.adoc

@@ -1,0 +1,20 @@
+= Terminate Primitive
+:navtitle: Terminate
+
+The `TerminatePrimitive` interface provides programmatic workflow and step termination through cancellation or failure.
+
+== Overview
+
+// TODO: Describe TerminateCommand and its factory methods
+
+== Workflow Cancellation
+
+// TODO: Document cancel(), cancel(reason), cancel(cause)
+
+== Workflow Failure
+
+// TODO: Document fail(cause)
+
+== Step Cancellation
+
+// TODO: Document cancelStep methods -- step cancellation does not terminate the workflow

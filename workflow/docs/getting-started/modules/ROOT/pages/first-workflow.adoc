@@ -1,0 +1,20 @@
+= Your First Workflow
+:navtitle: First Workflow
+
+In this step, you will create a minimal workflow that executes a single action using the `execute` primitive.
+
+== Defining a Workflow
+
+// TODO: Show a minimal WorkflowDefinition using SimpleWorkflowContext with a single awaitExecute call
+
+== The Execute Primitive
+
+// TODO: Explain what happens under the hood -- the engine records STARTED and COMPLETED events for the step
+
+== Registering with WorkflowModule
+
+// TODO: Show how to register the workflow definition using WorkflowModule.usingContext()
+
+== Running It
+
+// TODO: Show how to trigger the workflow by publishing the start event

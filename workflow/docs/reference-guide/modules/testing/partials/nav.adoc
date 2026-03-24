@@ -1,0 +1,3 @@
+* xref:testing:index.adoc[]
+** xref:testing:test-base.adoc[]
+** xref:testing:patterns.adoc[]

@@ -1,0 +1,20 @@
+= Associations
+:navtitle: Associations
+
+Associations define how incoming events are correlated to running workflow instances.
+
+== AssociationValue
+
+// TODO: Document the record: associationValueRetriever, operator, associationValueSupplier
+
+== Value Retrievers
+
+// TODO: Document PayloadPropertyValueRetriever and MetadataPropertyValueRetriever
+
+== Comparison Operators
+
+// TODO: Document EqualsComparison and ValueComparisonOperatorRegistry
+
+== Building Associations
+
+// TODO: Document AssociationsUtils.associate() and equalsTo()

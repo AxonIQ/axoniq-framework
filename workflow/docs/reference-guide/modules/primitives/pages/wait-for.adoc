@@ -1,0 +1,20 @@
+= WaitFor Primitive
+:navtitle: WaitFor
+
+The `WaitForPrimitive` interface suspends workflow execution until an external event matching a specified condition is received, or a timeout expires.
+
+== Overview
+
+// TODO: Describe parameters: stepName, EventCondition, resultPayloadReducer, timeout, eventNameCustomizer
+
+== Event Conditions
+
+// TODO: Document EventCondition -- qualifiedName + optional Predicate<EventMessage>
+
+== Association-based Matching
+
+// TODO: Document AssociationsUtils.associate() with payloadProperty and equalsTo
+
+== Timeout Behavior
+
+// TODO: Describe StepStatus.TIMED_OUT and sleep as a special case

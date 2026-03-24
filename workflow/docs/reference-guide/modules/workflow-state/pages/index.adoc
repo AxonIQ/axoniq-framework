@@ -1,0 +1,13 @@
+= Workflow State
+:navtitle: Workflow State
+
+This section covers the state management aspects of the Axon Workflow Engine.
+
+[cols="<,<"]
+|===
+|Topic |Purpose
+
+|xref:payload-management.adoc[Payload Management] |PayloadReducer strategies, global vs. local payload
+|xref:step-results.adoc[Step Results] |WorkflowStepResult, StepStatus, WorkflowStatus
+|xref:associations.adoc[Associations] |Event-workflow correlation via AssociationValue
+|===

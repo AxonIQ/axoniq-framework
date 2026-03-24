@@ -1,0 +1,24 @@
+= Testing Workflows
+:navtitle: Testing
+
+In this step, you will write an integration test for your workflow using the test module.
+
+== Test Setup
+
+// TODO: Show extending AbstractDeclarativeTestBase and implementing getDeclaredDefinitions()
+
+== Triggering the Workflow
+
+// TODO: Show using DelayedPublisher to publish the start event
+
+== Simulating External Events
+
+// TODO: Show Schedule.ofMillis() for publishing events at specific delays
+
+== Asserting Results
+
+// TODO: Show Awaitility-based assertions on workflow status and step execution
+
+== Full Example
+
+// TODO: Include a complete test class matching the workflow built in previous pages

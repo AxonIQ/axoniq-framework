@@ -1,0 +1,24 @@
+= Parallel Steps
+:navtitle: Parallel Steps
+
+In this step, you will run multiple steps concurrently and coordinate their results using composables.
+
+== Non-blocking Execution
+
+// TODO: Show ctx.execute() returning WorkflowStepResult for async execution
+
+== anyMatch -- First Match Wins
+
+// TODO: Show anyMatch(WorkflowStepResult::isCompleted, step1, step2) for race semantics
+
+== allMatch -- All Must Succeed
+
+// TODO: Show allMatch(WorkflowStepResult::success, step1, step2, step3) for guard semantics
+
+== noneMatch -- No Failures Allowed
+
+// TODO: Show noneMatch(WorkflowStepResult::failure, step1, step2) for negative guard
+
+== CombinatorWorkflowStepResult
+
+// TODO: Explain matched() and unmatched() for inspecting sub-results

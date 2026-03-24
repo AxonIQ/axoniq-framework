@@ -1,0 +1,24 @@
+= Waiting for Events
+:navtitle: Waiting for Events
+
+In this step, you will extend your workflow to wait for an external event before continuing.
+
+== The WaitFor Primitive
+
+// TODO: Explain awaitEvent -- the workflow suspends until a matching event arrives or the timeout expires
+
+== Event Conditions
+
+// TODO: Show EventConditions.fromType() for matching by event class
+
+== Association-based Matching
+
+// TODO: Show how to use associate(payloadProperty("field"), equalsTo("value")) for fine-grained filtering
+
+== Timeouts
+
+// TODO: Explain what happens when a waitFor times out (StepStatus.TIMED_OUT)
+
+== Sleep
+
+// TODO: Show ctx.sleep() as a special case of waitFor with no matching event

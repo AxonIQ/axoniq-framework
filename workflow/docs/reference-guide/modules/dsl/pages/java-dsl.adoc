@@ -1,0 +1,32 @@
+= Java DSL
+:navtitle: Java DSL
+
+`SimpleWorkflowContext` provides a synchronous Java API for defining workflows.
+
+== Overview
+
+// TODO: Describe SimpleWorkflowContext and its relationship to WorkflowContext
+
+== Executing Steps
+
+// TODO: Document awaitExecute and execute overloads
+
+== Waiting for Events
+
+// TODO: Document awaitEvent overloads and sleep
+
+== Modifying Payload
+
+// TODO: Document setPayload and the Payload helper class
+
+== Termination
+
+// TODO: Document cancel, fail, cancelStep methods
+
+== Default Timeout
+
+// TODO: Document setDefaultTimeout(Duration)
+
+== Example
+
+// TODO: Full UserSignupWorkflow example

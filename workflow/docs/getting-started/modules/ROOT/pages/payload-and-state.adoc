@@ -1,0 +1,20 @@
+= Payload and State
+:navtitle: Payload & State
+
+In this step, you will learn how data flows through your workflow using the payload system.
+
+== Workflow Payload
+
+// TODO: Explain the workflow payload as a Map<String, Object> that persists across all steps
+
+== Setting Payload
+
+// TODO: Show ctx.setPayload() and the Payload helper class
+
+== Payload Reducers
+
+// TODO: Explain the three built-in reducers: COMBINE_GLOBAL_AND_LOCAL, GLOBAL_ONLY, LOCAL_ONLY
+
+== Reading Payload
+
+// TODO: Show ctx.workflowPayload() for accessing current state

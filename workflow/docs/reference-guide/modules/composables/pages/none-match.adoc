@@ -1,0 +1,17 @@
+= noneMatch
+:navtitle: noneMatch
+
+The `NoneMatchCombinator` is a guard combinator that succeeds when **no** completed result matches a given predicate.
+It short-circuits on the first matching result.
+
+== Overview
+
+// TODO: Describe behavior, success conditions, matched/unmatched categorization
+
+== Usage
+
+// TODO: Java and Kotlin examples
+
+== Comparison with allMatch
+
+// TODO: noneMatch(p) is the structural inverse of allMatch(p)

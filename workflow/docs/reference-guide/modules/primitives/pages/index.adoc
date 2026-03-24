@@ -1,0 +1,14 @@
+= Primitives
+:navtitle: Primitives
+
+The Axon Workflow Engine provides four core primitives that serve as the fundamental building blocks for any workflow definition.
+
+[cols="<,<"]
+|===
+|Primitive |Purpose
+
+|xref:execute.adoc[Execute] |Running actions and tasks within a workflow
+|xref:wait-for.adoc[WaitFor] |Suspending until an external event arrives
+|xref:payload.adoc[Payload] |Durably modifying the workflow instance payload
+|xref:terminate.adoc[Terminate] |Ending a workflow or cancelling individual steps
+|===

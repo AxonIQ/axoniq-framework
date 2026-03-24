@@ -1,0 +1,17 @@
+= allMatch
+:navtitle: allMatch
+
+The `AllMatchCombinator` is a guard combinator that succeeds when **all** completed results match a given predicate.
+It short-circuits on the first non-matching result.
+
+== Overview
+
+// TODO: Describe behavior, success conditions, matched/unmatched categorization
+
+== Usage
+
+// TODO: Java and Kotlin examples
+
+== Short-circuit Behavior
+
+// TODO: Explain violator delegation and that remaining results are not auto-cancelled

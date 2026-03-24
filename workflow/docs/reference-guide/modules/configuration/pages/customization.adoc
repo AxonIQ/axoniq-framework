@@ -1,0 +1,20 @@
+= Customization
+:navtitle: Customization
+
+The `WorkflowCustomization` API allows fine-tuning workflow behavior.
+
+== EventNameCustomizer
+
+// TODO: Document the interface and DefaultEventNameCustomizer.Builder
+
+== WorkflowIdProvider
+
+// TODO: Document MessageWorkflowIdProvider and PayloadPropertyWorkflowIdProvider
+
+== WorkflowStatusChangeListener
+
+// TODO: Document registering listeners for status transitions
+
+== WorkflowConfiguration
+
+// TODO: Document the interface that bundles all configuration

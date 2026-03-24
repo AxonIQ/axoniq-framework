@@ -1,0 +1,12 @@
+= Testing
+:navtitle: Testing
+
+The Axon Workflow Engine provides a dedicated `test` module with infrastructure for testing workflow definitions.
+
+[cols="<,<"]
+|===
+|Topic |Purpose
+
+|xref:test-base.adoc[AbstractDeclarativeTestBase] |Base test class with engine setup and lifecycle management
+|xref:patterns.adoc[Testing Patterns] |Common patterns for event scheduling, assertions, and registration
+|===

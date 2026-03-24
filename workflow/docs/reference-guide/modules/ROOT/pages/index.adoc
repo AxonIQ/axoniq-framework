@@ -1,0 +1,34 @@
+= Axon Workflow Engine Reference
+:navtitle: Introduction
+
+This reference guide provides comprehensive documentation for the Axon Workflow Engine, an extension for Axon Framework 5 that lets developers write simple, imperative business logic while the engine handles event sourcing complexity automatically.
+
+The engine is built on four **primitives** and three **composables**:
+
+**Primitives** -- the four core building blocks:
+
+* **xref:primitives:execute.adoc[Execute]** -- Run actions and tasks (synchronous or asynchronous)
+* **xref:primitives:wait-for.adoc[WaitFor]** -- Wait for external events with conditions and timeouts
+* **xref:primitives:payload.adoc[Payload]** -- Modify workflow state durably
+* **xref:primitives:terminate.adoc[Terminate]** -- End workflows or individual steps (cancel, fail)
+
+**Composables** -- higher-level combinators for parallel work:
+
+* **xref:composables:all-match.adoc[allMatch]** -- Guard ensuring all results match a predicate
+* **xref:composables:any-match.adoc[anyMatch]** -- Race combinator where the first matching result wins
+* **xref:composables:none-match.adoc[noneMatch]** -- Guard ensuring no results match a predicate
+
+== Reference Sections
+
+[cols="<,<"]
+|===
+|Section |Purpose
+
+|xref::architecture.adoc[Architecture] |High-level architecture and event-sourcing model
+|xref:primitives:index.adoc[Primitives] |The four core building blocks
+|xref:composables:index.adoc[Composables] |Parallel step combinators
+|xref:dsl:index.adoc[DSL] |Java and Kotlin DSL implementations
+|xref:workflow-state:index.adoc[Workflow State] |Payload management, step results, and associations
+|xref:configuration:index.adoc[Configuration] |WorkflowModule setup, annotations, and customization
+|xref:testing:index.adoc[Testing] |Testing infrastructure and patterns
+|===
