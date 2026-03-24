@@ -53,15 +53,16 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
             pcepc.eventCriteria(
-                    set -> {
-                        if (set.isEmpty()) {
-                            return EventCriteria.havingAnyTag();
-                        } else {
-                            return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-                        }
-                    }
-            ).initialSegmentCount(1);
-    private final SequencingPolicy sequencingPolicy;
+                         set -> {
+                             if (set.isEmpty()) {
+                                 return EventCriteria.havingAnyTag();
+                             } else {
+                                 return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+                             }
+                         }
+                 ).initialSegmentCount(1)
+                 .batchSize(1);
+    private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
 
     /**
@@ -71,7 +72,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
      */
     public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
-        this.sequencingPolicy = new HierarchicalSequencingPolicy(
+        this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );

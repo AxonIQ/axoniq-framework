@@ -102,7 +102,7 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
         }
 
         // Verify no events were published after the workflow terminal event
-        var events = PrettyPrintingRecordingEventStore.lastInstance().getPublishedEvents().stream()
+        var events = PrettyPrintingRecordingEventStore.lastInstance().recorded().stream()
                                                       .filter(e -> e.metadata().containsKey("workflowId"))
                                                       .toList();
 

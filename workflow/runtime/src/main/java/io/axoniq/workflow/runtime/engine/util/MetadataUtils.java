@@ -34,6 +34,7 @@ public class MetadataUtils {
 
     public static final String METADATA_KEY_WORKFLOW_ID = "workflowId";
     public static final String METADATA_KEY_TYPE = "stepType";
+    public static final String METADATA_KEY_MODIFY_PAYLOAD = "modifyPayload";
     public static final String METADATA_KEY_STEP_NAME = "stepName";
     public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
 
@@ -67,6 +68,14 @@ public class MetadataUtils {
     public static Optional<StepStatus> getStepStatus(Metadata metadata) {
         if (metadata.containsKey(METADATA_KEY_TYPE)) {
             return Optional.of(StepStatus.valueOf(metadata.get(METADATA_KEY_TYPE)));
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<String> payloadReducer(Metadata metadata) {
+        if (metadata.containsKey(METADATA_KEY_MODIFY_PAYLOAD)) {
+            return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_MODIFY_PAYLOAD, null));
         } else {
             return Optional.empty();
         }

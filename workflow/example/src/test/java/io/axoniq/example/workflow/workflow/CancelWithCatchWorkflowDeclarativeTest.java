@@ -101,10 +101,12 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
             assertThat(context.workflowStepNames()).doesNotContain("stepAfterCancel");
         }
 
-        // Verify no events were published after the workflow terminal event
-        var events = PrettyPrintingRecordingEventStore.lastInstance().getPublishedEvents().stream()
-                                                      .filter(e -> e.metadata().containsKey("workflowId"))
-                                                      .toList();
+        var events = PrettyPrintingRecordingEventStore
+                .lastInstance()
+                .recorded()
+                .stream()
+                .filter(e -> e.metadata().containsKey("workflowId"))
+                .toList();
 
         // Find index of the workflow CANCELLED event
         int cancelledIndex = -1;

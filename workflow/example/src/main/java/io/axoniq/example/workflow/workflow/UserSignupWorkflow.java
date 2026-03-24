@@ -68,13 +68,6 @@ public class UserSignupWorkflow {
                          Duration.ofSeconds(10),
                          defaults());
 
-        /**
-         var a1 = ctx.executeWithResult("activateUser", payload().set("id", "id1").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-         var a2 = ctx.executeWithResult("activateUser2", payload().set("id", "id2").getValues(), UserService::activateUser, Duration.ofSeconds(10));
-         all(a1, a2).isSuccess();
-         */
-
-
         ctx.awaitExecute("sendWelcomeEmail",
                          ctx.workflowPayload(),
                          p -> NotificationService.sendEmail(payload(p).get("email")));
@@ -84,7 +77,7 @@ public class UserSignupWorkflow {
                                    MagicHappenedEvent.class,
                                    associate(payloadProperty("magician"), equalsTo("Merlin")),
                                    Duration.ofSeconds(5));
-        ctx.addPayload(magic);
+        ctx.setPayload("modifyPayload", magic);
 
         logger.info("Magic happened because of the magician {}", magic.magician());
         // -> end

@@ -56,7 +56,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     private final SimpleWorkflowExecution workflowExecution;
 
     /**
-     * Constructs new DSL context.
+     * Constructs a new DSL context.
      *
      * @param workflowId            workflow id.
      * @param payload               initial payload.
@@ -81,22 +81,25 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
 
     @Nonnull
     @Override
-    public WorkflowStepResult waitFor(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
-                                      @Nonnull Duration timeout, @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return delegate.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
+    public WorkflowStepResult waitFor(@Nonnull String stepName,
+                                      @Nonnull EventCondition eventCondition,
+                                      @Nonnull PayloadReducer resultPayloadReducer,
+                                      @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return delegate.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
     }
 
     @Nonnull
     @Override
     public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
-                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
+                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         return delegate.execute(stepName,
                                 local,
                                 action,
-                                parameterMapping,
-                                resultMapping,
+                                parameterPayloadReducer,
+                                resultPayloadReducer,
                                 timeout,
                                 eventNameCustomizer);
     }
@@ -147,8 +150,10 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     }
 
     @Override
-    public void applyPayloadModification(@Nonnull PayloadModification payloadModification) {
-        delegate.applyPayloadModification(payloadModification);
+    public void modifyPayload(@Nonnull String stepName,
+                              @Nonnull PayloadModification payloadModification,
+                              @Nonnull EventNameCustomizer eventNameCustomizer) {
+        delegate.modifyPayload(stepName, payloadModification, eventNameCustomizer);
     }
 
     @Nonnull

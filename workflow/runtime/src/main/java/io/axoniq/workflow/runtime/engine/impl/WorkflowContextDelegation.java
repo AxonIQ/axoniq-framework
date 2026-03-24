@@ -59,12 +59,11 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
  */
 public class WorkflowContextDelegation implements WorkflowContext {
 
-    private Map<String, Object> payload; // TODO -> move to WorkflowState!
-
     // Primitive implementations
     private final ExecuteDelegate executeDelegate;
     private final WaitForDelegate waitForDelegate;
     private final TerminateDelegate terminateDelegate;
+    private final PayloadDelegate payloadDelegate;
 
     // Combinators
     private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
@@ -86,19 +85,16 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Creates the context delegation.
      *
-     * @param initial           initial payload of the workflow instance.
      * @param workflowContext   workflow context created by the factory.
      * @param workflowExecution workflow execution.
      * @param processingContext processing context.
      */
     public WorkflowContextDelegation(
-            @Nonnull Map<String, Object> initial,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration,
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull ProcessingContext processingContext
     ) {
-        this.payload = Objects.requireNonNull(initial, "Payload must not be null");
         this.workflowExecution = Objects.requireNonNull(workflowExecution,
                                                         "Workflow execution supplier must not be null");
 
@@ -135,6 +131,14 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                        unitOfWorkFactory,
                                                        eventSink,
                                                        executor);
+        this.payloadDelegate = new PayloadDelegate(workflowContext,
+                                                   workflowExecution,
+                                                   stepParent,
+                                                   clock,
+                                                   unitOfWorkFactory,
+                                                   eventSink,
+                                                   executor);
+
         this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(workflowExecution);
         this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(workflowExecution);
         this.allCombinatorDelegate = new AllMatchCombinatorDelegate(workflowExecution);
@@ -149,14 +153,14 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     @Override
     public Map<String, Object> workflowPayload() {
-        return payload;
+        return workflowExecution.state().payload();
     }
 
     @Override
-    public void applyPayloadModification(
-            @Nonnull PayloadModification payloadModification
-    ) {
-        this.payload = Objects.requireNonNull(payloadModification.apply(payload), "Payload must not be null");
+    public void modifyPayload(@Nonnull String stepName,
+                              @Nonnull PayloadModification payloadModification,
+                              @Nonnull EventNameCustomizer eventNameCustomizer) {
+        payloadDelegate.modifyPayload(stepName, payloadModification, eventNameCustomizer);
     }
 
     @Nonnull
@@ -182,15 +186,15 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public WorkflowStepResult execute(@Nonnull String stepName,
                                       @org.jetbrains.annotations.Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
-                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
+                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         workflowExecution.state().throwTerminalCause();
         return executeDelegate.execute(stepName,
                                        local,
                                        action,
-                                       parameterMapping,
-                                       resultMapping,
+                                       parameterPayloadReducer,
+                                       resultPayloadReducer,
                                        timeout,
                                        eventNameCustomizer);
     }
@@ -199,10 +203,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public WorkflowStepResult waitFor(@Nonnull String stepName,
                                       @Nonnull EventCondition eventCondition,
+                                      @Nonnull PayloadReducer resultPayloadReducer,
                                       @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         workflowExecution.state().throwTerminalCause();
-        return waitForDelegate.waitFor(stepName, eventCondition, timeout, eventNameCustomizer);
+        return waitForDelegate.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
     }
 
     @Override
@@ -267,17 +272,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Event dispatching to the "wait for primitive".
      *
-     * @param eventMessage        event message to wait for.
-     * @param stepName            step name to wait for.
-     * @param eventNameCustomizer event name customizer.
+     * @param awaited event arrival wrapper object.
      */
     @Internal
-    public void eventReceived(
-            @Nonnull EventMessage eventMessage,
-            @Nonnull String stepName,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
-        waitForDelegate.eventReceived(eventMessage, stepName, eventNameCustomizer);
+    public void eventReceived(@Nonnull EventWaitConditions.Awaited awaited) {
+        waitForDelegate.eventReceived(awaited);
     }
 
     /**
@@ -299,6 +298,5 @@ public class WorkflowContextDelegation implements WorkflowContext {
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("workflowId", workflowExecution.workflowId());
         descriptor.describeProperty("workflowName", workflowExecution.workflowName());
-        descriptor.describeProperty("payload", payload);
     }
 }

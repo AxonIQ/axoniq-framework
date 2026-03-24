@@ -36,15 +36,15 @@ public interface ExecutePrimitive {
     /**
      * Execute primitive.
      *
-     * @param stepName            name of the step.
-     * @param local               local context passed to the call.
-     * @param action              action to execute.
-     * @param parameterMapping    reducer for parameters (to reduce local and workflow contexts -> effective
-     *                            parameters).
-     * @param resultMapping       reducer for result (to reduce result and global context -> global context after
-     *                            action).
-     * @param timeout             timeout of the action.
-     * @param eventNameCustomizer event name customizer.
+     * @param stepName                name of the step.
+     * @param local                   local context passed to the call.
+     * @param action                  action to execute.
+     * @param parameterPayloadReducer reducer for parameters (to reduce local and workflow payloads to effective
+     *                                parameters passed to the step execution).
+     * @param resultPayloadReducer    reducer for the result (to reduce result and workflow payload to the resulting
+     *                                workflow payload).
+     * @param timeout                 timeout of the action.
+     * @param eventNameCustomizer     event name customizer.
      * @return result.
      */
     @Nonnull
@@ -52,8 +52,8 @@ public interface ExecutePrimitive {
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     );
@@ -73,8 +73,8 @@ public interface ExecutePrimitive {
                         execute(command.stepName(),
                                 command.local(),
                                 command.action(),
-                                command.parameterMapping(),
-                                command.resultMapping(),
+                                command.parameterPayloadReducer(),
+                                command.resultPayloadReducer(),
                                 command.timeout(),
                                 command.eventNameCustomizer()));
     }
@@ -111,20 +111,20 @@ public interface ExecutePrimitive {
         PayloadProcessor action();
 
         /**
-         * Returns mapping to be used for the action parameters.
+         * Returns reducer to be used for the step parameters.
          *
-         * @return parameter mapping.
+         * @return step parameter reducer for payload.
          */
         @Nonnull
-        PayloadReducer parameterMapping();
+        PayloadReducer parameterPayloadReducer();
 
         /**
-         * Returns mapping to be used for the action result.
+         * Returns reducer to be used for the step result.
          *
-         * @return result mapping.
+         * @return step result reducer for payload.
          */
         @Nonnull
-        PayloadReducer resultMapping();
+        PayloadReducer resultPayloadReducer();
 
         /**
          * Returns timeout of the action.

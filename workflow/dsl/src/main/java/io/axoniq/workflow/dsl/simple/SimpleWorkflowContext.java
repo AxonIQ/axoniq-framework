@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.association.EqualsComparison;
@@ -43,7 +44,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.local;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.*;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
@@ -88,6 +89,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         e -> predicate.test(e.payloadAs(eventType))
                 ),
+                GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(Converter.class),
@@ -104,6 +106,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         e -> associationsUtils.build(super.processingContext()).test(e)
                 ),
+                GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(Converter.class),
@@ -122,7 +125,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @param timeout  timeout to wait.
      */
     public void sleep(String stepName, Duration timeout) {
-        var result = waitFor(stepName, EventConditions.never(), timeout, defaults());
+        var result = waitFor(stepName, EventConditions.never(), PayloadReducer.GLOBAL_ONLY, timeout, defaults());
         if (result.failure() && result.error().isPresent()) {
             throw result.error().get();
         }
@@ -130,7 +133,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Execute a step asynchronously.
-     * <p>The payload passed will be used as step input and the result will be added to the workflow instance
+     * <p>The payload passed will be used as step input, and the result will not be added to the workflow instance
      * payload.</p>
      *
      * @param stepName            name of the step.
@@ -149,12 +152,12 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-        return execute(stepName, payload, action, local(), PayloadReducer.all(), duration, eventNameCustomizer);
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, duration, eventNameCustomizer);
     }
 
     /**
      * Execute a step asynchronously using default timeout and event names.
-     * <p>The payload passed will be used as step input and the result will be added to the workflow instance
+     * <p>The payload passed will be used as step input, and the result will be not added to the workflow instance
      * payload.</p>
      *
      * @param stepName name of the step.
@@ -169,13 +172,13 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Map<String, Object> payload,
             @Nonnull PayloadProcessor action
     ) {
-        return execute(stepName, payload, action, local(), PayloadReducer.all(), defaultTimeout, defaults());
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, defaultTimeout, defaults());
     }
 
 
     /**
      * Executes the step synchronously.
-     * <p>The payload passed will be used as step input and the result will be added to the workflow instance
+     * <p>The payload passed will be used as step input, and the result will not be added to the workflow instance.
      * payload.</p>
      *
      * @param stepName            name of the step.
@@ -208,7 +211,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Executes the step synchronously using default duration and event names.
-     * <p>The payload passed will be used as step input and the result will be added to the workflow instance
+     * <p>The payload passed will be used as step input, and the result will not be added to the workflow instance
      * payload.</p>
      *
      * @param stepName name of the step.
@@ -293,8 +296,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     /**
      * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
      *
-     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
-     *                                                                   published
+     * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel() {
         terminate(TerminateCommand.cancel(defaults()));
@@ -304,8 +306,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
      *
      * @param eventNameCustomizer customizer for the published cancellation event name
-     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
-     *                                                                   published
+     * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel(EventNameCustomizer eventNameCustomizer) {
         terminate(TerminateCommand.cancel(eventNameCustomizer));
@@ -316,11 +317,10 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * cancelling all running steps.
      *
      * @param reason descriptive reason for the cancellation
-     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
-     *                                                                   published
+     * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel(String reason) {
-        terminate(TerminateCommand.cancel(new io.axoniq.workflow.runtime.api.WorkflowCancelledException(reason),
+        terminate(TerminateCommand.cancel(new WorkflowCancelledException(reason),
                                           defaults()));
     }
 
@@ -328,8 +328,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * Cancels the entire workflow gracefully, publishing a cancellation event and cancelling all running steps.
      *
      * @param cause the exception that triggered the cancellation
-     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
-     *                                                                   published
+     * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel(Throwable cause) {
         terminate(TerminateCommand.cancel(cause, defaults()));
@@ -340,8 +339,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param cause               the exception that triggered the cancellation
      * @param eventNameCustomizer customizer for the published cancellation event name
-     * @throws io.axoniq.workflow.runtime.api.WorkflowCancelledException always, after the cancellation event is
-     *                                                                   published
+     * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     public void cancel(Throwable cause, EventNameCustomizer eventNameCustomizer) {
         terminate(TerminateCommand.cancel(cause, eventNameCustomizer));
@@ -382,12 +380,41 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                  defaults()));
     }
 
-    public void addPayload(@Nonnull Object object) {
-        addPayload(payload(this, object));
+    /**
+     * Sets the payload of the workflow instance, converting the object into a <code>Map<String, Object></code> and
+     * replacing all payload keys if there are duplicates.
+     *
+     * @param stepName the name of the payload modification payload step.
+     * @param object   the object to be converted into a payload.
+     */
+    public void setPayload(@Nonnull String stepName, @Nonnull Object object) {
+        setPayload(stepName, payload(this, object));
     }
 
-    public void addPayload(@Nonnull Payload payload) {
-        applyPayloadModification(p -> payload(p).with(payload).getValues());
+    /**
+     * Sets the payload of the workflow instance and replacing all payload keys if there are duplicates.
+     *
+     * @param stepName the name of the payload modification payload step.
+     * @param payload  the object to be set.
+     */
+    public void setPayload(@Nonnull String stepName, @Nonnull Payload payload) {
+        setPayload(stepName, payload, defaults());
+    }
+
+    /**
+     * Sets the payload of the workflow instance and replacing all payload keys if there are duplicates.
+     *
+     * @param stepName            the name of the payload modification payload step.
+     * @param payload             the object to be set.
+     * @param eventNameCustomizer the customizer for event names.
+     */
+    public void setPayload(@Nonnull String stepName, @Nonnull Payload payload,
+                           EventNameCustomizer eventNameCustomizer) {
+        modifyPayload(stepName,
+                      workflowPayload -> COMBINE_GLOBAL_AND_LOCAL.apply(
+                              workflowPayload, payload.getValues()
+                      ),
+                      eventNameCustomizer);
     }
 
     public void setDefaultTimeout(@Nonnull Duration defaultTimeout) {
