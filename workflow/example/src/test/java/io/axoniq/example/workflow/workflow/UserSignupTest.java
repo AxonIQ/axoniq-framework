@@ -187,7 +187,7 @@ class UserSignupTest {
                     "sendWelcomeEmail",
                     "waitASecond",
                     "waitForMagicToHappen",
-                    "modifyPayload1"
+                    "modifyPayload"
             );
 
             var payload = workflowHistory.state().payload();

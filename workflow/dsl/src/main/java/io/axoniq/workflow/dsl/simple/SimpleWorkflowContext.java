@@ -38,15 +38,13 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.GLOBAL_ONLY;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.LOCAL_ONLY;
+import static io.axoniq.workflow.runtime.api.PayloadReducer.*;
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
@@ -61,7 +59,6 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     private Duration defaultTimeout;
-    private final AtomicInteger payloadCounter = new AtomicInteger(1);
 
     /**
      * Creates an equals matcher for association values.
@@ -100,7 +97,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         ));
     }
 
-    public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils, Duration timeout) {
+    public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
+                            Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
@@ -382,14 +380,41 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                  defaults()));
     }
 
-    public void setPayload(@Nonnull Object object) {
-        setPayload(payload(this, object));
+    /**
+     * Sets the payload of the workflow instance, converting the object into a <code>Map<String, Object></code> and
+     * replacing all payload keys if there are duplicates.
+     *
+     * @param stepName the name of the payload modification payload step.
+     * @param object   the object to be converted into a payload.
+     */
+    public void setPayload(@Nonnull String stepName, @Nonnull Object object) {
+        setPayload(stepName, payload(this, object));
     }
 
-    public void setPayload(@Nonnull Payload payload) {
-        modifyPayload("modifyPayload" + payloadCounter.getAndIncrement(),
-                      p -> payload(p).with(payload).getValues(),
-                      defaults());
+    /**
+     * Sets the payload of the workflow instance and replacing all payload keys if there are duplicates.
+     *
+     * @param stepName the name of the payload modification payload step.
+     * @param payload  the object to be set.
+     */
+    public void setPayload(@Nonnull String stepName, @Nonnull Payload payload) {
+        setPayload(stepName, payload, defaults());
+    }
+
+    /**
+     * Sets the payload of the workflow instance and replacing all payload keys if there are duplicates.
+     *
+     * @param stepName            the name of the payload modification payload step.
+     * @param payload             the object to be set.
+     * @param eventNameCustomizer the customizer for event names.
+     */
+    public void setPayload(@Nonnull String stepName, @Nonnull Payload payload,
+                           EventNameCustomizer eventNameCustomizer) {
+        modifyPayload(stepName,
+                      workflowPayload -> COMBINE_GLOBAL_AND_LOCAL.apply(
+                              workflowPayload, payload.getValues()
+                      ),
+                      eventNameCustomizer);
     }
 
     public void setDefaultTimeout(@Nonnull Duration defaultTimeout) {

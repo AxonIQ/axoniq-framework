@@ -77,7 +77,7 @@ public class UserSignupWorkflow {
                                    MagicHappenedEvent.class,
                                    associate(payloadProperty("magician"), equalsTo("Merlin")),
                                    Duration.ofSeconds(5));
-        ctx.setPayload(magic);
+        ctx.setPayload("modifyPayload", magic);
 
         logger.info("Magic happened because of the magician {}", magic.magician());
         // -> end
