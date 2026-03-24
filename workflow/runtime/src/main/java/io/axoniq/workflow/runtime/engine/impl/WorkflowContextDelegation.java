@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -107,7 +107,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                         "Could not retrieve UoW factory");
         this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
         this.executor = Objects.requireNonNull(processingContext.component(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
-                                               "Could not retrieve EventSink");
+                                               "Could not retrieve workflow engine executor");
         this.eventSink = Objects.requireNonNull(processingContext.component(EventSink.class),
                                                 "Could not retrieve EventSink");
 

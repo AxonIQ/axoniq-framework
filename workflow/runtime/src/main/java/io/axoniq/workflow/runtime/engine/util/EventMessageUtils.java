@@ -11,13 +11,14 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
 package io.axoniq.workflow.runtime.engine.util;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
@@ -71,8 +72,9 @@ public class EventMessageUtils {
                                                @Nonnull String workflowName,
                                                @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
-        return new GenericEventMessage(new MessageType(name), Map.of(),
+        return new GenericEventMessage(new MessageType(name), context.workflowPayload(),
                                        MetadataUtils.create(context.workflowId(), WorkflowStatus.STARTED)
+                                               .and(METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL)
         );
     }
 

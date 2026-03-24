@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -102,8 +102,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
-                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
-                             .qualifiedName(),
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
                         e -> associationsUtils.build(super.processingContext()).test(e)
                 ),
                 GLOBAL_ONLY,

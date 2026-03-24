@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
@@ -74,14 +75,9 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
 
         delayedPublisher.start();
 
-        await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
-        });
-
-        workflowEngine.runWorkflows(false);
-
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
+            assertThat(workflowHistoryRepository.findAll()).isEmpty();
+            assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
@@ -92,13 +88,13 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowEngine.workflowExecutions()).isEmpty();
 
-        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
-            var context = execution.workflowContext();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
-            assertThat(context.workflowStepNames()).contains("stepA");
-            assertThat(context.workflowStepNames()).doesNotContain("stepAfterCancel");
+        for (WorkflowHistory history : workflowHistoryRepository.findAll()) {
+            var state = history.state();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
+            assertThat(state.workflowStepNames()).contains("stepA");
+            assertThat(state.workflowStepNames()).doesNotContain("stepAfterCancel");
         }
 
         var events = PrettyPrintingRecordingEventStore

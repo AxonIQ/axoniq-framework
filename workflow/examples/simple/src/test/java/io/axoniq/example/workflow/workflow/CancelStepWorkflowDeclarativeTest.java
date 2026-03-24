@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
@@ -75,11 +76,13 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
                                       assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         );
 
-        workflowEngine.runWorkflows(false);
-
         await().atMost(30, TimeUnit.SECONDS)
-               .untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).allMatch(
-                       h -> h.state().workflowStatus().isTerminal())
+               .untilAsserted(() ->
+                              {
+                                  assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+                                  assertThat(workflowHistoryRepository.findAll()).allMatch(
+                                          h -> h.state().workflowStatus().isTerminal());
+                              }
                );
 
         // Let async cleanup settle
@@ -89,10 +92,10 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
-        for (WorkflowExecution workflowExecution : workflowEngine.workflowExecutions()) {
-            var state = workflowExecution.state();
+        for (WorkflowHistory wh : workflowHistoryRepository.findAll()) {
+            var state = wh.state();
             // Workflow ended as CANCELLED (via ctx.cancel())
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
 
@@ -100,7 +103,7 @@ class CancelStepWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
             assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");
 
             // stepB was explicitly cancelled via cancelStep before the workflow-level cancel
-            var stepB = workflowExecution.state().getStep("stepB");
+            var stepB = wh.state().getStep("stepB");
             assertThat(stepB.status()).isEqualTo(StepStatus.CANCELLED);
         }
     }

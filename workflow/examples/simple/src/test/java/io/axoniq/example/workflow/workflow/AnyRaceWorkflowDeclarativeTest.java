@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -24,7 +24,9 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
@@ -76,10 +78,9 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows(false);
-
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions()).allMatch(h -> h.workflowContext().workflowStatus()
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll()).allMatch(h -> h.state().workflowStatus()
                                                                            .isTerminal());
         });
 
@@ -90,13 +91,13 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowEngine.workflowExecutions()).isEmpty();
 
-        for (WorkflowContext context : workflowEngine.workflowExecutions().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
-            assertThat(context.workflowStatus().isTerminal()).isTrue();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("fastStep", "slowStep");
+        for (WorkflowState state : workflowHistoryRepository.findAll().stream()
+                                                              .map(WorkflowHistory::state).toList()) {
+            assertThat(state.workflowStatus().isTerminal()).isTrue();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("fastStep", "slowStep");
         }
     }
 }

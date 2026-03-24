@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -23,13 +23,13 @@ import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
-import org.assertj.core.api.Assertions
+import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
@@ -82,26 +82,22 @@ class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
 
         // all started
         await().untilAsserted(ThrowingRunnable {
-            Assertions.assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
+            assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         })
-
-        // simulate all-replayed and start workflows
-        workflowEngine.runWorkflows(false)
-
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
-            Assertions.assertThat(workflowEngine.workflowExecutions())
-                .allMatch(Predicate { h: WorkflowExecution -> h.state().workflowStatus().isTerminal })
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty()
+            assertThat(workflowHistoryRepository.findAll())
+                .allMatch(Predicate { h -> h.state().workflowStatus().isTerminal })
         })
 
-
         // Verify that both workflows executed all steps
-        for (context in workflowEngine.workflowExecutions().stream()
-            .map(WorkflowExecution::state).toList()) {
-            Assertions.assertThat(context.workflowStatus().isTerminal).isTrue()
-            Assertions.assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED)
-            Assertions.assertThat(context.workflowStepNames()).containsExactly(
+        for (context in workflowHistoryRepository.findAll().stream()
+            .map(WorkflowHistory::state).toList()) {
+            assertThat(context.workflowStatus().isTerminal).isTrue()
+            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED)
+            assertThat(context.workflowStepNames()).containsExactly(
                 "createUser",
                 "activateUser",
                 "waitASecond",

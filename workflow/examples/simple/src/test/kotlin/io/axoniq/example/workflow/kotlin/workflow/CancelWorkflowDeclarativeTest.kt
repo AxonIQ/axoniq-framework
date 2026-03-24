@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -81,7 +81,7 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         })
 
-        workflowEngine.runWorkflows(false)
+        // workflowEngine.runWorkflows()
 
         Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
             assertThat(workflowEngine.workflowExecutions())

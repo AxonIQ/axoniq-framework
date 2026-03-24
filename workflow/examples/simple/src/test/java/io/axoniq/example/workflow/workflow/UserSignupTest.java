@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -163,18 +163,20 @@ class UserSignupTest {
         });
 
         // simulate all-replayed and start workflows
-        workflowEngine.runWorkflows(false);
+        // workflowEngine.runWorkflows(false);
 
         assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
             assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
-        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
+        assertThat(workflowEngine.workflowExecutions()).isEmpty(); // no running workflows anymore
+
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1); // history is still present
 
         // Verify that both workflows executed all steps
         for (WorkflowHistory workflowHistory : workflowHistoryRepository.findAll()) {

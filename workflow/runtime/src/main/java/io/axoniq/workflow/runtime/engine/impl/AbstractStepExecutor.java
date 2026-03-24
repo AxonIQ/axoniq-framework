@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -179,13 +179,17 @@ public abstract class AbstractStepExecutor {
                             + ", cannot publish step event " + eventMessage.type()));
         }
         logger.trace("Appending event {}", eventMessage.type());
-        return ProcessingContextUtils.executeWithResult(
-                workflowExecution.workflowId(),
-                unitOfWorkFactory,
-                executor,
-                context,
-                ctx -> eventSink.publish(ctx, eventMessage)
-        );
+        return ProcessingContextUtils
+                .executeWithResult(
+                        workflowExecution.workflowId(),
+                        unitOfWorkFactory,
+                        executor,
+                        context,
+                        ctx -> {
+                            logger.trace("Thread: {}, ProcessingContext {}", Thread.currentThread(), ctx);
+                            return eventSink.publish(ctx, eventMessage);
+                        }
+                );
     }
 
     @Nonnull

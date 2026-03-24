@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -22,7 +22,9 @@ import jakarta.annotation.Nullable;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -60,9 +62,23 @@ public class ProcessingContextUtils {
             @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
         var uow = (id == null)
                 ? unitOfWorkFactory.create(customize -> customize.workScheduler(executor))
-                : unitOfWorkFactory.create(id, customize -> customize.workScheduler(executor));
+                : unitOfWorkFactory.create(UUID.randomUUID().toString(),
+                                           customize -> customize.workScheduler(executor)); // FIXME
         return uow.executeWithResult(c -> {
             var ctx = ProcessingContextUtils.copyResources(parentContext, c);
+            ctx.whenComplete(completed ->
+                                     LoggerFactory.getLogger(ProcessingContextUtils.class)
+                                                  .trace("ProcessingContext {} completed", completed)
+            );
+            ctx.onAfterCommit(after -> {
+                LoggerFactory.getLogger(ProcessingContextUtils.class).trace("ProcessingContext {} after", after);
+                return CompletableFuture.completedFuture(null);
+            });
+            ctx.onPrepareCommit(prepare -> {
+                LoggerFactory.getLogger(ProcessingContextUtils.class).trace("ProcessingContext {} prepare", prepare);
+                return CompletableFuture.completedFuture(null);
+            });
+
             return action.apply(ctx);
         });
     }

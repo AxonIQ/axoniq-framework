@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
@@ -72,10 +73,9 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows(false);
-
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
@@ -86,10 +86,10 @@ class CancelWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWo
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
-        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
-            var state = execution.state();
+        for (WorkflowHistory wh : workflowHistoryRepository.findAll()) {
+            var state = wh.state();
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
             assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("stepA", "stepB", "stepC");

@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
@@ -75,10 +76,9 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
         });
 
-        workflowEngine.runWorkflows(false);
-
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions()).allMatch(e -> e.workflowContext().workflowStatus()
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll()).allMatch(e -> e.state().workflowStatus()
                                                                            .isTerminal());
         });
 
@@ -89,14 +89,14 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
-        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
-            var context = execution.workflowContext();
-            assertThat(context.workflowStatus().isTerminal()).isTrue();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+        for (WorkflowHistory history : workflowHistoryRepository.findAll()) {
+            var state = history.state();
+            assertThat(state.workflowStatus().isTerminal()).isTrue();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             // Both steps should be in history: failingStep (failed) and slowStep
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("failingStep", "slowStep");
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("failingStep", "slowStep");
         }
     }
 }
