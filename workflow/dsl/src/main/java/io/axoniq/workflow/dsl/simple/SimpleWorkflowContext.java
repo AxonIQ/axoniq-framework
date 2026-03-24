@@ -102,8 +102,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
                 EventConditions.fromQualifiedName(
-                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
-                             .qualifiedName(),
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
                         e -> associationsUtils.build(super.processingContext()).test(e)
                 ),
                 GLOBAL_ONLY,
