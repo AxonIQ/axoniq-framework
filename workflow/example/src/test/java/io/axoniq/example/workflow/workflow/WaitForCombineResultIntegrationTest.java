@@ -19,17 +19,18 @@ package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.EventCondition;
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
 
@@ -42,6 +43,7 @@ import java.util.function.UnaryOperator;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,17 +77,15 @@ class WaitForCombineResultIntegrationTest
                 ofMillis(1000, new RegistrationReceivedEvent("wf-wait-combine", "other@axoniq.io", "arrived"))
         ));
 
-        var x = delayedPublisher.start();
-
-        await().untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).isNotEmpty());
-
-        x.join();
+        delayedPublisher.start();
 
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
             assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
+
+        await().untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).isEmpty());
 
         var history = workflowHistoryRepository.findAll().iterator().next();
         assertThat(history.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
@@ -100,9 +100,11 @@ class WaitForCombineResultIntegrationTest
 
         public void execute(WaitForCombineWorkflowContext ctx) {
             // Using the new overload of awaitEvent with COMBINE
-            ctx.awaitEvent("waitStep", RegistrationReceivedEvent.class,
+            ctx.awaitEvent("waitStep",
+                           RegistrationReceivedEvent.class,
                            associate(payloadProperty("status"), equalsTo("arrived")),
-                           Duration.ofSeconds(5));
+                           Duration.ofSeconds(5)
+            );
         }
     }
 
@@ -114,21 +116,23 @@ class WaitForCombineResultIntegrationTest
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
 
-        /**
-         * {@inheritDoc}
-         *
-         * overwrite this method to change the PayloadReducer.
-         */
         @Override
-        @Nonnull
-        public WorkflowStepResult waitFor(
-                @Nonnull String stepName,
-                @Nonnull EventCondition eventCondition,
-                @Nonnull PayloadReducer resultPayloadReducer,
-                @Nonnull Duration timeout,
-                @Nonnull EventNameCustomizer eventNameCustomizer
-        ) {
-            return super.waitFor(stepName, eventCondition, COMBINE_GLOBAL_AND_LOCAL, timeout, eventNameCustomizer);
+        public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
+                                Duration timeout) {
+            return waitFor(PrimitiveCommands.blockingWait(
+                    stepName,
+                    EventConditions.fromQualifiedName(
+                            super.processingContext()
+                                 .component(MessageTypeResolver.class).resolve(eventType)
+                                 .orElseThrow().qualifiedName(),
+                            e -> associationsUtils.build(super.processingContext()).test(e)
+                    ),
+                    COMBINE_GLOBAL_AND_LOCAL,
+                    timeout,
+                    TypeReference.fromType(eventType),
+                    super.processingContext().component(Converter.class),
+                    defaults()
+            ));
         }
     }
 
