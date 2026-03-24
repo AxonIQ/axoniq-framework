@@ -49,7 +49,7 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
         @Container
         @JvmField
         val toxiproxy: ToxiproxyContainer = ToxiproxyContainer(
-            DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.9.0")
+                DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.9.0")
         )
     }
 
@@ -70,9 +70,9 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
 
         val toxiproxyClient = ToxiproxyClient(toxiproxy.host, toxiproxy.controlPort)
         proxy = toxiproxyClient.createProxy(
-            "mock-server",
-            "0.0.0.0:$PROXY_PORT",
-            "$dockerHostIp:${mockServer.port}",
+                "mock-server",
+                "0.0.0.0:$PROXY_PORT",
+                "$dockerHostIp:${mockServer.port}",
         )
     }
 
@@ -119,11 +119,11 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
     @Test
     fun `reconnects when network becomes a black hole and heartbeats stop arriving`() {
         mockServer.clientSettings = ClientSettingsV2(
-            heartbeatInterval = 200,
-            heartbeatTimeout = 1000,
-            processorReportInterval = 5000,
-            handlerReportInterval = 5000,
-            applicationReportInterval = 5000,
+                heartbeatInterval = 200,
+                heartbeatTimeout = 1000,
+                processorReportInterval = 5000,
+                handlerReportInterval = 5000,
+                applicationReportInterval = 5000,
         )
         client = buildClient()
         client.start()
@@ -186,11 +186,11 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
     @Test
     fun `recovers after extended black-hole outage`() {
         mockServer.clientSettings = ClientSettingsV2(
-            heartbeatInterval = 200,
-            heartbeatTimeout = 1000,
-            processorReportInterval = 5000,
-            handlerReportInterval = 5000,
-            applicationReportInterval = 5000,
+                heartbeatInterval = 200,
+                heartbeatTimeout = 1000,
+                processorReportInterval = 5000,
+                handlerReportInterval = 5000,
+                applicationReportInterval = 5000,
         )
         client = buildClient()
         client.start()
@@ -214,34 +214,35 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
         every { setupPayloadCreator.createReport() } returns minimalSetupPayload()
 
         val config = AxoniqPlatformConfiguration("test-env", "test-token", "test-app")
-            .host(toxiproxy.host)
-            .port(toxiproxy.getMappedPort(PROXY_PORT))
-            .secure(false)
+                .host(toxiproxy.host)
+                .port(toxiproxy.getMappedPort(PROXY_PORT))
+                .secure(false)
 
         return AxoniqConsoleRSocketClient(
-            properties = config,
-            setupPayloadCreator = setupPayloadCreator,
-            registrar = RSocketHandlerRegistrar(encodingStrategy),
-            encodingStrategy = encodingStrategy,
-            clientSettingsService = ClientSettingsService(),
+                properties = config,
+                setupPayloadCreator = setupPayloadCreator,
+                registrar = RSocketHandlerRegistrar(encodingStrategy),
+                encodingStrategy = encodingStrategy,
+                clientSettingsService = ClientSettingsService(),
+                instanceName = "test-instance"
         )
     }
 
     private fun minimalSetupPayload() = SetupPayload(
-        commandBus = CommandBusInformation(
-            type = "test", axonServer = false, localSegmentType = null,
-            context = null, messageSerializer = null,
-        ),
-        queryBus = QueryBusInformation(
-            type = "test", axonServer = false, localSegmentType = null,
-            context = null, messageSerializer = null, serializer = null,
-        ),
-        eventStore = EventStoreInformation(
-            type = "test", axonServer = false, context = null,
-            eventSerializer = null, snapshotSerializer = null,
-        ),
-        processors = emptyList(),
-        versions = Versions(frameworkVersion = "test", moduleVersions = emptyList<ModuleVersion>()),
-        upcasters = emptyList(),
+            commandBus = CommandBusInformation(
+                    type = "test", axonServer = false, localSegmentType = null,
+                    context = null, messageSerializer = null,
+            ),
+            queryBus = QueryBusInformation(
+                    type = "test", axonServer = false, localSegmentType = null,
+                    context = null, messageSerializer = null, serializer = null,
+            ),
+            eventStore = EventStoreInformation(
+                    type = "test", axonServer = false, context = null,
+                    eventSerializer = null, snapshotSerializer = null,
+            ),
+            processors = emptyList(),
+            versions = Versions(frameworkVersion = "test", moduleVersions = emptyList<ModuleVersion>()),
+            upcasters = emptyList(),
     )
 }

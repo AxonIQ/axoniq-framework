@@ -92,11 +92,11 @@ class AxoniqConsoleRSocketClientIntegrationTest {
     @Test
     fun `disconnects when heartbeats from server stop arriving`() {
         mockServer.clientSettings = ClientSettingsV2(
-            heartbeatInterval = 200,
-            heartbeatTimeout = 1000,
-            processorReportInterval = 5000,
-            handlerReportInterval = 5000,
-            applicationReportInterval = 5000,
+                heartbeatInterval = 200,
+                heartbeatTimeout = 1000,
+                processorReportInterval = 5000,
+                handlerReportInterval = 5000,
+                applicationReportInterval = 5000,
         )
         client = buildClient()
         client.start()
@@ -117,34 +117,35 @@ class AxoniqConsoleRSocketClientIntegrationTest {
         every { setupPayloadCreator.createReport() } returns minimalSetupPayload()
 
         val config = AxoniqPlatformConfiguration("test-env", "test-token", "test-app")
-            .host("localhost")
-            .port(mockServer.port)
-            .secure(false)
+                .host("localhost")
+                .port(mockServer.port)
+                .secure(false)
 
         return AxoniqConsoleRSocketClient(
-            properties = config,
-            setupPayloadCreator = setupPayloadCreator,
-            registrar = RSocketHandlerRegistrar(encodingStrategy),
-            encodingStrategy = encodingStrategy,
-            clientSettingsService = ClientSettingsService(),
+                properties = config,
+                setupPayloadCreator = setupPayloadCreator,
+                registrar = RSocketHandlerRegistrar(encodingStrategy),
+                encodingStrategy = encodingStrategy,
+                clientSettingsService = ClientSettingsService(),
+                instanceName = "test-instance"
         )
     }
 
     private fun minimalSetupPayload() = SetupPayload(
-        commandBus = CommandBusInformation(
-            type = "test", axonServer = false, localSegmentType = null,
-            context = null, messageSerializer = null,
-        ),
-        queryBus = QueryBusInformation(
-            type = "test", axonServer = false, localSegmentType = null,
-            context = null, messageSerializer = null, serializer = null,
-        ),
-        eventStore = EventStoreInformation(
-            type = "test", axonServer = false, context = null,
-            eventSerializer = null, snapshotSerializer = null,
-        ),
-        processors = emptyList(),
-        versions = Versions(frameworkVersion = "test", moduleVersions = emptyList<ModuleVersion>()),
-        upcasters = emptyList(),
+            commandBus = CommandBusInformation(
+                    type = "test", axonServer = false, localSegmentType = null,
+                    context = null, messageSerializer = null,
+            ),
+            queryBus = QueryBusInformation(
+                    type = "test", axonServer = false, localSegmentType = null,
+                    context = null, messageSerializer = null, serializer = null,
+            ),
+            eventStore = EventStoreInformation(
+                    type = "test", axonServer = false, context = null,
+                    eventSerializer = null, snapshotSerializer = null,
+            ),
+            processors = emptyList(),
+            versions = Versions(frameworkVersion = "test", moduleVersions = emptyList<ModuleVersion>()),
+            upcasters = emptyList(),
     )
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ public class AxoniqPlatformConfiguration {
     private Boolean secure = true;
     private Integer port = 7000;
     private String hostname = ManagementFactory.getRuntimeMXBean().getName();
-    private String nodeId = randomNodeId();
     private Long initialDelay = 0L;
 
     private ScheduledExecutorService reportingTaskExecutor;
@@ -63,7 +62,8 @@ public class AxoniqPlatformConfiguration {
 
     /**
      * The hostname of the application. Defaults to the runtime name of the JVM. Needs to be unique in combination with
-     * the {@code nodeId}.
+     * the {@code nodeId}. Does not take effect in case Axon Server is configured, in which case that clientId is used
+     * instead. In all other cases will use the provided hostname, suffixed by 4 alphanumerical characters.
      *
      * @param hostname The hostname of the application
      * @return The builder for fluent interfacing
@@ -71,19 +71,6 @@ public class AxoniqPlatformConfiguration {
     public AxoniqPlatformConfiguration hostname(String hostname) {
         BuilderUtils.assertNonEmpty(hostname, "Hostname may not be null or empty");
         this.hostname = hostname;
-        return this;
-    }
-
-    /**
-     * The node id of the application. Defaults to a random four character string. This is to prevent conflicts when
-     * multiple instances of the same application are running on the same host.
-     *
-     * @param nodeId The node id of the application
-     * @return The builder for fluent interfacing
-     */
-    public AxoniqPlatformConfiguration nodeId(String nodeId) {
-        BuilderUtils.assertNonEmpty(nodeId, "Node id may not be null or empty");
-        this.nodeId = nodeId;
         return this;
     }
 
@@ -180,10 +167,6 @@ public class AxoniqPlatformConfiguration {
         return applicationName.replaceAll("([\\[\\]])", "-");
     }
 
-    public String getInstanceName() {
-        return getHostname() + "-" + getNodeId();
-    }
-
     public String getHost() {
         return host;
     }
@@ -200,16 +183,7 @@ public class AxoniqPlatformConfiguration {
         return hostname;
     }
 
-    public String getNodeId() {
-        return nodeId;
-    }
-
     public Long getInitialDelay() {
         return initialDelay;
-    }
-
-    private String randomNodeId() {
-        String uuid = UUID.randomUUID().toString();
-        return uuid.substring(uuid.length() - 4);
     }
 }

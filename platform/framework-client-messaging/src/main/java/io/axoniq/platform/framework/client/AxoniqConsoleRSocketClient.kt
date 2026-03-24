@@ -63,7 +63,8 @@ class AxoniqConsoleRSocketClient(
         private val setupPayloadCreator: SetupPayloadCreator,
         private val registrar: RSocketHandlerRegistrar,
         private val encodingStrategy: RSocketPayloadEncodingStrategy,
-        private val clientSettingsService: ClientSettingsService
+        private val clientSettingsService: ClientSettingsService,
+        private val instanceName: String,
 ) {
     private val environmentId: String = properties.environmentId
     private val accessToken: String = properties.accessToken
@@ -73,7 +74,6 @@ class AxoniqConsoleRSocketClient(
     private val secure: Boolean = properties.secure
     private val initialDelay: Long = properties.initialDelay
     private val executor: ScheduledExecutorService = properties.getReportingTaskExecutor()
-    private val instanceName: String = properties.instanceName
     private val heartbeatOrchestrator = HeartbeatOrchestrator()
     private var maintenanceTask: ScheduledFuture<*>? = null
     private val logger = LoggerFactory.getLogger(this::class.java)
