@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:./examples/bike-rental/rental_db;AUTO_SERVER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create
+  application:
+    name: bike-rental
+  docker:
+    compose:
+      file: file:examples/bike-rental/docker-compose.yaml
+      lifecycle-management: start_only
+  main:
+    web-application-type: reactive
+axon:
+  axonserver:
+    enabled: true
+  eventhandling:
+    processors:
+      [io.axoniq.demo.bikerental.rental]:
+        mode: pooled
+        initialSegmentCount: 1
+springdoc:
+  swagger-ui:
+    try-it-out-enabled: true

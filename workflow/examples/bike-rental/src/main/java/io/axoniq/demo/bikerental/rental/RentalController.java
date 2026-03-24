@@ -1,6 +1,8 @@
 package io.axoniq.demo.bikerental.rental;
 
 import io.axoniq.demo.bikerental.coreapi.rental.BikeStatus;
+import io.axoniq.demo.bikerental.coreapi.rental.FindAllBikeRentals;
+import io.axoniq.demo.bikerental.coreapi.rental.FindRentalByBikeIdQuery;
 import io.axoniq.demo.bikerental.coreapi.rental.RegisterBikeCommand;
 import io.axoniq.demo.bikerental.coreapi.rental.RequestBikeCommand;
 import io.axoniq.demo.bikerental.coreapi.rental.ReturnBikeCommand;
@@ -23,8 +25,6 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequestMapping("/")
 public class RentalController {
 
-    public static final String FIND_ALL_QUERY = "findAll";
-    public static final String FIND_ONE_QUERY = "findOne";
     private static final List<String> LOCATIONS = Arrays.asList("Amsterdam",
                                                                 "Paris",
                                                                 "Vilnius",
@@ -74,12 +74,12 @@ public class RentalController {
 
     @GetMapping("/bikes")
     public CompletableFuture<List<BikeStatus>> findAll() {
-        return queryGateway.query(FIND_ALL_QUERY, null, ResponseTypes.multipleInstancesOf(BikeStatus.class));
+        return queryGateway.queryMany(FindAllBikeRentals.INSTANCE, BikeStatus.class);
     }
 
     @GetMapping("/bikes/{bikeId}")
     public CompletableFuture<BikeStatus> findStatus(@PathVariable("bikeId") String bikeId) {
-        return queryGateway.query(FIND_ONE_QUERY, bikeId, BikeStatus.class);
+        return queryGateway.query(new FindRentalByBikeIdQuery(bikeId), BikeStatus.class);
     }
 
     private String randomLocation() {

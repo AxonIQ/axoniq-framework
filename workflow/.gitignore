@@ -33,3 +33,6 @@ CLAUDE.md
 # AI ASSISTANT - Cursor
 .vscode
 .cursor
+
+/examples/bike-rental/rental_db.mv.db
+/examples/bike-rental/rental_db.trace.db

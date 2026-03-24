@@ -114,6 +114,41 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         ));
     }
 
+    public <T> WorkflowStepResult waitFor(
+            String stepName, Class<T> eventType,
+            Predicate<T> predicate,
+            Duration timeout) {
+        return waitFor(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                             .qualifiedName(),
+                        e -> predicate.test(e.payloadAs(eventType))
+                ),
+                GLOBAL_ONLY,
+                timeout,
+                defaults()
+        );
+    }
+
+    public <T> WorkflowStepResult waitFor(
+            String stepName,
+            Class<T> eventType,
+            AssociationsUtils associationsUtils,
+            Duration timeout) {
+        return waitFor(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
+                        e -> associationsUtils.build(super.processingContext()).test(e)
+                ),
+                GLOBAL_ONLY,
+                timeout,
+                defaults()
+        );
+    }
+
     public <T> T awaitEvent(String stepName, Class<T> eventType, Duration timeout) {
         return this.awaitEvent(stepName, eventType, e -> true, timeout);
     }

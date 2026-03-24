@@ -21,22 +21,18 @@ import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModuleEnhancer;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
-import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.axonframework.common.configuration.Module;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,20 +89,5 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         workflowEngine.shutdown();
         configuration.shutdown();
         ((MutableWorkflowHistoryRepository) workflowHistoryRepository).clear();
-    }
-
-    @RegistrationScope
-    static class WorkflowModuleEnhancer implements ConfigurationEnhancer {
-
-        private final Module workflowModule;
-
-        WorkflowModuleEnhancer(Module workflowModule) {
-            this.workflowModule = workflowModule;
-        }
-
-        @Override
-        public void enhance(@NotNull ComponentRegistry componentRegistry) {
-            componentRegistry.registerModule(workflowModule);
-        }
     }
 }
