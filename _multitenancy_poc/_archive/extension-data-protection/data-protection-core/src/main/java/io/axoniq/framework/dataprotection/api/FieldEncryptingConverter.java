@@ -178,18 +178,6 @@ public class FieldEncryptingConverter implements Converter {
     }
 
     /**
-     * Checks if this converter can convert between the given source and target types.
-     *
-     * @param sourceType The source type
-     * @param targetType The target type
-     * @return true if conversion is supported, false otherwise
-     */
-    @Override
-    public boolean canConvert(Type sourceType, Type targetType) {
-        return delegateConverter.canConvert(sourceType, targetType);
-    }
-
-    /**
      * Converts the given {@code object} to the expected target type.
      * <p>
      * This method intelligently handles both serialization and deserialization:

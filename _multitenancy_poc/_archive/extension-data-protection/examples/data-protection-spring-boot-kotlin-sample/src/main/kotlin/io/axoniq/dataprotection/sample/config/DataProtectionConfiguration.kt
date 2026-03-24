@@ -30,7 +30,7 @@ import io.axoniq.license.entitlement.EntitlementManager
 import jakarta.persistence.EntityManagerFactory
 import org.axonframework.conversion.ChainingContentTypeConverter
 import org.axonframework.conversion.Converter
-import org.axonframework.conversion.json.JacksonConverter
+import org.axonframework.conversion.jackson2.Jackson2Converter
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.AutoConfigureBefore
@@ -90,7 +90,7 @@ class DataProtectionConfiguration {
     /**
      * Creates the base converter bean that Axon Framework will use for all conversions.
      *
-     * This bean is a FieldEncryptingConverter which wraps a JacksonConverter
+     * This bean is a FieldEncryptingConverter which wraps a Jackson2Converter
      * and handles automatic encryption/decryption of @PersonalData annotated fields.
      *
      * Axon's ConverterAutoConfiguration will automatically use this converter to
@@ -105,7 +105,7 @@ class DataProtectionConfiguration {
         val contentTypeConverter = ChainingContentTypeConverter(
             this::class.java.classLoader
         )
-        val delegateConverter = JacksonConverter(objectMapper, contentTypeConverter)
+        val delegateConverter = Jackson2Converter(objectMapper, contentTypeConverter)
         return FieldEncryptingConverter(cryptoEngine, delegateConverter)
     }
 
@@ -124,7 +124,7 @@ class DataProtectionConfiguration {
      */
     @Bean
     fun fieldEncrypter(cryptoEngine: CryptoEngine): FieldEncrypter {
-        val converter = JacksonConverter()
+        val converter = Jackson2Converter()
         return FieldEncrypter(cryptoEngine, converter)
     }
 }

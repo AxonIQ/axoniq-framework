@@ -26,6 +26,9 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  * @author Stefan Mirkovic
  */
 public class DataProtectionAxoniqComponent implements AxoniqAddon {
+    /**
+     * The unique identifier for the Data Protection extension.
+     */
     public static final String IDENTIFIER = "framework.data_protection";
 
     @Override
