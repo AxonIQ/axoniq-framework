@@ -47,6 +47,8 @@
 
     <modules>
         <module>postgresql-core</module>
+        <module>postgresql-spring-boot-autoconfigure</module>
+        <module>postgresql-spring-boot-starter</module>
     </modules>
 
     <properties>
@@ -58,6 +60,8 @@
         <axon-framework.version>5.0.2</axon-framework.version>
         <postgresql.version>42.7.8</postgresql.version>
         <hikari-cp.version>7.0.2</hikari-cp.version>
+        <!-- Autodetection -->
+        <spring-boot.version>3.5.8</spring-boot.version>
         <!-- Conversion -->
         <jackson.version>2.20.0</jackson.version>
         <!-- Logging -->
