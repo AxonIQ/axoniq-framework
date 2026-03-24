@@ -23,13 +23,11 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
@@ -51,6 +49,10 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Simple workflow based on {@link SimpleWorkflowContext}.
+ *
+ * @author Stefan Dragisic
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class UserSignupTest {
 
@@ -94,7 +96,9 @@ class UserSignupTest {
 
         @Test
         void shouldExecuteAllStepsOnFirstRun() {
-            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine, workflowHistoryRepository);
+            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher,
+                                                                workflowEngine,
+                                                                workflowHistoryRepository);
         }
     }
 
@@ -118,7 +122,9 @@ class UserSignupTest {
 
         @Test
         void shouldExecuteAllStepsOnFirstRun() {
-            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher, workflowEngine, workflowHistoryRepository);
+            UserSignupTest.this.shouldExecuteAllStepsOnFirstRun(delayedPublisher,
+                                                                workflowEngine,
+                                                                workflowHistoryRepository);
         }
     }
 
@@ -175,18 +181,18 @@ class UserSignupTest {
             var state = workflowHistory.state();
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder(
+            assertThat(state.workflowStepNames()).containsExactly(
                     "createUser",
                     "activateUser",
                     "sendWelcomeEmail",
                     "waitASecond",
-                    "waitForMagicToHappen"
+                    "waitForMagicToHappen",
+                    "modifyPayload"
             );
 
-            // FIXME -> see #61
-            // var payload = workflowExecution.workflowContext().workflowPayload();
-            // assertThat(payload.containsKey("magic"));
-            // assertThat(payload.containsKey("__createUser"));
+            var payload = workflowHistory.state().payload();
+            assertThat(payload.containsKey("magic"));
+            assertThat(payload.containsKey("__createUser"));
         }
     }
 }

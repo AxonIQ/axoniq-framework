@@ -77,8 +77,8 @@ class Kontext(
         stepName: String,
         action: (payload: Map<String, Any?>) -> T,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.local(),
-        resultMapping: PayloadReducer = PayloadReducer.all(),
+        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
@@ -105,6 +105,7 @@ class Kontext(
     fun <T : Any> awaitEvent(
         stepName: String,
         type: KClass<T>,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
@@ -117,6 +118,7 @@ class Kontext(
                             .resolve(type.java)
                             .orElseThrow().qualifiedName
                     ),
+                    resultMapping,
                     timeout.toJavaDuration(),
                     eventNameCustomizer
                 ),
@@ -139,8 +141,8 @@ class Kontext(
         stepName: String,
         action: PayloadProcessor,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.local(),
-        resultMapping: PayloadReducer = PayloadReducer.all(),
+        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.execute(
@@ -158,12 +160,14 @@ class Kontext(
     fun waitFor(
         stepName: String,
         qualifiedName: QualifiedName,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.waitFor(
         PrimitiveCommands.WorkflowStepResultWaitForCommand(
             stepName,
             EventConditions.fromQualifiedName(qualifiedName),
+            resultMapping,
             timeout.toJavaDuration(),
             eventNameCustomizer
         )
@@ -176,10 +180,10 @@ class Kontext(
         eventNameCustomizer: EventNameCustomizer = defaults()
     ) {
         val result = waitFor(
-            stepName,
-            QualifiedName(Void::class.java),
-            timeout,
-            eventNameCustomizer
+            stepName = stepName,
+            qualifiedName = QualifiedName(Void::class.java),
+            timeout = timeout,
+            eventNameCustomizer = eventNameCustomizer
         )
         if (result.failure() && result.error().isPresent) {
             throw result.error().get()

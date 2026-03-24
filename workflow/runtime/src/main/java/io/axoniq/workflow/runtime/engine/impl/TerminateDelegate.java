@@ -116,7 +116,7 @@ public class TerminateDelegate implements TerminatePrimitive {
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
 
         ProcessingContextUtils.executeWithResult(
-                null,
+                workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
@@ -138,7 +138,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         var eventNameCustomizer = command.eventNameCustomizer();
 
         ProcessingContextUtils.executeWithResult(
-                null,
+                workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),

@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -31,6 +32,8 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD;
+
 /**
  * Utility with factory methods for workflow event messages.
  *
@@ -38,6 +41,7 @@ import java.util.function.Predicate;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@Internal
 public class EventMessageUtils {
 
     private EventMessageUtils() {
@@ -179,21 +183,28 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow step has completed.
      *
-     * @param context    workflow context.
-     * @param stepName   name of the step.
-     * @param result     result of the step.
-     * @param customizer event name customizer.
+     * @param context                  workflow context.
+     * @param stepName                 name of the step.
+     * @param result                   result of the step.
+     * @param resultPayloadReducerName name of the result payload reducer, or {@code null} if no reducer is used, see
+     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_LOCAL_ONLY},
+     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_GLOBAL_ONLY},
+     *                                 {@link io.axoniq.workflow.runtime.api.PayloadReducer#NAME_COMBINE_LOCAL_AND_GLOBAL}
+     * @param customizer               event name customizer.
      * @return event message.
      */
     @Nonnull
     public static EventMessage completedStep(@Nonnull WorkflowContext context,
                                              @Nonnull String stepName,
                                              @Nonnull Map<String, Object> result,
+                                             @Nullable String resultPayloadReducerName,
                                              @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
-        return new GenericEventMessage(new MessageType(name), result,
-                                       MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED)
-        );
+        var meta = MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED);
+        if (resultPayloadReducerName != null) {
+            meta = meta.and(METADATA_KEY_MODIFY_PAYLOAD, resultPayloadReducerName);
+        }
+        return new GenericEventMessage(new MessageType(name), result, meta);
     }
 
     /**

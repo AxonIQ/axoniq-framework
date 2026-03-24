@@ -19,6 +19,7 @@ package io.axoniq.workflow.runtime.engine.execution;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
@@ -107,12 +108,14 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Registers a new wait condition.
      *
-     * @param stepName            waiting step name.
-     * @param eventCondition      event condition.
-     * @param eventNameCustomizer event name customizer.
+     * @param stepName             waiting step name.
+     * @param eventCondition       event condition.
+     * @param resultPayloadReducer step result payload reducer.
+     * @param eventNameCustomizer  event name customizer.
      */
     void registerWaitCondition(@Nonnull String stepName,
                                @Nonnull EventCondition eventCondition,
+                               @Nonnull PayloadReducer resultPayloadReducer,
                                @Nonnull EventNameCustomizer eventNameCustomizer);
 
     /**

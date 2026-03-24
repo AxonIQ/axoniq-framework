@@ -81,13 +81,14 @@ public class PrimitiveCommands {
     public static <T> BlockingWaitForCommand<T> blockingWait(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultReducer,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
             @Nonnull Converter converter,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
         return new BlockingWaitForCommand<>(
-                PrimitiveCommands.wait(stepName, eventCondition, duration, eventNameCustomizer),
+                PrimitiveCommands.wait(stepName, eventCondition, resultReducer, duration, eventNameCustomizer),
                 type,
                 converter
         );
@@ -104,8 +105,8 @@ public class PrimitiveCommands {
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    PayloadReducer.local(),
-                                                    PayloadReducer.all(),
+                                                    PayloadReducer.LOCAL_ONLY,
+                                                    PayloadReducer.GLOBAL_ONLY,
                                                     duration,
                                                     eventNameCustomizer);
     }
@@ -113,10 +114,15 @@ public class PrimitiveCommands {
     public static WorkflowStepResultWaitForCommand wait(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultReducer,
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-        return new WorkflowStepResultWaitForCommand(stepName, eventCondition, duration, eventNameCustomizer);
+        return new WorkflowStepResultWaitForCommand(stepName,
+                                                    eventCondition,
+                                                    resultReducer,
+                                                    duration,
+                                                    eventNameCustomizer);
     }
 
     @Internal
@@ -148,14 +154,14 @@ public class PrimitiveCommands {
 
         @NotNull
         @Override
-        public PayloadReducer parameterMapping() {
-            return delegate.parameterMapping();
+        public PayloadReducer parameterPayloadReducer() {
+            return delegate.parameterPayloadReducer();
         }
 
         @NotNull
         @Override
-        public PayloadReducer resultMapping() {
-            return delegate.resultMapping();
+        public PayloadReducer resultPayloadReducer() {
+            return delegate.resultPayloadReducer();
         }
 
         @NotNull
@@ -202,6 +208,12 @@ public class PrimitiveCommands {
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return delegate.eventNameCustomizer();
+        }
+
+        @Nonnull
+        @Override
+        public PayloadReducer resultPayloadReducer() {
+            return delegate.resultPayloadReducer();
         }
     }
 
@@ -252,13 +264,13 @@ public class PrimitiveCommands {
 
         @Nonnull
         @Override
-        public PayloadReducer parameterMapping() {
+        public PayloadReducer parameterPayloadReducer() {
             return parameterMapping;
         }
 
         @Nonnull
         @Override
-        public PayloadReducer resultMapping() {
+        public PayloadReducer resultPayloadReducer() {
             return resultMapping;
         }
 
@@ -284,6 +296,7 @@ public class PrimitiveCommands {
     public record WorkflowStepResultWaitForCommand(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) implements WaitForPrimitive.WaitForCommand<WorkflowStepResult> {
