@@ -107,7 +107,7 @@ public void execute(SimpleWorkflowContext ctx) {
     var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
                                      InventoryService::reserveStock);
     if (!reserved) {
-        ctx.cancel("Stock unavailable");
+        ctx.fail("Stock unavailable");
         return;
     }
 

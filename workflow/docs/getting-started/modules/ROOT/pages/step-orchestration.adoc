@@ -1,5 +1,5 @@
-= Parallel Steps
-:navtitle: Parallel Steps
+= Step Orchestration
+:navtitle: Step Orchestration
 
 Real-world workflows often need to run steps concurrently.
 You might want to ship the order and send a confirmation email at the same time, or call multiple services and take the first response.
@@ -109,7 +109,7 @@ public void execute(SimpleWorkflowContext ctx) {
     var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
                                      InventoryService::reserveStock);
     if (!reserved) {
-        ctx.cancel("Stock unavailable");
+        ctx.fail("Stock unavailable");
         return;
     }
 

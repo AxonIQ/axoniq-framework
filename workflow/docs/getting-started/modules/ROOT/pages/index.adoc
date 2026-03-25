@@ -36,7 +36,7 @@ Along the way, you will learn each core concept:
 . *xref:first-workflow.adoc[Your First Workflow]* — Create a minimal workflow that executes actions
 . *xref:waiting-for-events.adoc[Waiting for Events]* — Suspend the workflow until payment is confirmed
 . *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
-. *xref:parallel-steps.adoc[Parallel Steps]* — Ship and notify the customer concurrently
+. *xref:step-orchestration.adoc[Step Orchestration]* — Ship and notify the customer concurrently
 . *xref:testing-workflows.adoc[Testing Workflows]* — Write integration tests for your workflow
 
 [TIP]

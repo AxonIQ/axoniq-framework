@@ -3,5 +3,5 @@
 * xref:first-workflow.adoc[]
 * xref:waiting-for-events.adoc[]
 * xref:payload-and-state.adoc[]
-* xref:parallel-steps.adoc[]
+* xref:step-orchestration.adoc[]
 * xref:testing-workflows.adoc[]
