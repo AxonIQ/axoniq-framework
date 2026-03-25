@@ -18,6 +18,7 @@
 package io.axoniq.framework.extension.dataprotection;
 
 import io.axoniq.license.entitlement.AxoniqAddon;
+import org.jspecify.annotations.NonNull;
 
 /**
  * AxoniqComponent implementation for the Axon Framework Data Protection Extension. This allows the extension to be
@@ -33,12 +34,12 @@ public class DataProtectionAxoniqComponent implements AxoniqAddon {
     public static final String IDENTIFIER = "framework.data_protection";
 
     @Override
-    public String identifier() {
+    public @NonNull String identifier() {
         return IDENTIFIER;
     }
 
     @Override
-    public String name() {
+    public @NonNull String name() {
         return "Axon Framework Data Protection Extension";
     }
 }
