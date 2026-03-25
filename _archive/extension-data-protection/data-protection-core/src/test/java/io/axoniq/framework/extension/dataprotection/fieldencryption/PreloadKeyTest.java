@@ -38,14 +38,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests of the scenario that a keyid is preloaded through the FieldEncrypter methods rather than provided through
  * a @DataSubjectId
  */
-public class PreloadKeyTest {
+class PreloadKeyTest {
 
     private CryptoEngine cryptoEngine;
     private FieldEncrypter fieldEncrypter;
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 

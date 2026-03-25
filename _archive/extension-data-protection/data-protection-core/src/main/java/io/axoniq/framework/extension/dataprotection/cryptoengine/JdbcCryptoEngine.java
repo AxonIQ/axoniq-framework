@@ -18,7 +18,6 @@
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
 import io.axoniq.framework.extension.dataprotection.internal.utils.ExceptionFactory;
-import io.axoniq.license.entitlement.EntitlementManager;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -46,14 +45,12 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
     /**
      * Constructs a new JdbcCryptoEngine.
      *
-     * @param dataSource the DataSource
-     * @param tableName the SQL name table in which keys will be stored
-     * @param keyIdColumnName the SQL name of the column in which the key id will be stored
+     * @param dataSource        the DataSource
+     * @param tableName         the SQL name table in which keys will be stored
+     * @param keyIdColumnName   the SQL name of the column in which the key id will be stored
      * @param keyDataColumnName the SQL name of the column in which the key data will be stored
-     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JdbcCryptoEngine(DataSource dataSource, String tableName, String keyIdColumnName, String keyDataColumnName, EntitlementManager entitlementManager) {
-        super(entitlementManager);
+    public JdbcCryptoEngine(DataSource dataSource, String tableName, String keyIdColumnName, String keyDataColumnName) {
         this.dataSource = dataSource;
         this.tableName = tableName;
         this.keyIdColumnName = keyIdColumnName;
@@ -61,15 +58,14 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
     }
 
     /**
-     * Constructs a new JdbcCryptoEngine, using "id" as the SQL name of the key id column, and "secret_key" as the
-     * SQL name of the key data column.
+     * Constructs a new JdbcCryptoEngine, using "id" as the SQL name of the key id column, and "secret_key" as the SQL
+     * name of the key data column.
      *
      * @param dataSource the DataSource
-     * @param tableName the SQL name table in which keys will be stored
-     * @param entitlementManager the {@link EntitlementManager} for license validation
+     * @param tableName  the SQL name table in which keys will be stored
      */
-    public JdbcCryptoEngine(DataSource dataSource, String tableName, EntitlementManager entitlementManager) {
-        this(dataSource, tableName, "id", "secret_key", entitlementManager);
+    public JdbcCryptoEngine(DataSource dataSource, String tableName) {
+        this(dataSource, tableName, "id", "secret_key");
     }
 
     /**
@@ -77,10 +73,9 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
      * of the key data column, and "data_protection_keys" as the SQL name of the table.
      *
      * @param dataSource the DataSource
-     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JdbcCryptoEngine(DataSource dataSource, EntitlementManager entitlementManager) {
-        this(dataSource, "data_protection_keys", entitlementManager);
+    public JdbcCryptoEngine(DataSource dataSource) {
+        this(dataSource, "data_protection_keys");
     }
 
     /**

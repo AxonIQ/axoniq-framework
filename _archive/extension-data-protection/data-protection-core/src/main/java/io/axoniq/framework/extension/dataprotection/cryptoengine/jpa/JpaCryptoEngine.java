@@ -20,7 +20,6 @@ package io.axoniq.framework.extension.dataprotection.cryptoengine.jpa;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.DatabaseBackedCryptoEngine;
 import io.axoniq.framework.extension.dataprotection.internal.utils.ExceptionFactory;
-import io.axoniq.license.entitlement.EntitlementManager;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.PersistenceException;
@@ -51,26 +50,21 @@ public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {
     private final Constructor<? extends KeyEntity> entityConstructor;
 
     /**
-     * Creates a new {@link JpaCryptoEngine}. Will use {@link DefaultKeyEntity} as the class to
-     * store key entities.
+     * Creates a new {@link JpaCryptoEngine}. Will use {@link DefaultKeyEntity} as the class to store key entities.
      *
      * @param emf the {@link EntityManagerFactory} to use.
-     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JpaCryptoEngine(EntityManagerFactory emf, EntitlementManager entitlementManager) {
-        this(emf, DefaultKeyEntity.class, entitlementManager);
-
+    public JpaCryptoEngine(EntityManagerFactory emf) {
+        this(emf, DefaultKeyEntity.class);
     }
 
     /**
      * Creates a new {@link JpaCryptoEngine} for a custom entity class.
      *
-     * @param emf the {@link EntityManagerFactory} to use.
+     * @param emf         the {@link EntityManagerFactory} to use.
      * @param entityClass the entity used to store key information
-     * @param entitlementManager the {@link EntitlementManager} for license validation
      */
-    public JpaCryptoEngine(EntityManagerFactory emf, Class<? extends KeyEntity> entityClass, EntitlementManager entitlementManager) {
-        super(entitlementManager);
+    public JpaCryptoEngine(EntityManagerFactory emf, Class<? extends KeyEntity> entityClass) {
         this.emf = emf;
         this.entityClass = entityClass;
         try {

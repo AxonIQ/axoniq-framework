@@ -46,7 +46,9 @@ public abstract class Utils {
      * @param rootToken the Vault root token for authentication
      * @return a configured VaultCryptoEngine instance
      */
-    public static VaultCryptoEngine initVaultCryptoEngine(@Nullable Integer engineVersion, String vaultAddress, String rootToken) {
+    public static VaultCryptoEngine initVaultCryptoEngine(@Nullable Integer engineVersion,
+                                                          String vaultAddress,
+                                                          String rootToken) {
         /* Create the OkHttpClient. */
         OkHttpClient okHttpClient = Utils.getUnsafeOkHttpClient();
 
@@ -60,7 +62,9 @@ public abstract class Utils {
          * Both engines can coexist in the same Vault instance on different mount paths.
          */
         String prefix = (engineVersion != null && engineVersion == 2) ? "secret/data/" : "secret-v1/";
-        return new VaultCryptoEngine(okHttpClient, vaultAddress, rootToken, prefix, TestUtils.mockEntitlementManager());
+        VaultCryptoEngine cryptoEngine = new VaultCryptoEngine(okHttpClient, vaultAddress, rootToken, prefix);
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
+        return cryptoEngine;
     }
 
     private Utils() {

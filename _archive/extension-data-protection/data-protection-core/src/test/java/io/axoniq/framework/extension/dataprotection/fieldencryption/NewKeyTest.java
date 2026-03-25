@@ -32,14 +32,15 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests of the scenario that a key has changed.
  */
-public class NewKeyTest {
+class NewKeyTest {
 
     private CryptoEngine cryptoEngine;
     private FieldEncrypter fieldEncrypter;
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 
@@ -57,6 +58,7 @@ public class NewKeyTest {
     }
 
     @Data public static class Person {
+
         @DataSubjectId
         private final String id;
         @PersonalData

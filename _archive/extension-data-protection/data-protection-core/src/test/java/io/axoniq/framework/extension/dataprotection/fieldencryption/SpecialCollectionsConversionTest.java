@@ -48,17 +48,18 @@ import static io.axoniq.framework.extension.dataprotection.utils.TestUtils.defau
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests encryption in special collections (immutables, singletons, etc.) using AF5 Converter API.
+ * Tests encryption in special collections (immutable, singletons, etc.) using AF5 Converter API.
  * This is the AF5 equivalent of SpecialCollectionsTest which used the AF4 Serializer API.
  */
-public class SpecialCollectionsConversionTest {
+class SpecialCollectionsConversionTest {
 
     private FieldEncrypter fieldEncrypter;
     private Converter converter;
 
     @BeforeEach
     public void setUp() throws Exception {
-        CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         converter = defaultTestConverter();
         fieldEncrypter = new FieldEncrypter(cryptoEngine, converter);
         DataFactory dataFactory = new DataFactory();
