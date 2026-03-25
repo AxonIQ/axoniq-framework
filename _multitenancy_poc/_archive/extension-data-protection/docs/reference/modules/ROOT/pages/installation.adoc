@@ -21,7 +21,7 @@ Add the following dependency to your `pom.xml`:
 [source,xml]
 ----
 <dependency>
-    <groupId>io.axoniq.framework.extension</groupId>
+    <groupId>io.axoniq.framework.extensions</groupId>
     <artifactId>data-protection-core</artifactId>
     <version>5.0.0</version>
 </dependency>
