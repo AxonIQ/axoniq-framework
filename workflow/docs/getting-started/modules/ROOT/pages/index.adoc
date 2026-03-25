@@ -46,6 +46,7 @@ Along the way, you will learn each core concept:
 . *xref:workflow-lifecycle.adoc[Workflow Lifecycle]* — Terminal states, fail vs cancel, and lifecycle listeners
 . *xref:step-orchestration.adoc[Step Orchestration]* — Ship and notify the customer concurrently
 . *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
+. *xref:configuration.adoc[Configuration]* — Declarative setup, workflow ID providers, custom contexts
 . *xref:testing-workflows.adoc[Testing Workflows]* — Write integration tests for your workflow
 
 [TIP]

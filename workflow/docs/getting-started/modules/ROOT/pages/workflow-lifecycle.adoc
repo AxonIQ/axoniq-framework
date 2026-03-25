@@ -74,83 +74,10 @@ The `SimpleWorkflowContext` passed to your workflow method is your single entry 
 
 In Kotlin, the equivalent is `Kontext`, which provides the same capabilities with idiomatic Kotlin syntax — `payload` as a property, named parameters with defaults, and `kotlin.time.Duration` support.
 
-=== Custom workflow context
-
-You don't have to use `SimpleWorkflowContext`. You can extend it to add domain-specific methods, override defaults, or build your own API style on top of the primitives:
-
-[source,java]
-----
-public class OrderWorkflowContext extends SimpleWorkflowContext {
-
-    public OrderWorkflowContext(String workflowId, Map<String, Object> payload,
-                                ProcessingContext processingContext,
-                                WorkflowConfiguration<?> workflowConfiguration) {
-        super(workflowId, payload, processingContext, workflowConfiguration);
-    }
-
-    // Domain-specific convenience method
-    public boolean reserveStock() {
-        return awaitExecute("reserveStock", Boolean.class,
-                             InventoryService::reserveStock);
-    }
-
-    // Override defaults — e.g., always combine payloads for waitFor
-    @Override
-    public WorkflowStepResult waitFor(String stepName, EventCondition eventCondition,
-                                      PayloadReducer resultPayloadReducer,
-                                      Duration timeout, EventNameCustomizer eventNameCustomizer) {
-        return super.waitFor(stepName, eventCondition,
-                             PayloadReducer.COMBINE_GLOBAL_AND_LOCAL,
-                             timeout, eventNameCustomizer);
-    }
-}
-----
-
-Register it with a factory:
-
-[source,java]
-----
-public class OrderWorkflowContextFactory
-        implements WorkflowContextFactory<OrderWorkflowContext> {
-
-    @Override
-    public OrderWorkflowContext createContext(Map<String, Object> payload, String workflowId,
-                                             ProcessingContext processingContext,
-                                             WorkflowConfiguration<?> workflowConfiguration) {
-        return new OrderWorkflowContext(workflowId, payload,
-                                        processingContext, workflowConfiguration);
-    }
-}
-----
-
-Wire it up in your workflow module configuration:
-
-[source,java]
-----
-WorkflowModule
-    .usingContext(OrderWorkflowContext.class)
-    .workflowContextFactory(c -> new OrderWorkflowContextFactory())
-    .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(OrderWorkflowContext.class))
-    .definitions(d -> d
-            .declarative(c -> new OrderFulfillmentWorkflow()::execute)
-            .workflowName("OrderFulfillment")
-            .on(EventConditions.fromType(OrderPlacedEvent.class))
-            .notCustomized()
-    );
-----
-
-Your workflow then uses the custom context directly:
-
-[source,java]
-----
-public void execute(OrderWorkflowContext ctx) {
-    if (!ctx.reserveStock()) {   // domain-specific method
-        ctx.fail("Stock unavailable");
-        return;
-    }
-    // ...
-}
-----
+[TIP]
+====
+You can also build your own custom workflow context with domain-specific methods. See xref:configuration.adoc#custom-workflow-context[Custom Workflow Context].
+====
 
 [[fail-vs-cancel]]
 == fail() vs cancel()
