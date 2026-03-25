@@ -1,0 +1,190 @@
+= Workflow Lifecycle
+:navtitle: Workflow Lifecycle
+
+A workflow moves through a series of states during its lifetime.
+This section covers how workflows terminate — both intentionally and unexpectedly — and how to react to state changes with lifecycle listeners.
+
+[NOTE]
+====
+Each workflow instance runs on a **virtual thread**.
+Virtual threads are lightweight — a suspended workflow (e.g., waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
+In a future version, the engine will support offloading long-running suspended workflows to disk, freeing memory entirely until they are resumed.
+====
+
+== Workflow states
+
+A workflow is always in one of these states:
+
+[cols="1,2"]
+|===
+|Status |Description
+
+|`STARTED`
+|The workflow is actively executing steps.
+
+|`COMPLETED`
+|The workflow method returned normally — all work is done.
+
+|`FAILED`
+|The workflow was explicitly failed via `ctx.fail()`.
+
+|`CANCELLED`
+|The workflow was cancelled via `ctx.cancel()` or `execution.cancel()`.
+
+|`TIMED_OUT`
+|The workflow exceeded its overall timeout.
+|===
+
+`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states** — the workflow will not be retried or resumed.
+
+[[fail-vs-cancel]]
+== fail() vs cancel()
+
+Both terminate the workflow, but they signal different intent and are called from different places:
+
+[cols="1,1,1,2"]
+|===
+|Method |Workflow status |Called from |Use case
+
+|`ctx.fail("reason")`
+|`FAILED`
+|Inside the workflow
+|The workflow detected an error and cannot continue. Called from your workflow code.
+
+|`ctx.cancel("reason")`
+|`CANCELLED`
+|Outside the workflow
+|An external action (user, admin, API) wants to stop a running workflow.
+|===
+
+=== fail — internal termination
+
+Use `fail` inside your workflow code when the business logic determines the workflow should stop:
+
+[source,java]
+----
+var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
+                                 InventoryService::reserveStock);
+if (!reserved) {
+    ctx.fail("Stock unavailable"); // workflow terminates with FAILED status
+}
+----
+
+If the workflow has running steps (e.g., parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
+
+[source]
+----
+[4]: io.namespace.ShipOrderCancelled (CANCELLED): WorkflowFailedException: Stock unavailable     // <1>
+[5]: io.namespace.NotifyCustomerCancelled (CANCELLED): WorkflowFailedException: Stock unavailable // <1>
+[6]: io.namespace.OrderFulfillmentWorkflow#ExecuteFailed (FAILED): RuntimeException: Stock unavailable // <2>
+----
+<.> Running steps are cancelled first — each CANCELLED event carries the `WorkflowFailedException` with the reason.
+<.> Then the workflow itself is terminated with a FAILED event containing the original cause.
+
+=== cancel — external termination
+
+Use `cancel` from outside the workflow — for example, when a user or API wants to stop a running workflow:
+
+[source,java]
+----
+var execution = workflowExecutionRepository.findById(workflowId);
+execution.cancel("Cancelled by user");
+----
+
+Like `fail`, `cancel` first cancels all running steps, then terminates the workflow:
+
+[source]
+----
+[4]: io.namespace.ShipOrderCancelled (CANCELLED): WorkflowCancelledException: Cancelled by user     // <1>
+[5]: io.namespace.NotifyCustomerCancelled (CANCELLED): WorkflowCancelledException: Cancelled by user // <1>
+[6]: io.namespace.OrderFulfillmentWorkflow#ExecuteCancelled (CANCELLED): WorkflowCancelledException: Cancelled by user // <2>
+----
+<.> All running steps are cancelled — each event carries the `WorkflowCancelledException` with the reason.
+<.> The workflow is terminated with a CANCELLED event (not FAILED), also carrying the reason.
+
+== Unhandled exceptions
+
+[IMPORTANT]
+====
+If a workflow exits due to an *unhandled* exception — one where you didn't explicitly call `fail` or `cancel` — it is **not** in a terminal state.
+The engine will retry it on the next restart.
+
+Always ensure your workflow has explicit terminal paths — call `fail` or `cancel` for every error condition, or let the workflow complete normally.
+====
+
+== Lifecycle listeners
+
+You can register listeners that are called when a workflow reaches a specific state.
+This is useful for cleanup, notifications, or triggering follow-up processes.
+
+=== Annotation-based listeners
+
+The simplest way is to annotate methods on your workflow class:
+
+[source,java]
+----
+public class OrderFulfillmentWorkflow {
+
+    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    public void execute(SimpleWorkflowContext ctx) {
+        // ... workflow logic
+    }
+
+    @OnSuccess // <1>
+    public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx) {
+        logger.info("Order {} fulfilled successfully!", ctx.workflowPayload().get("orderId"));
+    }
+
+    @OnFailure // <2>
+    public void onFailed(WorkflowStatus status, SimpleWorkflowContext ctx) {
+        logger.warn("Order {} failed: {}", ctx.workflowPayload().get("orderId"), status);
+    }
+
+    @OnCancellation // <3>
+    public void onCancelled(WorkflowStatus status, SimpleWorkflowContext ctx) {
+        logger.info("Order {} was cancelled", ctx.workflowPayload().get("orderId"));
+    }
+
+    @OnTimeout // <4>
+    public void onTimedOut(WorkflowStatus status, SimpleWorkflowContext ctx) {
+        logger.warn("Order {} timed out", ctx.workflowPayload().get("orderId"));
+    }
+}
+----
+<.> Called when the workflow completes successfully (`COMPLETED` status).
+<.> Called when the workflow fails (`FAILED` status).
+<.> Called when the workflow is cancelled (`CANCELLED` status).
+<.> Called when the workflow times out (`TIMED_OUT` status).
+
+Each listener method receives the `WorkflowStatus` and the `WorkflowContext`, giving you access to the workflow payload and ID.
+
+=== Programmatic listeners
+
+For more control, register listeners via the declarative configuration:
+
+[source,java]
+----
+.customized((c, w) -> w
+        .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
+                (status, context) -> {
+                    logger.info("Workflow {} completed", context.workflowId());
+                })
+        .registerWorkflowStatusChangeListener(WorkflowStatus.FAILED,
+                (status, context) -> {
+                    logger.warn("Workflow {} failed", context.workflowId());
+                })
+)
+----
+
+You can also unregister listeners:
+
+[source,java]
+----
+w.unregisterWorkflowStatusChangeListener(WorkflowStatus.COMPLETED, myListener);
+----
+
+[NOTE]
+====
+Lifecycle listeners are called *after* the terminal event is published.
+They run in the context of the workflow execution and have access to the full workflow payload.
+====

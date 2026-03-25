@@ -33,7 +33,7 @@ Both steps run concurrently.
 
 [source,java]
 ----
-var winner = ctx.anyMatch(WorkflowStepResult::isCompleted, shipping, notification); // <1>
+var winner = ctx.anyMatch(WorkflowStepResult::success, shipping, notification); // <1>
 
 winner.await(); // <2>
 logger.info("First to finish: {}", winner.getStepName()); // <3>

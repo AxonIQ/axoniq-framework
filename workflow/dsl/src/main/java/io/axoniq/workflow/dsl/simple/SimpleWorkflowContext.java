@@ -119,6 +119,67 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
+     * Non-blocking wait for an event of the given type.
+     * Returns immediately with a {@link WorkflowStepResult} that completes when the event arrives or the timeout expires.
+     *
+     * @param stepName  name of the workflow step.
+     * @param eventType the event type to wait for.
+     * @param timeout   maximum wait duration.
+     * @return workflow step result.
+     */
+    public WorkflowStepResult waitForEvent(String stepName, Class<?> eventType, Duration timeout) {
+        return waitFor(stepName,
+                       EventConditions.fromQualifiedName(
+                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                                    .qualifiedName()
+                       ),
+                       PayloadReducer.GLOBAL_ONLY, timeout, defaults());
+    }
+
+    /**
+     * Non-blocking wait for an event of the given type with a predicate filter.
+     * Returns immediately with a {@link WorkflowStepResult} that completes when a matching event arrives or the timeout expires.
+     *
+     * @param stepName  name of the workflow step.
+     * @param eventType the event type to wait for.
+     * @param predicate predicate to filter events.
+     * @param timeout   maximum wait duration.
+     * @param <T>       event type.
+     * @return workflow step result.
+     */
+    public <T> WorkflowStepResult waitForEvent(String stepName, Class<T> eventType,
+                                               Predicate<T> predicate, Duration timeout) {
+        return waitFor(stepName,
+                       EventConditions.fromQualifiedName(
+                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                                    .qualifiedName(),
+                               e -> predicate.test(e.payloadAs(eventType))
+                       ),
+                       PayloadReducer.GLOBAL_ONLY, timeout, defaults());
+    }
+
+    /**
+     * Non-blocking wait for an event of the given type with association filtering.
+     * Returns immediately with a {@link WorkflowStepResult} that completes when a matching event arrives or the timeout expires.
+     *
+     * @param stepName          name of the workflow step.
+     * @param eventType         the event type to wait for.
+     * @param associationsUtils association filter to correlate events to this workflow instance.
+     * @param timeout           maximum wait duration.
+     * @return workflow step result.
+     */
+    public WorkflowStepResult waitForEvent(String stepName, Class<?> eventType,
+                                           AssociationsUtils associationsUtils, Duration timeout) {
+        return waitFor(stepName,
+                       EventConditions.fromQualifiedName(
+                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                                    .qualifiedName(),
+                               e -> associationsUtils.build(super.processingContext()).test(e)
+                       ),
+                       PayloadReducer.GLOBAL_ONLY, timeout, defaults());
+    }
+
+    /**
      * Blocks the execution until the timeout occurs (synchronous call).
      *
      * @param stepName name of the step.
