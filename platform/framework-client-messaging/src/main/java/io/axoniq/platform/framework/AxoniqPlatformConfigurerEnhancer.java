@@ -40,6 +40,7 @@ import io.axoniq.platform.framework.messaging.AxoniqPlatformQueryBus;
 import io.axoniq.platform.framework.messaging.HandlerMetricsRegistry;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.configuration.Module;
@@ -52,13 +53,16 @@ import org.axonframework.messaging.eventhandling.processing.subscribing.Subscrib
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 
+import java.util.UUID;
+
 public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
     public static final int PLATFORM_ENHANCER_ORDER = Integer.MAX_VALUE - 5;
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        if (!registry.hasComponent(AxoniqPlatformConfiguration.class)) {
+        if (!registry.hasComponent(AxoniqPlatformConfiguration.class)
+                || registry.hasComponent(AxoniqConsoleRSocketClient.class)) {
             return;
         }
         registry
@@ -106,7 +110,8 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(SetupPayloadCreator.class),
                                                    c.getComponent(RSocketHandlerRegistrar.class),
                                                    c.getComponent(RSocketPayloadEncodingStrategy.class),
-                                                   c.getComponent(ClientSettingsService.class)))
+                                                   c.getComponent(ClientSettingsService.class),
+                                                   determineInstanceName(c)))
 
                                            .onStart(Phase.EXTERNAL_CONNECTIONS, AxoniqConsoleRSocketClient::start))
                 .registerComponent(ComponentDefinition
@@ -207,6 +212,40 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
             return null;
         });
+    }
+
+    /**
+     * Determines the instance name. Either takes the exact instanceId that Axon Server connector has generated to
+     * correlate the two as much as possible, or falls back to a random generated 4-byte string..
+     */
+    private String determineInstanceName(Configuration c) {
+        try {
+            Class<?> connectionManagerClazz = Class.forName(
+                    "org.axonframework.axonserver.connector.AxonServerConnectionManager");
+            if (c.hasComponent(connectionManagerClazz)) {
+                Object connectionManager = c.getComponent(connectionManagerClazz);
+                // Get private connectionFactory field of type factoryClazz
+                Object connectionFactory = ReflectionKt.getPropertyValue(connectionManager, "connectionFactory");
+                if (connectionFactory != null) {
+                    // Now call getClientInstanceId public method
+                    String instanceId = ReflectionKt.getPropertyValue(connectionFactory, "clientInstanceId");
+
+                    if (instanceId != null && instanceId.matches(".*-[0-9a-fA-F]{8}$")) {
+                        return instanceId;
+                    }
+                }
+            }
+        } catch (ClassNotFoundException e) {
+            // Do nothing
+        }
+        // No AS, or not AS client 2026+. Fall back to random nodeId.
+        return c.getComponent(AxoniqPlatformConfiguration.class).getHostname() + "-" + randomNodeId();
+    }
+
+
+    private String randomNodeId() {
+        String uuid = UUID.randomUUID().toString();
+        return uuid.substring(uuid.length() - 4);
     }
 
     @Override

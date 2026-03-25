@@ -72,9 +72,6 @@ class HandlerMetricsRegistry(
         }
         logger.debug { "Sending handler information every ${settings.handlerReportInterval}ms to Axoniq Platform" }
         this.reportTask = executor.scheduleAtFixedRate({
-            if (!axoniqConsoleRSocketClient.isConnected()) {
-                return@scheduleAtFixedRate
-            }
             try {
                 val stats = getStats()
                 logger.debug { "Sending metrics: $stats" }
@@ -84,7 +81,6 @@ class HandlerMetricsRegistry(
                         }
                         .onErrorComplete()
                         .subscribe()
-                axoniqConsoleRSocketClient.sendReport(Routes.MessageFlow.STATS, stats).block()
             } catch (e: Exception) {
                 logger.warn { "No metrics could be reported to AxonIQ Console: ${e.message}" }
             }

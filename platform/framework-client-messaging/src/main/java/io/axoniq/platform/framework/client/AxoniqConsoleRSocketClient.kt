@@ -36,7 +36,6 @@ import io.rsocket.metadata.WellKnownMimeType
 import io.rsocket.transport.netty.client.TcpClientTransport
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.netty.tcp.TcpClient
 import java.time.Instant
@@ -44,8 +43,6 @@ import java.time.temporal.ChronoUnit
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 import kotlin.math.pow
 
 /**
@@ -66,7 +63,8 @@ class AxoniqConsoleRSocketClient(
         private val setupPayloadCreator: SetupPayloadCreator,
         private val registrar: RSocketHandlerRegistrar,
         private val encodingStrategy: RSocketPayloadEncodingStrategy,
-        private val clientSettingsService: ClientSettingsService
+        private val clientSettingsService: ClientSettingsService,
+        private val instanceName: String,
 ) {
     private val environmentId: String = properties.environmentId
     private val accessToken: String = properties.accessToken
@@ -76,21 +74,23 @@ class AxoniqConsoleRSocketClient(
     private val secure: Boolean = properties.secure
     private val initialDelay: Long = properties.initialDelay
     private val executor: ScheduledExecutorService = properties.getReportingTaskExecutor()
-    private val instanceName: String = properties.instanceName
     private val heartbeatOrchestrator = HeartbeatOrchestrator()
     private var maintenanceTask: ScheduledFuture<*>? = null
     private val logger = LoggerFactory.getLogger(this::class.java)
 
-    private val connectionLock = ReentrantLock()
+    private val connectionLock = Any()
 
     @Volatile
     private var rsocket: RSocket? = null
+
+    @Volatile
+    private var pendingConnection: Mono<RSocket>? = null
     private var lastConnectionTry = Instant.EPOCH
     private var connectionRetryCount = 0
 
     @Volatile
     private var status: ClientStatus = ClientStatus.PENDING
-    private var supressConnectMessage = false
+    private var suppressConnectMessage = false
 
     init {
         clientSettingsService.subscribeToSettings(heartbeatOrchestrator)
@@ -124,24 +124,66 @@ class AxoniqConsoleRSocketClient(
     }
 
     /**
-     * Sends a message to the platform. If there is no connection active, does nothing silently.
+     * Sends a message to the platform. If the connection attempt fails, the error is propagated to the caller.
      * Do not use this method for reports, as it does not check if reports are paused. Use [sendReport] instead.
      */
-    fun sendMessage(payload: Any, route: String) = (rsocket
-            ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
-            ?.map {
-                val notifications = encodingStrategy.decode(it, NotificationList::class.java)
-                logger.log(notifications)
-            }
-            ?: Mono.empty())
+    fun sendMessage(payload: Any, route: String): Mono<Unit> {
+        return getOrConnectRSocket()
+                .flatMap { socket ->
+                    socket.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
+                            .map {
+                                val notifications = encodingStrategy.decode(it, NotificationList::class.java)
+                                logger.log(notifications)
+                            }
+                }
+    }
 
     fun <R> retrieve(payload: Any, route: String, responseType: Class<R>): Mono<R> {
-        return rsocket
-                ?.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
-                ?.map { responsePayload ->
-                    encodingStrategy.decode(responsePayload, responseType)
+        return getOrConnectRSocket()
+                .flatMap { socket ->
+                    socket.requestResponse(encodingStrategy.encode(payload, createRoutingMetadata(route)))
+                            .map { responsePayload ->
+                                encodingStrategy.decode(responsePayload, responseType)
+                            }
                 }
-                ?: Mono.empty()
+    }
+
+    /**
+     * Returns the current RSocket connection, or attempts to establish one if not yet connected.
+     * Concurrent callers share the same in-flight [pendingConnection] Mono so that only one TCP
+     * connection is ever established at a time. Propagates any connection error to the caller.
+     */
+    private fun getOrConnectRSocket(): Mono<RSocket> {
+        val current = rsocket
+        if (current != null) return Mono.just(current)
+        return synchronized(connectionLock) {
+            pendingConnection ?: buildConnectionMono().also { pendingConnection = it }
+        }
+    }
+
+    /**
+     * Builds a cold-then-cached Mono that creates the RSocket connection and retrieves initial settings.
+     * The Mono is cached so all concurrent subscribers share a single connection attempt.
+     * [pendingConnection] is cleared (via [doOnTerminate]) once the attempt completes or fails,
+     * allowing a fresh attempt on the next call to [getOrConnectRSocket].
+     */
+    private fun buildConnectionMono(): Mono<RSocket> {
+        return createRSocketMono()
+                .flatMap { socket ->
+                    rsocket = socket
+                    retrieveSettings().map { settings ->
+                        clientSettingsService.updateSettings(settings)
+                        if (!suppressConnectMessage) {
+                            logger.info("Connection to Axoniq Platform set up successfully! This instance's name: $instanceName, settings: $settings")
+                            suppressConnectMessage = true
+                        }
+                        connectionRetryCount = 0
+                        socket
+                    }
+                }
+                .doOnError { disposeCurrentConnection() }
+                .doFinally { synchronized(connectionLock) { pendingConnection = null } }
+                .cache()
     }
 
     /**
@@ -154,6 +196,7 @@ class AxoniqConsoleRSocketClient(
         if (this.maintenanceTask != null) {
             return
         }
+        ensureConnected()
         this.maintenanceTask = executor.scheduleWithFixedDelay(
                 this::ensureConnected,
                 initialDelay,
@@ -175,28 +218,26 @@ class AxoniqConsoleRSocketClient(
     }
 
     private fun connectSafely() {
-        try {
-            rsocket = createRSocket()
-            // Fetch the client settings from the server
-            val settings = retrieveSettings().block()
-                    ?: throw IllegalStateException("Could not receive the settings from Axoniq Platform!")
-            clientSettingsService.updateSettings(settings)
-            if (!supressConnectMessage) {
-                logger.info("Connection to Axoniq Platform set up successfully! This instance's name: $instanceName, settings: $settings")
-                supressConnectMessage = true
-            }
-            connectionRetryCount = 0
-        } catch (e: Exception) {
-            if (connectionRetryCount == 10) {
-                logger.error("Failed to connect to Axoniq Platform. Error: ${e.message}. Will keep trying to connect...")
-                supressConnectMessage = false
-            }
-            disposeCurrentConnection()
-            logger.debug("Failed to connect to Axoniq Platform", e)
-        }
+        val retryCount = connectionRetryCount
+        getOrConnectRSocket().subscribe(
+                { /* success — logged inside buildConnectionMono */ },
+                { e ->
+                    if (retryCount == 4) {
+                        if (suppressConnectMessage) {
+                            logger.warn("Lost connection to Axoniq Platform. Will keep trying to reconnect...")
+                        } else {
+                            logger.warn("Unable to connect to Axoniq Platform. Will keep trying to reconnect...")
+                        }
+                        suppressConnectMessage = false
+                    } else if (retryCount > 4 && retryCount % 10 == 0) {
+                        logger.error("Still unable to reconnect to Axoniq Platform after $retryCount attempts. Reason: ${e.message}")
+                    }
+                    logger.debug("Failed to connect to Axoniq Platform", e)
+                }
+        )
     }
 
-    private fun createRSocket(): RSocket {
+    private fun createRSocketMono(): Mono<RSocket> {
         val authentication = PlatformClientAuthentication(
                 identification = ConsoleClientIdentifier(
                         environmentId = environmentId,
@@ -210,7 +251,7 @@ class AxoniqConsoleRSocketClient(
                 setupPayloadCreator.createReport(),
                 createSetupMetadata(authentication)
         )
-        val rsocket = RSocketConnector.create()
+        return RSocketConnector.create()
                 .metadataMimeType(WellKnownMimeType.MESSAGE_RSOCKET_COMPOSITE_METADATA.string)
                 .dataMimeType(encodingStrategy.getMimeType().string)
                 .setupPayload(setupPayload)
@@ -218,8 +259,6 @@ class AxoniqConsoleRSocketClient(
                     Mono.just(registrar.createRespondingRSocketFor(rsocket))
                 }
                 .connect(tcpClientTransport())
-                .block()!!
-        return rsocket
     }
 
     private fun createRoutingMetadata(route: String): CompositeByteBuf {
@@ -246,25 +285,18 @@ class AxoniqConsoleRSocketClient(
                     disposeCurrentConnection()
                 }
         return if (secure) {
-            return client.secure()
+            client.secure()
         } else client
     }
 
     fun isConnected() = rsocket != null
 
-    /**
-     * Disposes the current RSocket connection in a thread-safe manner.
-     * This method can be called from multiple threads (e.g., TCP disconnect callback,
-     * heartbeat checker), but will only perform the disposal once per connection.
-     */
     fun disposeCurrentConnection() {
-        connectionLock.withLock {
-            val currentRSocket = rsocket
-            if (currentRSocket != null) {
-                rsocket = null
-                currentRSocket.dispose()
-                clientSettingsService.clearSettings()
-            }
+        val currentRSocket = rsocket
+        if (currentRSocket != null) {
+            rsocket = null
+            currentRSocket.dispose()
+            clientSettingsService.clearSettings()
         }
     }
 
@@ -292,12 +324,11 @@ class AxoniqConsoleRSocketClient(
         }
 
         override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
-            if (this.heartbeatSendTask != null) {
-                return
-            }
+            this.heartbeatSendTask?.cancel(true)
+            this.heartbeatCheckTask?.cancel(true)
             lastReceivedHeartbeat = Instant.now()
             this.heartbeatSendTask = executor.scheduleWithFixedDelay(
-                    { sendHeartbeat().subscribe() },
+                    { sendHeartbeat().subscribe({}, { e -> logger.debug("Heartbeat failed", e) }) },
                     0,
                     settings.heartbeatInterval,
                     TimeUnit.MILLISECONDS
@@ -309,12 +340,13 @@ class AxoniqConsoleRSocketClient(
                     1000,
                     TimeUnit.MILLISECONDS
             )
-
         }
 
         override fun onDisconnected() {
             this.heartbeatSendTask?.cancel(true)
+            this.heartbeatSendTask = null
             this.heartbeatCheckTask?.cancel(true)
+            this.heartbeatCheckTask = null
         }
 
         private fun checkHeartbeats(heartbeatTimeout: Long) {
@@ -340,10 +372,15 @@ class AxoniqConsoleRSocketClient(
                 .map {
                     encodingStrategy.decode(it, ClientSettingsV2::class.java)
                 }
-                .doOnError {
+                .onErrorMap {
                     if (it.message?.contains("Access Denied") == true) {
-                        logger.error("Was unable to send call to Axoniq Platform since authentication was incorrect!")
+                        IllegalStateException("Was unable to connect to Axoniq Platform due to invalid authentication! Make sure the access token is correct.")
+                    } else {
+                        it
                     }
+                }
+                .doOnError {
+                    logger.error("Could not connect to Axoniq Platform", it)
                 }
     }
 
