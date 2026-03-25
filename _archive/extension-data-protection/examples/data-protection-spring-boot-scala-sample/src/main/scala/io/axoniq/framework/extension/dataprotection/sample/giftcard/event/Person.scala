@@ -18,8 +18,8 @@
 
 package io.axoniq.framework.extension.dataprotection.sample.giftcard.event
 
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.{DeepPersonalData, PersonalData}
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.{DeepPersonalData, PersonalData}
 
 import scala.annotation.meta.field
 
