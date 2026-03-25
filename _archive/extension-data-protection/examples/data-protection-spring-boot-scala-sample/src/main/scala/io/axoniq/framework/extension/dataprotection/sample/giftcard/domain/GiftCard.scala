@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025. AxonIQ B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
  * Version September 2025 (the "License");
@@ -8,6 +8,7 @@
  * specific language governing permissions and limitations under
  * the License.
  *
+ * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
  *    https://www.axoniq.io/legal/terms-of-service
@@ -15,10 +16,10 @@
  *
  */
 
-package io.axoniq.dataprotection.sample.giftcard.domain
+package io.axoniq.framework.extension.dataprotection.sample.giftcard.domain
 
-import io.axoniq.dataprotection.sample.giftcard.command.{IssueGiftCardCommand, RedeemGiftCardCommand}
-import io.axoniq.dataprotection.sample.giftcard.event.{GiftCardIssuedEvent, GiftCardRedeemedEvent}
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.command.{IssueGiftCardCommand, RedeemGiftCardCommand}
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.event.{GiftCardIssuedEvent, GiftCardRedeemedEvent}
 import org.axonframework.eventsourcing.annotation.EventSourcingHandler
 import org.axonframework.eventsourcing.annotation.reflection.EntityCreator
 import org.axonframework.extension.spring.stereotype.EventSourced
