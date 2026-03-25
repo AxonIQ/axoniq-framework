@@ -23,7 +23,7 @@
     <parent>
         <groupId>io.axoniq.framework.extensions.postgresql</groupId>
         <artifactId>axon-postgresql-extension</artifactId>
-        <version>0.1.1-SNAPSHOT</version>
+        <version>1.0.0-RC1</version>
     </parent>
 
     <artifactId>axon-postgresql-spring-boot-starter</artifactId>
