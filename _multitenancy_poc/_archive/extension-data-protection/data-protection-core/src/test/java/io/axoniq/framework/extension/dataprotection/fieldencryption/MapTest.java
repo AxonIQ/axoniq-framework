@@ -24,7 +24,7 @@ import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.api.Scope;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
-import io.axoniq.framework.dataprotection.utils.TestUtils;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import lombok.Data;
 import lombok.Value;
 import org.fluttercode.datafactory.impl.DataFactory;

@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.framework.dataprotection;
+package io.axoniq.framework.extension.dataprotection;
 
 import io.axoniq.license.entitlement.AxoniqAddon;
 
@@ -26,6 +26,7 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  * @author Stefan Mirkovic
  */
 public class DataProtectionAxoniqComponent implements AxoniqAddon {
+
     /**
      * The unique identifier for the Data Protection extension.
      */

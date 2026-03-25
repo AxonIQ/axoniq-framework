@@ -17,7 +17,7 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
-import io.axoniq.framework.dataprotection.utils.TestUtils;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.junit.jupiter.api.*;
 
