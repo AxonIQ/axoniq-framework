@@ -33,11 +33,10 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
-import org.axonframework.messaging.eventhandling.replay.ResetContext;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +46,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**
  * Event handling component handling all events.
@@ -67,10 +67,15 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                                  return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
                              }
                          }
-                 ).initialSegmentCount(1)
+                 )
+                 .eventSource(c.getComponent(StreamableEventSource.class))
+                 .initialSegmentCount(1)
                  .batchSize(1)
-                 .initialToken(s -> completedFuture(ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(1))))
-            ;
+                 .initialToken(s -> completedFuture(
+                                       // FIXME, how can we control the correct index here? switching to 0 breaks it
+                                       createReplayToken(new GlobalSequenceTrackingToken(1))
+                               )
+                 );
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
     private final ReplayStatusChangedHandler replayStatusChangedHandler;
@@ -118,15 +123,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
-
-    // TODO: Question on Steven: why do I need to override this method and there is no default implementation in the interface?
-    @Override
-    @Nonnull
-    public MessageStream.Empty<Message> handle(@Nonnull ResetContext resetContext,
-                                               @Nonnull ProcessingContext context) {
-        return MessageStream.empty();
-    }
-
     @Override
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
@@ -140,5 +136,8 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     @Override
     public void describeTo(@NotNull ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
+        if (replayStatusChangedHandler != null) {
+            descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());
+        }
     }
 }

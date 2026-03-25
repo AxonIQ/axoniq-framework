@@ -29,6 +29,7 @@
     </parent>
 
     <artifactId>axon-workflow-test</artifactId>
+    <name>Axon Extension - Workflow - Test</name>
 
     <dependencies>
         <dependency>

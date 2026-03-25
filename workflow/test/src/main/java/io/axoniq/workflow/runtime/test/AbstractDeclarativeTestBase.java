@@ -39,6 +39,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.function.UnaryOperator;
 
+/**
+ * Abstract test base for workflow test, until we develop a test fixture.
+ *
+ * @param <T> type of the workflow context.
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
     protected final Logger logger = LoggerFactory.getLogger(getClass());
