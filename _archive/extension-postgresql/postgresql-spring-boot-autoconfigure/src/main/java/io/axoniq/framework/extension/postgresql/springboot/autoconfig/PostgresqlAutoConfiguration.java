@@ -21,7 +21,6 @@ package io.axoniq.framework.extension.postgresql.springboot.autoconfig;
 import io.axoniq.framework.extension.postgresql.PostgresqlConfigurationEnhancer;
 import io.axoniq.framework.extension.postgresql.PostgresqlEventStorageEngine;
 import io.axoniq.framework.extension.postgresql.springboot.PostgresqlProperties;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -61,7 +60,7 @@ public class PostgresqlAutoConfiguration {
     public ConfigurationEnhancer disablePostgresqlConfigurationEnhancer() {
         return new ConfigurationEnhancer() {
             @Override
-            public void enhance(@Nonnull ComponentRegistry registry) {
+            public void enhance(ComponentRegistry registry) {
                 registry.disableEnhancer(PostgresqlConfigurationEnhancer.class);
             }
 

@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.tx.TransactionalExecutor;
@@ -363,7 +362,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
      * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter an event converter for converting the payload to bytes, cannot be {@code null}
      */
-    public PostgresqlEventStorageEngine(@Nonnull DataSource dataSource, @Nonnull EventConverter converter) {
+    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
@@ -538,15 +537,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("dataSource", dataSource);
         descriptor.describeProperty("converter", converter);
     }
 
     @Override
     public CompletableFuture<AppendTransaction<?>> appendEvents(
-        @Nonnull AppendCondition condition,
-        @Nonnull ProcessingContext context,
+        AppendCondition condition,
+        ProcessingContext context,
         List<TaggedEventMessage<?>> events
     ) {
         if (LOGGER.isDebugEnabled()) {
@@ -617,7 +616,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
-    public MessageStream<EventMessage> source(@Nonnull SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
         CompletableFuture<Void> endOfStreams = new CompletableFuture<>();
         AtomicLong lastGlobalIndex = new AtomicLong();
@@ -635,7 +634,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
-    public MessageStream<EventMessage> stream(@Nonnull StreamingCondition condition) {
+    public MessageStream<EventMessage> stream(StreamingCondition condition) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
         TrackingToken trackingToken = condition.position();
 
@@ -1049,7 +1048,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
          * @param data the input byte array to hash, cannot be {@code null} but can be empty
          * @return a 32-bit hash code for the input
          */
-        int hash(@Nonnull byte[] data);
+        int hash(byte[] data);
 
     }
 }
