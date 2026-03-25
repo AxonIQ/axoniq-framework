@@ -23,7 +23,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.axoniq.framework.extension.dataprotection.api.ReplacementValueProvider;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
-import io.axoniq.framework.dataprotection.internal.messages.EncryptedFieldData;
+import io.axoniq.framework.extension.dataprotection.internal.messages.EncryptedFieldData;
 import io.axoniq.framework.extension.dataprotection.internal.model.IPDField;
 import io.axoniq.framework.extension.dataprotection.internal.model.PDField;
 import io.axoniq.framework.extension.dataprotection.internal.utils.ExceptionFactory;
@@ -41,8 +41,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 
 /**
- * Implementation of {@link Encrypter} for byte array data. Handles encryption, decryption,
- * and replacement operations using AES encryption with CBC mode.
+ * Implementation of {@link Encrypter} for byte array data. Handles encryption, decryption, and replacement operations
+ * using AES encryption with CBC mode.
  *
  * @author Frans van Buul
  */

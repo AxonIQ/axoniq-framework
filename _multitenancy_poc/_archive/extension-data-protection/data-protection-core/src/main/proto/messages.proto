@@ -1,5 +1,5 @@
 syntax = "proto3";
-package io.axoniq.framework.dataprotection.internal.messages;
+package io.axoniq.framework.extension.dataprotection.internal.messages;
 option java_multiple_files = true;
 
 /*
