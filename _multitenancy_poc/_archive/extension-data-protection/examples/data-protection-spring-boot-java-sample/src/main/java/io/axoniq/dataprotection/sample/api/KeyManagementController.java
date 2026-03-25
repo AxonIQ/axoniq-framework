@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025. AxonIQ B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
  * Version September 2025 (the "License");
@@ -17,7 +17,7 @@
  */
 package io.axoniq.dataprotection.sample.api;
 
-import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
+import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
