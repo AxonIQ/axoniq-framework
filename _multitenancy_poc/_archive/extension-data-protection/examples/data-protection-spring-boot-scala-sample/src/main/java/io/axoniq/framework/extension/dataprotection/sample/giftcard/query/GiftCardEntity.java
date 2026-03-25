@@ -19,7 +19,7 @@
 package io.axoniq.framework.extension.dataprotection.sample.giftcard.query;
 
 import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup;
-import io.axoniq.dataprotection.sample.giftcard.event.Person;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.event.Person;
 import io.axoniq.framework.extension.dataprotection.api.DeepPersonalData;
 import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData;

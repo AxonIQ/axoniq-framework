@@ -17,14 +17,14 @@
  */
 package io.axoniq.framework.extension.dataprotection.sample.giftcard.web;
 
-import io.axoniq.dataprotection.sample.giftcard.command.IssueGiftCardCommand;
-import io.axoniq.dataprotection.sample.giftcard.command.RedeemGiftCardCommand;
-import io.axoniq.dataprotection.sample.giftcard.event.Address;
-import io.axoniq.dataprotection.sample.giftcard.event.Person;
-import io.axoniq.dataprotection.sample.giftcard.query.FindAllGiftCardsQuery;
-import io.axoniq.dataprotection.sample.giftcard.query.FindGiftCardQuery;
-import io.axoniq.dataprotection.sample.giftcard.query.GiftCardSummary;
-import io.axoniq.dataprotection.sample.giftcard.query.GiftCardSummaryList;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.command.IssueGiftCardCommand;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.command.RedeemGiftCardCommand;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.event.Address;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.event.Person;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.query.FindAllGiftCardsQuery;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.query.FindGiftCardQuery;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.query.GiftCardSummary;
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.query.GiftCardSummaryList;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.springframework.http.MediaType;
