@@ -1,0 +1,334 @@
+= Common Patterns
+:navtitle: Common Patterns
+
+This section shows how to compose the engine's primitives and combinators into common workflow patterns.
+These aren't special features — they're built from `execute`, `waitForEvent`, `awaitExecute`, and the combinators you already know.
+
+== Fan-out / Fan-in
+
+Fan-out launches multiple steps in parallel. Fan-in collects all results before continuing.
+
+=== Fan-out — launch parallel steps
+
+Reserve stock for every line item in an order concurrently:
+
+[source,java]
+----
+var lineItems = (List<Map<String, Object>>) ctx.workflowPayload().get("lineItems");
+
+// Fan-out: launch one reservation per line item
+var reservations = lineItems.stream()
+        .map(item -> ctx.execute(
+                "reserve-" + item.get("sku"),                              // <1>
+                payload("sku", item.get("sku"),
+                        "quantity", item.get("quantity")).getValues(),
+                InventoryService::reserveStock,
+                Duration.ofSeconds(30), defaults()))
+        .toArray(WorkflowStepResult[]::new);
+----
+<.> Each step gets a unique name based on the SKU — the engine tracks them independently.
+
+=== Fan-in — collect all results
+
+Use `allMatch` to wait for every reservation to complete:
+
+[source,java]
+----
+// Fan-in: wait for all reservations
+var guard = ctx.allMatch(WorkflowStepResult::isCompleted, reservations); // <1>
+
+if (!guard.success()) {
+    // Some reservations failed — cancel the rest and compensate
+    for (var step : guard.unmatched()) {
+        if (!step.isCompleted()) {
+            step.cancel("Partial reservation failure");
+        }
+    }
+    for (var step : guard.matched()) {
+        if (step.success()) {
+            ctx.awaitExecute("release-" + step.getStepName(),
+                    step.<Map<String, Object>>result().orElse(Map.of()),
+                    InventoryService::releaseStock);
+        }
+    }
+    ctx.fail("Not all items could be reserved");
+}
+
+logger.info("All {} items reserved!", reservations.length);
+----
+<.> `allMatch` accepts a varargs array — works naturally with the collected results.
+
+=== Fan-out with waitForEvent
+
+Same pattern works for events. Request approval from multiple approvers in parallel, wait for all:
+
+[source,java]
+----
+var approvers = List.of("team-lead", "finance", "legal");
+
+// Fan-out: send approval requests and wait for each response
+for (var approver : approvers) {
+    ctx.awaitExecute("requestApproval-" + approver,
+            payload("approver", approver, "requestId", ctx.workflowId()).getValues(),
+            ApprovalService::sendRequest);
+}
+
+var approvals = approvers.stream()
+        .map(approver -> ctx.waitForEvent(
+                "approval-" + approver,                                    // <1>
+                ApprovalDecisionEvent.class,
+                Duration.ofDays(5)))
+        .toArray(WorkflowStepResult[]::new);
+
+// Fan-in: wait for all approvals
+var result = ctx.allMatch(WorkflowStepResult::isCompleted, approvals);
+
+if (!result.success()) {
+    ctx.fail("Not all approvals received within deadline");
+}
+
+logger.info("All {} approvers responded!", approvers.size());
+----
+<.> Each approver gets their own `waitForEvent` — all run concurrently.
+
+== Saga — compensating transactions
+
+A saga executes steps sequentially and rolls back completed steps if a later step fails.
+This is standard imperative code — try each step, and on failure, compensate in reverse order:
+
+[source,java]
+----
+// Step 1: reserve stock
+ctx.awaitExecute("reserveStock",
+        payload("orderId", orderId).getValues(),
+        InventoryService::reserveStock);
+
+// Step 2: charge payment
+try {
+    ctx.awaitExecute("chargePayment",
+            payload("orderId", orderId, "amount", amount).getValues(),
+            PaymentService::charge);
+} catch (StepFailedException e) {
+    // Payment failed — compensate step 1
+    ctx.awaitExecute("releaseStock",
+            payload("orderId", orderId).getValues(),
+            InventoryService::releaseStock);
+    ctx.fail("Payment failed: " + e.getMessage());
+}
+
+// Step 3: ship order
+try {
+    ctx.awaitExecute("shipOrder",
+            payload("orderId", orderId).getValues(),
+            ShippingService::shipOrder);
+} catch (StepFailedException e) {
+    // Shipping failed — compensate steps 2 and 1 in reverse
+    ctx.awaitExecute("refundPayment",
+            payload("orderId", orderId, "amount", amount).getValues(),
+            PaymentService::refund);
+    ctx.awaitExecute("releaseStock",
+            payload("orderId", orderId).getValues(),
+            InventoryService::releaseStock);
+    ctx.fail("Shipping failed: " + e.getMessage());
+}
+----
+
+Each compensating action is itself a durable step — the engine records it, and crash recovery ensures the rollback completes even if the application restarts mid-compensation.
+
+== Scatter-gather
+
+Scatter-gather fans out to multiple services and collects results as they arrive — without waiting for all.
+Use `anyMatch` in a loop to process results one at a time:
+
+[source,java]
+----
+var suppliers = List.of("supplierA", "supplierB", "supplierC");
+
+// Scatter: request quotes from all suppliers
+var quotes = suppliers.stream()
+        .map(s -> ctx.execute("getQuote-" + s,
+                payload("supplier", s, "itemId", itemId).getValues(),
+                QuoteService::requestQuote,
+                Duration.ofSeconds(30), defaults()))
+        .toList();
+
+var remaining = new ArrayList<>(quotes);
+
+// Gather: process quotes as they arrive
+while (!remaining.isEmpty()) {
+    var fastest = ctx.anyMatch(WorkflowStepResult::isCompleted,
+                               remaining.toArray(WorkflowStepResult[]::new));
+    fastest.await();
+
+    var winner = fastest.matched().getFirst();
+    logger.info("Received quote from {}: {}", winner.getStepName(), winner.result());
+
+    remaining.remove(winner); // <1>
+}
+----
+<.> Remove the processed result and loop until all quotes are collected.
+
+This lets you react to each response immediately — e.g., display partial results, make early decisions, or short-circuit once you have enough data.
+
+== Human-in-the-loop
+
+Wait for a human action — an approval, a review, a manual data entry — with escalation if they don't respond in time:
+
+[source,java]
+----
+// Request approval from the team lead
+ctx.awaitExecute("requestApproval",
+        payload("approver", "team-lead", "requestId", ctx.workflowId()).getValues(),
+        ApprovalService::sendRequest);
+
+// Wait for their response
+var decision = ctx.waitForEvent("awaitApproval",
+        ApprovalDecisionEvent.class, Duration.ofDays(3));
+
+if (decision.timeout()) {                                                // <1>
+    // Team lead didn't respond — escalate to department head
+    ctx.awaitExecute("escalate",
+            payload("approver", "department-head", "requestId", ctx.workflowId()).getValues(),
+            ApprovalService::escalate);
+
+    decision = ctx.waitForEvent("awaitEscalatedApproval",
+            ApprovalDecisionEvent.class, Duration.ofDays(1));
+
+    if (decision.timeout()) {
+        ctx.fail("No approval received after escalation");
+    }
+}
+
+decision.await();
+logger.info("Approval decision received: {}", decision.result());
+----
+<.> `timeout()` blocks until the step completes, then returns `true` if it timed out — perfect for escalation logic.
+
+== Circuit breaker
+
+Skip a step entirely if it has been failing consistently.
+This is implemented in your action code, not in the engine — but the engine's durable state makes it easy:
+
+[source,java]
+----
+var failureCount = (int) ctx.workflowPayload().getOrDefault("emailFailures", 0);
+
+if (failureCount < 3) {                                                  // <1>
+    try {
+        ctx.awaitExecute("sendEmail",
+                payload("to", email, "subject", subject).getValues(),
+                EmailService::send);
+        ctx.setPayload("resetEmailFailures",
+                payload("emailFailures", 0));                             // <2>
+    } catch (StepFailedException e) {
+        ctx.setPayload("recordEmailFailure",
+                payload("emailFailures", failureCount + 1));              // <3>
+        logger.warn("Email failed ({}/3), will skip next time", failureCount + 1);
+    }
+} else {
+    logger.warn("Circuit open — skipping email, {} consecutive failures", failureCount);
+}
+----
+<.> Only attempt the step if under the failure threshold.
+<.> Reset the counter on success.
+<.> Increment the counter on failure — persisted durably in the workflow payload.
+
+== Retry with backoff
+
+[NOTE]
+====
+**Built-in retry support is coming soon.** The API below is planned but not yet available.
+====
+
+The `RetryPolicy` API will let you configure retries per step — max attempts, backoff strategy, and programmatic control:
+
+[source,java]
+----
+// Simple: retry up to 3 times
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        Duration.ofSeconds(30),
+        RetryPolicy.maxRetries(3));                                       // <1>
+
+// With fixed backoff: wait 500ms between retries
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        Duration.ofSeconds(30),
+        RetryPolicy.maxRetries(3)
+                .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(500))));
+
+// With exponential backoff
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        Duration.ofSeconds(30),
+        RetryPolicy.maxRetries(5)
+                .withBackoff(BackoffStrategy.exponential(Duration.ofMillis(200), 2.0)));
+
+// With retry handler and conditional stop
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        Duration.ofSeconds(30),
+        RetryPolicy.maxRetries(5)
+                .onRetry(retryCtx -> logger.warn("Retry {}/{} for {}: {}",       // <2>
+                        retryCtx.attempt(), retryCtx.maxRetries(),
+                        retryCtx.stepName(), retryCtx.error().getMessage()))
+                .retryUntil(retryCtx -> isTransient(retryCtx.error())));          // <3>
+----
+<.> If the step fails, the engine retries up to 3 times before marking it as FAILED.
+<.> `onRetry` is called before each retry — use it for logging, metrics, or alerts.
+<.> `retryUntil` stops retrying early if the error is not transient (e.g., a 404 should not be retried).
+
+The `BackoffStrategy` options:
+
+[cols="1,2"]
+|===
+|Strategy |Behavior
+
+|`BackoffStrategy.NONE`
+|No delay between retries.
+
+|`BackoffStrategy.fixed(Duration)`
+|Constant delay between retries.
+
+|`BackoffStrategy.exponential(Duration, multiplier)`
+|Delay doubles (or multiplies) after each retry.
+|===
+
+Retries are event-sourced — on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
+
+== Scheduled / delayed steps
+
+[NOTE]
+====
+**Dedicated scheduling support is coming soon.**
+In a future version, you will be able to schedule steps to run at a specific time (e.g., "send reminder at 9am tomorrow").
+====
+
+For now, use `sleep` to implement delays:
+
+[source,java]
+----
+// Wait until a specific time
+var targetTime = LocalDateTime.of(2026, 4, 1, 9, 0);
+var delay = Duration.between(LocalDateTime.now(), targetTime);
+
+ctx.sleep("waitUntilAprilFirst", delay);
+
+ctx.awaitExecute("sendReminder",
+        payload("to", email).getValues(),
+        ReminderService::send);
+----
+
+This is durable — if the application restarts during the sleep, the engine recalculates the remaining delay and resumes correctly.
+
+== Sub-workflows
+
+[NOTE]
+====
+**Sub-workflow support is coming soon.**
+In a future version, one workflow will be able to launch and await another workflow, enabling hierarchical decomposition of complex processes.
+====
