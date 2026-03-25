@@ -4,7 +4,7 @@
 ** xref:first-workflow.adoc[]
 ** xref:waiting-for-events.adoc[]
 ** xref:understanding-steps.adoc[]
-*** xref:understanding-steps.adoc#executing-steps[Executing Steps]
+*** xref:understanding-steps.adoc#step-primitives[Step Primitives]
 *** xref:understanding-steps.adoc#workflow-step-result[WorkflowStepResult]
 *** xref:understanding-steps.adoc#timeouts[Timeouts]
 *** xref:understanding-steps.adoc#payload-reducers[Payload Reducers]

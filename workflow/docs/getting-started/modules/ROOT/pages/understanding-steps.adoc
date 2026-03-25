@@ -6,7 +6,7 @@ This section covers the full configuration available across all step types — t
 
 [NOTE]
 ====
-Everything in this section applies to all step primitives: `awaitExecute`, `execute`, `awaitEvent`, and `sleep` — unless noted otherwise.
+Everything in this section applies to all step primitives: `awaitExecute`, `execute`, `awaitEvent`, `waitForEvent`, and `sleep` — unless noted otherwise.
 ====
 
 [IMPORTANT]
@@ -32,7 +32,7 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 [sidebar]
 .In this section
 --
-* <<executing-steps>> — `awaitExecute` (blocking) and `execute` (non-blocking) overloads
+* <<step-primitives>> — all primitives at a glance, `awaitExecute` and `execute` overloads
 * <<workflow-step-result>> — inspecting, waiting for, and cancelling async results
 * <<timeouts>> — defaults, per-step overrides, crash recovery
 * <<payload-reducers>> — controlling data flow in and out of steps
@@ -44,8 +44,38 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 * <<kotlin-dsl-equivalents>> — Kotlin syntax for all of the above
 --
 
-[[executing-steps]]
-== Executing steps
+[[step-primitives]]
+== Step primitives at a glance
+
+[cols="1,1,1,2"]
+|===
+|Primitive |Blocking |Returns |Covered in
+
+|`awaitExecute`
+|Yes
+|Typed result
+|This page (<<awaitexecute,below>>)
+
+|`execute`
+|No
+|`WorkflowStepResult`
+|This page (<<execute,below>>)
+
+|`awaitEvent`
+|Yes
+|Typed event
+|xref:waiting-for-events.adoc[]
+
+|`waitForEvent`
+|No
+|`WorkflowStepResult`
+|xref:waiting-for-events.adoc[]
+
+|`sleep`
+|Yes
+|void
+|xref:waiting-for-events.adoc[]
+|===
 
 [[awaitexecute]]
 === awaitExecute (blocking)
@@ -116,12 +146,12 @@ var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         Duration.ofMinutes(5), defaults());
 ----
 
-See xref:step-orchestration.adoc[] for combining multiple results with `allMatch`, `anyMatch`, and `noneMatch`.
+See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitForEvent` results with `allMatch`, `anyMatch`, and `noneMatch`.
 
 [[workflow-step-result]]
 == WorkflowStepResult
 
-The returned `WorkflowStepResult` lets you inspect, wait for, or cancel a running step.
+The `WorkflowStepResult` returned by `execute` and `waitForEvent` lets you inspect, wait for, or cancel a running step.
 
 .Blocking methods — wait until the step reaches a terminal state
 [cols="2,3"]
@@ -165,18 +195,28 @@ The returned `WorkflowStepResult` lets you inspect, wait for, or cancel a runnin
 |Cancels the step if still running. No-op if already in a terminal state. See <<cancelling-a-step>>.
 |===
 
+Both `execute` and `waitForEvent` return a `WorkflowStepResult`:
+
 [source,java]
 ----
+// non-blocking execute
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
         Duration.ofMinutes(5), defaults());
 
-// do other work while shipping runs...
+// non-blocking wait for event
+var approval = ctx.waitForEvent("awaitApproval",
+        ManagerApproved.class, Duration.ofMinutes(30));
 
+// check and wait on either
 if (shipping.isCompleted()) {
     logger.info("Shipping already done!");
-} else {
-    shipping.await(); // block until it finishes
+}
+
+approval.await(); // block until the event arrives or times out
+
+if (approval.timeout()) {
+    logger.warn("Approval timed out!");
 }
 ----
 
@@ -316,17 +356,20 @@ try {
 
 === Non-blocking steps — check the result
 
-With `execute`, the step runs asynchronously. Check the result to handle errors:
+With `execute` and `waitForEvent`, steps run asynchronously. Check the result to handle errors:
 
 [source,java]
 ----
+var paymentConfirmation = ctx.waitForEvent("awaitPayment",
+        PaymentConfirmed.class, Duration.ofMinutes(15));
+
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
         Duration.ofMinutes(5), defaults());
 
-var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
-        NotificationService::sendConfirmation,
-        Duration.ofSeconds(30), defaults());
+if (paymentConfirmation.timeout()) { // blocks until terminal state
+    ctx.fail("Payment confirmation timed out");
+}
 
 if (shipping.failure()) { // blocks until shipping reaches a terminal state
     // Compensating action for failed shipping
@@ -335,11 +378,6 @@ if (shipping.failure()) { // blocks until shipping reaches a terminal state
             PaymentService::refund);
 
     ctx.fail("Shipping failed: " + shipping.error().get().getMessage());
-}
-
-if (notification.timeout()) {
-    // Notification timed out — not critical, just log it
-    logger.warn("Customer notification timed out for order {}", orderId);
 }
 ----
 
@@ -379,28 +417,28 @@ You can cancel a running step in two ways:
 *Via the result handle:*
 [source,java]
 ----
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
-        ShippingService::shipOrder, Duration.ofMinutes(5), defaults());
+var approval = ctx.waitForEvent("awaitApproval",
+        ManagerApproved.class, Duration.ofMinutes(30));
 
-// later...
-shipping.cancel("No longer needed"); // <1>
+// later — manager rejected, no longer need approval
+approval.cancel("Manager rejected the request"); // <1>
 ----
-<.> Cancels the step. The workflow continues executing — only this step is affected.
+<.> Cancels the wait. The workflow continues executing — only this step is affected.
 
 *Via the context:*
 [source,java]
 ----
-ctx.cancelStep("shipOrder");                        // default message: "Step cancelled"
-ctx.cancelStep("shipOrder", "No longer needed");    // custom reason
-ctx.cancelStep("shipOrder", someException);          // wrap an existing exception
+ctx.cancelStep("awaitApproval");                            // default message: "Step cancelled"
+ctx.cancelStep("awaitApproval", "Manager rejected");        // custom reason
+ctx.cancelStep("awaitApproval", someException);              // wrap an existing exception
 ----
 
 Both approaches produce a CANCELLED event in the event store:
 
 [source]
 ----
-[4]: io.namespace.ShipOrderCancelled (CANCELLED): {}                        // <1>
-[4]: io.namespace.ShipOrderCancelled (CANCELLED): StepCancellationException // <2>
+[4]: io.namespace.AwaitApprovalCancelled (CANCELLED): {}                        // <1>
+[4]: io.namespace.AwaitApprovalCancelled (CANCELLED): StepCancellationException // <2>
 ----
 <.> Without a reason — empty payload.
 <.> With a reason — the payload contains the `StepCancellationException` with the message.

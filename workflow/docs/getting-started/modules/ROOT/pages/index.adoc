@@ -36,7 +36,7 @@ Along the way, you will learn each core concept:
 . *Steps*
 .. *xref:first-workflow.adoc[Your First Workflow]* — Create a minimal workflow that executes actions
 .. *xref:waiting-for-events.adoc[Waiting for Events]* — Suspend the workflow until payment is confirmed
-.. *xref:understanding-steps.adoc[Understanding Steps]* — Timeouts, error handling, event naming, payload reducers, and execution semantics
+.. *xref:understanding-steps.adoc[Understanding Steps]* — All primitives at a glance, timeouts, error handling, payload reducers, event naming, and execution semantics
 . *xref:workflow-lifecycle.adoc[Workflow Lifecycle]* — Terminal states, fail vs cancel, and lifecycle listeners
 . *xref:step-orchestration.adoc[Step Orchestration]* — Ship and notify the customer concurrently
 . *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
