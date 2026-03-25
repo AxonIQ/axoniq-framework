@@ -55,8 +55,9 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
+        <axon-framework.version>5.1.0-RC2</axon-framework.version>
         <axonserver-connector.version>2026.0.0</axonserver-connector.version>
+        <jspecify.version>1.0.0</jspecify.version>
         <!-- Conversion -->
         <jackson.version>2.21.1</jackson.version>
         <jackson3.version>3.1.0</jackson3.version>
@@ -212,6 +213,11 @@
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jspecify</groupId>
+                <artifactId>jspecify</artifactId>
+                <version>${jspecify.version}</version>
             </dependency>
             <!-- Logging -->
             <dependency>

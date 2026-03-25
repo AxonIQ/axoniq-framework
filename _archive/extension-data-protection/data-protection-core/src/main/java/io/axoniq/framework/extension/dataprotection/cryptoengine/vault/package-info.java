@@ -23,4 +23,7 @@
  *
  * @author Frans van Buul
  */
+@NullMarked
 package io.axoniq.framework.extension.dataprotection.cryptoengine.vault;
+
+import org.jspecify.annotations.NullMarked;
