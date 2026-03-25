@@ -29,9 +29,7 @@
     </parent>
 
     <artifactId>axon-workflow-dsl</artifactId>
-
-    <properties>
-    </properties>
+    <name>Axon Extension - Workflow - Standard DSL</name>
 
     <dependencies>
         <dependency>

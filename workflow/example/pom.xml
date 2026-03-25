@@ -29,6 +29,7 @@
     </parent>
 
     <artifactId>axon-workflow-example</artifactId>
+    <name>Axon Extension - Workflow - Example Simple</name>
 
     <dependencies>
         <dependency>

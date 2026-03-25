@@ -29,6 +29,7 @@
     </parent>
 
     <artifactId>axon-workflow-runtime</artifactId>
+    <name>Axon Extension - Workflow - Core</name>
 
     <properties>
     </properties>
