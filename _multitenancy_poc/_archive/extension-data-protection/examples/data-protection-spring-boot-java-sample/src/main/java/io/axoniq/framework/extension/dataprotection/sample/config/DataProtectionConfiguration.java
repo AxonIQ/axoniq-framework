@@ -22,7 +22,6 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.jpa.JpaCryptoEngine;
-import io.axoniq.license.entitlement.EntitlementManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
@@ -60,16 +59,15 @@ public class DataProtectionConfiguration {
     /**
      * Provides a JPA-based CryptoEngine that stores encryption keys in H2 database.
      * <p>
-     * Keys are persisted in the axoniq_gdpr_keys table and survive application restarts.
-     * This is the production-ready implementation for encryption key management.
+     * Keys are persisted in the axoniq_gdpr_keys table and survive application restarts. This is the production-ready
+     * implementation for encryption key management.
      *
      * @param entityManagerFactory JPA entity manager factory for database access
-     * @param entitlementManager the entitlement manager for license validation
-     * @return a JpaCryptoEngine instance for persistent key storage
+     * @return a {@link JpaCryptoEngine} instance for persistent key storage
      */
     @Bean
-    public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory, EntitlementManager entitlementManager) {
-        return new JpaCryptoEngine(entityManagerFactory, entitlementManager);
+    public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory) {
+        return new JpaCryptoEngine(entityManagerFactory);
     }
 
     /**

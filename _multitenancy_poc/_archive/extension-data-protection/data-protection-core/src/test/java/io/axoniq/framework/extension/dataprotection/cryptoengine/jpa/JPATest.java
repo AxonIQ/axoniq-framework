@@ -19,16 +19,21 @@ package io.axoniq.framework.extension.dataprotection.cryptoengine.jpa;
 
 import io.axoniq.framework.extension.dataprotection.cryptoengine.AbstractEngineTestSet;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 
-public class JPATest extends AbstractEngineTestSet {
+/**
+ * Test class validating the {@link JpaCryptoEngine}.
+ */
+class JPATest extends AbstractEngineTestSet {
 
-    private static EntityManagerFactory emf = Persistence.createEntityManagerFactory("myPersistenceUnit");
+    private final static EntityManagerFactory emf = Persistence.createEntityManagerFactory("myPersistenceUnit");
 
     @Override
     protected CryptoEngine getCryptoEngine() {
-        return new JpaCryptoEngine(emf, mockEntitlementManager());
+        CryptoEngine cryptoEngine = new JpaCryptoEngine(emf);
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
+        return cryptoEngine;
     }
-
 }

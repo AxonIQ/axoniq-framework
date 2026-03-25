@@ -43,7 +43,7 @@ import java.util.Map;
 import static io.axoniq.framework.extension.dataprotection.utils.TestUtils.defaultTestConverter;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class TypeAnalysisTests {
+class TypeAnalysisTests {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -51,7 +51,8 @@ public class TypeAnalysisTests {
 
     @BeforeEach
     public void setUp() throws Exception {
-        CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 

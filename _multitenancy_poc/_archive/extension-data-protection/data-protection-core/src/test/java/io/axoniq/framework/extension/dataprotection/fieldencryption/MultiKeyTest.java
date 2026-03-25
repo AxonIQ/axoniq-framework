@@ -29,13 +29,14 @@ import org.junit.jupiter.api.*;
 import static io.axoniq.framework.extension.dataprotection.utils.TestUtils.defaultTestConverter;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class MultiKeyTest {
+class MultiKeyTest {
 
     private CryptoEngine cryptoEngine;
     private FieldEncrypter fieldEncrypter;
 
     @Data
     public static class NewCustomerEvent {
+
         @DataSubjectId(group = "name", prefix = "name-")
         @DataSubjectId(group = "address", prefix = "address-")
         private final int id;
@@ -49,7 +50,8 @@ public class MultiKeyTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
     }
 

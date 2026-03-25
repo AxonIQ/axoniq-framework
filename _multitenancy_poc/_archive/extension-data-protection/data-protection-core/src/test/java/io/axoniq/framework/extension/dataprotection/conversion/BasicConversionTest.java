@@ -52,7 +52,8 @@ public class BasicConversionTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        final CryptoEngine cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        final CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         Converter delegateConverter = defaultTestConverter();
         converter = new FieldEncryptingConverter(cryptoEngine, delegateConverter);
         dataFactory = new DataFactory();

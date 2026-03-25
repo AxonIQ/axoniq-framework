@@ -51,7 +51,8 @@ public class DeepInspectObjectTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         fieldEncrypter.setModifyImmutableCollections(false);
         dataFactory = new DataFactory();

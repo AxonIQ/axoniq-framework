@@ -17,6 +17,7 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,13 +25,13 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 
-/*
- * To make this test work on any given machine, install SoftHSM (https://www.opendnssec.org/softhsm/),
- * initialize a token, and adjust the configuration below accordingly.
- *
+/**
+ * To make this test work on any given machine, install SoftHSM (https://www.opendnssec.org/softhsm/), initialize a
+ * token, and adjust the configuration below accordingly.
+ * <p>
  * The test will be ignored if the native lib can't be found.
  */
-public class PKCS11Test extends AbstractEngineTestSet {
+class PKCS11Test extends AbstractEngineTestSet {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     private static final String SOFTHSM_CONFIG_FILE = "/usr/local/etc/softhsm/softhsm2_stef.conf";
@@ -39,7 +40,8 @@ public class PKCS11Test extends AbstractEngineTestSet {
 
     static {
         if (new File(SOFTHSM_CONFIG_FILE).exists()) {
-            cryptoEngine = new PKCS11CryptoEngine(SOFTHSM_CONFIG_FILE, TOKEN_PIN.toCharArray(), mockEntitlementManager());
+            cryptoEngine = new PKCS11CryptoEngine(SOFTHSM_CONFIG_FILE, TOKEN_PIN.toCharArray());
+            cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         } else {
             logger.warn("SoftHSM native lib not found - all PKCS#11 test will be skipped");
             cryptoEngine = null;

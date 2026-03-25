@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Contains a few elementary tests of the FieldEncrypter, encrypting byte[] and String fields in a single class.
- * This is implemented an an abstract test class, allowing us to run these tests against vanilla Java, Lombok
+ * This is implemented an abstract test class, allowing us to run these tests against vanilla Java, Lombok
  * and Kotlin classes.
  */
 public abstract class AbstractBasicTestSet<T> {
@@ -55,7 +55,8 @@ public abstract class AbstractBasicTestSet<T> {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
+        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());

@@ -17,8 +17,6 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
-import io.axoniq.license.entitlement.EntitlementManager;
-
 import java.util.concurrent.ConcurrentHashMap;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -33,14 +31,11 @@ public class InMemoryCryptoEngine extends DatabaseBackedCryptoEngine {
 
     private static final ConcurrentHashMap<String, SecretKeySpec> db = new ConcurrentHashMap<>();
 
-    /**
-     * Constructs an {@link InMemoryCryptoEngine}.
-     *
-     * @param entitlementManager the {@link EntitlementManager} for license validation
-     */
-    public InMemoryCryptoEngine(EntitlementManager entitlementManager) {
-        super(entitlementManager);
-    }
+     /**
+      * Constructs an {@link InMemoryCryptoEngine}. There are no parameters to configure.
+      */
+     public InMemoryCryptoEngine() {
+     }
 
     @Override
     public SecretKey getKey(String id) {

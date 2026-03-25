@@ -17,23 +17,28 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import org.hsqldb.jdbc.JDBCDataSource;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 
-public class JDBCTest extends AbstractEngineTestSet {
+/**
+ * Test class validating the {@link JdbcCryptoEngine}.
+ */
+class JDBCTest extends AbstractEngineTestSet {
 
     private static JdbcCryptoEngine cryptoEngine;
 
     static {
         JDBCDataSource jdbcDataSource = new JDBCDataSource();
         jdbcDataSource.setURL("jdbc:hsqldb:mem:mydb");
-        cryptoEngine = new JdbcCryptoEngine(jdbcDataSource, mockEntitlementManager());
+        cryptoEngine = new JdbcCryptoEngine(jdbcDataSource);
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
 
-        try(Connection connection = jdbcDataSource.getConnection()) {
+        try (Connection connection = jdbcDataSource.getConnection()) {
             connection.prepareStatement(cryptoEngine.getCreateTableStatement()).execute();
-        } catch(SQLException ex) {
+        } catch (SQLException ex) {
             throw new RuntimeException(ex);
         }
     }
@@ -42,5 +47,4 @@ public class JDBCTest extends AbstractEngineTestSet {
     protected CryptoEngine getCryptoEngine() {
         return cryptoEngine;
     }
-
 }

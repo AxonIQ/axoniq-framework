@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests of the custom replacement value mechanism.
  */
-public class ReplacementValueTest {
+class ReplacementValueTest {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -83,8 +83,11 @@ public class ReplacementValueTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        cryptoEngine = new InMemoryCryptoEngine(TestUtils.mockEntitlementManager());
-        fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter(), new CustomReplacementValueProviderDeleted());
+        cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
+        fieldEncrypter = new FieldEncrypter(cryptoEngine,
+                                            defaultTestConverter(),
+                                            new CustomReplacementValueProviderDeleted());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());
     }
