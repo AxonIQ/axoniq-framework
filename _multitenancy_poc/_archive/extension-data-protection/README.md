@@ -50,7 +50,7 @@ Add the dependency to your project:
 
 ```xml
 <dependency>
-    <groupId>io.axoniq.framework</groupId>
+    <groupId>io.axoniq.framework.extension</groupId>
     <artifactId>dataprotection-core</artifactId>
     <version>5.0.0-SNAPSHOT</version>
 </dependency>
@@ -375,7 +375,7 @@ Encrypted data is stored in Protocol Buffers format containing:
 
 **Breaking Changes:**
 
-1. **Package names:** `io.axoniq.framework.dataprotection` → `io.axoniq.framework.dataprotection`
+1. **Package names:** `io.axoniq.dataprotection` → `io.axoniq.framework.extension.dataprotection`
 2. **API change:** `FieldEncryptingSerializer` → `FieldEncryptingConverter` (Axon 5.x Converter API)
 3. **Java version:** Java 11+ → Java 21+
 
