@@ -22,6 +22,7 @@ import io.axoniq.demo.bikerental.coreapi.payment.GetAllPaymentsQuery;
 import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentIdQuery;
 import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentStatusQuery;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus;
+import io.axoniq.demo.bikerental.coreapi.payment.PreparePaymentCommand;
 import io.axoniq.demo.bikerental.coreapi.payment.RejectPaymentCommand;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
@@ -43,6 +44,11 @@ public class PaymentController {
     public PaymentController(QueryGateway queryGateway, CommandGateway commandGateway) {
         this.queryGateway = queryGateway;
         this.commandGateway = commandGateway;
+    }
+
+    @PostMapping("/preparePayment")
+    public CompletableFuture<String> preparePayment(@RequestParam("amount") int amount, @RequestParam("reference") String paymentReference) {
+        return commandGateway.send(new PreparePaymentCommand(amount, paymentReference)).resultAs(String.class);
     }
 
     @GetMapping("/status/{paymentId}")

@@ -22,7 +22,7 @@ import org.axonframework.messaging.eventhandling.annotation.Event;
 
 @Event
 public record RequestRejectedEvent(
-        @EventTag(key = "Bike")
+        @EventTag(key = "bikeId")
         String bikeId
 ) {
 

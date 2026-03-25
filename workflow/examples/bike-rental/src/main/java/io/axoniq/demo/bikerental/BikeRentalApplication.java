@@ -29,6 +29,8 @@ import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 
 @SpringBootApplication
 public class BikeRentalApplication {
@@ -36,49 +38,6 @@ public class BikeRentalApplication {
     public static void main(String[] args) {
         SpringApplication.run(BikeRentalApplication.class, args);
     }
-
-    /*
-    @Bean
-    public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-
-        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
-                                                                    .allowIfBaseType(Object.class)
-                                                                    .build();
-
-        mapper.activateDefaultTyping(
-                ptv,
-                ObjectMapper.DefaultTyping.OBJECT_AND_NON_CONCRETE,
-                JsonTypeInfo.As.PROPERTY
-        );
-
-        return mapper;
-    }
-*/
-    /*
-    @Bean
-    public EventStorageEngine storageEngine(AxonServerConnectionManager connectionManager,
-                                            EventConverter eventConverter) {
-        return new AggregateBasedAxonServerEventStorageEngine(
-                connectionManager.getConnection(),
-                eventConverter
-        );
-    }
-
-    @Bean
-    public EventStore storageBasedEventStore(EventStorageEngine engine) {
-        return new StorageEngineBackedEventStore(engine, new SimpleEventBus(), new AnnotationBasedTagResolver());
-    }
-
-
-    @Bean
-    public EventSourcingConfigurer eventSourcingConfigurer(EventStorageEngine engine) {
-        return EventSourcingConfigurer.create()
-                                      .registerEventStorageEngine(c -> engine)
-                ;
-    }
-
-     */
 
     @Bean
     public WorkflowModuleEnhancer paymentWorkflow() {
@@ -97,27 +56,4 @@ public class BikeRentalApplication {
                         )
         );
     }
-    /**
-     *        @Autowired
-     *    public void configure(EventProcessingConfigurer config) {
-     * 		config.registerPooledStreamingEventProcessor(
-     * 				"io.axoniq.demo.bikerental.payment",
-     * 				Configuration::eventStore,
-     * 				(c, b) -> b.workerExecutor(workerExecutorService())
-     * 						   .batchSize(100)
-     * 		);
-     *    }
-     */
-
-    /**
-     *
-     * @Autowired public void configure(EventProcessingConfigurer eventProcessing) {
-     * eventProcessing.registerPooledStreamingEventProcessor( "PaymentSagaProcessor", Configuration::eventStore, (c, b)
-     * -> b.workerExecutor(workerExecutorService()) .batchSize(100)
-     * .initialToken(StreamableMessageSource::createHeadToken) ); eventProcessing.registerPooledStreamingEventProcessor(
-     * "io.axoniq.demo.bikerental.rental.query", Configuration::eventStore, (c, b) ->
-     * b.workerExecutor(workerExecutorService()) .batchSize(100)
-     * <p>
-     * ); }
-     */
 }

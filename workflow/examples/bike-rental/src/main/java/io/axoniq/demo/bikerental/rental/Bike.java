@@ -36,7 +36,7 @@ import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import java.util.Objects;
 import java.util.UUID;
 
-@EventSourced(tagKey = "bikeId")
+@EventSourced(tagKey = "Bike")
 public class Bike {
 
     private String bikeId;
@@ -46,14 +46,7 @@ public class Bike {
     private boolean reservationConfirmed;
 
     @EntityCreator
-    public Bike(String bikeId) {
-        this.bikeId = bikeId;
-        this.isAvailable = true;
-    }
-
-    @EntityCreator
-    public Bike(BikeRegisteredEvent event) {
-        this(event.bikeId());
+    public Bike() {
     }
 
     @CommandHandler
@@ -96,6 +89,12 @@ public class Bike {
             throw new IllegalStateException("Bike was already returned");
         }
         eventAppender.append(new BikeReturnedEvent(command.bikeId(), command.location()));
+    }
+
+    @EventSourcingHandler
+    public void handle(BikeRegisteredEvent event) {
+        this.bikeId = event.bikeId();
+        this.isAvailable = true;
     }
 
     @EventSourcingHandler

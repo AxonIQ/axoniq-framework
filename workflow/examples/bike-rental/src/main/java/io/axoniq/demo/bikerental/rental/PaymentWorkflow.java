@@ -29,6 +29,8 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Map;
@@ -43,6 +45,7 @@ import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate
 
 public class PaymentWorkflow {
 
+    private static final Logger logger = LoggerFactory.getLogger(PaymentWorkflow.class);
     private final CommandGateway commandGateway;
 
     public PaymentWorkflow(CommandGateway commandGateway) {
@@ -56,7 +59,7 @@ public class PaymentWorkflow {
     )
     public void execute(SimpleWorkflowContext ctx) {
 
-        ctx.setPayload("setAmount",
+        ctx.setPayload("setAmountAndReference",
                        Map.of(
                                "amount", 10,
                                "paymentReference", ctx.workflowPayload().get("rentalReference")
@@ -66,50 +69,58 @@ public class PaymentWorkflow {
 
         AtomicBoolean paymentPending = new AtomicBoolean(true);
         while (paymentPending.get()) {
-            var paymentPrepared = ctx.allMatch(
-                    WorkflowStepResult::success,
-                    sendCommand(ctx,
-                                "preparePayment",
-                                payload ->
-                                        new PreparePaymentCommand(
-                                                payload.get("amount"),
-                                                payload.get("paymentReference")
-                                        )
-                    ),
-                    ctx.waitFor("paymentPrepared",
-                                PaymentPreparedEvent.class,
-                                associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
-                                Duration.ofSeconds(5)
-                    )
-            );
-            paymentPrepared.await();
 
-            if (paymentPrepared.failure()) {
+            logger.info("Preparing payment {}", paymentReference);
+
+            var paymentPrepared = ctx.waitFor("paymentPrepared",
+                                              PaymentPreparedEvent.class,
+                                              associate(payloadProperty("paymentReference"),
+                                                        equalsTo(paymentReference)),
+                                              Duration.ofSeconds(10)
+            );
+
+            if (sendCommand(ctx,
+                            "preparePayment",
+                            payload ->
+                                    new PreparePaymentCommand(
+                                            payload.get("amount"),
+                                            payload.get("paymentReference")
+                                    )
+            ).success()) {
+                paymentPrepared.await();
+                if (paymentPrepared.failure()) {
+                    // NICE TO HAVE
+                    // paymentPrepared.cancel("Prepare payment failed.");
+                    ctx.sleep("retryPayment", Duration.ofSeconds(5));
+                } else if (paymentPrepared.success()) {
+                    paymentPending.set(false);
+                    var paymentId = paymentPrepared.result().orElseThrow(() -> new IllegalStateException("No payload"));
+                    ctx.setPayload("setPaymentId", paymentId);
+
+                    logger.info("Payment prepared successfully for reference {}, the payment id is {}",
+                                paymentReference,
+                                paymentId);
+                }
+            } else {
+                // NICE TO HAVE
+                // paymentPrepared.cancel("Prepare payment failed.");
                 ctx.sleep("retryPayment", Duration.ofSeconds(5));
-            } else if (paymentPrepared.success()) {
-                paymentPending.set(false);
-                var paymentPreparedResult = paymentPrepared
-                        .matched().stream()
-                        .filter(r -> r.getStepName().equals("paymentPrepared"))
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException("Payment prepared result not found"))
-                        .<Map<String, Object>>result()
-                        .orElseThrow(() -> new IllegalStateException("Payment prepared result is empty"));
-                ctx.setPayload("setPaymentId", paymentPreparedResult);
             }
         }
 
+        var timeout = 240;
+        logger.info("Waiting for payment confirmation or rejection for the next {} seconds", timeout);
         var paymentStatus = ctx.anyMatch(
                 WorkflowStepResult::success,
                 ctx.waitFor("paymentConfirmed",
                             PaymentConfirmedEvent.class,
                             associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
-                            Duration.ofSeconds(30)
+                            Duration.ofSeconds(timeout)
                 ),
                 ctx.waitFor("paymentRejected",
                             PaymentRejectedEvent.class,
                             associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
-                            Duration.ofSeconds(30)
+                            Duration.ofSeconds(timeout)
                 )
         );
         paymentStatus.await();
@@ -117,25 +128,28 @@ public class PaymentWorkflow {
         if (!paymentStatus.matched().isEmpty()) {
             switch (paymentStatus.matched().getFirst().getStepName()) {
                 case "paymentConfirmed":
+                    logger.info("Payment confirmed. Approving the request.");
                     sendCommand(ctx,
                                 "confirmRequest",
                                 payload -> new ApproveRequestCommand(
                                         payload.get("bikeId"),
                                         payload.get("renter")
                                 )
-                    );
+                    ).await();
                     break;
                 case "paymentRejected":
+                    logger.info("Payment rejected. Rejecting the request.");
                     sendCommand(ctx,
                                 "confirmRequest",
                                 payload -> new RejectRequestCommand(
                                         payload.get("bikeId"),
                                         payload.get("renter")
                                 )
-                    );
+                    ).await();
                     break;
             }
         } else {
+            logger.info("Payment not confirmed or rejected within {} seconds. Rejecting the request.", timeout);
             // timeout
             sendCommand(
                     ctx,
@@ -143,7 +157,7 @@ public class PaymentWorkflow {
                     payload -> new RejectPaymentCommand(
                             payload.get("paymentId")
                     )
-            );
+            ).await();
         }
     }
 
