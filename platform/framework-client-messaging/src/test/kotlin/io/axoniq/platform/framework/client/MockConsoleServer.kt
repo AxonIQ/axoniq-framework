@@ -139,7 +139,7 @@ class MockConsoleServer {
     /**
      * Creates a response payload with a heap-backed data buffer.
      * [DefaultPayload.create(byte[])] wraps the byte array in an UnpooledHeapByteBuf, which supports
-     * [io.netty.buffer.ByteBuf.array] — required by [io.axoniq.platform.framework.client.strategy.CborEncodingStrategy.decode].
+     * [io.netty.buffer.ByteBuf.array] — required by [io.axoniq.platform.framework.client.strategy.CborJackson2EncodingStrategy.decode].
      */
     private fun encodeResponse(obj: Any): Payload = DefaultPayload.create(mapper.writeValueAsBytes(obj))
 

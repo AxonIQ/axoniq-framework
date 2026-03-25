@@ -33,7 +33,7 @@ class AxoniqConsoleHandlerEnhancerDefinition : HandlerEnhancerDefinition {
     private val logger = KotlinLogging.logger { }
 
 
-    override fun <T : Any?> wrapHandler(original: MessageHandlingMember<T>): MessageHandlingMember<T> {
+    override fun <T: Any> wrapHandler(original: MessageHandlingMember<T>): MessageHandlingMember<T> {
         if (original.attribute<Any>("EventSourcingHandler.payloadType").isPresent) {
             // Skip event sourcing handlers
             return original;

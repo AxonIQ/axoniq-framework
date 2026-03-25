@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,12 @@ package io.axoniq.platform.framework.messaging.enhancing
 import org.axonframework.messaging.queryhandling.annotation.QueryHandlingMember
 import java.lang.reflect.Type
 
-class AxoniqPlatformQueryHandlingMember<T>(override val delegate: QueryHandlingMember<T>, declaringClassName: String) : AxoniqPlatformMessageHandlingMember<T>(delegate, declaringClassName), QueryHandlingMember<T> {
-    override fun queryName(): String? {
+class AxoniqPlatformQueryHandlingMember<T: Any>(override val delegate: QueryHandlingMember<T>, declaringClassName: String) : AxoniqPlatformMessageHandlingMember<T>(delegate, declaringClassName), QueryHandlingMember<T> {
+    override fun queryName(): String {
         return delegate.queryName()
     }
 
-    override fun resultType(): Type? {
+    override fun resultType(): Type {
         return delegate.resultType()
     }
 }

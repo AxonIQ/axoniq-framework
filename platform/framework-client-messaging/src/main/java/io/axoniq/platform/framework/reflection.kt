@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,12 @@ fun <T> Any.getPropertyValue(fieldName: String): T? {
             field,
             this
     )
+}
+
+fun <T> Any.setPropertyValue(fieldName: String, value: T) {
+    val field = ReflectionUtils.fieldsOf(this::class.java).firstOrNull { it.name == fieldName } ?: return
+    field.isAccessible = true
+    field.set(this, value)
 }
 
 fun Any.getPropertyType(fieldName: String): String {

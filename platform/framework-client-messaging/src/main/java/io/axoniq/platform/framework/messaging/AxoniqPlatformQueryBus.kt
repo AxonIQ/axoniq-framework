@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ class AxoniqPlatformQueryBus(
         descriptor.describeWrapperOf(delegate)
     }
 
-    override fun subscribe(name: QualifiedName, queryHandler: QueryHandler): QueryBus? {
+    override fun subscribe(name: QualifiedName, queryHandler: QueryHandler): QueryBus {
         logger.debug { "Decorating query handler subscription for [$name] and handler [$queryHandler]" }
         delegate.subscribe(name) { command, context ->
             logger.debug { "Handling query [${command.type()}] with handler [$queryHandler]" }
@@ -69,7 +69,7 @@ class AxoniqPlatformQueryBus(
         return this
     }
 
-    override fun query(query: QueryMessage, context: ProcessingContext?): MessageStream<QueryResponseMessage?> {
+    override fun query(query: QueryMessage, context: ProcessingContext?): MessageStream<QueryResponseMessage> {
         val measurementContainer = context?.getResource(HandlerMeasurement.RESOURCE_KEY)
         if (measurementContainer == null) {
             metricsRegistry.registerMessageDispatchedWithoutHandling(query.toInformation())
@@ -80,7 +80,7 @@ class AxoniqPlatformQueryBus(
         return delegate.query(query, context)
     }
 
-    override fun subscriptionQuery(query: QueryMessage, context: ProcessingContext?, updateBufferSize: Int): MessageStream<QueryResponseMessage?> {
+    override fun subscriptionQuery(query: QueryMessage, context: ProcessingContext?, updateBufferSize: Int): MessageStream<QueryResponseMessage> {
         val measurementContainer = context?.getResource(HandlerMeasurement.RESOURCE_KEY)
         if (measurementContainer == null) {
             metricsRegistry.registerMessageDispatchedWithoutHandling(query.toInformation())
@@ -91,7 +91,7 @@ class AxoniqPlatformQueryBus(
         return delegate.subscriptionQuery(query, context, updateBufferSize)
     }
 
-    override fun subscribeToUpdates(query: QueryMessage, updateBufferSize: Int): MessageStream<SubscriptionQueryUpdateMessage?> {
+    override fun subscribeToUpdates(query: QueryMessage, updateBufferSize: Int): MessageStream<SubscriptionQueryUpdateMessage> {
         return delegate.subscribeToUpdates(query, updateBufferSize)
     }
 
@@ -109,11 +109,11 @@ class AxoniqPlatformQueryBus(
         }, context)
     }
 
-    override fun completeSubscriptions(filter: Predicate<QueryMessage?>, context: ProcessingContext?): CompletableFuture<Void?> {
+    override fun completeSubscriptions(filter: Predicate<QueryMessage>, context: ProcessingContext?): CompletableFuture<Void> {
         return delegate.completeSubscriptions(filter, context)
     }
 
-    override fun completeSubscriptionsExceptionally(filter: Predicate<QueryMessage?>, cause: Throwable, context: ProcessingContext?): CompletableFuture<Void?> {
+    override fun completeSubscriptionsExceptionally(filter: Predicate<QueryMessage>, cause: Throwable, context: ProcessingContext?): CompletableFuture<Void> {
         return delegate.completeSubscriptionsExceptionally(filter, cause, context)
     }
 }

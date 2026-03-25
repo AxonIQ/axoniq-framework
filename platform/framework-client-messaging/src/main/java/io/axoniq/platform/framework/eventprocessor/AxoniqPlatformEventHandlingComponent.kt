@@ -34,6 +34,7 @@ import org.axonframework.messaging.eventhandling.EventHandlerRegistry
 import org.axonframework.messaging.eventhandling.EventHandlingComponent
 import org.axonframework.messaging.eventhandling.EventMessage
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment
+import org.axonframework.messaging.eventhandling.replay.ResetContext
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -44,14 +45,14 @@ class AxoniqPlatformEventHandlingComponent(
         private val processorMetricRegistry: ProcessorMetricsRegistry
 ) : EventHandlingComponent {
     private val logger = KotlinLogging.logger { }
-    override fun handle(event: EventMessage, context: ProcessingContext): MessageStream.Empty<Message?> {
+    override fun handle(event: EventMessage, context: ProcessingContext): MessageStream.Empty<Message> {
         if (context.containsResource(RESOURCE_KEY)) {
             val startTime = System.nanoTime()
             // This is a subscribing event handler called from another event handler in the same component.
             val originalMeasurements = context.getResource(RESOURCE_KEY)
             val eventResult = delegate.handle(event, context)
             eventResult.onComplete {
-                originalMeasurements.registerMetricValue(
+                originalMeasurements?.registerMetricValue(
                         ChildHandlerMetric(
                                 handler = HandlerStatisticsMetricIdentifier(
                                         type = HandlerType.EventProcessor,
@@ -68,21 +69,22 @@ class AxoniqPlatformEventHandlingComponent(
         // Report ingest latency
         logger.debug { "Registering ingest for event [${event.type()}][${event.identifier()}] in processor [$processorName]" }
         val ingestTimestamp = Instant.now()
-        val segment = contextWithMeasurements.getResource(Segment.RESOURCE_KEY)
-        processorMetricRegistry.registerIngested(processorName, segment.segmentId, ChronoUnit.NANOS.between(event.timestamp(), ingestTimestamp))
-        contextWithMeasurements.runOnAfterCommit {
-            logger.debug { "Processed event [${event.type()}][${event.identifier()}] successfully in processor [$processorName]" }
-            processorMetricRegistry.registerCommitted(processorName, segment.segmentId, ChronoUnit.NANOS.between(ingestTimestamp, Instant.now()))
-            measurement.complete(true)
-            handlerMetricsRegistry.registerMeasurement(measurement)
-        }
-        contextWithMeasurements.onError { _, _, _ ->
-            logger.debug { "Error in processing event [${event.type()}][${event.identifier()}] in processor [$processorName]" }
-            measurement.complete(false)
-            handlerMetricsRegistry.registerMeasurement(measurement)
-        }
+        contextWithMeasurements.getResource(Segment.RESOURCE_KEY)?.let { segment ->
+            processorMetricRegistry.registerIngested(processorName, segment.segmentId, ChronoUnit.NANOS.between(event.timestamp(), ingestTimestamp))
+            contextWithMeasurements.runOnAfterCommit {
+                logger.debug { "Processed event [${event.type()}][${event.identifier()}] successfully in processor [$processorName]" }
+                processorMetricRegistry.registerCommitted(processorName, segment.segmentId, ChronoUnit.NANOS.between(ingestTimestamp, Instant.now()))
+                measurement.complete(true)
+                handlerMetricsRegistry.registerMeasurement(measurement)
+            }
+            contextWithMeasurements.onError { _, _, _ ->
+                logger.debug { "Error in processing event [${event.type()}][${event.identifier()}] in processor [$processorName]" }
+                measurement.complete(false)
+                handlerMetricsRegistry.registerMeasurement(measurement)
+            }
 
-        processorMetricRegistry.registerActiveMessage(contextWithMeasurements, processorName, segment.segmentId, event.timestamp())
+            processorMetricRegistry.registerActiveMessage(contextWithMeasurements, processorName, segment.segmentId, event.timestamp())
+        }
         return delegate.handle(event, contextWithMeasurements)
     }
 

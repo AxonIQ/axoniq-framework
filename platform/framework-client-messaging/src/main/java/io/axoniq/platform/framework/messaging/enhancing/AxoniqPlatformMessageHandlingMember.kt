@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,10 @@ import org.axonframework.messaging.core.annotation.MessageHandlingMember
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 import java.util.Optional
 
-open class AxoniqPlatformMessageHandlingMember<T>(open val delegate: MessageHandlingMember<T>, val declaringClassName: String) : MessageHandlingMember<T> {
+open class AxoniqPlatformMessageHandlingMember<T: Any>(open val delegate: MessageHandlingMember<T>, val declaringClassName: String) : MessageHandlingMember<T> {
     private val logger = KotlinLogging.logger { }
 
-    override fun payloadType(): Class<*>? {
+    override fun payloadType(): Class<*> {
         return delegate.payloadType()
     }
 
@@ -41,11 +41,11 @@ open class AxoniqPlatformMessageHandlingMember<T>(open val delegate: MessageHand
     }
 
     @Suppress("DEPRECATION")
-    override fun handleSync(message: Message, context: ProcessingContext, target: T): Any? {
+    override fun handleSync(message: Message, context: ProcessingContext, target: T?): Any {
         return delegate.handleSync(message, context, target)
     }
 
-    override fun handle(message: Message, context: ProcessingContext, target: T): MessageStream<*>? {
+    override fun handle(message: Message, context: ProcessingContext, target: T?): MessageStream<*> {
         HandlerMeasurement.onContext(context) {
             logger.debug { "Received message [${message.type()}] for class [$declaringClassName]" }
             it.reportHandlingClass(declaringClassName)
@@ -63,7 +63,7 @@ open class AxoniqPlatformMessageHandlingMember<T>(open val delegate: MessageHand
         return stream
     }
 
-    override fun <HT : Any?> unwrap(handlerType: Class<HT>): Optional<HT> {
+    override fun <HT : Any> unwrap(handlerType: Class<HT>): Optional<HT> {
         if(handlerType.isInstance(this)) {
             return Optional.of(this) as Optional<HT>
         }

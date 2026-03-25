@@ -39,7 +39,6 @@ class AxoniqPlatformEventStorageEngine(
         private val delegate: EventStorageEngine,
         private val registry: HandlerMetricsRegistry,
 ) : EventStorageEngine {
-    private val logger = KotlinLogging.logger { }
 
     override fun appendEvents(condition: AppendCondition, context: ProcessingContext?, events: List<TaggedEventMessage<*>>): CompletableFuture<EventStorageEngine.AppendTransaction<*>> {
         // First, report dispatches
@@ -73,23 +72,23 @@ class AxoniqPlatformEventStorageEngine(
         return appendEvents(condition, context, events.toList())
     }
 
-    override fun source(condition: SourcingCondition): MessageStream<EventMessage?> {
+    override fun source(condition: SourcingCondition): MessageStream<EventMessage> {
         return delegate.source(condition)
     }
 
-    override fun stream(condition: StreamingCondition): MessageStream<EventMessage?> {
+    override fun stream(condition: StreamingCondition): MessageStream<EventMessage> {
         return delegate.stream(condition)
     }
 
-    override fun firstToken(): CompletableFuture<TrackingToken?> {
+    override fun firstToken(): CompletableFuture<TrackingToken> {
         return delegate.firstToken()
     }
 
-    override fun latestToken(): CompletableFuture<TrackingToken?> {
+    override fun latestToken(): CompletableFuture<TrackingToken> {
         return delegate.latestToken()
     }
 
-    override fun tokenAt(at: Instant, ): CompletableFuture<TrackingToken?> {
+    override fun tokenAt(at: Instant): CompletableFuture<TrackingToken> {
         return delegate.tokenAt(at)
     }
 

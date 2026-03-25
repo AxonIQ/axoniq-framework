@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import java.util.concurrent.CompletableFuture
 class AxoniqPlatformRepository<ID : Any, E : Any>(
         private val delegate: Repository<ID, E>,
 ) : Repository.LifecycleManagement<ID, E> {
-    override fun attach(entity: ManagedEntity<ID, E?>, processingContext: ProcessingContext): ManagedEntity<ID, E> {
+    override fun attach(entity: ManagedEntity<ID, E>, processingContext: ProcessingContext): ManagedEntity<ID, E> {
         val lfcm = delegate as Repository.LifecycleManagement<ID, E>
         return lfcm.attach(entity, processingContext)
     }
