@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import io.rsocket.Payload
 import io.rsocket.metadata.WellKnownMimeType
 import io.rsocket.util.DefaultPayload
 
-class CborEncodingStrategy : RSocketPayloadEncodingStrategy {
+class CborJackson2EncodingStrategy : RSocketPayloadEncodingStrategy {
     private val mapper = CBORMapper.builder().build().findAndRegisterModules()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 

@@ -28,7 +28,8 @@ import io.axoniq.platform.framework.client.ClientSettingsService;
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.platform.framework.client.ServerProcessorReporter;
 import io.axoniq.platform.framework.client.SetupPayloadCreator;
-import io.axoniq.platform.framework.client.strategy.CborEncodingStrategy;
+import io.axoniq.platform.framework.client.strategy.CborJackson2EncodingStrategy;
+import io.axoniq.platform.framework.client.strategy.CborJackson3EncodingStrategy;
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy;
 import io.axoniq.platform.framework.eventprocessor.AxoniqPlatformEventHandlingComponent;
 import io.axoniq.platform.framework.eventprocessor.EventProcessorManager;
@@ -45,6 +46,7 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.configuration.Module;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.common.util.ExecutorServiceFactory;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
@@ -52,12 +54,17 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorModule;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import org.jspecify.annotations.NonNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
 import java.util.UUID;
 
 public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
     public static final int PLATFORM_ENHANCER_ORDER = Integer.MAX_VALUE - 5;
+    private static final Logger logger = LoggerFactory.getLogger(AxoniqPlatformConfigurerEnhancer.class);
 
     @Override
     public void enhance(ComponentRegistry registry) {
@@ -91,7 +98,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                            .withBuilder(EventProcessorManager::new))
                 .registerComponent(ComponentDefinition
                                            .ofType(RSocketPayloadEncodingStrategy.class)
-                                           .withBuilder(c -> new CborEncodingStrategy()))
+                                           .withBuilder(c -> createJackson2Or3EncodingStrategy()))
                 .registerComponent(ComponentDefinition
                                            .ofType(RSocketHandlerRegistrar.class)
                                            .withBuilder(c -> new RSocketHandlerRegistrar(c.getComponent(
@@ -183,19 +190,20 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                       }))
                 .registerDecorator(DecoratorDefinition.forType(DistributedQueryBusConfiguration.class)
                                                       .with((cc, name, delegate) -> {
-                                                          return new DistributedQueryBusConfiguration(
-                                                                  delegate.queryThreads(),
-                                                                  (config, queue) -> {
-                                                                      var built = delegate.queryExecutorServiceFactory()
-                                                                                          .createExecutorService(config,
-                                                                                                                 queue);
-                                                                      return new MeasuringExecutorServiceDecorator(
-                                                                              BusType.QUERY,
-                                                                              built,
-                                                                              cc.getComponent(ApplicationMetricRegistry.class));
-                                                                  },
-                                                                  delegate.queryResponseThreads(),
-                                                                  delegate.queryResponseExecutorServiceFactory());
+                                                          try {
+                                                              ExecutorServiceFactory<DistributedQueryBusConfiguration> original = ReflectionKt.getPropertyValue(delegate, "queryExecutorServiceFactory");
+                                                              Objects.requireNonNull(original);
+                                                              ReflectionKt.setPropertyValue(delegate, "queryExecutorServiceFactory", (ExecutorServiceFactory<DistributedQueryBusConfiguration>) (configuration, queue) -> {
+                                                                  var built = original.createExecutorService(configuration, queue);
+                                                                  return new MeasuringExecutorServiceDecorator(
+                                                                          BusType.QUERY,
+                                                                          built,
+                                                                          cc.getComponent(ApplicationMetricRegistry.class));
+                                                              });
+                                                          } catch (Exception e) {
+                                                              logger.error("Failed to instruct DistributedQueryBusConfiguration, e)");
+                                                          }
+                                                          return delegate;
                                                       }));
 
 
@@ -212,6 +220,53 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
 
             return null;
         });
+    }
+
+    /**
+     * Checks the classpath for Jackson 2 or Jackson 3 and its requiremenets for this application.
+     * Will fail to create the component if neither is there, or if one is present and doesn't have the right modules.
+     */
+    private static RSocketPayloadEncodingStrategy createJackson2Or3EncodingStrategy() {
+        try {
+            Class.forName("tools.jackson.databind.ObjectMapper");
+            try {
+                Class.forName("tools.jackson.dataformat.cbor.CBORMapper");
+                try {
+                    Class.forName("tools.jackson.module.kotlin.KotlinModule");
+                    return new CborJackson3EncodingStrategy();
+                } catch (ClassNotFoundException e) {
+                    throw new IllegalArgumentException(
+                            "Found Jackson 3 on the classpath, but can not find the KotlinModule. Please add the tools.jackson.module:jackson-module-kotlin dependency to your project");
+                }
+            } catch (ClassNotFoundException e) {
+                throw new IllegalArgumentException(
+                        "Found Jackson 3 on the classpath, but cannot find the CBOR dataformat. Please add the com.fasterxml.jackson.dataformat:jackson-dataformat-cbor dependency to your project.");
+            }
+        } catch (ClassNotFoundException e) {
+            // Do nothing, Jackson 3 is not on the classpath. Continue to check for 2
+        }
+
+        try {
+            Class.forName("com.fasterxml.jackson.databind.ObjectMapper");
+            try {
+                Class.forName(
+                        "com.fasterxml.jackson.dataformat.cbor.databind.CBORMapper");
+                try {
+                    Class.forName(
+                            "com.fasterxml.jackson.module.kotlin.KotlinModule");
+                    return new CborJackson2EncodingStrategy();
+                } catch (ClassNotFoundException e) {
+                    throw new IllegalArgumentException(
+                            "Found Jackson 2 on the classpath, but can not find the KotlinModule. Please add the com.fasterxml.jackson.module:jackson-module-kotlin dependency to your project");
+                }
+            } catch (ClassNotFoundException e) {
+                throw new IllegalArgumentException(
+                        "Found Jackson 2 on the classpath, but cannot find the CBOR dataformat. Please add the com.fasterxml.jackson.dataformat:jackson-dataformat-cbor dependency to your project.");
+            }
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException(
+                    "Neither Jackson 2 nor 3 was found on the classpath. Please add either Jackson 2 or 3 to your project.");
+        }
     }
 
     /**

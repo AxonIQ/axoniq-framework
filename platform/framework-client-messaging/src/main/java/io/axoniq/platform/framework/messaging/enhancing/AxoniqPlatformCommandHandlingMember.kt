@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025. AxonIQ B.V.
+ * Copyright (c) 2022-2026. AxonIQ B.V.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package io.axoniq.platform.framework.messaging.enhancing
 
 import org.axonframework.messaging.commandhandling.annotation.CommandHandlingMember
 
-class AxoniqPlatformCommandHandlingMember<T>(
+class AxoniqPlatformCommandHandlingMember<T: Any>(
         override val delegate: CommandHandlingMember<T>,
         declaringClassName: String
 ) : AxoniqPlatformMessageHandlingMember<T>(
@@ -26,11 +26,11 @@ class AxoniqPlatformCommandHandlingMember<T>(
         declaringClassName
 ), CommandHandlingMember<T> {
 
-    override fun commandName(): String? {
+    override fun commandName(): String {
         return delegate.commandName()
     }
 
-    override fun routingKey(): String? {
+    override fun routingKey(): String {
         return delegate.routingKey()
     }
 
