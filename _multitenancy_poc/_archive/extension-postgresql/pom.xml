@@ -19,15 +19,14 @@
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.axoniq.framework.postgresql</groupId>
-    <artifactId>postgresql-parent</artifactId>
+    <groupId>io.axoniq.framework.extensions.postgresql</groupId>
+    <artifactId>axon-postgresql-extension</artifactId>
     <version>0.1.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <modelVersion>4.0.0</modelVersion>
-
-    <name>AxonIQ Framework - PostgreSQL Extension</name>
+    <name>AxonIQ Framework - PostgreSQL - Parent</name>
     <description>
         An extension, from AxonIQ, for Axon Framework, providing a tailored storage solution through PostgreSQL.
     </description>
