@@ -93,13 +93,13 @@ public class PaymentWorkflow {
                 paymentPrepared.await();
                 if (paymentPrepared.success()) {
                     paymentPending.set(false);
-                    var paymentId = paymentPrepared.result().orElseThrow(() -> new IllegalStateException("No payload"))
-                                                   .toString();
-                    ctx.setPayload("setPaymentId", paymentId);
+                    var paymentDetails = paymentPrepared.<Map<String, Object>>result()
+                                                        .orElseThrow(() -> new IllegalStateException("No payload"));
+                    ctx.setPayload("setPaymentId", paymentDetails);
 
-                    logger.info("Payment prepared successfully for reference {}, the payment id is {}",
+                    logger.info("Payment prepared successfully for reference {}, the payment details are {}",
                                 paymentReference,
-                                paymentId);
+                                paymentDetails);
                 } else {
                     logger.info("Did not receive payment prepared event. Retrying in 5 secs.");
                     ctx.sleep("retryPayment", Duration.ofSeconds(5));

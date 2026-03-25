@@ -43,6 +43,9 @@ public class Payment {
 
     @CommandHandler
     public void handle(ConfirmPaymentCommand command, EventAppender eventAppender) {
+        if (paymentReference == null) {
+            throw new IllegalStateException("Payment not prepared yet");
+        }
         if (!closed) {
             eventAppender.append(new PaymentConfirmedEvent(command.paymentId(), paymentReference));
         }
@@ -50,6 +53,9 @@ public class Payment {
 
     @CommandHandler
     public void handle(RejectPaymentCommand command, EventAppender eventAppender) {
+        if (paymentReference == null) {
+            throw new IllegalStateException("Payment not prepared yet");
+        }
         if (!closed) {
             eventAppender.append(new PaymentRejectedEvent(command.paymentId(), paymentReference));
         }

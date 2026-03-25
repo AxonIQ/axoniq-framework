@@ -34,7 +34,10 @@ import java.util.Objects;
  */
 public class PayloadPropertyValueRetriever implements ValueRetriever {
 
-    private static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    /**
+     * Map type reference for easy access.
+     */
+    public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
 
     private final String payloadPropertyName;

@@ -41,13 +41,17 @@ public class PaymentController {
     private final QueryGateway queryGateway;
     private final CommandGateway commandGateway;
 
-    public PaymentController(QueryGateway queryGateway, CommandGateway commandGateway) {
+    public PaymentController(
+            QueryGateway queryGateway,
+            CommandGateway commandGateway
+    ) {
         this.queryGateway = queryGateway;
         this.commandGateway = commandGateway;
     }
 
     @PostMapping("/preparePayment")
-    public CompletableFuture<String> preparePayment(@RequestParam("amount") int amount, @RequestParam("reference") String paymentReference) {
+    public CompletableFuture<String> preparePayment(@RequestParam("amount") int amount,
+                                                    @RequestParam("reference") String paymentReference) {
         return commandGateway.send(new PreparePaymentCommand(amount, paymentReference)).resultAs(String.class);
     }
 

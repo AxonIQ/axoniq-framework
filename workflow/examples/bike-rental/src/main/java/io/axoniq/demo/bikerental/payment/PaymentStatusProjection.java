@@ -20,17 +20,11 @@ package io.axoniq.demo.bikerental.payment;
 import io.axoniq.demo.bikerental.coreapi.payment.GetAllPaymentsQuery;
 import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentIdQuery;
 import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentStatusQuery;
-import io.axoniq.demo.bikerental.coreapi.payment.PaymentConfirmedEvent;
-import io.axoniq.demo.bikerental.coreapi.payment.PaymentPreparedEvent;
-import io.axoniq.demo.bikerental.coreapi.payment.PaymentRejectedEvent;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus;
-import org.axonframework.messaging.core.annotation.Namespace;
-import org.axonframework.messaging.eventhandling.annotation.EventHandler;
-import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.springframework.stereotype.Component;
 
-import static io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus.Status.*;
+import static io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus.Status.PENDING;
 
 @Component
 public class PaymentStatusProjection {
@@ -59,21 +53,5 @@ public class PaymentStatusProjection {
             return paymentStatusRepository.findAllByStatus(q.status());
         }
         return paymentStatusRepository.findAll();
-    }
-
-    @EventHandler
-    public void handle(PaymentPreparedEvent event, QueryUpdateEmitter updateEmitter) {
-        paymentStatusRepository.save(new PaymentStatus(event.paymentId(), event.amount(), event.paymentReference()));
-        updateEmitter.emit(String.class, event.paymentReference()::equals, event.paymentId());
-    }
-
-    @EventHandler
-    public void handle(PaymentConfirmedEvent event) {
-        paymentStatusRepository.findById(event.paymentId()).ifPresent(s -> s.setStatus(APPROVED));
-    }
-
-    @EventHandler
-    public void handle(PaymentRejectedEvent event) {
-        paymentStatusRepository.findById(event.paymentId()).ifPresent(s -> s.setStatus(REJECTED));
     }
 }
