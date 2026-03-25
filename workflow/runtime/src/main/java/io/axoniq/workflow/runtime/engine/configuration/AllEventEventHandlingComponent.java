@@ -28,11 +28,13 @@ import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy;
 import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -43,6 +45,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiFunction;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
@@ -68,7 +71,11 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                              }
                          }
                  )
+                 .tokenStore(c.getComponent(TokenStore.class))
                  .eventSource(c.getComponent(StreamableEventSource.class))
+                 .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
+                 // .coordinatorExecutor(c.getComponent(ScheduledExecutorService.class, "event-processor-coordinator"))
+                 // .workerExecutor(c.getComponent(ScheduledExecutorService.class, "event-processor-worker"))
                  .initialSegmentCount(1)
                  .batchSize(1)
                  .initialToken(s -> completedFuture(

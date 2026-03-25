@@ -17,14 +17,15 @@
  */
 package io.axoniq.demo.bikerental.coreapi.rental;
 
-import org.axonframework.eventsourcing.annotation.EventTag;
-import org.axonframework.messaging.eventhandling.annotation.Event;
+import org.axonframework.messaging.core.annotation.Namespace;
+import org.axonframework.messaging.queryhandling.annotation.Query;
 
-@Event
-public record BikeInUseEvent(
-        @EventTag(key = "Bike")
-        String bikeId,
-        String renter
+import static io.axoniq.demo.bikerental.coreapi.rental.FindAvailableQuery.QUERY_NAME;
+
+@Namespace("io.axoniq.demo.bikerental.coreapi.rental")
+@Query(name = QUERY_NAME)
+public record FindAvailableQuery(
+        String bikeType
 ) {
-
+    public static final String QUERY_NAME = "findAvailable";
 }

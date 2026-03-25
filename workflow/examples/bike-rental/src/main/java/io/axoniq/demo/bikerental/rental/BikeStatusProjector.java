@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
 package io.axoniq.demo.bikerental.rental;
 
 import io.axoniq.demo.bikerental.coreapi.rental.BikeInUseEvent;
@@ -5,7 +22,7 @@ import io.axoniq.demo.bikerental.coreapi.rental.BikeRegisteredEvent;
 import io.axoniq.demo.bikerental.coreapi.rental.BikeRequestedEvent;
 import io.axoniq.demo.bikerental.coreapi.rental.BikeReturnedEvent;
 import io.axoniq.demo.bikerental.coreapi.rental.BikeStatus;
-import io.axoniq.demo.bikerental.coreapi.rental.FindAllBikeRentals;
+import io.axoniq.demo.bikerental.coreapi.rental.FindAllBikeRentalsQuery;
 import io.axoniq.demo.bikerental.coreapi.rental.FindRentalByBikeIdQuery;
 import io.axoniq.demo.bikerental.coreapi.rental.RequestRejectedEvent;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
@@ -25,7 +42,7 @@ public class BikeStatusProjector {
     public void on(BikeRegisteredEvent event, QueryUpdateEmitter updateEmitter) {
         var bikeStatus = new BikeStatus(event.bikeId(), event.bikeType(), event.location());
         bikeStatusRepository.save(bikeStatus);
-        updateEmitter.emit(FindAllBikeRentals.class, q -> true, bikeStatus);
+        updateEmitter.emit(FindAllBikeRentalsQuery.class, q -> true, bikeStatus);
     }
 
     @EventHandler
@@ -37,7 +54,7 @@ public class BikeStatusProjector {
                     return bs;
                 })
                 .ifPresent(bikeStatus -> {
-                    updateEmitter.emit(FindAllBikeRentals.class, q -> true, bikeStatus);
+                    updateEmitter.emit(FindAllBikeRentalsQuery.class, q -> true, bikeStatus);
                     updateEmitter.emit(FindRentalByBikeIdQuery.class,
                                        q -> event.bikeId().equals(q.bikeId()),
                                        bikeStatus);
@@ -53,7 +70,7 @@ public class BikeStatusProjector {
                     return bs;
                 })
                 .ifPresent(bikeStatus -> {
-                    updateEmitter.emit(FindAllBikeRentals.class, q -> true, bikeStatus);
+                    updateEmitter.emit(FindAllBikeRentalsQuery.class, q -> true, bikeStatus);
                     updateEmitter.emit(FindRentalByBikeIdQuery.class,
                                        q -> event.bikeId().equals(q.bikeId()),
                                        bikeStatus);
@@ -69,7 +86,7 @@ public class BikeStatusProjector {
                     return bs;
                 })
                 .ifPresent(bikeStatus -> {
-                    updateEmitter.emit(FindAllBikeRentals.class, q -> true, bikeStatus);
+                    updateEmitter.emit(FindAllBikeRentalsQuery.class, q -> true, bikeStatus);
                     updateEmitter.emit(FindRentalByBikeIdQuery.class,
                                        q -> event.bikeId().equals(q.bikeId()),
                                        bikeStatus);
@@ -85,7 +102,7 @@ public class BikeStatusProjector {
                     return bs;
                 })
                 .ifPresent(bikeStatus -> {
-                    updateEmitter.emit(FindAllBikeRentals.class, q -> true, bikeStatus);
+                    updateEmitter.emit(FindAllBikeRentalsQuery.class, q -> true, bikeStatus);
                     updateEmitter.emit(FindRentalByBikeIdQuery.class,
                                        q -> event.bikeId().equals(q.bikeId()),
                                        bikeStatus);
