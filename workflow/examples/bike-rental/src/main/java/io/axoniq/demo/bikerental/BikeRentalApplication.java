@@ -7,13 +7,21 @@ import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import io.axoniq.demo.bikerental.rental.PaymentWorkflow;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModuleEnhancer;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import org.axonframework.axonserver.connector.AxonServerConnectionManager;
 import org.axonframework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
+import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.eventsourcing.eventstore.AnnotationBasedTagResolver;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.eventsourcing.eventstore.StorageEngineBackedEventStore;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.eventhandling.SimpleEventBus;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -52,8 +60,25 @@ public class BikeRentalApplication {
         );
     }
 
+    @Bean
+    public EventStore storageBasedEventStore(EventStorageEngine engine) {
+        return new StorageEngineBackedEventStore(engine, new SimpleEventBus(), new AnnotationBasedTagResolver());
+    }
+
 
     @Bean
+    public EventSourcingConfigurer eventSourcingConfigurer(EventStorageEngine engine) {
+        return EventSourcingConfigurer.create()
+                                      .registerEventStorageEngine(c -> engine)
+                ;
+    }
+
+    @Bean
+    public ConfigurationEnhancer configureApplication() {
+        return registry -> registry.disableEnhancer(WorkflowEnhancer.class);
+    }
+
+    // @Bean
     public WorkflowModuleEnhancer paymentWorkflow() {
         return new WorkflowModuleEnhancer(
                 WorkflowModule

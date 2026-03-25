@@ -17,11 +17,6 @@ spring:
 axon:
   axonserver:
     enabled: true
-  eventhandling:
-    processors:
-      [io.axoniq.demo.bikerental.rental]:
-        mode: pooled
-        initialSegmentCount: 1
 springdoc:
   swagger-ui:
     try-it-out-enabled: true

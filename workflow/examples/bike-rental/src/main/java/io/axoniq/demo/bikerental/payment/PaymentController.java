@@ -1,9 +1,9 @@
 package io.axoniq.demo.bikerental.payment;
 
 import io.axoniq.demo.bikerental.coreapi.payment.ConfirmPaymentCommand;
-import io.axoniq.demo.bikerental.coreapi.payment.FindAllPaymentsQuery;
-import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentId;
-import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentStatus;
+import io.axoniq.demo.bikerental.coreapi.payment.GetAllPaymentsQuery;
+import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentIdQuery;
+import io.axoniq.demo.bikerental.coreapi.payment.GetPaymentStatusQuery;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus;
 import io.axoniq.demo.bikerental.coreapi.payment.RejectPaymentCommand;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
@@ -30,12 +30,12 @@ public class PaymentController {
 
     @GetMapping("/status/{paymentId}")
     public CompletableFuture<PaymentStatus> getStatus(@PathVariable("paymentId") String paymentId) {
-        return queryGateway.query(new GetPaymentStatus(paymentId), PaymentStatus.class);
+        return queryGateway.query(new GetPaymentStatusQuery(paymentId), PaymentStatus.class);
     }
 
     @GetMapping("/findPayment")
     public CompletableFuture<String> findPaymentId(@RequestParam("reference") String paymentReference) {
-        return queryGateway.query(new GetPaymentId(paymentReference), String.class);
+        return queryGateway.query(new GetPaymentIdQuery(paymentReference), String.class);
     }
 
     @PostMapping("/acceptPayment")
@@ -52,6 +52,6 @@ public class PaymentController {
     public CompletableFuture<List<PaymentStatus>> getStatus(
             @RequestParam(value = "status", required = false) PaymentStatus.Status status
     ) {
-        return queryGateway.queryMany(new FindAllPaymentsQuery(status), PaymentStatus.class);
+        return queryGateway.queryMany(new GetAllPaymentsQuery(status), PaymentStatus.class);
     }
 }

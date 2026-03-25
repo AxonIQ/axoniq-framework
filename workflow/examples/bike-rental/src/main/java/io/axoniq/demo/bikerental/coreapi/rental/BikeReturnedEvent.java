@@ -1,6 +1,13 @@
 package io.axoniq.demo.bikerental.coreapi.rental;
 
+import org.axonframework.eventsourcing.annotation.EventTag;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 
 @Event
-public record BikeReturnedEvent(String bikeId, String location) {}
+public record BikeReturnedEvent(
+        @EventTag(key = "Bike")
+        String bikeId,
+        String location
+) {
+
+}

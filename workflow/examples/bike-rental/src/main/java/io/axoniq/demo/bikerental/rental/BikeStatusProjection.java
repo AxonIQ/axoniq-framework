@@ -10,6 +10,7 @@ import io.axoniq.demo.bikerental.coreapi.rental.FindAvailable;
 import io.axoniq.demo.bikerental.coreapi.rental.FindRentalByBikeIdQuery;
 import io.axoniq.demo.bikerental.coreapi.rental.RentalStatus;
 import io.axoniq.demo.bikerental.coreapi.rental.RequestRejectedEvent;
+import org.axonframework.messaging.core.annotation.Namespace;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
@@ -87,17 +88,17 @@ public class BikeStatusProjection {
                 });
     }
 
-    @QueryHandler(queryName = FindAllBikeRentals.QUERY_NAME)
+    @QueryHandler(queryName = "io.axoniq.demo.bikerental.coreapi.rental.findAll")
     public Iterable<BikeStatus> findAll() {
         return bikeStatusRepository.findAll();
     }
 
-    @QueryHandler(queryName = FindAvailable.QUERY_NAME)
+    @QueryHandler(queryName = "io.axoniq.demo.bikerental.coreapi.rental.findAvailable")
     public Iterable<BikeStatus> findAvailable(String bikeType) {
         return bikeStatusRepository.findAllByBikeTypeAndStatus(bikeType, RentalStatus.AVAILABLE);
     }
 
-    @QueryHandler(queryName = FindRentalByBikeIdQuery.QUERY_NAME)
+    @QueryHandler(queryName = "io.axoniq.demo.bikerental.coreapi.rental.findOne")
     public BikeStatus findOne(String bikeId) {
         return bikeStatusRepository.findById(bikeId).orElse(null);
     }

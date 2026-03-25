@@ -1,9 +1,11 @@
 package io.axoniq.demo.bikerental.coreapi.payment;
 
+import org.axonframework.messaging.core.annotation.Namespace;
 import org.axonframework.messaging.queryhandling.annotation.Query;
 
-@Query(name = FindAllPaymentsQuery.QUERY_NAME)
-public record FindAllPaymentsQuery(
+@Namespace("io.axoniq.demo.bikerental.coreapi.payment")
+@Query(name = GetAllPaymentsQuery.QUERY_NAME)
+public record GetAllPaymentsQuery(
         PaymentStatus.Status status
 ) {
     public static final String QUERY_NAME = "getAllPayments";

@@ -5,7 +5,8 @@ import org.axonframework.modelling.annotation.TargetEntityId;
 
 @Command
 public record RegisterBikeCommand(
-        @TargetEntityId String bikeId,
+        @TargetEntityId
+        String bikeId,
         String bikeType,
         String location
 ) {

@@ -4,6 +4,9 @@ import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.modelling.annotation.TargetEntityId;
 
 @Command
-public record RequestBikeCommand(@TargetEntityId String bikeId, String renter) {
+public record RequestBikeCommand(
+        @TargetEntityId String bikeId,
+        String renter
+) {
 
 }

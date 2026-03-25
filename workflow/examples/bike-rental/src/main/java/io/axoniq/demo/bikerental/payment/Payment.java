@@ -14,7 +14,7 @@ import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
 import java.util.UUID;
 
-@EventSourced
+@EventSourced(type = "Payment")
 public class Payment {
 
     private String id;

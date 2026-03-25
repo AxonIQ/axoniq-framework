@@ -4,6 +4,10 @@ import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.modelling.annotation.TargetEntityId;
 
 @Command
-public record RejectRequestCommand(@TargetEntityId String bikeId, String renter) {
+public record RejectRequestCommand(
+        @TargetEntityId
+        String bikeId,
+        String renter
+) {
 
 }
