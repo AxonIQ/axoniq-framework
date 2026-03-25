@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025. AxonIQ B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
  * Version September 2025 (the "License");
@@ -18,10 +18,10 @@
 
 package io.axoniq.dataprotection.sample.giftcard.event;
 
-import io.axoniq.framework.dataprotection.api.DataSubjectId;
-import io.axoniq.framework.dataprotection.api.DeepPersonalData;
-import io.axoniq.framework.dataprotection.api.PersonalData;
-import io.axoniq.framework.dataprotection.api.SerializedPersonalData;
+import io.axoniq.framework.extension.dataprotection.api.DataSubjectId;
+import io.axoniq.framework.extension.dataprotection.api.DeepPersonalData;
+import io.axoniq.framework.extension.dataprotection.api.PersonalData;
+import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData;
 import org.axonframework.eventsourcing.annotation.EventTag;
 
 import java.math.BigDecimal;

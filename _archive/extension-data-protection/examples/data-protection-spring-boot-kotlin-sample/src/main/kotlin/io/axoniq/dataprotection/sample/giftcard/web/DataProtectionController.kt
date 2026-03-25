@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025. AxonIQ B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
  * Version September 2025 (the "License");
@@ -18,7 +18,7 @@
 package io.axoniq.dataprotection.sample.giftcard.web
 
 import io.axoniq.dataprotection.sample.giftcard.event.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine
+import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.withContext

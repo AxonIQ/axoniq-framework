@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025. AxonIQ B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
  * Version September 2025 (the "License");
@@ -21,10 +21,10 @@ package io.axoniq.dataprotection.sample.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.axoniq.framework.dataprotection.api.FieldEncrypter;
-import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
-import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine;
-import io.axoniq.framework.dataprotection.cryptoengine.jpa.JpaCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
+import io.axoniq.framework.extension.dataprotection.api.FieldEncryptingConverter;
+import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
+import io.axoniq.framework.extension.dataprotection.cryptoengine.jpa.JpaCryptoEngine;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
