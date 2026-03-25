@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 import static io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus.Status.*;
 
 @Component
-@Namespace("io.axoniq.demo.bikerental.coreapi.payment")
 public class PaymentStatusProjection {
 
     private final PaymentStatusRepository paymentStatusRepository;
@@ -25,23 +24,24 @@ public class PaymentStatusProjection {
         this.paymentStatusRepository = paymentStatusRepository;
     }
 
-    @QueryHandler(queryName = GetPaymentStatusQuery.QUERY_NAME)
-    public PaymentStatus getStatus(String paymentId) {
-        return paymentStatusRepository.findById(paymentId).orElse(null);
+    @QueryHandler(queryName = "io.axoniq.demo.bikerental.coreapi.payment.getPaymentStatus")
+    public PaymentStatus getStatus(GetPaymentStatusQuery q) {
+        return paymentStatusRepository.findById(q.paymentId()).orElse(null);
     }
 
-    @QueryHandler(queryName = GetPaymentIdQuery.QUERY_NAME)
-    public String getPaymentId(String paymentReference) {
-        return paymentStatusRepository.findByReferenceAndStatus(paymentReference, PENDING).map(PaymentStatus::getId)
+    @QueryHandler(queryName = "io.axoniq.demo.bikerental.coreapi.payment.getPaymentId")
+    public String getPaymentId(GetPaymentIdQuery q) {
+        return paymentStatusRepository.findByReferenceAndStatus(q.paymentReference(), PENDING)
+                                      .map(PaymentStatus::getId)
                                       .orElse(null);
     }
 
-    @QueryHandler(queryName = GetAllPaymentsQuery.QUERY_NAME)
-    public Iterable<PaymentStatus> findByStatus(PaymentStatus.Status status) {
-        if (status == null) {
-            return paymentStatusRepository.findAll();
+    @QueryHandler(queryName = "io.axoniq.demo.bikerental.coreapi.payment.getAllPayments")
+    public Iterable<PaymentStatus> findByStatus(GetAllPaymentsQuery q) {
+        if (q.status() != null) {
+            return paymentStatusRepository.findAllByStatus(q.status());
         }
-        return paymentStatusRepository.findAllByStatus(status);
+        return paymentStatusRepository.findAll();
     }
 
     @EventHandler

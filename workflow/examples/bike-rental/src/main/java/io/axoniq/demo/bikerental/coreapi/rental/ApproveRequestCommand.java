@@ -1,12 +1,12 @@
 package io.axoniq.demo.bikerental.coreapi.rental;
 
-import org.axonframework.eventsourcing.annotation.EventTag;
 import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.modelling.annotation.TargetEntityId;
 
-@Command
+@Command(routingKey = "bikeId")
 public record ApproveRequestCommand(
-        @EventTag(key = "Bike") String bikeId,
+        @TargetEntityId
+        String bikeId,
         String renter
 ) {
 

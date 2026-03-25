@@ -39,7 +39,10 @@ public class RentalController {
     private final CommandGateway commandGateway;
     private final QueryGateway queryGateway;
 
-    public RentalController(CommandGateway commandGateway, QueryGateway queryGateway) {
+    public RentalController(
+            CommandGateway commandGateway,
+            QueryGateway queryGateway
+    ) {
         this.commandGateway = commandGateway;
         this.queryGateway = queryGateway;
     }
@@ -50,7 +53,7 @@ public class RentalController {
         CompletableFuture<Void> all = CompletableFuture.completedFuture(null);
         for (int i = 0; i < bikeCount; i++) {
             all = CompletableFuture.allOf(all,
-                                          commandGateway.send(new RegisterBikeCommand(UUID.randomUUID().toString(),
+                                          commandGateway.send(new RegisterBikeCommand(randomBikeId(),
                                                                                       bikeType,
                                                                                       randomLocation()))
                                                         .resultAs(Void.class)
@@ -84,5 +87,9 @@ public class RentalController {
 
     private String randomLocation() {
         return LOCATIONS.get(ThreadLocalRandom.current().nextInt(LOCATIONS.size()));
+    }
+
+    private String randomBikeId() {
+        return UUID.randomUUID().toString();
     }
 }

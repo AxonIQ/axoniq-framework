@@ -14,22 +14,22 @@ import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
 import java.util.UUID;
 
-@EventSourced(type = "Payment")
+@EventSourced(tagKey = "paymentReference")
 public class Payment {
-
-    private String id;
 
     private boolean closed;
     private String paymentReference;
 
     @EntityCreator
-    public Payment() {
+    public Payment(PaymentPreparedEvent event) {
+        this.paymentReference = event.paymentReference();
     }
 
     @CommandHandler
-    public static void handle(PreparePaymentCommand command, EventAppender eventAppender) {
+    public static String handle(PreparePaymentCommand command, EventAppender eventAppender) {
         String paymentId = UUID.randomUUID().toString();
         eventAppender.append(new PaymentPreparedEvent(paymentId, command.amount(), command.paymentReference()));
+        return paymentId;
     }
 
     @CommandHandler
@@ -44,12 +44,6 @@ public class Payment {
         if (!closed) {
             eventAppender.append(new PaymentRejectedEvent(command.paymentId(), paymentReference));
         }
-    }
-
-    @EventSourcingHandler
-    protected void on(PaymentPreparedEvent event) {
-        this.id = event.paymentId();
-        this.paymentReference = event.paymentReference();
     }
 
     @EventSourcingHandler

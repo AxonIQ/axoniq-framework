@@ -15,12 +15,11 @@ import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
 import org.axonframework.extension.spring.stereotype.EventSourced;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-import org.axonframework.messaging.eventstreaming.EventCriteria;
 
 import java.util.Objects;
 import java.util.UUID;
 
-@EventSourced(type = "Bike")
+@EventSourced(tagKey = "bikeId")
 public class Bike {
 
     private String bikeId;
@@ -30,7 +29,14 @@ public class Bike {
     private boolean reservationConfirmed;
 
     @EntityCreator
-    public Bike() {
+    public Bike(String bikeId) {
+        this.bikeId = bikeId;
+        this.isAvailable = true;
+    }
+
+    @EntityCreator
+    public Bike(BikeRegisteredEvent event) {
+        this(event.bikeId());
     }
 
     @CommandHandler
@@ -76,12 +82,6 @@ public class Bike {
     }
 
     @EventSourcingHandler
-    protected void handle(BikeRegisteredEvent event) {
-        this.bikeId = event.bikeId();
-        this.isAvailable = true;
-    }
-
-    @EventSourcingHandler
     protected void handle(BikeReturnedEvent event) {
         this.isAvailable = true;
         this.reservationConfirmed = false;
@@ -108,4 +108,23 @@ public class Bike {
         this.reservationConfirmed = true;
     }
 
+    @SuppressWarnings("unused")
+    public String getBikeId() {
+        return bikeId;
+    }
+
+    @SuppressWarnings("unused")
+    public boolean isAvailable() {
+        return isAvailable;
+    }
+
+    @SuppressWarnings("unused")
+    public String getReservedBy() {
+        return reservedBy;
+    }
+
+    @SuppressWarnings("unused")
+    public boolean isReservationConfirmed() {
+        return reservationConfirmed;
+    }
 }
