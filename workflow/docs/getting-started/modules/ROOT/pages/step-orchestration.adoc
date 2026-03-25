@@ -2,54 +2,103 @@
 :navtitle: Step Orchestration
 
 Real-world workflows often need to run steps concurrently.
-You might want to ship the order and send a confirmation email at the same time, or call multiple services and take the first response.
+You might want to ship the order and send a confirmation email at the same time, race two payment providers, or wait for multiple approvals before proceeding.
+
+The three combinators — `anyMatch`, `allMatch`, and `noneMatch` — let you compose non-blocking steps (`execute` and `waitForEvent`) into powerful orchestration patterns.
 
 == Non-blocking execution
 
-So far we've used `awaitExecute`, which blocks until the step completes.
-The `execute` method starts a step without waiting and returns a `WorkflowStepResult`:
+So far we've used `awaitExecute` and `awaitEvent`, which block until the step completes.
+The non-blocking variants — `execute` and `waitForEvent` — start steps without waiting and return a `WorkflowStepResult`:
 
 [source,java]
 ----
-var shipping = ctx.execute("shipOrder", ctx.workflowPayload(), // <1>
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
         Duration.ofMinutes(5), defaults());
 
-var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(), // <2>
-        (c, p) -> {
-            NotificationService.sendConfirmation(payload(p).get("email"));
-            return Map.of();
-        },
+var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
+        NotificationService::sendConfirmation,
         Duration.ofSeconds(30), defaults());
 ----
 
-<.> Starts shipping — returns immediately with a `WorkflowStepResult`.
-<.> Starts notification — also returns immediately.
-Both steps run concurrently.
-
-== anyMatch — first match wins
-
-`anyMatch` resolves as soon as the first step reaches a terminal state that matches the predicate:
+Both steps run concurrently. You can also mix `execute` with `waitForEvent`:
 
 [source,java]
 ----
-var winner = ctx.anyMatch(WorkflowStepResult::success, shipping, notification); // <1>
+var approval = ctx.waitForEvent("awaitApproval",
+        ManagerApproved.class, Duration.ofMinutes(30));
 
-winner.await(); // <2>
-logger.info("First to finish: {}", winner.getStepName()); // <3>
+var backgroundCheck = ctx.execute("runBackgroundCheck", ctx.workflowPayload(),
+        ComplianceService::check,
+        Duration.ofMinutes(10), defaults());
 ----
 
+== anyMatch — first match wins
+
+`anyMatch` resolves as soon as the *first* step reaches a terminal state that matches the predicate.
+
+[IMPORTANT]
+====
+`anyMatch` uses **short-circuit semantics** — the moment the first step matches, the combinator resolves.
+The remaining steps may still be running.
+They are *not* automatically cancelled — if you need cleanup, cancel them explicitly via `unmatched()`.
+====
+
+=== Race two events
+
+Wait for the first of two possible events — whichever arrives first wins:
+
+[source,java]
+----
+var paymentByCard = ctx.waitForEvent("awaitCardPayment",
+        CardPaymentConfirmed.class, Duration.ofMinutes(10));
+
+var paymentByBank = ctx.waitForEvent("awaitBankTransfer",
+        BankTransferConfirmed.class, Duration.ofMinutes(30));
+
+var result = ctx.anyMatch(WorkflowStepResult::isCompleted,     // <1>
+                          paymentByCard, paymentByBank);
+
+result.await();                                                 // <2>
+
+var winner = result.matched().getFirst();                       // <3>
+logger.info("Payment received via: {}", winner.getStepName());
+
+// Cancel the loser — it's no longer needed
+for (var loser : result.unmatched()) {                          // <4>
+    loser.cancel("Payment already received via " + winner.getStepName());
+}
+----
 <.> Resolves when the first result reaches a terminal state matching the predicate.
 <.> Blocks until the winner is determined.
-<.> Inspect which step won the race.
+<.> `matched()` contains all results that satisfied the predicate — the winner is always the first element.
+<.> `unmatched()` contains the rest — cancel them to clean up.
 
-Use case: race two payment providers, take whichever confirms first.
+=== Race two services
 
-[NOTE]
-====
-Losers are NOT auto-cancelled.
-If you want to clean up, call `loser.cancel()` explicitly.
-====
+Same pattern works with `execute` — request shipping quotes from two carriers, take whichever responds first:
+
+[source,java]
+----
+var dhlQuote = ctx.execute("getDhlQuote", ctx.workflowPayload(),
+        DhlService::getQuote, Duration.ofSeconds(10), defaults());
+
+var fedexQuote = ctx.execute("getFedexQuote", ctx.workflowPayload(),
+        FedexService::getQuote, Duration.ofSeconds(10), defaults());
+
+var race = ctx.anyMatch(WorkflowStepResult::isCompleted,
+                        dhlQuote, fedexQuote);
+race.await();
+
+var winner = race.matched().getFirst();
+logger.info("Using {} — quoted first", winner.getStepName());
+
+// Cancel the slower carrier
+for (var loser : race.unmatched()) {
+    loser.cancel("Went with " + winner.getStepName());
+}
+----
 
 == allMatch — all must succeed
 
@@ -58,42 +107,206 @@ It short-circuits on the first non-match:
 
 [source,java]
 ----
-var guard = ctx.allMatch(WorkflowStepResult::success, shipping, notification); // <1>
-guard.await();
+// Ship and notify in parallel
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
+        ShippingService::shipOrder,
+        Duration.ofMinutes(5), defaults());
+
+var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
+        NotificationService::sendConfirmation,
+        Duration.ofSeconds(30), defaults());
+
+var guard = ctx.allMatch(WorkflowStepResult::success,           // <1>
+                         shipping, notification);
+
+if (guard.success()) {                                           // <2>
+    logger.info("All steps completed successfully!");
+} else {
+    // Something failed — inspect what went wrong
+    for (var failed : guard.unmatched()) {                       // <3>
+        logger.warn("Step {} did not succeed", failed.getStepName());
+    }
+    ctx.fail("Not all steps completed successfully");
+}
 ----
-
 <.> Blocks until all steps complete successfully, or one fails (short-circuit).
-
-Use case: proceed only after both shipping and notification have completed successfully.
+<.> `success()` on the combinator is `true` only if all steps matched the predicate.
+<.> `unmatched()` contains the step that violated the predicate, plus any steps that hadn't completed yet when the short-circuit happened.
 
 == noneMatch — no failures allowed
 
 `noneMatch` succeeds when _no_ step matches the predicate.
-It short-circuits on the first match:
+
+[IMPORTANT]
+====
+`noneMatch` uses **short-circuit semantics** — the moment the first step matches the predicate (e.g., a step fails), the combinator resolves immediately.
+The remaining steps may still be running.
+They are *not* automatically cancelled — cancel them explicitly via `unmatched()` if needed.
+====
+
+=== Basic usage
 
 [source,java]
 ----
-var check = ctx.noneMatch(WorkflowStepResult::failure, shipping, notification);
-check.await();
-----
+var stepA = ctx.execute("processA", Map.of(), ServiceA::process,
+        Duration.ofMinutes(5), defaults());
 
-Use case: proceed only if none of the steps failed.
+var stepB = ctx.execute("processB", Map.of(), ServiceB::process,
+        Duration.ofMinutes(5), defaults());
+
+var stepC = ctx.execute("processC", Map.of(), ServiceC::process,
+        Duration.ofMinutes(5), defaults());
+
+var check = ctx.noneMatch(WorkflowStepResult::failure,          // <1>
+                          stepA, stepB, stepC);
+if (check.success()) {
+    logger.info("No failures — all clear!");
+}
+----
+<.> Succeeds if none of the steps fail. Short-circuits as soon as one fails.
+
+=== Cancel remaining on failure
+
+When one step fails, cancel the others immediately:
+
+[source,java]
+----
+var check = ctx.noneMatch(WorkflowStepResult::failure,
+                          stepA, stepB, stepC);
+check.await();
+
+if (!check.success()) {
+    var failedStep = check.matched().getFirst();                // <1>
+    logger.warn("Step {} failed", failedStep.getStepName());
+
+    // Cancel all steps that are still running
+    for (var remaining : check.unmatched()) {                   // <2>
+        remaining.cancel("Cancelled due to failure of " + failedStep.getStepName());
+    }
+
+    ctx.fail("Step " + failedStep.getStepName() + " failed");
+}
+----
+<.> `matched()` contains the step(s) that triggered the predicate — the violator(s).
+<.> `unmatched()` contains the steps that didn't fail — some may still be running.
+
+=== Compensating actions on failure
+
+For a more robust pattern, cancel remaining steps *and* run a compensating action to roll back:
+
+[source,java]
+----
+var reserveStock = ctx.execute("reserveStock", ctx.workflowPayload(),
+        InventoryService::reserveStock,
+        Duration.ofMinutes(1), defaults());
+
+var reserveShipping = ctx.execute("reserveShipping", ctx.workflowPayload(),
+        ShippingService::reserveSlot,
+        Duration.ofMinutes(1), defaults());
+
+var chargePayment = ctx.execute("chargePayment", ctx.workflowPayload(),
+        PaymentService::charge,
+        Duration.ofSeconds(30), defaults());
+
+var check = ctx.noneMatch(WorkflowStepResult::failure,
+                          reserveStock, reserveShipping, chargePayment);
+check.await();
+
+if (!check.success()) {
+    var failedStep = check.matched().getFirst();
+
+    // 1. Cancel steps that are still running
+    for (var remaining : check.unmatched()) {
+        if (!remaining.isCompleted()) {
+            remaining.cancel("Rolling back due to " + failedStep.getStepName());
+        }
+    }
+
+    // 2. Compensate steps that already completed successfully
+    for (var completed : check.unmatched()) {                   // <1>
+        if (completed.success()) {
+            ctx.awaitExecute("rollback-" + completed.getStepName(),
+                    ctx.workflowPayload(),
+                    CompensationService::rollback);
+        }
+    }
+
+    ctx.fail("Order failed at " + failedStep.getStepName()
+             + ": " + failedStep.error().map(Throwable::getMessage).orElse("unknown"));
+}
+----
+<.> Iterate over `unmatched()` — steps that didn't fail. If they already completed successfully, run a compensating action to undo their work.
 
 == Inspecting sub-results
 
-All three composables return a `CombinatorWorkflowStepResult` with `matched()` and `unmatched()` methods:
+All three combinators return a `CombinatorWorkflowStepResult` with `matched()` and `unmatched()` methods:
 
-[source,java]
-----
-guard.matched();   // steps that matched the predicate
-guard.unmatched(); // steps that didn't
-----
+[cols="1,3"]
+|===
+|Method |Description
+
+|`matched()`
+|Steps that satisfied the predicate. Sorted by event-sourced timestamps (earliest first). For `anyMatch`, the winner is always the first element.
+
+|`unmatched()`
+|Everything else — steps that didn't match, plus steps that hadn't completed when the combinator short-circuited. Completed results appear first (sorted by timestamp), followed by still-running results.
+|===
+
+[NOTE]
+====
+`matched()` and `unmatched()` reflect a *snapshot* of each result's state at the time they are called — not the final outcome.
+Because combinators short-circuit, some results may not have completed yet.
+Those not-yet-completed results always appear in `unmatched()`.
+====
 
 [NOTE]
 ====
 Sub-results are ordered by event-sourced timestamps, not array order.
 This ensures deterministic behavior during replay.
 ====
+
+=== Cleanup pattern with matched() and unmatched()
+
+After a combinator short-circuits, use `matched()` to identify what triggered it and `unmatched()` to clean up everything else:
+
+[cols="1,1,2"]
+|===
+|Combinator |`matched()` contains |`unmatched()` contains
+
+|`anyMatch`
+|The winner(s) — steps that satisfied the predicate
+|The losers — cancel them if no longer needed
+
+|`noneMatch`
+|The violator(s) — steps that triggered the predicate (e.g., the failed step)
+|The rest — some may still be running, cancel them; some may have completed successfully, compensate them
+
+|`allMatch`
+|The steps that satisfied the predicate so far
+|The violator that broke the guard, plus any still-running steps
+|===
+
+The general pattern after a short-circuit:
+
+[source,java]
+----
+result.await();
+
+if (!result.success()) {
+    // 1. Who caused the problem?
+    var trigger = result.matched().getFirst();    // for noneMatch: the violator
+                                                   // for anyMatch: the winner
+
+    // 2. Clean up the rest
+    for (var step : result.unmatched()) {
+        if (!step.isCompleted()) {
+            step.cancel("No longer needed — " + trigger.getStepName() + " already resolved");  // still running → cancel
+        } else if (step.success()) {
+            // already completed → compensate if needed
+        }
+    }
+}
+----
 
 == The complete workflow
 
@@ -113,18 +326,21 @@ public void execute(SimpleWorkflowContext ctx) {
         return;
     }
 
-    // Initiate and await payment
-    ctx.awaitExecute("initiatePayment", ctx.workflowPayload(),
-                     PaymentService::initiatePayment,
-                     Duration.ofSeconds(30), defaults());
+    // Subscribe to payment confirmation first (no race condition)
+    var paymentConfirmation = ctx.waitForEvent("awaitPayment",
+            PaymentConfirmed.class, Duration.ofMinutes(15));
 
-    var confirmation = ctx.awaitEvent("awaitPayment",
-            PaymentConfirmed.class,
-            associate(payloadProperty("orderId"),
-                      equalsTo(ctx.workflowPayload().get("orderId"))),
-            Duration.ofMinutes(15));
+    // Then initiate payment
+    var paymentInitiation = ctx.execute("initiatePayment",
+            ctx.workflowPayload(),
+            PaymentService::initiatePayment,
+            Duration.ofSeconds(30), defaults());
 
-    ctx.setPayload("storePaymentDetails", confirmation);
+    // Wait for both
+    ctx.allMatch(WorkflowStepResult::isCompleted,
+                 paymentConfirmation, paymentInitiation).await();
+
+    ctx.setPayload("storePaymentDetails", paymentConfirmation);
 
     // Ship and notify in parallel
     var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
@@ -132,19 +348,16 @@ public void execute(SimpleWorkflowContext ctx) {
             Duration.ofMinutes(5), defaults());
 
     var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
-            (c, p) -> {
-                NotificationService.sendConfirmation(payload(p).get("email"));
-                return Map.of();
-            },
+            NotificationService::sendConfirmation,
             Duration.ofSeconds(30), defaults());
 
-    ctx.allMatch(WorkflowStepResult::success, shipping, notification).await();
+    ctx.allMatch(WorkflowStepResult::isCompleted, shipping, notification).await();
 
     logger.info("Order {} fulfilled!", ctx.workflowPayload().get("orderId"));
 }
 ----
 
-Six steps, one method, and the engine handles event sourcing, crash recovery, and audit trails for all of them.
+Seven steps, one method, and the engine handles event sourcing, crash recovery, and audit trails for all of them.
 
 Our order fulfillment workflow is complete!
 Let's make sure it works with automated tests.
