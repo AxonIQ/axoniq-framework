@@ -45,6 +45,7 @@ Along the way, you will learn each core concept:
 .. *xref:understanding-steps.adoc[Understanding Steps]* — All primitives at a glance, timeouts, error handling, payload reducers, event naming, and execution semantics
 . *xref:workflow-lifecycle.adoc[Workflow Lifecycle]* — Terminal states, fail vs cancel, and lifecycle listeners
 . *xref:step-orchestration.adoc[Step Orchestration]* — Ship and notify the customer concurrently
+. *xref:common-patterns.adoc[Common Patterns]* — Fan-out/fan-in, saga compensation, scatter-gather, human-in-the-loop, and more
 . *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
 . *xref:configuration.adoc[Configuration]* — Declarative setup, workflow ID providers, custom contexts
 . *xref:testing-workflows.adoc[Testing Workflows]* — Write integration tests for your workflow
