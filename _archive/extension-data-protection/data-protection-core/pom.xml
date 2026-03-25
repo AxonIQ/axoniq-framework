@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  ~ Copyright (c) 2010-2025. AxonIQ B.V.
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
   ~
   ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
   ~ Version September 2025 (the "License");
@@ -13,7 +13,7 @@
   ~ You may not use this file except in compliance with the License.
   ~ You may obtain a copy of the License at:
   ~
-  ~    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+  ~    https://www.axoniq.io/legal/terms-of-service
   ~
   ~
   -->
@@ -21,12 +21,12 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.axoniq.framework</groupId>
-        <artifactId>dataprotection</artifactId>
+        <groupId>io.axoniq.framework.extension</groupId>
+        <artifactId>data-protection-parent</artifactId>
         <version>5.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>data-protection-core</artifactId>
+    <artifactId>axon-data-protection-core</artifactId>
 
     <name>AxonIQ Framework - Data Protection - Core</name>
     <description>
@@ -279,15 +279,15 @@
                     <relocations>
                         <relocation>
                             <pattern>com.google</pattern>
-                            <shadedPattern>io.axoniq.framework.dataprotection.internal.shaded.com.google</shadedPattern>
+                            <shadedPattern>io.axoniq.framework.extension.dataprotection.internal.shaded.com.google</shadedPattern>
                         </relocation>
                         <relocation>
                             <pattern>google.protobuf</pattern>
-                            <shadedPattern>io.axoniq.framework.dataprotection.internal.shaded.google.protobuf</shadedPattern>
+                            <shadedPattern>io.axoniq.framework.extension.dataprotection.internal.shaded.google.protobuf</shadedPattern>
                         </relocation>
                         <relocation>
                             <pattern>com.googlecode</pattern>
-                            <shadedPattern>io.axoniq.framework.dataprotection.internal.shaded.com.googlecode</shadedPattern>
+                            <shadedPattern>io.axoniq.framework.extension.dataprotection.internal.shaded.com.googlecode</shadedPattern>
                         </relocation>
                     </relocations>
                     <createDependencyReducedPom>false</createDependencyReducedPom>
@@ -317,7 +317,7 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
                     <source>21</source>
-                    <excludePackageNames>io.axoniq.framework.dataprotection.internal</excludePackageNames>
+                    <excludePackageNames>io.axoniq.framework.extension.dataprotection.internal</excludePackageNames>
                     <doclint>all,-missing</doclint>
                     <detectOfflineLinks>false</detectOfflineLinks>
                     <failOnError>false</failOnError>

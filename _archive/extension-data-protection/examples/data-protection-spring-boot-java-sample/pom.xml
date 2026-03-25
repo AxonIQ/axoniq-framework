@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  ~ Copyright (c) 2010-2025. AxonIQ B.V.
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
   ~
   ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
   ~ Version September 2025 (the "License");
@@ -13,7 +13,7 @@
   ~ You may not use this file except in compliance with the License.
   ~ You may obtain a copy of the License at:
   ~
-  ~    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+  ~    https://www.axoniq.io/legal/terms-of-service
   ~
   ~
   -->
@@ -23,13 +23,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.axoniq.framework</groupId>
-        <artifactId>dataprotection</artifactId>
+        <groupId>io.axoniq.framework.extension</groupId>
+        <artifactId>data-protection-parent</artifactId>
         <version>5.0.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>data-protection-spring-boot-java-sample</artifactId>
+    <artifactId>axon-data-protection-spring-boot-java-sample</artifactId>
     <name>Data Protection Extension - Spring Boot Java Sample</name>
     <description>
         Sample Spring Boot application demonstrating Axon Data Protection extension usage with field-level encryption
@@ -58,8 +58,8 @@
 
         <!-- Data Protection Extension -->
         <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>data-protection-core</artifactId>
+            <groupId>io.axoniq.framework.extension</groupId>
+            <artifactId>axon-data-protection-core</artifactId>
             <version>${project.version}</version>
         </dependency>
 
