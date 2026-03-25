@@ -276,12 +276,21 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     private final EventConverter converter;
 
     /**
-     * Capacity of 1,048,576 entries (2^20).
-     *
-     * This size was chosen to accommodate roughly 500 concurrent appends,
-     * assuming an average of 3 tags per event, while keeping the hash collision
-     * rate below 1%.
-     *
+     * This is the maximum number of consistency tags that are kept track of in
+     * the consistency tags table to keep this table to a reasonable size. To detect
+     * conflicts, only tag hashes are stored, not full tags to prevent infinite growth
+     * of the consistency tags table.
+     * <p>
+     * The size of 1,048,576 entries (2^20) was chosen to accommodate roughly 500
+     * concurrent appends, assuming an average of 3 tags per event, while keeping the
+     * hash collision rate below 1%.
+     * <p>
+     * Setting it higher has the trade off of making the consistency tags table larger
+     * requiring more table and index space, and may make it harder to keep this table
+     * in memory. Setting it lower has the trade off of making collisions more frequent
+     * which can lead to appends being aborted and retried when there was no actual
+     * conflict.
+     * <p>
      * Must be a power of two to allow efficient bitmask-based indexing.
      */
     private final int hashCapacity = 1024 * 1024;  // must be a power of 2
