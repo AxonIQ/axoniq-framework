@@ -1,0 +1,304 @@
+= Configuration
+:navtitle: Configuration
+
+Throughout this tutorial, workflows have been defined using the `@Workflow` annotation.
+This section covers the declarative (programmatic) configuration API, which gives you full control over how workflows are wired up — and how to customize the context, event naming, ID resolution, and more.
+
+== Annotation vs declarative
+
+The `@Workflow` annotation is the simplest way to define a workflow:
+
+[source,java]
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced",
+          workflowNamespace = "io.myapp.orders")
+public void execute(SimpleWorkflowContext ctx) { /* ... */ }
+----
+
+The declarative API offers the same capabilities plus additional options not available via annotations.
+Here's a complete example showing how to set up the Axon configuration with a workflow module:
+
+[source,java]
+----
+var configurer = MessagingConfigurer.create();
+
+configurer.componentRegistry(r -> r.registerEnhancer(registry ->
+        registry.registerModule(
+                WorkflowModule
+                        .usingContext(SimpleWorkflowContext.class)
+                        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                        .workflowExecutionFactory(c ->
+                                new DSLAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
+                        .definitions(d -> d
+                                .declarative(c -> new OrderFulfillmentWorkflow()::execute)
+                                .workflowName("OrderFulfillment")
+                                .on(EventConditions.fromType(OrderPlacedEvent.class))
+                                .customized((c, w) -> w
+                                        .eventNameCustomizer(namespace("io.myapp.orders"))
+                                        .workflowIdProvider(fromPayloadAttribute(c, "orderId"))
+                                )
+                        )
+        )
+));
+
+var configuration = configurer.start(); // <1>
+----
+<.> `start()` initializes the Axon configuration and makes the workflow engine ready to receive events.
+
+== The WorkflowModule builder
+
+The builder follows a step-by-step flow:
+
+[source]
+----
+WorkflowModule
+    .usingContext(ContextType.class)           // 1. Which context type
+    .workflowContextFactory(...)               // 2. How to create context instances
+    .workflowExecutionFactory(...)             // 3. How to create executions
+    .definitions(d -> d                        // 4. Define one or more workflows
+        .declarative(...) or .autodetected(...)
+    );
+----
+
+=== Step 1: Context type
+
+[source,java]
+----
+WorkflowModule.usingContext(SimpleWorkflowContext.class)
+----
+
+Specifies the workflow context type. Use `SimpleWorkflowContext.class` for the built-in context, or your own custom context class.
+
+=== Step 2: Context factory
+
+[source,java]
+----
+.workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+----
+
+Provides a factory that creates new context instances for each workflow execution.
+
+=== Step 3: Execution factory
+
+[source,java]
+----
+.workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
+----
+
+`DSLAdoptingExecutionFactory` is the standard execution factory for DSL-based contexts (anything extending `AbstractDSLWorkflowContext`). It bridges the context to the engine's execution model.
+
+=== Step 4: Workflow definitions
+
+You can define workflows in two ways:
+
+**Declarative** — full control:
+[source,java]
+----
+.definitions(d -> d
+        .declarative(c -> workflow::execute)
+        .workflowName("OrderFulfillment")
+        .on(EventConditions.fromType(OrderPlacedEvent.class))
+        .customized((c, w) -> w /* ... */)
+)
+----
+
+**Autodetected** — convention-based, reads `@Workflow` annotations:
+[source,java]
+----
+.definitions(d -> d
+        .autodetected(c -> new OrderFulfillmentWorkflow(),
+                      SimpleWorkflowContext.class)
+)
+----
+
+You can chain multiple definitions:
+[source,java]
+----
+.definitions(d -> d
+        .declarative(c -> workflowA::execute)
+        .workflowName("WorkflowA")
+        .on(EventConditions.fromType(EventA.class))
+        .notCustomized()
+
+        .declarative(c -> workflowB::execute)
+        .workflowName("WorkflowB")
+        .on(EventConditions.fromType(EventB.class))
+        .notCustomized()
+)
+----
+
+== Start conditions
+
+The `.on(...)` method defines which events trigger a new workflow instance.
+
+[cols="1,2"]
+|===
+|Method |Description
+
+|`EventConditions.fromType(MyEvent.class)`
+|Start on any event of this type.
+
+|`EventConditions.fromType(MyEvent.class, predicate)`
+|Start on events of this type that match a predicate (e.g., association filtering).
+|===
+
+Example with association filtering — only start for VIP customers:
+
+[source,java]
+----
+.on(EventConditions.fromType(
+        RegistrationReceivedEvent.class,
+        associate(payloadProperty("status"), equalsTo("vip"))
+))
+----
+
+== Workflow ID provider
+
+The workflow ID provider determines how each workflow instance gets its unique ID from the triggering event.
+
+[cols="1,2"]
+|===
+|Provider |Description
+
+|`PayloadPropertyWorkflowIdProvider`
+|Extracts the ID from a payload field. Supports transformation.
+
+|`MessageWorkflowIdProvider`
+|Uses the event message's own identifier. This is the default.
+|===
+
+[source,java]
+----
+// Extract orderId from payload, prefix it
+.workflowIdProvider(fromPayloadAttribute(c, "orderId", id -> "order-" + id))
+
+// Extract directly without transformation
+.workflowIdProvider(fromPayloadAttribute(c, "orderId"))
+----
+
+== Customization options
+
+The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowCustomization` object:
+
+[source,java]
+----
+.customized((c, w) -> w
+        .eventNameCustomizer(namespace("io.myapp.orders")
+                .stepCompleted("Done")
+                .workflowBaseName("OrderFulfillment"))
+        .workflowIdProvider(fromPayloadAttribute(c, "orderId"))
+        .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
+                (status, context) -> {
+                    logger.info("Workflow {} completed", context.workflowId());
+                })
+)
+----
+
+[cols="1,2"]
+|===
+|Option |Description
+
+|`eventNameCustomizer(...)`
+|Global event name customizer for all steps in this workflow. See xref:understanding-steps.adoc#event-name-customization[Event Name Customization].
+
+|`workflowIdProvider(...)`
+|How to extract the workflow instance ID from triggering events.
+
+|`registerWorkflowStatusChangeListener(status, listener)`
+|React to workflow state changes. See xref:workflow-lifecycle.adoc#_lifecycle_listeners[Lifecycle Listeners].
+
+|`unregisterWorkflowStatusChangeListener(status, listener)`
+|Remove a previously registered listener.
+|===
+
+If you don't need any customizations, use `.notCustomized()`.
+
+[[custom-workflow-context]]
+== Custom workflow context
+
+You don't have to use `SimpleWorkflowContext`. You can extend it to build a domain-specific DSL that hides the engine primitives behind business language.
+
+For example, an approval workflow context:
+
+[source,java]
+----
+public class ApprovalWorkflowContext extends SimpleWorkflowContext {
+
+    public ApprovalWorkflowContext(String workflowId, Map<String, Object> payload,
+                                   ProcessingContext processingContext,
+                                   WorkflowConfiguration<?> workflowConfiguration) {
+        super(workflowId, payload, processingContext, workflowConfiguration);
+    }
+
+    /** Request approval and wait for a response event. Returns true if approved. */
+    public boolean requestApproval(String approver, Duration deadline) {
+        awaitExecute("requestApproval",
+                payload("approver", approver, "requestId", workflowId()).getValues(),
+                ApprovalService::sendRequest);
+
+        var decision = awaitEvent("awaitDecision", ApprovalDecisionEvent.class, deadline);
+        return "approved".equals(decision.outcome());
+    }
+
+    /** Escalate to a manager when the original approver doesn't respond in time. */
+    public void escalate(String manager) {
+        awaitExecute("escalate",
+                payload("manager", manager, "requestId", workflowId()).getValues(),
+                ApprovalService::escalate);
+    }
+
+    /** Notify the requester of the final outcome. */
+    public void notifyOutcome(String recipient, String decision) {
+        awaitExecute("notifyOutcome",
+                payload("recipient", recipient, "decision", decision).getValues(),
+                NotificationService::sendDecision);
+    }
+}
+----
+
+Register it with a factory:
+
+[source,java]
+----
+public class ApprovalWorkflowContextFactory
+        implements WorkflowContextFactory<ApprovalWorkflowContext> {
+
+    @Override
+    public ApprovalWorkflowContext createContext(Map<String, Object> payload, String workflowId,
+                                                ProcessingContext processingContext,
+                                                WorkflowConfiguration<?> workflowConfiguration) {
+        return new ApprovalWorkflowContext(workflowId, payload,
+                                           processingContext, workflowConfiguration);
+    }
+}
+----
+
+Wire it all together:
+
+[source,java]
+----
+WorkflowModule
+    .usingContext(ApprovalWorkflowContext.class)
+    .workflowContextFactory(c -> new ApprovalWorkflowContextFactory())
+    .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(ApprovalWorkflowContext.class))
+    .definitions(d -> d
+            .declarative(c -> new PurchaseApprovalWorkflow()::execute)
+            .workflowName("PurchaseApproval")
+            .on(EventConditions.fromType(PurchaseRequestSubmitted.class))
+            .notCustomized()
+    );
+----
+
+Your workflow then reads like plain business logic — no engine primitives in sight:
+
+[source,java]
+----
+public void execute(ApprovalWorkflowContext ctx) {
+    if (!ctx.requestApproval("team-lead", Duration.ofDays(3))) {
+        ctx.escalate("department-head");
+    }
+    ctx.notifyOutcome(ctx.workflowPayload().get("requester"), "approved");
+}
+----
+
+The engine still records every step as durable events, handles crash recovery, and provides audit trails — but the workflow code speaks the language of your domain.
