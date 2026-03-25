@@ -60,6 +60,7 @@
         <axon-framework.version>5.1.0-RC2</axon-framework.version>
         <postgresql.version>42.7.8</postgresql.version>
         <hikari-cp.version>7.0.2</hikari-cp.version>
+        <jspecify.version>1.0.0</jspecify.version>
         <!-- Autodetection -->
         <spring-boot.version>3.5.8</spring-boot.version>
         <!-- Conversion -->
@@ -72,7 +73,7 @@
         <awaitility.version>4.3.0</awaitility.version>
         <hamcrest.version>3.0</hamcrest.version>
         <junit.jupiter.version>5.13.4</junit.jupiter.version>
-        <mockito.version>5.20.0</mockito.version>
+        <mockito.version>5.21.0</mockito.version>
         <reactor.version>3.7.11</reactor.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <!-- Build / Plugin -->
@@ -100,6 +101,12 @@
                 <groupId>org.axonframework</groupId>
                 <artifactId>axon-eventsourcing</artifactId>
                 <version>${axon-framework.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>jakarta.annotation</groupId>
+                        <artifactId>jakarta.annotation-api</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.axonframework</groupId>
@@ -187,6 +194,11 @@
                 <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jspecify</groupId>
+                <artifactId>jspecify</artifactId>
+                <version>${jspecify.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

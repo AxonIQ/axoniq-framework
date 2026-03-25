@@ -18,7 +18,6 @@
 
 package io.axoniq.framework.extension.postgresql;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -47,7 +46,7 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
     public static final int ENHANCER_ORDER = Integer.MIN_VALUE + 20;
 
     @Override
-    public void enhance(@Nonnull ComponentRegistry registry) {
+    public void enhance(ComponentRegistry registry) {
         registry.registerIfNotPresent(
                 EventStorageEngine.class,
                 configuration -> new PostgresqlEventStorageEngine(
