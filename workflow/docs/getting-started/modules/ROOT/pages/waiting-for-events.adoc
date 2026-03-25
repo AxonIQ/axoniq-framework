@@ -134,4 +134,4 @@ In Kotlin, waiting for an event is even more concise:
 val confirmation = awaitEvent("awaitPayment", PaymentConfirmed::class)
 ----
 
-Now that we can wait for external events, let's see how to store the payment details and manage data flowing through our workflow.
+Now that we can execute actions and wait for external events, let's dive deeper into xref:understanding-steps.adoc[all the options] you can configure — timeouts, error handling, event naming, payload reducers, and execution semantics.
