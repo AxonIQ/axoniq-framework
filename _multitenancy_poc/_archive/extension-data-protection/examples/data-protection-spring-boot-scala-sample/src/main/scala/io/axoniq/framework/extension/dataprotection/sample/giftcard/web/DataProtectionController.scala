@@ -17,8 +17,8 @@
  */
 package io.axoniq.framework.extension.dataprotection.sample.giftcard.web
 
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.cryptoengine.CryptoEngine
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine
 import org.slf4j.{Logger, LoggerFactory}
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation._

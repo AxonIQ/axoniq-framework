@@ -18,8 +18,8 @@
 
 package io.axoniq.framework.extension.dataprotection.sample.giftcard.event
 
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.{DataSubjectId, DeepPersonalData, PersonalData, SerializedPersonalData}
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.{DataSubjectId, DeepPersonalData, PersonalData, SerializedPersonalData}
 import org.axonframework.eventsourcing.annotation.EventTag
 
 import java.math.BigDecimal
