@@ -7,7 +7,6 @@ services:
       - '8224:8224'
     hostname: axonserver-1
     environment:
-#      - axoniq_console_authentication={{ENVIRONMENT_ID}}-asc:{{SERVER_ACCESS_TOKEN}}
       - axoniq.axonserver.autocluster.dcb=true
     volumes:
       - data:/axonserver/data

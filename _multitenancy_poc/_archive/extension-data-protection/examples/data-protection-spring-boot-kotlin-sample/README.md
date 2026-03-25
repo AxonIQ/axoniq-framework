@@ -112,7 +112,7 @@ public record GiftCardIssuedEvent(
        │
        ▼
 ┌─────────────┐
-│  Aggregate  │ (Kotlin class)
+│  Entity  │ (Kotlin class)
 │  (GiftCard) │
 └──────┬──────┘
        │
@@ -149,7 +149,7 @@ public record GiftCardIssuedEvent(
 
 ```
 1. Command arrives with plain text personal data
-2. GiftCard aggregate emits GiftCardIssuedEvent
+2. GiftCard entity emits GiftCardIssuedEvent
 3. FieldEncryptingConverter intercepts event before storage
 4. Personal data fields (@PersonalData) are encrypted
 5. Encrypted event stored in event store
@@ -265,8 +265,8 @@ The sample demonstrates three types of personal data encryption with Kotlin's cl
 #### 1. Field-Level Encryption (`@PersonalData`)
 
 ```kotlin
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.PersonalData
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.PersonalData
 
 data class GiftCardIssuedEvent(
     @PersonalData(group = GiftPersonalDataGroup.GROUP_NAME, replacement = "<removed>")
@@ -279,7 +279,7 @@ data class GiftCardIssuedEvent(
 #### 2. Deep Encryption (`@DeepPersonalData`)
 
 ```kotlin
-import io.axoniq.framework.dataprotection.api.DeepPersonalData
+import io.axoniq.framework.extension.dataprotection.api.DeepPersonalData
 
 data class GiftCardIssuedEvent(
     @DeepPersonalData
@@ -292,7 +292,7 @@ Deep encryption recursively encrypts all `@PersonalData` fields within nested ob
 #### 3. Serialized Encryption (`@SerializedPersonalData`)
 
 ```kotlin
-import io.axoniq.framework.dataprotection.api.SerializedPersonalData
+import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData
 import java.time.LocalDate
 
 data class GiftCardIssuedEvent(
@@ -306,8 +306,8 @@ Serialized encryption converts the entire field to bytes before encryption, pres
 ### Data Subject Identifier
 
 ```kotlin
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.DataSubjectId
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.DataSubjectId
 import org.axonframework.eventsourcing.annotation.EventTag
 
 data class GiftCardIssuedEvent(
