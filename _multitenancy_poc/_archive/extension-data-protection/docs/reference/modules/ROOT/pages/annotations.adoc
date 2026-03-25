@@ -302,7 +302,7 @@ When using Axon Data Protection annotations in Scala case classes, you must appl
 
 [source,scala]
 ----
-import io.axoniq.framework.dataprotection.api.{DataSubjectId, PersonalData, DeepPersonalData, SerializedPersonalData}
+import io.axoniq.framework.extension.dataprotection.api.{DataSubjectId, PersonalData, DeepPersonalData, SerializedPersonalData}
 import scala.annotation.meta.field
 import java.time.LocalDate
 
