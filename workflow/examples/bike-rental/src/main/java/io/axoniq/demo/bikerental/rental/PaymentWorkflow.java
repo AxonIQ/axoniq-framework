@@ -79,31 +79,35 @@ public class PaymentWorkflow {
                                               Duration.ofSeconds(10)
             );
 
-            if (sendCommand(ctx,
-                            "preparePayment",
-                            payload ->
-                                    new PreparePaymentCommand(
-                                            payload.get("amount"),
-                                            payload.get("paymentReference")
-                                    )
-            ).success()) {
+            var preparePayment = sendCommand(ctx,
+                                             "preparePayment",
+                                             payload ->
+                                                     new PreparePaymentCommand(
+                                                             payload.get("amount"),
+                                                             payload.get("paymentReference")
+                                                     )
+            );
+            preparePayment.await(); // wait for it
+
+            if (preparePayment.success()) {
                 paymentPrepared.await();
-                if (paymentPrepared.failure()) {
-                    // NICE TO HAVE
-                    // paymentPrepared.cancel("Prepare payment failed.");
-                    ctx.sleep("retryPayment", Duration.ofSeconds(5));
-                } else if (paymentPrepared.success()) {
+                if (paymentPrepared.success()) {
                     paymentPending.set(false);
-                    var paymentId = paymentPrepared.result().orElseThrow(() -> new IllegalStateException("No payload"));
+                    var paymentId = paymentPrepared.result().orElseThrow(() -> new IllegalStateException("No payload"))
+                                                   .toString();
                     ctx.setPayload("setPaymentId", paymentId);
 
                     logger.info("Payment prepared successfully for reference {}, the payment id is {}",
                                 paymentReference,
                                 paymentId);
+                } else {
+                    logger.info("Did not receive payment prepared event. Retrying in 5 secs.");
+                    ctx.sleep("retryPayment", Duration.ofSeconds(5));
                 }
             } else {
                 // NICE TO HAVE
-                // paymentPrepared.cancel("Prepare payment failed.");
+                logger.info("Prepare payment command failed. Retrying in 5 secs.");
+                paymentPrepared.cancel("Prepare payment command failed.");
                 ctx.sleep("retryPayment", Duration.ofSeconds(5));
             }
         }

@@ -148,7 +148,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     break;
                 case FAILED:
                     addStep(WorkflowStep.failed(stepName,
-                                                (Throwable) eventPayload,
+                                                eventMessage.payloadAs(Exception.class, processingContext.component(Converter.class)),
                                                 eventMessage.timestamp(),
                                                 processingContext)); // TODO copy resources of the context
                     break;
