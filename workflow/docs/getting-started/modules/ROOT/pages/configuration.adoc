@@ -253,6 +253,11 @@ public class ApprovalWorkflowContext extends SimpleWorkflowContext {
                 payload("recipient", recipient, "decision", decision).getValues(),
                 NotificationService::sendDecision);
     }
+
+    /** Domain accessors for the workflow payload. */
+    public String requester() { return (String) workflowPayload().get("requester"); }
+    public String department() { return (String) workflowPayload().get("department"); }
+    public double amount() { return (double) workflowPayload().get("amount"); }
 }
 ----
 
@@ -297,7 +302,7 @@ public void execute(ApprovalWorkflowContext ctx) {
     if (!ctx.requestApproval("team-lead", Duration.ofDays(3))) {
         ctx.escalate("department-head");
     }
-    ctx.notifyOutcome(ctx.workflowPayload().get("requester"), "approved");
+    ctx.notifyOutcome(ctx.requester(), "approved");
 }
 ----
 
