@@ -23,14 +23,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.axoniq.framework.extension</groupId>
-        <artifactId>data-protection-parent</artifactId>
+        <groupId>io.axoniq.framework.extensions.dataprotection</groupId>
+        <artifactId>axon-data-protection-examples</artifactId>
         <version>5.0.0-SNAPSHOT</version>
-        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>axon-data-protection-spring-boot-java-sample</artifactId>
-    <name>Data Protection Extension - Spring Boot Java Sample</name>
+    <name>AxonIQ Example - Java - Spring Boot</name>
     <description>
         Sample Spring Boot application demonstrating Axon Data Protection extension usage with field-level encryption
         for GDPR compliance in event-sourced applications.
@@ -52,8 +51,8 @@
 
         <!-- Data Protection Extension -->
         <dependency>
-            <groupId>io.axoniq.framework.extension</groupId>
-            <artifactId>axon-data-protection-core</artifactId>
+            <groupId>io.axoniq.framework.extensions.dataprotection</groupId>
+            <artifactId>axon-data-protection</artifactId>
             <version>${project.version}</version>
         </dependency>
 
