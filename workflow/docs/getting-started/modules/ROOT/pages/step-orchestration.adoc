@@ -47,33 +47,37 @@ They are *not* automatically cancelled — if you need cleanup, cancel them expl
 
 === Race two events
 
-Wait for the first of two possible events — whichever arrives first wins:
+Wait for the first of two possible outcomes — whichever event arrives first wins:
 
 [source,java]
 ----
-var paymentByCard = ctx.waitForEvent("awaitCardPayment",
-        CardPaymentConfirmed.class, Duration.ofMinutes(10));
+var accepted = ctx.waitForEvent("paymentAccepted",
+        CardPaymentAccepted.class, Duration.ofMinutes(10));
 
-var paymentByBank = ctx.waitForEvent("awaitBankTransfer",
-        BankTransferConfirmed.class, Duration.ofMinutes(30));
+var declined = ctx.waitForEvent("paymentDeclined",
+        CardPaymentDeclined.class, Duration.ofMinutes(10));
 
 var result = ctx.anyMatch(WorkflowStepResult::isCompleted,     // <1>
-                          paymentByCard, paymentByBank);
+                          accepted, declined);
 
 result.await();                                                 // <2>
 
 var winner = result.matched().getFirst();                       // <3>
-logger.info("Payment received via: {}", winner.getStepName());
+logger.info("Payment outcome: {}", winner.getStepName());
 
-// Cancel the loser — it's no longer needed
-for (var loser : result.unmatched()) {                          // <4>
-    loser.cancel("Payment already received via " + winner.getStepName());
+// Cancel the wait for the other event
+for (var remaining : result.unmatched()) {                      // <4>
+    remaining.cancel("Outcome already determined");
+}
+
+if (winner == declined) {
+    ctx.fail("Payment was declined");
 }
 ----
 <.> Resolves when the first result reaches a terminal state matching the predicate.
-<.> Blocks until the winner is determined.
-<.> `matched()` contains all results that satisfied the predicate — the winner is always the first element.
-<.> `unmatched()` contains the rest — cancel them to clean up.
+<.> Blocks until the outcome is determined.
+<.> `matched()` contains the event that arrived first — the winner is always the first element.
+<.> `unmatched()` contains the other wait — cancel it since we already have our answer.
 
 === Race two services
 
