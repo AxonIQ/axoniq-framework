@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.postgresql;
+package io.axoniq.framework.extension.postgresql;
 
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
