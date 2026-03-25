@@ -36,3 +36,4 @@ CLAUDE.md
 
 /examples/bike-rental/rental_db.mv.db
 /examples/bike-rental/rental_db.trace.db
+examples/bike-rental/rental_db.lock.db
