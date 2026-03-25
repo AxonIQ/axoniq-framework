@@ -2,7 +2,7 @@
 :navtitle: Step Orchestration
 
 Real-world workflows often need to run steps concurrently.
-You might want to ship the order and send a confirmation email at the same time, race two payment providers, or wait for multiple approvals before proceeding.
+You might want to ship the order and send a confirmation email at the same time, request shipping quotes from two carriers and take the fastest, or wait for multiple approvals before proceeding.
 
 The three combinators — `anyMatch`, `allMatch`, and `noneMatch` — let you compose non-blocking steps (`execute` and `waitForEvent`) into powerful orchestration patterns.
 
