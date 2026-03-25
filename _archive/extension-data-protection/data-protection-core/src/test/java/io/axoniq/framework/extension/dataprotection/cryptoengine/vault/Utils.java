@@ -17,7 +17,7 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine.vault;
 
-import io.axoniq.framework.dataprotection.utils.TestUtils;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import okhttp3.OkHttpClient;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,13 +30,11 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
- * Utility class that has a methode to create the VaultCryptoEngine and it
- * has a factory method to produce an OkHttpClient that accepts
- * untrusted SSL certificates. This is useful to run tests against Vault with SSL
- * (which is important to test, among other things because of performance).
- *
- * Code has been copied from StackOverflow, answer by user sonxurxo:
- * https://stackoverflow.com/a/25992879/8254465
+ * Utility class that has a methode to create the VaultCryptoEngine and it has a factory method to produce an
+ * OkHttpClient that accepts untrusted SSL certificates. This is useful to run tests against Vault with SSL (which is
+ * important to test, among other things because of performance).
+ * <p>
+ * Code has been copied from StackOverflow, answer by user sonxurxo: https://stackoverflow.com/a/25992879/8254465
  */
 public abstract class Utils {
 

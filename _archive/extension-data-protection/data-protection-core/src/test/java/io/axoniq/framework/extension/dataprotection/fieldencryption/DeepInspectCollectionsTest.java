@@ -23,7 +23,7 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
-import io.axoniq.framework.dataprotection.utils.TestUtils;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
