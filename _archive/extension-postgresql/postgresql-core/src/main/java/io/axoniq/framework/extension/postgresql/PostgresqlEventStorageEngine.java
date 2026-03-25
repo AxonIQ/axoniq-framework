@@ -38,13 +38,13 @@ import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.StreamSpliterator;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
-import org.axonframework.eventsourcing.eventstore.jdbc.JdbcTransactionalExecutorProvider;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
+import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.TerminalEventMessage;
@@ -78,8 +78,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -199,7 +199,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         INSERT INTO consistency_tags (tag_hash, global_index) VALUES (?, ?)
           ON CONFLICT (tag_hash) DO UPDATE
             SET global_index = EXCLUDED.global_index
-            WHERE consistency_tags.global_index <= ? AND consistency_tags.global_index >= 0
+            WHERE consistency_tags.global_index < ? AND consistency_tags.global_index >= 0
         """;
 
     /**
@@ -629,7 +629,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                 endOfStreams.thenApply(event -> TerminalEventMessage.INSTANCE),
                 unused -> Context.with(
                     ConsistencyMarker.RESOURCE_KEY,
-                    new GlobalIndexConsistencyMarker(lastGlobalIndex.get())
+                    new GlobalIndexConsistencyMarker(lastGlobalIndex.get() + 1)  // return index of potential next matching message
                 )
             ));
     }
@@ -646,11 +646,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
             );
         }
 
-        AtomicLong lastGlobalIndex = new AtomicLong();
-        long start = trackingToken == null ? 0 : Math.max(0, trackingToken.position().orElse(0));
+        AtomicLong nextQueryIndex = new AtomicLong(trackingToken == null ? 0 : Math.max(0, trackingToken.position().orElse(0)));
 
-        Function<FinalizedEvent, List<FinalizedEvent>> fetcher = last -> {
-            long position = last == null ? start : last.position + 1;
+        Supplier<List<FinalizedEvent>> fetcher = () -> {
+            long position = nextQueryIndex.get();
             Batch batch = load(criterions, position, 50).join();
 
             /*
@@ -661,7 +660,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
              * needs a bit of an adjustment to keep this fully async.
              */
 
-            lastGlobalIndex.set(batch.highestGlobalIndex);
+            nextQueryIndex.set(batch.highestGlobalIndex + 1);
 
             return batch.events;
         };
@@ -799,6 +798,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                         list.add(new FinalizedEvent(
                             globalIndex,
                             new GenericEventMessage(identifier, messageType, payload, metadata, timestamp)
+                                .withConverter(converter)
                         ));
                     }
                 }
@@ -871,6 +871,14 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
      * @throws SQLException when a JDBC error occurred
      */
     private Set<Tag> lock(PreparedStatement tagUpsert, AppendCondition condition, long temporaryGlobalIndex) throws SQLException {
+
+        /*
+         * The position in a consistency marker is the position just after the last event it was consistent with,
+         * as this position is the position one can resume a sourcing from without having to adjust it manually.
+         * The locking insert/update query used uses a less than comparison ("<"), so this will work correctly, without
+         * having to adjust the marker position.
+         */
+
         long globalIndex = Math.max(0, GlobalIndexConsistencyMarker.position(condition.consistencyMarker()));
 
         assert temporaryGlobalIndex < 0;

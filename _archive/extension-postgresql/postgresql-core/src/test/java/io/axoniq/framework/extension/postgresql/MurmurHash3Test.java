@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Test for {@link MurmurHash3}.
+ * Test for {@code MurmurHash3}.
  *
  * @author John Hendrikx
  */
