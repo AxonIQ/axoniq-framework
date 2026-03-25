@@ -22,11 +22,11 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>io.axoniq.framework.extension</groupId>
-        <artifactId>dataprotection</artifactId>
+        <artifactId>data-protection-parent</artifactId>
         <version>5.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>data-protection-coverage-report</artifactId>
+    <artifactId>axon-data-protection-coverage-report</artifactId>
 
     <name>AxonIQ Framework - Data Protection - Coverage Report</name>
     <description>Project depending on all modules to construct a combined coverage report</description>
@@ -34,7 +34,7 @@
     <dependencies>
         <dependency>
             <groupId>io.axoniq.framework.extension</groupId>
-            <artifactId>data-protection-core</artifactId>
+            <artifactId>axon-data-protection-core</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>

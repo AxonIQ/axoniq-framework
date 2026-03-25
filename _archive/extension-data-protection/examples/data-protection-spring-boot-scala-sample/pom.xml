@@ -24,12 +24,12 @@
 
     <parent>
         <groupId>io.axoniq.framework.extension</groupId>
-        <artifactId>dataprotection</artifactId>
+        <artifactId>data-protection-parent</artifactId>
         <version>5.0.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>data-protection-spring-boot-scala-sample</artifactId>
+    <artifactId>axon-data-protection-spring-boot-scala-sample</artifactId>
     <name>Data Protection Extension - Spring Boot Scala Sample</name>
     <description>
         Sample Spring Boot application with Scala demonstrating Axon Data Protection extension usage with field-level
@@ -56,7 +56,7 @@
         <!-- Data Protection Extension -->
         <dependency>
             <groupId>io.axoniq.framework.extension</groupId>
-            <artifactId>data-protection-core</artifactId>
+            <artifactId>axon-data-protection-core</artifactId>
             <version>${project.version}</version>
         </dependency>
 
