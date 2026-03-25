@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -46,7 +47,8 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-@RegistrationScope
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+@Internal
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 
     public static final String WORKFLOW_ENGINE_EVENT_MODULE = "WorkflowEngine";
