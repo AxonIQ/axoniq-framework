@@ -13,7 +13,7 @@
   ~ You may not use this file except in compliance with the License.
   ~ You may obtain a copy of the License at:
   ~
-  ~    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+  ~    https://www.axoniq.io/legal/terms-of-service
   ~
   ~
   -->
@@ -38,7 +38,7 @@
     <licenses>
         <license>
             <name>Commercial</name>
-            <url>https://lp.axoniq.io/axoniq-software-subscription-agreement-terms</url>
+            <url>https://www.axoniq.io/legal/terms-of-service</url>
         </license>
     </licenses>
     <issueManagement>
