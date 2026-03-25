@@ -40,15 +40,15 @@ import org.springframework.context.annotation.ComponentScan
 @SpringBootApplication
 @EntityScan(
     basePackages = [
-        "io.axoniq.dataprotection.sample",
-        "io.axoniq.framework.dataprotection.cryptoengine.jpa",
+        "io.axoniq.framework.extension.dataprotection.sample",
+        "io.axoniq.framework.extension.dataprotection.cryptoengine.jpa",
         "org.axonframework.eventsourcing.eventstore.jpa",
         "org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa"
     ]
 )
 @ComponentScan(
     basePackages = [
-        "io.axoniq.dataprotection.sample"
+        "io.axoniq.framework.extension.dataprotection.sample"
     ]
 )
 class DataProtectionKotlinSampleApplication

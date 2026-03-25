@@ -241,8 +241,8 @@ The sample demonstrates three types of personal data encryption:
 
 #### 1. Field-Level Encryption (`@PersonalData`)
 ```scala
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.PersonalData
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.PersonalData
 import scala.annotation.meta.field
 
 case class GiftCardIssuedEvent(
@@ -255,7 +255,7 @@ case class GiftCardIssuedEvent(
 
 #### 2. Deep Encryption (`@DeepPersonalData`)
 ```scala
-import io.axoniq.framework.dataprotection.api.DeepPersonalData
+import io.axoniq.framework.extension.dataprotection.api.DeepPersonalData
 import scala.annotation.meta.field
 
 case class GiftCardIssuedEvent(
@@ -266,8 +266,8 @@ case class GiftCardIssuedEvent(
 
 #### 3. Serialized Encryption (`@SerializedPersonalData`)
 ```scala
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.SerializedPersonalData
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData
 import scala.annotation.meta.field
 import java.time.LocalDate
 
@@ -280,8 +280,8 @@ case class GiftCardIssuedEvent(
 ### Data Subject Identifier
 
 ```scala
-import io.axoniq.dataprotection.sample.giftcard.GiftPersonalDataGroup
-import io.axoniq.framework.dataprotection.api.DataSubjectId
+import io.axoniq.framework.extension.dataprotection.sample.giftcard.GiftPersonalDataGroup
+import io.axoniq.framework.extension.dataprotection.api.DataSubjectId
 import org.axonframework.eventsourcing.annotation.EventTag
 import scala.annotation.meta.field
 
