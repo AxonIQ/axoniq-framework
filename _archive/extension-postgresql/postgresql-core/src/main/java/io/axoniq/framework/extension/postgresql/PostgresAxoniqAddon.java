@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -23,6 +23,9 @@ import io.axoniq.license.entitlement.AxoniqAddon;
 /**
  * AxoniqAddon implementation for the Axon Framework PostgreSQL Extension. This allows the extension to be detected
  * and logged at startup, and to be included in the license entitlement system.
+ *
+ * @author Mitchell Herrijgers
+ * @since 1.0.0
  */
 public class PostgresAxoniqAddon implements AxoniqAddon {
     static final String IDENTIFIER = "framework.postgres";
