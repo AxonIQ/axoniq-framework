@@ -10,7 +10,7 @@ Event sourcing delivers all of that, but comes with significant complexity: comm
 The Axon Workflow Engine bridges that gap.
 You write simple, imperative business logic, and the engine handles event sourcing, state persistence, and crash recovery automatically.
 
-The engine is built on *execution primitives*, *lifecycle primitives*, and *composables*:
+The engine is built on *primitives* and *composables*:
 
 *Execution primitives* — the core building blocks for workflow steps:
 

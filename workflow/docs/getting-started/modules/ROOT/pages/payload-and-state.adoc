@@ -85,7 +85,7 @@ Under the hood, each step has two _payload reducers_ that control how data flows
 ====
 For most workflows, the defaults work well.
 You'll only need custom reducers for advanced payload merging scenarios.
-See the xref:axon-workflow-reference:workflow-state:payload-management.adoc[Payload Management] reference for details.
+See xref:understanding-steps.adoc#payload-reducers[Payload Reducers] for details.
 ====
 
 == Durability

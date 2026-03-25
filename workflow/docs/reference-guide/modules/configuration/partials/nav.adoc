@@ -1,4 +1,0 @@
-* xref:configuration:index.adoc[]
-** xref:configuration:workflow-module.adoc[]
-** xref:configuration:annotations.adoc[]
-** xref:configuration:customization.adoc[]

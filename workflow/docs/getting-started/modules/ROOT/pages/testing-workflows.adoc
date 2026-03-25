@@ -144,9 +144,9 @@ You've built and tested a complete order fulfillment workflow using the Axon Wor
 
 Your workflow handles stock reservation, payment processing, event-based waiting with association filtering, durable state management, and parallel execution — all in a single, readable method.
 
-To dive deeper into specific topics, check the xref:axon-workflow-reference::index.adoc[Reference Guide]:
+To dive deeper into specific topics:
 
-* *xref:axon-workflow-reference:primitives:terminate.adoc[Terminate]* — cancel and failure handling patterns
-* *xref:axon-workflow-reference:configuration:customization.adoc[Customization]* — event naming, workflow ID providers, status change listeners
-* *xref:axon-workflow-reference:dsl:kotlin-dsl.adoc[Kotlin DSL]* — idiomatic Kotlin API with extension functions
-* *xref:axon-workflow-reference:configuration:annotations.adoc[Annotations]* — `@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout` lifecycle callbacks
+* *xref:understanding-steps.adoc[Understanding Steps]* — timeouts, error handling, payload reducers, event naming
+* *xref:workflow-lifecycle.adoc[Workflow Lifecycle]* — fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
+* *xref:common-patterns.adoc[Common Patterns]* — saga, fan-out/fan-in, retry, and more
+* *xref:configuration.adoc[Configuration]* — declarative setup, custom contexts, event naming customization
