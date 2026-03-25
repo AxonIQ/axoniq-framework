@@ -145,8 +145,8 @@ Add the dependency to your project:
 
 ```xml
 <dependency>
-    <groupId>io.axoniq.framework.extension</groupId>
-    <artifactId>dataprotection-core</artifactId>
+    <groupId>io.axoniq.framework.extensions.dataprotection</groupId>
+    <artifactId>axon-data-protection</artifactId>
     <version>5.0.0-SNAPSHOT</version>
 </dependency>
 ```

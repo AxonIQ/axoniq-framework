@@ -19,15 +19,14 @@
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.axoniq.framework.extension</groupId>
-    <artifactId>data-protection-parent</artifactId>
+    <groupId>io.axoniq.framework.extensions.dataprotection</groupId>
+    <artifactId>axon-data-protection-extension</artifactId>
     <version>5.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <modelVersion>4.0.0</modelVersion>
-
-    <name>AxonIQ Framework - Data Protection Extension</name>
+    <name>AxonIQ Framework - Data Protection - Parent</name>
     <description>
         An extension, from AxonIQ, for Axon Framework, providing cryptographic data protection and GDPR compliance
         for event-sourced applications through field-level encryption and key management.
@@ -48,9 +47,6 @@
 
     <modules>
         <module>data-protection-core</module>
-        <module>examples/data-protection-spring-boot-java-sample</module>
-        <module>examples/data-protection-spring-boot-scala-sample</module>
-        <module>examples/data-protection-spring-boot-kotlin-sample</module>
     </modules>
 
     <properties>
@@ -454,6 +450,19 @@
     </build>
 
     <profiles>
+
+        <profile>
+            <id>examples</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <property>
+                    <name>examples</name>
+                </property>
+            </activation>
+            <modules>
+                <module>examples</module>
+            </modules>
+        </profile>
         <profile>
             <id>coverage</id>
             <activation>
