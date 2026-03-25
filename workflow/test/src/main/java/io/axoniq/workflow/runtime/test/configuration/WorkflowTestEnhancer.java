@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.test.configuration;
 
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.Converter;
@@ -25,7 +26,6 @@ import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.Executor;
 
@@ -34,7 +34,7 @@ import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.W
 public class WorkflowTestEnhancer implements ConfigurationEnhancer {
 
     @Override
-    public void enhance(@NotNull ComponentRegistry registry) {
+    public void enhance(@Nonnull ComponentRegistry registry) {
         registry
                 .registerComponent(DelayedPublisher.class, cfg ->
                         new DelayedPublisher(

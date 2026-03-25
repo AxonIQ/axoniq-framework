@@ -21,7 +21,7 @@ import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jetbrains.annotations.NotNull;
+import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 
@@ -35,10 +35,10 @@ import java.util.Map;
  */
 public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
-    @NotNull
+    @Nonnull
     @Override
     public SimpleWorkflowContext createContext(
-            @NotNull Map<String, Object> initialPayload,
+            @Nonnull Map<String, Object> initialPayload,
             @Nonnull String workflowId,
             @Nonnull ProcessingContext processingContext,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration

@@ -22,15 +22,12 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.eventsourcing.eventstore.EventStore;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.test.fixture.RecordingEventStore;
-import org.jetbrains.annotations.NotNull;
-import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
@@ -44,7 +41,13 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
     private static volatile PrettyPrintingRecordingEventStore lastInstance;
+    private static final Set<String> IGNORED_KEYS = Set.of("correlationId", "causationId");
 
+    /**
+     * Constructs a new {@link PrettyPrintingRecordingEventStore} wrapping the given {@link EventStore}.
+     *
+     * @param delegate event store to wrap.
+     */
     public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
         super(delegate);
         lastInstance = this;
@@ -65,7 +68,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         // descriptor.describeWrapperOf(this.delegate);
         var eventsByWorkflowId = recorded().stream()
                                            .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
@@ -73,7 +76,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
                                                    METADATA_KEY_WORKFLOW_ID,
                                                    "none")));
         var events = eventsByWorkflowId.entrySet().stream()
-                                       .filter(entry -> !entry.getKey().equals("none"))
+                                       .filter(entry -> !"none".equals(entry.getKey()))
                                        .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))
                                        .toList();
         descriptor.describeProperty("workflowEvents", events);
@@ -85,13 +88,13 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     ) implements DescribableComponent {
 
         @Override
-        public void describeTo(@NotNull ComponentDescriptor descriptor) {
+        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
             descriptor.describeProperty(workflowId, events.stream().map(event -> {
                 var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name)
                                           .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))
                                           .orElse("none");
                 var name = event.type().qualifiedName().toString();
-                return String.format("%s (%s): %s, %s", name, status, event.payload(), event.metadata());
+                return String.format("%s (%s): %s, %s", name, status, event.payload(), event.metadata().withoutKeys(IGNORED_KEYS));
             }).toList());
         }
     }

@@ -54,37 +54,22 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
-                <groupId>org.axonframework.extensions.spring</groupId>
-                <artifactId>axon-spring-boot-starter</artifactId>
-                <version>${axon.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>org.axonframework</groupId>
-                <artifactId>axon-server-connector</artifactId>
+                <artifactId>axon-framework-bom</artifactId>
                 <version>${axon.version}</version>
+                <scope>import</scope>
+                <type>pom</type>
             </dependency>
-
-            <!--
-            <dependency>
-                <groupId>org.axonframework.extensions.spring</groupId>
-                <artifactId>axon-spring-boot-starter-test</artifactId>
-                <version>${axon.version}</version>
-                <scope>test</scope>
-            </dependency>
-            -->
-
         </dependencies>
     </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
-            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-eventsourcing</artifactId>
-            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -99,7 +84,7 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-test</artifactId>
-            <version>${axon.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
@@ -138,36 +123,6 @@
                             <plugin>all-open</plugin>
                         </compilerPlugins>
                     </configuration>
-
-                    <executions>
-                        <execution>
-                            <id>default-compile</id>
-                            <phase>compile</phase>
-                            <goals>
-                                <goal>compile</goal>
-                            </goals>
-                            <configuration>
-                                <sourceDirs>
-                                    <sourceDir>src/main/kotlin</sourceDir>
-                                    <sourceDir>src/main/java</sourceDir>
-                                </sourceDirs>
-                            </configuration>
-                        </execution>
-                        <execution>
-                            <id>default-test-compile</id>
-                            <phase>test-compile</phase>
-                            <goals>
-                                <goal>test-compile</goal>
-                            </goals>
-                            <configuration>
-                                <sourceDirs>
-                                    <sourceDir>src/test/kotlin</sourceDir>
-                                    <sourceDir>src/test/java</sourceDir>
-                                </sourceDirs>
-                            </configuration>
-                        </execution>
-                    </executions>
-
                     <dependencies>
                         <dependency>
                             <groupId>org.jetbrains.kotlin</groupId>

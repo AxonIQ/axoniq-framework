@@ -47,6 +47,11 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-test</artifactId>
+            <scope>compile</scope>
+        </dependency>
 
     </dependencies>
 

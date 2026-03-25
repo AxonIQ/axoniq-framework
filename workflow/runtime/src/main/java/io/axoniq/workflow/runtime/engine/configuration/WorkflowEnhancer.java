@@ -32,7 +32,7 @@ import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import org.jetbrains.annotations.NotNull;
+import jakarta.annotation.Nonnull;
 
 import java.time.Clock;
 import java.util.concurrent.Executor;
@@ -61,7 +61,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
      * given {@link ComponentRegistry}.
      */
     @Override
-    public void enhance(@NotNull ComponentRegistry componentRegistry) {
+    public void enhance(@Nonnull ComponentRegistry componentRegistry) {
 
         componentRegistry
                 .registerComponent(WorkflowConfigurationRegistry.class,

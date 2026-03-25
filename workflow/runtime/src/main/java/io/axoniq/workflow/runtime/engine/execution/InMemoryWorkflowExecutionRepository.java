@@ -20,7 +20,7 @@ package io.axoniq.workflow.runtime.engine.execution;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.jetbrains.annotations.NotNull;
+import jakarta.annotation.Nonnull;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -61,7 +61,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     }
 
     @Override
-    public WorkflowExecution remove(@NotNull String workflowId) {
+    public WorkflowExecution remove(@Nonnull String workflowId) {
         return workflowExecutions.remove(workflowId);
     }
 
@@ -71,7 +71,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("size", workflowExecutions.size());
         descriptor.describeProperty("workflowIds", workflowExecutions.keySet().stream().toList());
     }

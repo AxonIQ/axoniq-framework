@@ -39,7 +39,7 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
-import org.jetbrains.annotations.NotNull;
+import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,7 +107,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
         logger.debug("Handling event {}", event);
         return eventHandler.handle(event, context);
     }
@@ -119,7 +119,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     }
 
     @Override
-    public boolean supports(@NotNull QualifiedName eventName) {
+    public boolean supports(@Nonnull QualifiedName eventName) {
         return true;
     }
 
@@ -141,7 +141,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
         if (replayStatusChangedHandler != null) {
             descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());

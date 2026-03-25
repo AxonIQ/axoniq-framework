@@ -30,10 +30,10 @@ import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,7 +101,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                     "Workflow name must not be null");
         this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
 
-
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
                 workflowContext,
@@ -136,11 +135,22 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                             }
 
                             if (this.state().workflowStatus() == WorkflowStatus.NONE) {
-                                sendWorkflowEvent(startedWorkflow(this.workflowContext(),
-                                                                  workflowName,
-                                                                  eventNameCustomizer),
-                                                  ctx)
-                                        .join(); // FIXME join without timeout?
+                                sendWorkflowEvent(
+                                        startedWorkflow(this.workflowContext(),
+                                                        workflowName,
+                                                        eventNameCustomizer),
+                                        ctx
+                                ).join(); // FIXME join without timeout?
+                                /*
+                                TODO: question why does it not work to wait for this state to be applied?
+                                try {
+                                    awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
+                                } catch (Exception e) {
+                                    logger.error(
+                                            "Error waiting for start of workflow instance {}", workflowId, e
+                                    );
+                                }
+                                 */
                             }
 
                             try {
@@ -157,9 +167,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                     sendWorkflowEvent(completedWorkflow(this.workflowContext(),
                                                                         workflowName,
                                                                         eventNameCustomizer),
-                                                      ctx).get(
-                                            5,
-                                            TimeUnit.SECONDS); // FIXME constant?
+                                                      ctx).get(5, TimeUnit.SECONDS); // FIXME constant?
                                 }
                             } catch (WorkflowFailedException e) {
                                 // if Events are already sent by TerminateDelegate, just let it propagate
@@ -209,8 +217,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         awaitStateChange(s -> s.workflowStatus().isTerminal());
                     } catch (Exception e) {
                         logger.error(
-                                "Error waiting for termination of workflow instance {}", workflowId,
-                                e
+                                "Error waiting for termination of workflow instance {}", workflowId, e
                         );
                     }
                     cleanup();
@@ -244,7 +251,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
-        appendTask(i -> state().evolve(eventMessage, processingContext));
+        appendTask(i -> i.state().evolve(eventMessage, processingContext));
     }
 
     @Override
@@ -304,7 +311,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
         if (!this.taskQueue.offer(task)) {
             // whoops, we're overloading this workflow with events. STOP!!!
-            throw new RuntimeException("Too many events for this workflow instance"); // FIXME <- task queue is full, backpressure?
+            throw new RuntimeException("Too many tasks to perform workflow instance"); // FIXME <- task queue is full, backpressure?
         }
     }
 

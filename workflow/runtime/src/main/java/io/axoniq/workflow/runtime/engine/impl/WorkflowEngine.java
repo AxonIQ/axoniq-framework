@@ -32,7 +32,7 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
-import org.jetbrains.annotations.NotNull;
+import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,10 +71,10 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@NotNull EventMessage eventMessage,
-                                               @NotNull ProcessingContext processingContext) {
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
+                                               @Nonnull ProcessingContext processingContext) {
         logger.trace("Received eventMessage {} {}", eventMessage.identifier(), eventMessage.type());
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
@@ -150,7 +150,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private Consumer<ProcessingContext> createExecutor(@Nonnull WorkflowExecution execution) {
         return pc -> {
             try {
-                logger.info("Execution workflow execution with id: {}", execution.workflowId());
+                logger.info("Executing workflow execution with id: {}", execution.workflowId());
                 execution.execute(
                         finished -> {
                             logger.debug("Workflow {} finished with status {}, removing it from repository",
