@@ -57,13 +57,13 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <axon-framework.version>5.0.2</axon-framework.version>
+        <axon-framework.version>5.1.0-RC2</axon-framework.version>
         <postgresql.version>42.7.8</postgresql.version>
         <hikari-cp.version>7.0.2</hikari-cp.version>
         <!-- Autodetection -->
         <spring-boot.version>3.5.8</spring-boot.version>
         <!-- Conversion -->
-        <jackson.version>2.20.0</jackson.version>
+        <jackson.version>3.1.0</jackson.version>
         <!-- Logging -->
         <log4j.version>2.25.1</log4j.version>
         <slf4j.version>2.0.17</slf4j.version>
@@ -115,7 +115,7 @@
             </dependency>
             <!-- Conversion -->
             <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
+                <groupId>tools.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
                 <type>pom</type>
