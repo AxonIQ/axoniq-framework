@@ -24,7 +24,7 @@ import io.axoniq.framework.extension.dataprotection.api.ReplacementValueProvider
 import io.axoniq.framework.extension.dataprotection.internal.encryption.core.ByteArrayEncrypter;
 import io.axoniq.framework.extension.dataprotection.internal.encryption.core.Encrypter;
 import io.axoniq.framework.extension.dataprotection.internal.encryption.core.Operation;
-import io.axoniq.framework.dataprotection.internal.messages.SerializedEncryptedFieldData;
+import io.axoniq.framework.extension.dataprotection.internal.messages.SerializedEncryptedFieldData;
 import io.axoniq.framework.extension.dataprotection.internal.model.PDField;
 import io.axoniq.framework.extension.dataprotection.internal.utils.ExceptionFactory;
 import org.axonframework.conversion.Converter;
@@ -118,10 +118,11 @@ public class ConvertingEncrypter implements Encrypter<ValuePair> {
 
             byte[] encryptedData = byteArrayEncrypter.encrypt(serializedData, key, partialValue);
 
-            SerializedEncryptedFieldData.Builder builder = SerializedEncryptedFieldData.newBuilder()
-                    .setVersion(1)
-                    .setEncryptedData(ByteString.copyFrom(encryptedData))
-                    .setTypeName(typeName);
+            SerializedEncryptedFieldData.Builder builder =
+                    SerializedEncryptedFieldData.newBuilder()
+                                                .setVersion(1)
+                                                .setEncryptedData(ByteString.copyFrom(encryptedData))
+                                                .setTypeName(typeName);
             // Note: Type revision is not available with Converter API
 
             byte[] storageBytes = builder.build().toByteArray();
