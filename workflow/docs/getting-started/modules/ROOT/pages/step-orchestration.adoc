@@ -312,3 +312,93 @@ if (!result.success()) {
 }
 ----
 
+== Common patterns
+
+=== Fan-out / Fan-in — dynamic parallelism
+
+Fan-out launches multiple steps in parallel. Fan-in collects all results before continuing.
+This isn't a special feature — it's just `execute` or `waitForEvent` in a loop, combined with a combinator.
+
+==== Fan-out — launch parallel steps
+
+Reserve stock for every line item in an order concurrently:
+
+[source,java]
+----
+var lineItems = (List<Map<String, Object>>) ctx.workflowPayload().get("lineItems");
+
+// Fan-out: launch one reservation per line item
+var reservations = lineItems.stream()
+        .map(item -> ctx.execute(
+                "reserve-" + item.get("sku"),                              // <1>
+                payload("sku", item.get("sku"),
+                        "quantity", item.get("quantity")).getValues(),
+                InventoryService::reserveStock,
+                Duration.ofSeconds(30), defaults()))
+        .toArray(WorkflowStepResult[]::new);
+----
+<.> Each step gets a unique name based on the SKU — the engine tracks them independently.
+
+==== Fan-in — collect all results
+
+Use `allMatch` to wait for every reservation to complete:
+
+[source,java]
+----
+// Fan-in: wait for all reservations
+var guard = ctx.allMatch(WorkflowStepResult::isCompleted, reservations); // <1>
+
+if (!guard.success()) {
+    // Some reservations failed — cancel the rest and compensate
+    for (var step : guard.unmatched()) {
+        if (!step.isCompleted()) {
+            step.cancel("Partial reservation failure");
+        }
+    }
+    for (var step : guard.matched()) {
+        if (step.success()) {
+            ctx.awaitExecute("release-" + step.getStepName(),
+                    step.<Map<String, Object>>result().orElse(Map.of()),
+                    InventoryService::releaseStock);
+        }
+    }
+    ctx.fail("Not all items could be reserved");
+}
+
+logger.info("All {} items reserved!", reservations.length);
+----
+<.> `allMatch` accepts a varargs array — works naturally with the collected results.
+
+==== Fan-out with waitForEvent
+
+Same pattern works for events. Request approval from multiple approvers in parallel, wait for all:
+
+[source,java]
+----
+var approvers = List.of("team-lead", "finance", "legal");
+
+// Fan-out: send approval requests and wait for each response
+for (var approver : approvers) {
+    ctx.awaitExecute("requestApproval-" + approver,
+            payload("approver", approver, "requestId", ctx.workflowId()).getValues(),
+            ApprovalService::sendRequest);
+}
+
+var approvals = approvers.stream()
+        .map(approver -> ctx.waitForEvent(
+                "approval-" + approver,                                    // <1>
+                ApprovalDecisionEvent.class,
+                Duration.ofDays(5)))
+        .toArray(WorkflowStepResult[]::new);
+
+// Fan-in: wait for all approvals
+var result = ctx.allMatch(WorkflowStepResult::isCompleted, approvals);
+
+if (!result.success()) {
+    ctx.fail("Not all approvals received within deadline");
+}
+
+logger.info("All {} approvers responded!", approvers.size());
+----
+<.> Each approver gets their own `waitForEvent` — all run concurrently.
+
