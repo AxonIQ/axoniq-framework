@@ -10,16 +10,22 @@ Event sourcing delivers all of that, but comes with significant complexity: comm
 The Axon Workflow Engine bridges that gap.
 You write simple, imperative business logic, and the engine handles event sourcing, state persistence, and crash recovery automatically.
 
-The engine is built on four *primitives* and three *composables*:
+The engine is built on *execution primitives*, *lifecycle primitives*, and *composables*:
 
-*Primitives* — the four core building blocks:
+*Execution primitives* — the core building blocks for workflow steps:
 
 * *Execute* — Run actions and tasks (synchronous or asynchronous)
 * *WaitFor* — Suspend until an external event arrives
-* *Payload* — Modify workflow state durably
-* *Terminate* — End a workflow or cancel individual steps
 
-*Composables* — higher-level combinators for parallel work:
+*Storage primitives* — manage durable workflow state:
+
+* *Payload* — Read and modify the workflow payload across steps
+
+*Lifecycle primitives* — control the workflow's lifecycle:
+
+* *Terminate* — End a workflow (`fail`, `cancel`) or cancel individual steps (`cancelStep`)
+
+*Composables* — higher-level combinators for step orchestration:
 
 * *allMatch* — Guard ensuring all results match a predicate
 * *anyMatch* — Race combinator where the first matching result wins

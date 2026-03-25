@@ -15,6 +15,7 @@
 *** xref:understanding-steps.adoc#event-name-customization[Event Name Customization]
 *** xref:understanding-steps.adoc#kotlin-dsl-equivalents[Kotlin DSL]
 * xref:workflow-lifecycle.adoc[]
+** xref:workflow-lifecycle.adoc#_the_workflow_context[Workflow Context]
 ** xref:workflow-lifecycle.adoc#fail-vs-cancel[fail() vs cancel()]
 ** xref:workflow-lifecycle.adoc#_unhandled_exceptions[Unhandled Exceptions]
 ** xref:workflow-lifecycle.adoc#_lifecycle_listeners[Lifecycle Listeners]
