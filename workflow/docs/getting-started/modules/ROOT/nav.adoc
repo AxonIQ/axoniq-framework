@@ -1,6 +1,7 @@
 * xref:index.adoc[]
 * xref:project-setup.adoc[]
 * xref:first-workflow.adoc[]
+* xref:understanding-steps.adoc[]
 * xref:waiting-for-events.adoc[]
 * xref:payload-and-state.adoc[]
 * xref:step-orchestration.adoc[]

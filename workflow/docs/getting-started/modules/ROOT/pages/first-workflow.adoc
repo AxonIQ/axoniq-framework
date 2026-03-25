@@ -196,5 +196,5 @@ class OrderFulfillmentWorkflow {
 
 The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support (e.g., `30.seconds`).
 
-Our workflow can execute actions, but after initiating payment we need to wait for an external confirmation.
-Let's see how to do that.
+We've seen how to define and execute steps.
+Next, let's explore xref:understanding-steps.adoc[all the options] you can configure — timeouts, event naming, payload reducers, and execution semantics.

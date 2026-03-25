@@ -34,6 +34,7 @@ Along the way, you will learn each core concept:
 
 . *xref:project-setup.adoc[Project Setup]* — Add dependencies and define domain events
 . *xref:first-workflow.adoc[Your First Workflow]* — Create a minimal workflow that executes actions
+. *xref:understanding-steps.adoc[Understanding Steps]* — Timeouts, event naming, payload reducers, and execution semantics
 . *xref:waiting-for-events.adoc[Waiting for Events]* — Suspend the workflow until payment is confirmed
 . *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
 . *xref:step-orchestration.adoc[Step Orchestration]* — Ship and notify the customer concurrently
