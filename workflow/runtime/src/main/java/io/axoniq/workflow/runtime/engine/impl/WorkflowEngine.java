@@ -38,11 +38,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-
-import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -79,9 +75,9 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            var execution = workflowExecutionRepository.findById(workflowId)
-                                                       .orElseThrow(() -> new IllegalStateException(
-                                                               "No workflow found for id: " + workflowId));
+            var execution = workflowExecutionRepository
+                    .findById(workflowId)
+                    .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId));
             execution.onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
@@ -132,36 +128,24 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     }
 
     private void execute(@Nonnull WorkflowExecution execution) {
-
-        boolean runInNewThread = true; // FIXME -> this is the only way to run it currently.
-        if (runInNewThread) {
-            execution.workflowContext().processingContext().component(Executor.class, WORKFLOW_ENGINE_EXECUTOR).execute(
-                    () -> {
-                        this.createExecutor(execution).accept(execution.workflowContext().processingContext());
-                    });
-        } else {
-            execution.workflowContext()
-                     .processingContext()
-                     .whenComplete(this.createExecutor(execution));
-        }
-    }
-
-    private Consumer<ProcessingContext> createExecutor(@Nonnull WorkflowExecution execution) {
-        return pc -> {
-            try {
-                logger.info("Executing workflow execution with id: {}", execution.workflowId());
-                execution.execute(
-                        finished -> {
-                            logger.debug("Workflow {} finished with status {}, removing it from repository",
-                                         execution.workflowId(),
-                                         finished.state().workflowStatus());
-                            this.workflowExecutionRepository.remove(execution.workflowId());
-                        }
-                );
-            } catch (Throwable t) {
-                throw new RuntimeException("Error during workflow execution", t);
-            }
-        };
+        execution
+                .workflowContext()
+                .processingContext()
+                .whenComplete(pc -> {
+                    try {
+                        logger.info("Executing workflow execution with id: {}", execution.workflowId());
+                        execution.execute(
+                                finished -> {
+                                    logger.debug("Workflow {} finished with status {}, removing it from repository",
+                                                 execution.workflowId(),
+                                                 finished.state().workflowStatus());
+                                    this.workflowExecutionRepository.remove(execution.workflowId());
+                                }
+                        );
+                    } catch (Throwable t) {
+                        throw new RuntimeException("Error during workflow execution", t);
+                    }
+                });
     }
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,

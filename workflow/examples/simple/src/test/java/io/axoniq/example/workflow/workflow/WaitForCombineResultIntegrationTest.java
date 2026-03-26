@@ -72,7 +72,6 @@ class WaitForCombineResultIntegrationTest
                 .notCustomized();
     }
 
-    @Disabled("FIXME -> The events are delivered in wrong order to the history")
     @Test
     void shouldWriteEventPayloadToWorkflowPayloadWhenUsingCombine() {
         delayedPublisher.addSchedules(List.of(
@@ -103,15 +102,12 @@ class WaitForCombineResultIntegrationTest
 
         static final Logger logger = LoggerFactory.getLogger(WaitForCombineWorkflow.class);
         public void execute(WaitForCombineWorkflowContext ctx) {
-            logger.warn("Started {}", payload(ctx).getValues());
             // Using the new overload of awaitEvent with COMBINE
             var event = ctx.awaitEvent("waitStep",
                            RegistrationReceivedEvent.class,
                            associate(payloadProperty("status"), equalsTo("arrived")),
                            Duration.ofSeconds(5)
             );
-            logger.warn("Received {}", event);
-            logger.warn("After receipt {}", payload(ctx).getValues());
         }
     }
 
