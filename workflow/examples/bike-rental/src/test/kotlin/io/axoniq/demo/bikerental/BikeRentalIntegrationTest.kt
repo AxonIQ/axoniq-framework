@@ -29,12 +29,35 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpMethod
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
+import org.testcontainers.containers.GenericContainer
+import org.testcontainers.junit.jupiter.Container
+import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.utility.DockerImageName
 import java.util.concurrent.TimeUnit
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @AutoConfigureTestRestTemplate
+@Testcontainers
 class BikeRentalIntegrationTest {
+
+    companion object {
+        @Container
+        val axonServer = GenericContainer(DockerImageName.parse("docker.axoniq.io/axoniq/axonserver:2025.2.7"))
+            .withExposedPorts(8024, 8124)
+            .withEnv("AXONIQ_AXONSERVER_DEVMODE_ENABLED", "true")
+            .withEnv("AXONIQ_AXONSERVER_STANDALONE-DCB", "true");
+
+        @JvmStatic
+        @DynamicPropertySource
+        fun axonProperties(registry: DynamicPropertyRegistry) {
+            registry.add("axon.axonserver.servers") {
+                "${axonServer.host}:${axonServer.getMappedPort(8124)}"
+            }
+        }
+    }
 
     @Autowired
     private lateinit var restTemplate: TestRestTemplate
