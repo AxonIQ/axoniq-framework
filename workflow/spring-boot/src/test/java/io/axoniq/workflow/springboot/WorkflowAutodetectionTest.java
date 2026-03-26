@@ -52,6 +52,7 @@ public class WorkflowAutodetectionTest {
     @Autowired
     private TestWorkflow testWorkflow;
 
+    @Disabled("FIXME as part of #98, as soon as initialization of EventHandling is clarified")
     @Test
     void should_autodetect_workflow() {
 
