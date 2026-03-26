@@ -40,7 +40,7 @@
         <module>dsl</module>
         <module>runtime</module>
         <module>test</module>
-        <module>example</module>
+        <module>examples/simple</module>
     </modules>
 
     <dependencyManagement>
