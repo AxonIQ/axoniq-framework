@@ -22,16 +22,17 @@ import lombok.Getter;
 import lombok.Setter;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
+import org.jspecify.annotations.Nullable;
 
 /**
- * Implementation of field-level encryption that wraps a delegate {@link Converter}, performing encryption
- * before converting and decryption after converting, using a {@link FieldEncrypter}.
+ * Implementation of field-level encryption that wraps a delegate {@link Converter}, performing encryption before
+ * converting and decryption after converting, using a {@link FieldEncrypter}.
  * <p>
- * This is the primary implementation for Axon Framework 5.x applications using the Converter API.
- * The delegate {@link Converter} must support <code>byte[]</code> conversions.
+ * This is the primary implementation for Axon Framework 5.x applications using the Converter API. The delegate
+ * {@link Converter} must support <code>byte[]</code> conversions.
  * <p>
- * This class implements {@link Converter} and can be used as a drop-in replacement for standard converters
- * in Axon Framework 5.x applications.
+ * This class implements {@link Converter} and can be used as a drop-in replacement for standard converters in Axon
+ * Framework 5.x applications.
  *
  * @author Frans van Buul
  */
@@ -41,10 +42,9 @@ public class FieldEncryptingConverter implements Converter {
     private final Converter delegateConverter;
 
     /**
-     * Property that determines whether or not the converter should create a clone first before
-     * invoking the {@link FieldEncrypter} on the object. By default, this is <code>false</code>.
-     * Setting this to <code>true</code> ensures that {@link FieldEncrypter} doesn't modify the original object,
-     * but introduces a performance penalty.
+     * Property that determines whether or not the converter should create a clone first before invoking the
+     * {@link FieldEncrypter} on the object. By default, this is <code>false</code>. Setting this to <code>true</code>
+     * ensures that {@link FieldEncrypter} doesn't modify the original object, but introduces a performance penalty.
      *
      * @param skipCloning whether to skip cloning before encryption
      * @return the current value of skipCloning
@@ -55,14 +55,14 @@ public class FieldEncryptingConverter implements Converter {
     // ===== Factory methods =====
 
     /**
-     * Creates a {@link FieldEncryptingConverter} using a {@link CryptoEngine} and delegate {@link Converter}.
-     * A {@link FieldEncrypter} will be constructed using the {@link CryptoEngine}, using the delegate
-     * converter also as the converter for the {@link FieldEncrypter}. The {@link FieldEncrypter} will use
-     * the default {@link ReplacementValueProvider}.
+     * Creates a {@link FieldEncryptingConverter} using a {@link CryptoEngine} and delegate {@link Converter}. A
+     * {@link FieldEncrypter} will be constructed using the {@link CryptoEngine}, using the delegate converter also as
+     * the converter for the {@link FieldEncrypter}. The {@link FieldEncrypter} will use the default
+     * {@link ReplacementValueProvider}.
      * <p>
      * This is the recommended factory method for Axon Framework 5.x applications.
      *
-     * @param cryptoEngine the {@link CryptoEngine} to be used
+     * @param cryptoEngine      the {@link CryptoEngine} to be used
      * @param delegateConverter the {@link Converter} to wrap
      * @return a new FieldEncryptingConverter instance
      */
@@ -71,27 +71,27 @@ public class FieldEncryptingConverter implements Converter {
     }
 
     /**
-     * Creates a {@link FieldEncryptingConverter} using a {@link CryptoEngine}, {@link ReplacementValueProvider},
-     * and delegate {@link Converter}.
+     * Creates a {@link FieldEncryptingConverter} using a {@link CryptoEngine}, {@link ReplacementValueProvider}, and
+     * delegate {@link Converter}.
      *
-     * @param cryptoEngine the {@link CryptoEngine} to be used
+     * @param cryptoEngine             the {@link CryptoEngine} to be used
      * @param replacementValueProvider the {@link ReplacementValueProvider} to use
-     * @param delegateConverter the {@link Converter} to wrap
+     * @param delegateConverter        the {@link Converter} to wrap
      * @return a new FieldEncryptingConverter instance
      */
     public static FieldEncryptingConverter create(CryptoEngine cryptoEngine,
-                                                   ReplacementValueProvider replacementValueProvider,
-                                                   Converter delegateConverter) {
+                                                  ReplacementValueProvider replacementValueProvider,
+                                                  Converter delegateConverter) {
         return new FieldEncryptingConverter(cryptoEngine, replacementValueProvider, delegateConverter);
     }
 
     // ===== Constructors =====
 
     /**
-     * Constructs a {@link FieldEncryptingConverter} for a given {@link FieldEncrypter} and {@link Converter}.
-     * This version of the constructor gives maximum control over the {@link FieldEncrypter}.
+     * Constructs a {@link FieldEncryptingConverter} for a given {@link FieldEncrypter} and {@link Converter}. This
+     * version of the constructor gives maximum control over the {@link FieldEncrypter}.
      *
-     * @param fieldEncrypter the {@link FieldEncrypter} to be used
+     * @param fieldEncrypter    the {@link FieldEncrypter} to be used
      * @param delegateConverter the {@link Converter} to wrap
      */
     public FieldEncryptingConverter(FieldEncrypter fieldEncrypter, Converter delegateConverter) {
@@ -100,12 +100,12 @@ public class FieldEncryptingConverter implements Converter {
     }
 
     /**
-     * Constructs a {@link FieldEncryptingConverter} using a given {@link CryptoEngine} and {@link Converter}.
-     * A {@link FieldEncrypter} will be constructed using the {@link CryptoEngine} and using the delegate
-     * converter also as the converter for the {@link FieldEncrypter}. The {@link FieldEncrypter} will use
-     * the default {@link ReplacementValueProvider}.
+     * Constructs a {@link FieldEncryptingConverter} using a given {@link CryptoEngine} and {@link Converter}. A
+     * {@link FieldEncrypter} will be constructed using the {@link CryptoEngine} and using the delegate converter also
+     * as the converter for the {@link FieldEncrypter}. The {@link FieldEncrypter} will use the default
+     * {@link ReplacementValueProvider}.
      *
-     * @param cryptoEngine the {@link CryptoEngine} to be used
+     * @param cryptoEngine      the {@link CryptoEngine} to be used
      * @param delegateConverter the {@link Converter} to wrap
      */
     public FieldEncryptingConverter(CryptoEngine cryptoEngine, Converter delegateConverter) {
@@ -116,28 +116,28 @@ public class FieldEncryptingConverter implements Converter {
      * Constructs a {@link FieldEncryptingConverter} using a given {@link CryptoEngine},
      * {@link ReplacementValueProvider} and {@link Converter}.
      *
-     * @param cryptoEngine the {@link CryptoEngine} to be used
+     * @param cryptoEngine             the {@link CryptoEngine} to be used
      * @param replacementValueProvider the {@link ReplacementValueProvider} to use
-     * @param delegateConverter the {@link Converter} to wrap
+     * @param delegateConverter        the {@link Converter} to wrap
      */
     public FieldEncryptingConverter(CryptoEngine cryptoEngine,
-                                     ReplacementValueProvider replacementValueProvider,
-                                     Converter delegateConverter) {
+                                    ReplacementValueProvider replacementValueProvider,
+                                    Converter delegateConverter) {
         this(new FieldEncrypter(cryptoEngine, delegateConverter, replacementValueProvider), delegateConverter);
     }
 
     /**
-     * Constructs a {@link FieldEncryptingConverter} using a given {@link CryptoEngine} and two {@link Converter}s.
-     * A {@link FieldEncrypter} will be constructed using the {@link CryptoEngine} and personalDataConverter
-     * as the converter for the {@link FieldEncrypter}.
+     * Constructs a {@link FieldEncryptingConverter} using a given {@link CryptoEngine} and two {@link Converter}s. A
+     * {@link FieldEncrypter} will be constructed using the {@link CryptoEngine} and personalDataConverter as the
+     * converter for the {@link FieldEncrypter}.
      *
-     * @param cryptoEngine the {@link CryptoEngine} to be used
+     * @param cryptoEngine          the {@link CryptoEngine} to be used
      * @param personalDataConverter the {@link Converter} to be used internally for personal data conversion
-     * @param delegateConverter the {@link Converter} to wrap
+     * @param delegateConverter     the {@link Converter} to wrap
      */
     public FieldEncryptingConverter(CryptoEngine cryptoEngine,
-                                     Converter personalDataConverter,
-                                     Converter delegateConverter) {
+                                    Converter personalDataConverter,
+                                    Converter delegateConverter) {
         this(new FieldEncrypter(cryptoEngine, personalDataConverter), delegateConverter);
     }
 
@@ -151,12 +151,13 @@ public class FieldEncryptingConverter implements Converter {
      * UnsupportedOperationException when Jackson tries to call put() during deserialization).</p>
      *
      * <p>The default implementation checks if the object is a Java record. Records are immutable,
-     * so cloning is unnecessary - the FieldEncrypter will create a new instance with encrypted fields.
-     * For non-record objects (mutable POJOs), this method attempts serialization-based cloning.</p>
+     * so cloning is unnecessary - the FieldEncrypter will create a new instance with encrypted fields. For non-record
+     * objects (mutable POJOs), this method attempts serialization-based cloning.</p>
      *
      * @param object the object to clone
      * @return the cloned object, or the same object if cloning is not needed (e.g., for records)
      */
+    @Nullable
     protected Object clone(Object object) {
         // For Java records, skip cloning as they are immutable and FieldEncrypter creates new instances
         if (object.getClass().isRecord()) {
@@ -175,18 +176,6 @@ public class FieldEncryptingConverter implements Converter {
     }
 
     /**
-     * Checks if this converter can convert between the given source and target types.
-     *
-     * @param sourceType The source type
-     * @param targetType The target type
-     * @return true if conversion is supported, false otherwise
-     */
-    @Override
-    public boolean canConvert(java.lang.reflect.Type sourceType, java.lang.reflect.Type targetType) {
-        return delegateConverter.canConvert(sourceType, targetType);
-    }
-
-    /**
      * Converts the given {@code object} to the expected target type.
      * <p>
      * This method intelligently handles both serialization and deserialization:
@@ -200,13 +189,14 @@ public class FieldEncryptingConverter implements Converter {
      * - Events loaded from the event store are automatically decrypted
      * - Event handlers receive decrypted events with plain text @PersonalData fields
      *
-     * @param object       The object to convert
-     * @param targetType   The expected target type
-     * @param <T>          The expected target type
+     * @param object     The object to convert
+     * @param targetType The expected target type
+     * @param <T>        The expected target type
      * @return the converted object
      */
     @Override
-    public <T> T convert(Object object, java.lang.reflect.Type targetType) {
+    @Nullable
+    public <T> T convert(@Nullable Object object, java.lang.reflect.Type targetType) {
         // DESERIALIZATION: byte[] -> Object (decrypt after conversion)
         // This happens when loading events from the event store
         if (object instanceof byte[]) {
