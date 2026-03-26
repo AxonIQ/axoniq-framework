@@ -62,7 +62,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         // descriptor.describeWrapperOf(this.delegate);
         var eventsByWorkflowId = recorded().stream()
                                            .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
@@ -82,7 +82,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     ) implements DescribableComponent {
 
         @Override
-        public void describeTo(@NotNull ComponentDescriptor descriptor) {
+        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
             descriptor.describeProperty(workflowId, events.stream().map(event -> {
                 var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name)
                                           .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))

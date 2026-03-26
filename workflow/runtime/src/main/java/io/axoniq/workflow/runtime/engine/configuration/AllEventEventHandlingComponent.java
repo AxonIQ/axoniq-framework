@@ -33,7 +33,6 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,9 +77,9 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
         );
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
         logger.debug("Handling event {}", event);
         return eventHandler.handle(event, context);
     }
@@ -91,18 +90,18 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     }
 
     @Override
-    public boolean supports(@NotNull QualifiedName eventName) {
+    public boolean supports(@Nonnull QualifiedName eventName) {
         return true;
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public Object sequenceIdentifierFor(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    public Object sequenceIdentifierFor(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
     }
 }

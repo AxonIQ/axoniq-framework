@@ -27,10 +27,10 @@ import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import org.jetbrains.annotations.NotNull;
 
 import java.time.Clock;
 import java.util.concurrent.Executor;
@@ -57,7 +57,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
      * given {@link ComponentRegistry}.
      */
     @Override
-    public void enhance(@NotNull ComponentRegistry componentRegistry) {
+    public void enhance(@Nonnull ComponentRegistry componentRegistry) {
 
         componentRegistry
                 .registerComponent(WorkflowConfigurationRegistry.class,

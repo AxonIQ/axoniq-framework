@@ -23,7 +23,7 @@ import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
-import org.testcontainers.shaded.com.google.common.base.Predicate
+import java.util.function.Predicate
 import kotlin.reflect.KClass
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -64,8 +64,9 @@ class Kontext(
         PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
             if (result.success() && result.result<Any>().isPresent) {
+                val converted: T? = converter.convert(result.result<Map<String, Any?>>().get(), type)
                 @Suppress("UNCHECKED_CAST")
-                return converter.convert(result.result<Map<String, Any?>>().get(), type) as T
+                return converted as T
             } else {
                 throw result.error().get()
             }
@@ -222,7 +223,7 @@ class Kontext(
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(
             TerminatePrimitive.TerminateCommand.cancel(
-                io.axoniq.workflow.runtime.api.WorkflowCancelledException(
+                WorkflowCancelledException(
                     reason
                 ), eventNameCustomizer
             )
@@ -290,7 +291,7 @@ class Kontext(
         workflowKontext.terminate(
             TerminatePrimitive.TerminateCommand.cancelledStep(
                 stepName,
-                io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                StepCancellationException(reason),
                 eventNameCustomizer
             )
         )
