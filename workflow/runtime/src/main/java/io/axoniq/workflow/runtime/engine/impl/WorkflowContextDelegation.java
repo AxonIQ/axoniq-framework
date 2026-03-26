@@ -45,7 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
@@ -80,7 +80,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     private final EventSink eventSink;
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final Clock clock;
-    private final Executor executor;
+    private final ExecutorService executorService;
 
 
     /**
@@ -107,8 +107,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.unitOfWorkFactory = Objects.requireNonNull(processingContext.component(UnitOfWorkFactory.class),
                                                         "Could not retrieve UoW factory");
         this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
-        this.executor = Objects.requireNonNull(processingContext.component(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
-                                               "Could not retrieve workflow engine executor");
+        this.executorService = Objects.requireNonNull(processingContext.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR),
+                                                      "Could not retrieve workflow engine executor");
         this.eventSink = Objects.requireNonNull(processingContext.component(EventSink.class),
                                                 "Could not retrieve EventSink");
 
@@ -119,26 +119,26 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
-                                                   executor);
+                                                   executorService);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
-                                                   executor);
+                                                   executorService);
         this.terminateDelegate = new TerminateDelegate(workflowContext,
                                                        workflowExecution,
                                                        unitOfWorkFactory,
                                                        eventSink,
-                                                       executor);
+                                                       executorService);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
-                                                   executor);
+                                                   executorService);
 
         this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(workflowExecution);
         this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(workflowExecution);
@@ -266,8 +266,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Nonnull
-    public Executor executor() {
-        return this.executor;
+    public ExecutorService executorService() {
+        return this.executorService;
     }
 
     /**

@@ -69,7 +69,6 @@ class WaitForCombineResultIntegrationTest
                 .notCustomized();
     }
 
-    @Disabled("FIXME -> The events are delivered in wrong order to the history")
     @Test
     void shouldWriteEventPayloadToWorkflowPayloadWhenUsingCombine() {
         delayedPublisher.addSchedules(List.of(
