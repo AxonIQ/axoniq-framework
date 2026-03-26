@@ -30,11 +30,10 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProce
 
 import java.util.List;
 
-import static io.axoniq.workflow.springboot.SpringUtils.handlerBeans;
-import static io.axoniq.workflow.springboot.SpringUtils.sortByOrder;
+import static io.axoniq.workflow.springboot.SpringUtils.*;
 
 /**
- * Workflow deinition lookup.
+ * Workflow definition lookup.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -56,13 +55,14 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
             return;
         }
 
-        List<String> found = handlerBeans(WorkflowContext.class, beanFactory, false);
+        List<SpringUtils.WorkflowContextFactoryBeanDefinition> workflowFactoryBeanDefinitions = factoryBeans(beanFactory, false);
+        List<SpringUtils.WorkflowBeanDefinition> found = handlerBeans(WorkflowContext.class, beanFactory, false);
         if (!found.isEmpty()) {
-            List<String> sortedFound = sortByOrder(found, beanFactory);
+            List<SpringUtils.WorkflowBeanDefinition> sortedFound = sortByOrder(found, beanFactory);
             AbstractBeanDefinition beanDefinition =
                     BeanDefinitionBuilder
                             .genericBeanDefinition(WorkflowModuleConfigurer.class)
-                            .addConstructorArgValue(value.name())
+                            .addConstructorArgValue(workflowFactoryBeanDefinitions)
                             .addConstructorArgValue(sortedFound)
                             .getBeanDefinition();
             ((BeanDefinitionRegistry) beanFactory).registerBeanDefinition(configurerBeanName, beanDefinition);

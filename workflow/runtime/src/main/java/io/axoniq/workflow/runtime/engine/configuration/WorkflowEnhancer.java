@@ -51,7 +51,6 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
 @Internal
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 
-    public static final String WORKFLOW_ENGINE_EVENT_MODULE = "WorkflowEngine";
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngine";
 
     /**
@@ -96,20 +95,5 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(
                         cfg.getComponent(MutableWorkflowHistoryRepository.class)
                 ));
-
-        componentRegistry.registerModule(
-                EventProcessorModule
-                        .pooledStreaming(WORKFLOW_ENGINE_EVENT_MODULE)
-                        .eventHandlingComponents(req -> req
-                                .declarative("workflowEngineComponent", cfg -> new AllEventEventHandlingComponent(
-                                                     cfg.getComponent(WorkflowEngine.class)
-                                             )
-                                ).declarative("workflowHistoryProjector", cfg -> new AllEventEventHandlingComponent(
-                                        cfg.getComponent(WorkflowHistoryProjector.class)
-                                ))
-                        )
-                        .customized(ANY_EVENT_IN_ONE_SEGMENT)
-                        .build()
-        );
     }
 }

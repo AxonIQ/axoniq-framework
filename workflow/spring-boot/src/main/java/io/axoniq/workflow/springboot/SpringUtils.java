@@ -18,9 +18,12 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils.MethodWithWorkflowAttributes;
 import org.axonframework.common.ObjectUtils;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.core.GenericTypeResolver;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.annotation.OrderUtils;
@@ -55,19 +58,15 @@ public class SpringUtils {
      * @return A new {@link List} of sorted bean references, according to the value of the {@link Order} annotation
      * value on the beans.
      */
-    public static List<String> sortByOrder(List<String> found, ConfigurableListableBeanFactory beanFactory) {
+    public static List<WorkflowBeanDefinition> sortByOrder(List<WorkflowBeanDefinition> found,
+                                                           ConfigurableListableBeanFactory beanFactory) {
         return found.stream()
-                    .collect(Collectors.toMap(
-                            beanRef -> beanRef,
-                            beanRef -> OrderUtils.getOrder(
-                                    ObjectUtils.getOrDefault(beanFactory.getType(beanRef), Object.class),
+                    .sorted(java.util.Comparator.comparingInt(beanRef ->
+                            OrderUtils.getOrder(
+                                    ObjectUtils.getOrDefault(beanFactory.getType(beanRef.beanName), Object.class),
                                     Ordered.LOWEST_PRECEDENCE
                             )
                     ))
-                    .entrySet()
-                    .stream()
-                    .sorted(java.util.Map.Entry.comparingByValue())
-                    .map(java.util.Map.Entry::getKey)
                     .collect(Collectors.toList());
     }
 
@@ -81,18 +80,24 @@ public class SpringUtils {
      * @param includePrototypeBeans Whether to include prototype beans.
      * @return A list of bean names with message handlers.
      */
-    public static List<String> handlerBeans(Class<? extends WorkflowContext> workflowContextType,
-                                            ConfigurableListableBeanFactory registry,
-                                            boolean includePrototypeBeans) {
-        List<String> found = new ArrayList<>();
+    public static List<WorkflowBeanDefinition> handlerBeans(Class<? extends WorkflowContext> workflowContextType,
+                                                            ConfigurableListableBeanFactory registry,
+                                                            boolean includePrototypeBeans) {
+        List<WorkflowBeanDefinition> found = new ArrayList<>();
         for (String beanName : registry.getBeanDefinitionNames()) {
             BeanDefinition bd = registry.getBeanDefinition(beanName);
 
             if (bd.isAutowireCandidate()) {  // excludes unproxied variants of proxied beans
                 if (includePrototypeBeans || (bd.isSingleton() && !bd.isAbstract())) {
                     Class<?> beanType = registry.getType(beanName);
-                    if (beanType != null && workflowMethods(beanType, workflowContextType).findAny().isPresent()) {
-                        found.add(beanName);
+                    if (beanType != null) {
+                        workflowMethods(beanType, workflowContextType)
+                                .collect(Collectors.groupingBy(MethodWithWorkflowAttributes::workflowContextType))
+                                .forEach((workflowContextClass, methods) -> {
+                                    if (!methods.isEmpty()) {
+                                        found.add(new WorkflowBeanDefinition(beanName, beanType, workflowContextClass));
+                                    }
+                                });
                     }
                 }
             }
@@ -100,4 +105,60 @@ public class SpringUtils {
         return found;
     }
 
+    /**
+     * Returns a list of beans found in the given {@code register} that contain a factory for the given
+     * {@code workflowContextType}. The search will only consider prototype beans (or any other non-singleton or
+     * abstract bean definitions) when {@code includePrototypeBeans} is {@code true}.
+     *
+     * @param registry              The registry to find these handlers in.
+     * @param includePrototypeBeans Whether to include prototype beans.
+     * @return A list of bean names with message handlers.
+     */
+    public static List<WorkflowContextFactoryBeanDefinition> factoryBeans(ConfigurableListableBeanFactory registry,
+                                                                          boolean includePrototypeBeans) {
+        List<WorkflowContextFactoryBeanDefinition> found = new ArrayList<>();
+        for (String beanName : registry.getBeanDefinitionNames()) {
+            BeanDefinition bd = registry.getBeanDefinition(beanName);
+            if (bd.isAutowireCandidate()) {  // excludes unproxied variants of proxied beans
+                if (includePrototypeBeans || (bd.isSingleton() && !bd.isAbstract())) {
+                    Class<?> beanType = registry.getType(beanName);
+                    if (beanType != null && WorkflowContextFactory.class.isAssignableFrom(beanType)) {
+                        Class<?> typeArgument = GenericTypeResolver.resolveTypeArgument(beanType, WorkflowContextFactory.class);
+                        if (typeArgument != null && WorkflowContext.class.isAssignableFrom(typeArgument)) {
+                            found.add(new WorkflowContextFactoryBeanDefinition(beanName, (Class<? extends WorkflowContext>) typeArgument));
+                        }
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Represents a workflow bean definition.
+     *
+     * @param beanName            bean name.
+     * @param beanType            bean type.
+     * @param workflowContextType type of workflow context.
+     */
+    public record WorkflowBeanDefinition(
+            String beanName,
+            Class<?> beanType,
+            Class<? extends WorkflowContext> workflowContextType
+    ) {
+
+    }
+
+    /**
+     * Bean definition for workflow context factory.
+     *
+     * @param beanName            name of the bean.
+     * @param workflowContextType type of workflow context.
+     */
+    public record WorkflowContextFactoryBeanDefinition(
+            String beanName,
+            Class<? extends WorkflowContext> workflowContextType
+    ) {
+
+    }
 }
