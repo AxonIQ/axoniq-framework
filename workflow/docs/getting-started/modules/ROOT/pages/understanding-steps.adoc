@@ -551,6 +551,8 @@ return d -> d
 
 With this configuration, all steps produce events like `io.myapp.orders.ReserveStockDone` — without having to specify the namespace or suffix on every step.
 
+For the full declarative configuration API — workflow modules, start conditions, ID providers, and more — see xref:configuration.adoc[Configuration].
+
 === Step-level customizer
 
 Override the customizer on a specific step when you need different naming:
