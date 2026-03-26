@@ -39,6 +39,7 @@ import org.springframework.test.context.ContextConfiguration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Disabled("FIXME as part of #98, as soon as initialization of EventHandling is clarified")
 @SpringBootTest(
         classes = WorkflowAutodetectionTest.TestConfig.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
@@ -52,7 +53,6 @@ public class WorkflowAutodetectionTest {
     @Autowired
     private TestWorkflow testWorkflow;
 
-    @Disabled("FIXME as part of #98, as soon as initialization of EventHandling is clarified")
     @Test
     void should_autodetect_workflow() {
 
