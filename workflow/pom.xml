@@ -40,8 +40,6 @@
         <module>dsl</module>
         <module>runtime</module>
         <module>test</module>
-        <module>examples/simple</module>
-        <module>examples/bike-rental</module>
     </modules>
 
     <dependencyManagement>
@@ -123,6 +121,7 @@
                             <plugin>all-open</plugin>
                         </compilerPlugins>
                     </configuration>
+
                     <dependencies>
                         <dependency>
                             <groupId>org.jetbrains.kotlin</groupId>
@@ -145,6 +144,21 @@
         </pluginManagement>
     </build>
 
+    <profiles>
+        <profile>
+            <id>examples</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <property>
+                    <name>!skipExamples</name>
+                </property>
+            </activation>
+            <modules>
+                <module>examples</module>
+            </modules>
+        </profile>
+    </profiles>
+
     <repositories>
         <repository>
             <name>Central Portal Snapshots</name>
@@ -158,4 +172,35 @@
             </snapshots>
         </repository>
     </repositories>
+
+    <developers>
+        <developer>
+            <id>abuijze</id>
+            <name>Allard Buijze</name>
+            <email>allard.buijze@axoniq.io</email>
+            <organization>AxonIQ</organization>
+            <organizationUrl>https://axoniq.io</organizationUrl>
+        </developer>
+        <developer>
+            <id>smcvb</id>
+            <name>Steven van Beelen</name>
+            <email>steven.vanbeelen@axoniq.io</email>
+            <organization>AxonIQ</organization>
+            <organizationUrl>https://axoniq.io</organizationUrl>
+        </developer>
+        <developer>
+            <id>schananas</id>
+            <name>Stefan Dragisic</name>
+            <email>stefan.dragisic@axoniq.io</email>
+            <organization>AxonIQ</organization>
+            <organizationUrl>https://axoniq.io</organizationUrl>
+        </developer>
+        <developer>
+            <id>zambrovski</id>
+            <name>Simon Zambrovski</name>
+            <email>simon.zambrovski@holisticon.de</email>
+            <organization>Holisticon AG</organization>
+            <organizationUrl>https://holisticon.de</organizationUrl>
+        </developer>
+    </developers>
 </project>

@@ -23,13 +23,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.axoniq.framework.workflow</groupId>
-        <artifactId>axon-workflow-parent</artifactId>
+        <groupId>io.axoniq.framework.workflow.examples</groupId>
+        <artifactId>axon-workflow-examples</artifactId>
         <version>1.0.0-SNAPSHOT</version>
-        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>axon-workflow-example</artifactId>
+    <artifactId>axon-workflow-example-simple</artifactId>
     <name>Axon Extension - Workflow - Example Simple</name>
 
     <dependencies>
@@ -50,18 +49,5 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.jetbrains.kotlin</groupId>
-                <artifactId>kotlin-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
 
 </project>
