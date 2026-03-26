@@ -233,73 +233,11 @@ if (failureCount < 3) {                                                  // <1>
 <.> Reset the counter on success.
 <.> Increment the counter on failure — persisted durably in the workflow payload.
 
-== Retry with backoff
+== Retry with backoff [.badge]#coming soon#
 
-[NOTE]
-====
-**Built-in retry support is coming soon.** The API below is planned but not yet available.
-====
+For retry policies, backoff strategies, and examples, see xref:understanding-steps.adoc#retries[Retries] in Understanding Steps.
 
-The `RetryPolicy` API will let you configure retries per step — max attempts, backoff strategy, and programmatic control:
-
-[source,java]
-----
-// Simple: retry up to 3 times (uses default timeout and event names)
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
-        RetryPolicy.maxRetries(3));                                       // <1>
-
-// With fixed backoff: wait 500ms between retries
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
-        RetryPolicy.maxRetries(3)
-                .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(500))));
-
-// With exponential backoff (base 200ms, capped at 5s)
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
-        RetryPolicy.maxRetries(5)
-                .withBackoff(BackoffStrategy.exponential(Duration.ofMillis(200), Duration.ofSeconds(5))));
-
-// With retry handler and conditional stop
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
-        RetryPolicy.maxRetries(5)
-                .onRetry(retryCtx -> logger.warn("Retry {}/{} for {}: {}",       // <2>
-                        retryCtx.attempt(), retryCtx.maxRetries(),
-                        retryCtx.stepName(), retryCtx.error().getMessage()))
-                .retryUntil(retryCtx -> isTransient(retryCtx.error())));          // <3>
-----
-<.> If the step fails, the engine retries up to 3 times before marking it as FAILED. `maxRetries=3` means up to 4 total executions (1 initial + 3 retries).
-<.> `onRetry` is called before each retry — use it for logging, metrics, or alerts.
-<.> `retryUntil` stops retrying early if the error is not transient (e.g., a 404 should not be retried).
-
-The `BackoffStrategy` options:
-
-[cols="1,2"]
-|===
-|Strategy |Behavior
-
-|`BackoffStrategy.NONE`
-|No delay between retries.
-
-|`BackoffStrategy.fixed(Duration)`
-|Constant delay between retries.
-
-|`BackoffStrategy.linear(Duration base)`
-|Delay increases linearly: `base * attempt`.
-
-|`BackoffStrategy.exponential(Duration base, Duration max)`
-|Delay doubles each attempt: `base * 2^(attempt-1)`, capped at `max`.
-|===
-
-Retries are event-sourced — on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
-
-== Scheduled / delayed steps
+== Scheduled / delayed steps [.badge]#coming soon#
 
 [NOTE]
 ====
@@ -324,10 +262,97 @@ ctx.awaitExecute("sendReminder",
 
 This is durable — if the application restarts during the sleep, the engine recalculates the remaining delay and resumes correctly.
 
-== Sub-workflows
+== Sub-workflows [.badge]#coming soon#
 
 [NOTE]
 ====
-**Sub-workflow support is coming soon.**
-In a future version, one workflow will be able to launch and await another workflow, enabling hierarchical decomposition of complex processes.
+First-class sub-workflow support with built-in lifecycle management is **coming soon**.
 ====
+
+In the meantime, the engine's event-sourced nature makes it straightforward to implement sub-workflows yourself.
+The trick: a step's STARTED event can be the triggering event for a child workflow, and the parent can wait for the child workflow's natural `ExecuteCompleted` event — no explicit signalling needed.
+
+The child's `ExecuteCompleted` event has an empty payload, but carries the child's `workflowId` in its metadata.
+Use `metadataProperty("workflowId")` to associate the completion event with the correct child instance.
+
+[source,java]
+.Parent workflow — launches a child and waits for it to finish
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced",
+          workflowNamespace = "io.myapp")
+public void execute(SimpleWorkflowContext ctx) {
+
+    // ... do some work ...
+
+    var childWorkflowId = "payment-" + ctx.workflowId();
+
+    // Launch the child workflow by executing a no-op step.
+    // The STARTED event of this step triggers the child workflow.
+    ctx.awaitExecute("startPaymentProcess",                                // <1>
+            payload("childWorkflowId", childWorkflowId,
+                    "orderId", ctx.workflowId(),
+                    "amount", ctx.workflowPayload().get("amount")).getValues(),
+            (pc, p) -> {                                                   // <2>
+                logger.info("Starting child workflow {}", p.get("childWorkflowId"));
+                return Map.of();
+            });
+
+    // ... do other work in parallel while child runs ...
+
+    // Wait for this specific child's completion event (matched by workflowId in metadata)
+    ctx.awaitEvent("awaitPaymentProcess",                                  // <3>
+            PaymentProcessExecuteCompleted.class,
+            associate(metadataProperty("workflowId"),                       // <4>
+                      equalsTo(childWorkflowId)),
+            Duration.ofMinutes(30));
+
+    logger.info("Child workflow completed for order {}", ctx.workflowId());
+}
+----
+<.> The step name `startPaymentProcess` produces a `io.myapp.StartPaymentProcessStarted` event with the child workflow's ID and data in its payload.
+<.> The action is a no-op — it returns immediately. The purpose of this step is just to produce the STARTED event that triggers the child.
+<.> The parent waits for the child workflow's `ExecuteCompleted` event — every workflow emits this naturally when its method returns.
+<.> `metadataProperty("workflowId")` matches the child's workflow ID in the event metadata, ensuring we wait for the correct child instance — not just any workflow completion.
+
+[source,java]
+.Child workflow — triggered by the parent's step STARTED event
+----
+@Workflow(idProperty = "childWorkflowId",
+          startOnEvent = "io.myapp.StartPaymentProcessStarted",            // <1>
+          workflowNamespace = "io.myapp.payments")
+public void execute(SimpleWorkflowContext ctx) {
+
+    ctx.awaitExecute("validatePayment",
+            ctx.workflowPayload(),
+            PaymentService::validate);
+
+    ctx.awaitExecute("chargeCustomer",
+            ctx.workflowPayload(),
+            PaymentService::charge);
+    // No explicit signalling needed — the engine emits ExecuteCompleted   // <2>
+    // automatically when the workflow method returns.
+}
+----
+<.> The child workflow starts when the parent's `StartPaymentProcessStarted` event is published. The `childWorkflowId` from the payload becomes this workflow's instance ID.
+<.> When the method returns, the engine automatically publishes `PaymentProcessWorkflow#ExecuteCompleted` with `workflowId=payment-123` in its metadata — the parent is already listening for it.
+
+The event store shows the handoff:
+
+[source]
+----
+ [0][PARENT] io.myapp.StartPaymentProcessStarted (STARTED): {childWorkflowId=payment-123, orderId=123, amount=99.95} // <1>
+ [1][PARENT] io.myapp.StartPaymentProcessCompleted (COMPLETED): {}
+ [2][PARENT] io.myapp.AwaitPaymentProcessStarted (STARTED): {startTime=2026-03-26T10:00:01Z}   // <2>
+ [3][CHILD]  io.myapp.payments.PaymentProcessWorkflow#ExecuteStarted (STARTED): {}               // <3>
+ [4][CHILD]  io.myapp.payments.ValidatePaymentStarted (STARTED): {...}
+ [5][CHILD]  io.myapp.payments.ValidatePaymentCompleted (COMPLETED): {}
+ [6][CHILD]  io.myapp.payments.ChargeCustomerStarted (STARTED): {...}
+ [7][CHILD]  io.myapp.payments.ChargeCustomerCompleted (COMPLETED): {}
+ [8][CHILD]  io.myapp.payments.PaymentProcessWorkflow#ExecuteCompleted (COMPLETED): {} [metadata: workflowId=payment-123] // <4>
+ [9][PARENT] io.myapp.AwaitPaymentProcessCompleted (COMPLETED): {}                               // <4>
+[10][PARENT] io.myapp.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
+----
+<.> The parent's no-op step produces a STARTED event — this triggers the child workflow.
+<.> The parent suspends, waiting for the child's completion event.
+<.> The child workflow starts and executes its steps.
+<.> The child completes naturally — `ExecuteCompleted` carries `workflowId=payment-123` in metadata, which unblocks the parent.

@@ -312,5 +312,69 @@ if (!result.success()) {
 }
 ----
 
+== Parallel workflows
+
+Multiple workflows can be triggered by the same event, each handling a different concern independently.
+When an `OrderPlaced` event is published, both workflows start in parallel — each with its own state and lifecycle:
+
+[source,java]
+.OrderFulfillmentWorkflow — handles stock and shipping
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+public void execute(SimpleWorkflowContext ctx) {
+    ctx.awaitExecute("reserveStock", Boolean.class,
+                      InventoryService::reserveStock);
+    ctx.awaitExecute("shipOrder", ctx.workflowPayload(),
+                      ShippingService::shipOrder);
+}
+----
+
+[source,java]
+.CustomerNotificationWorkflow — handles all customer communication
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+public void execute(SimpleWorkflowContext ctx) {
+    ctx.awaitExecute("sendConfirmationEmail",
+            payload("email", ctx.workflowPayload().get("email"),
+                    "orderId", ctx.workflowId()).getValues(),
+            EmailService::sendOrderConfirmation);
+
+    ctx.sleep("waitBeforeFollowUp", Duration.ofDays(3));
+
+    ctx.awaitExecute("sendFollowUpEmail",
+            payload("email", ctx.workflowPayload().get("email"),
+                    "orderId", ctx.workflowId()).getValues(),
+            EmailService::sendFollowUp);
+}
+----
+
+Both workflows receive the same `OrderPlaced` event payload, but they run independently — each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected.
+
+[source]
+----
+-- OrderPlaced: {orderId=123, email=joe@example.com, ...} --
+
+-- OrderFulfillmentWorkflow (instance: 123) --
+[0]: io.namespace.OrderFulfillmentWorkflow#ExecuteStarted (STARTED): {}
+[1]: io.namespace.ReserveStockStarted (STARTED): {}
+[2]: io.namespace.ReserveStockCompleted (COMPLETED): {__reserveStock=true}
+[3]: io.namespace.ShipOrderStarted (STARTED): {orderId=123, ...}
+[4]: io.namespace.ShipOrderCompleted (COMPLETED): {}
+[5]: io.namespace.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
+
+-- CustomerNotificationWorkflow (instance: 123) --
+[0]: io.namespace.CustomerNotificationWorkflow#ExecuteStarted (STARTED): {}
+[1]: io.namespace.SendConfirmationEmailStarted (STARTED): {email=joe@example.com, orderId=123}
+[2]: io.namespace.SendConfirmationEmailCompleted (COMPLETED): {}
+[3]: io.namespace.WaitBeforeFollowUpStarted (STARTED): {startTime=...}
+[4]: io.namespace.WaitBeforeFollowUpTimedOut (TIMED_OUT): ...              // <1>
+[5]: io.namespace.SendFollowUpEmailStarted (STARTED): {email=joe@example.com, orderId=123}
+[6]: io.namespace.SendFollowUpEmailCompleted (COMPLETED): {}
+[7]: io.namespace.CustomerNotificationWorkflow#ExecuteCompleted (COMPLETED): {}
+----
+<.> The 3-day sleep — the notification workflow waits while the fulfillment workflow runs independently.
+
+For cross-workflow interaction patterns — parent-child workflows, event-based signalling between workflows — see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
+
 For more orchestration patterns like fan-out/fan-in, saga compensation, scatter-gather, and human-in-the-loop, see xref:common-patterns.adoc[].
 

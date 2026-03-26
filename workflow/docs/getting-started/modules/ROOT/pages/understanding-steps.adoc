@@ -500,13 +500,71 @@ The engine will use consistency markers to guarantee that each step action execu
 ====
 
 [[retries]]
-== Retries
+== Retries [.badge]#coming soon#
 
 [NOTE]
 ====
-**Built-in retry support is coming soon.**
-In a future version, you will be able to configure retry policies per step — max attempts, backoff strategy, and retryable error conditions.
+**Built-in retry support is coming soon.** The API below is planned but not yet available.
 ====
+
+The `RetryPolicy` API will let you configure retries per step — max attempts, backoff strategy, and programmatic control:
+
+[source,java]
+----
+// Simple: retry up to 3 times (uses default timeout and event names)
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        RetryPolicy.maxRetries(3));                                       // <1>
+
+// With fixed backoff: wait 500ms between retries
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        RetryPolicy.maxRetries(3)
+                .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(500))));
+
+// With exponential backoff (base 200ms, capped at 5s)
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        RetryPolicy.maxRetries(5)
+                .withBackoff(BackoffStrategy.exponential(Duration.ofMillis(200), Duration.ofSeconds(5))));
+
+// With retry handler and conditional stop
+ctx.awaitExecute("callApi",
+        payload("orderId", orderId).getValues(),
+        ExternalApi::call,
+        RetryPolicy.maxRetries(5)
+                .onRetry(retryCtx -> logger.warn("Retry {}/{} for {}: {}",       // <2>
+                        retryCtx.attempt(), retryCtx.maxRetries(),
+                        retryCtx.stepName(), retryCtx.error().getMessage()))
+                .retryUntil(retryCtx -> isTransient(retryCtx.error())));          // <3>
+----
+<.> If the step fails, the engine retries up to 3 times before marking it as FAILED. `maxRetries=3` means up to 4 total executions (1 initial + 3 retries).
+<.> `onRetry` is called before each retry — use it for logging, metrics, or alerts.
+<.> `retryUntil` stops retrying early if the error is not transient (e.g., a 404 should not be retried).
+
+The `BackoffStrategy` options:
+
+[cols="1,2"]
+|===
+|Strategy |Behavior
+
+|`BackoffStrategy.NONE`
+|No delay between retries.
+
+|`BackoffStrategy.fixed(Duration)`
+|Constant delay between retries.
+
+|`BackoffStrategy.linear(Duration base)`
+|Delay increases linearly: `base * attempt`.
+
+|`BackoffStrategy.exponential(Duration base, Duration max)`
+|Delay doubles each attempt: `base * 2^(attempt-1)`, capped at `max`.
+|===
+
+Retries are event-sourced — on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
 
 [[event-name-customization]]
 == Event name customization
