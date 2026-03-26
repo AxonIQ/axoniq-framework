@@ -21,7 +21,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
-import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
 import java.util.Map;

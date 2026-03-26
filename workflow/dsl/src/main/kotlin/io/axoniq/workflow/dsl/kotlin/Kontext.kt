@@ -224,7 +224,7 @@ class Kontext(
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(
             TerminatePrimitive.TerminateCommand.cancel(
-                io.axoniq.workflow.runtime.api.WorkflowCancelledException(
+                WorkflowCancelledException(
                     reason
                 ), eventNameCustomizer
             )
@@ -292,7 +292,7 @@ class Kontext(
         workflowKontext.terminate(
             TerminatePrimitive.TerminateCommand.cancelledStep(
                 stepName,
-                io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                StepCancellationException(reason),
                 eventNameCustomizer
             )
         )

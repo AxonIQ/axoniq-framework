@@ -29,10 +29,10 @@ import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import jakarta.annotation.Nonnull;
 
 import java.time.Clock;
 import java.util.concurrent.Executor;

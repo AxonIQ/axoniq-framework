@@ -35,7 +35,6 @@ import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
-import jakarta.annotation.Nonnull;
 
 import java.util.ArrayList;
 import java.util.Collections;

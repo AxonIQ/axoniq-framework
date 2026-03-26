@@ -24,7 +24,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.QualifiedName;
-import jakarta.annotation.Nonnull;
 
 import java.util.List;
 import java.util.Objects;

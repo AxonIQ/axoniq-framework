@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nonnull;
 
 import static io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils.requireIsAssignableFrom;
 

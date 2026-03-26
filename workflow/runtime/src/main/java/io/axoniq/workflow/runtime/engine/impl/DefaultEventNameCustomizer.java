@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.StringUtils;
 import org.axonframework.messaging.core.QualifiedName;
-import jakarta.annotation.Nonnull;
 
 import java.util.HashMap;
 import java.util.Map;
