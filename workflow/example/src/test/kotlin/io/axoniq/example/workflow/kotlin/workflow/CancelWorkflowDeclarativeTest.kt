@@ -81,7 +81,7 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
             assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         })
 
-        workflowEngine.runWorkflows(false)
+        // workflowEngine.runWorkflows()
 
         Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(ThrowingRunnable {
             assertThat(workflowEngine.workflowExecutions())

@@ -76,19 +76,16 @@ class CombineResultIntegrationTest
 
         delayedPublisher.start();
 
-        await().untilAsserted(() -> assertThat(workflowEngine.workflowExecutions()).isNotEmpty());
-
-        workflowEngine.runWorkflows(false);
-
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
-        var execution = workflowEngine.workflowExecutions().iterator().next();
-        assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+        var history = workflowHistoryRepository.findAll().iterator().next();
+        assertThat(history.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
 
-        var payload = execution.workflowContext().workflowPayload();
+        var payload = history.state().payload();
         // The step "combineStep" should have written its result to the workflow payload because we used COMBINE
         assertThat(payload.get("stepResult")).isEqualTo("combinedValue");
 

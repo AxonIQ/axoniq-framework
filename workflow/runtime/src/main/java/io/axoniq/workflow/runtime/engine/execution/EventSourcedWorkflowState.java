@@ -65,6 +65,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     public EventSourcedWorkflowState() {
         this(Map.of());
     }
+
     /**
      * Creates a new workflow state without reference to a workflow context.
      */
@@ -163,14 +164,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                    eventMessage.timestamp(),
                                                    processingContext)); // TODO copy resources of the context
                     // set payload if desired
-                    MetadataUtils.payloadReducer(metadata).ifPresent(reducerName -> {
-                        if (PayloadReducer.isDefault(reducerName)) {
-                            var resultReducer = PayloadReducer.byName(reducerName);
-                            Map<String, Object> stepPayload = eventMessage.payloadAs(new TypeReference<>() {
-                            }, processingContext.component(Converter.class));
-                            this.payload = resultReducer.apply(this.payload, stepPayload);
-                        }
-                    });
+                    evolvePayload(eventMessage, processingContext);
                     break;
                 case CANCELLED:
                     addStep(WorkflowStep.cancelled(stepName,
@@ -183,24 +177,46 @@ public class EventSourcedWorkflowState implements WorkflowState {
         });
         // Apply workflow-level state changes — ignore transitions once already terminal
         MetadataUtils.getWorkflowStatus(metadata).
-                     ifPresent(status ->
-
-                               {
-                                   if (workflowStatus().isTerminal()) {
-                                       logger.warn("Ignoring workflow status {} — already in terminal state {}",
-                                                   status, workflowStatus());
-                                       return;
-                                   }
-                                   final Throwable terminationCause;
-                                   if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
-                                           && eventPayload instanceof Throwable t) {
-                                       terminationCause = t;
-                                   } else {
-                                       terminationCause = null;
-                                   }
-                                   setStatus(status, terminationCause);
-                               });
+                     ifPresent(status -> {
+                         if (workflowStatus().isTerminal()) {
+                             logger.warn("Ignoring workflow status {} — already in terminal state {}",
+                                         status, workflowStatus());
+                             return;
+                         }
+                         final Throwable terminationCause;
+                         if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
+                                 && eventPayload instanceof Throwable t) {
+                             terminationCause = t;
+                         } else {
+                             terminationCause = null;
+                         }
+                         if (status == WorkflowStatus.STARTED) {
+                             evolvePayload(eventMessage, processingContext);
+                         }
+                         setStatus(status, terminationCause);
+                     });
+        logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
+    }
+
+    /**
+     * Changes payload using named payload reducer from the metadata.
+     *
+     * @param eventMessage      event message contaning new payload and metadata.
+     * @param processingContext processing context.
+     */
+    void evolvePayload(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+        // set payload if desired
+        MetadataUtils.payloadReducer(eventMessage.metadata()).ifPresent(reducerName -> {
+            if (PayloadReducer.isDefault(reducerName)) {
+                var resultReducer = PayloadReducer.byName(reducerName);
+                Map<String, Object> stepPayload = eventMessage.payloadAs(new TypeReference<>() {
+                }, processingContext.component(Converter.class));
+                var result = resultReducer.apply(this.payload, stepPayload);
+                logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
+                this.payload = result;
+            }
+        });
     }
 
     /**

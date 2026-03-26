@@ -71,15 +71,12 @@ class WorkflowCleanupTest extends AbstractDeclarativeTestBase<SimpleWorkflowCont
 
         delayedPublisher.start();
 
-        await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
-        });
-
-        workflowEngine.runWorkflows(true);
-
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
-                    .noneMatch(e -> e.workflowId().equals(workflowId));
+            assertThat(workflowEngine.workflowExecutions()).isEmpty();
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll())
+                    .anyMatch(e -> e.workflowId().equals(workflowId))
+                    .isNotEmpty();
         });
     }
 
@@ -92,15 +89,12 @@ class WorkflowCleanupTest extends AbstractDeclarativeTestBase<SimpleWorkflowCont
 
         delayedPublisher.start();
 
-        await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
-        });
-
-        workflowEngine.runWorkflows(true);
-
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
-                    .noneMatch(e -> e.workflowId().equals(workflowId));
+            assertThat(workflowEngine.workflowExecutions()).isEmpty();
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll())
+                    .anyMatch(e -> e.workflowId().equals(workflowId))
+                    .isNotEmpty();
         });
     }
 }
