@@ -85,7 +85,7 @@ public class AutoDetectionUtils {
      * @return workflow methods.
      */
     @Nonnull
-    static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
+    public static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
             @Nonnull Class<?> type,
             @Nonnull Class<C> workflowContextType) {
         var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(type));
