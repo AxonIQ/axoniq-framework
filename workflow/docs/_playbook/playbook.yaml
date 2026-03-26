@@ -13,6 +13,7 @@ asciidoc:
     page-pagination: true
   extensions:
   - '@asciidoctor/tabs'
+  - asciidoctor-kroki
 
 antora:
   extensions:

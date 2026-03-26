@@ -350,29 +350,28 @@ public void execute(SimpleWorkflowContext ctx) {
 
 Both workflows receive the same `OrderPlaced` event payload, but they run independently — each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected.
 
-[source]
-----
--- OrderPlaced: {orderId=123, email=joe@example.com, ...} --
-
--- OrderFulfillmentWorkflow (instance: 123) --
-[0]: io.namespace.OrderFulfillmentWorkflow#ExecuteStarted (STARTED): {}
-[1]: io.namespace.ReserveStockStarted (STARTED): {}
-[2]: io.namespace.ReserveStockCompleted (COMPLETED): {__reserveStock=true}
-[3]: io.namespace.ShipOrderStarted (STARTED): {orderId=123, ...}
-[4]: io.namespace.ShipOrderCompleted (COMPLETED): {}
-[5]: io.namespace.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
-
--- CustomerNotificationWorkflow (instance: 123) --
-[0]: io.namespace.CustomerNotificationWorkflow#ExecuteStarted (STARTED): {}
-[1]: io.namespace.SendConfirmationEmailStarted (STARTED): {email=joe@example.com, orderId=123}
-[2]: io.namespace.SendConfirmationEmailCompleted (COMPLETED): {}
-[3]: io.namespace.WaitBeforeFollowUpStarted (STARTED): {startTime=...}
-[4]: io.namespace.WaitBeforeFollowUpTimedOut (TIMED_OUT): ...              // <1>
-[5]: io.namespace.SendFollowUpEmailStarted (STARTED): {email=joe@example.com, orderId=123}
-[6]: io.namespace.SendFollowUpEmailCompleted (COMPLETED): {}
-[7]: io.namespace.CustomerNotificationWorkflow#ExecuteCompleted (COMPLETED): {}
-----
-<.> The 3-day sleep — the notification workflow waits while the fulfillment workflow runs independently.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
+1 started ExecuteStarted
+2 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
+4 completed ReserveStockCompleted {"__reserveStock": true}
+6 started ShipOrderStarted {"orderId": 123, "address": "123 Main St"}
+8 completed ShipOrderCompleted
+9 completed ExecuteCompleted
+  </div>
+  <div class="et-src" data-title="CustomerNotificationWorkflow (123)">
+1 started ExecuteStarted
+3 started SendConfirmationEmailStarted {"email": "joe@example.com", "orderId": 123}
+5 completed SendConfirmationEmailCompleted
+7 started WaitBeforeFollowUpStarted {"startTime": "2026-03-26T10:00:00Z"}
+10 timedout WaitBeforeFollowUpTimedOut "2026-03-29T10:00:00Z"
+11 started SendFollowUpEmailStarted {"email": "joe@example.com", "orderId": 123}
+12 completed SendFollowUpEmailCompleted
+13 completed ExecuteCompleted
+  </div>
+</div>
+++++
 
 For cross-workflow interaction patterns — parent-child workflows, event-based signalling between workflows — see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
 

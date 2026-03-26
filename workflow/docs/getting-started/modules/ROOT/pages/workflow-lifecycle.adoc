@@ -114,14 +114,17 @@ if (!reserved) {
 
 If the workflow has running steps (e.g., parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
 
-[source]
-----
-[4]: io.namespace.ShipOrderCancelled (CANCELLED): WorkflowFailedException: Stock unavailable     // <1>
-[5]: io.namespace.NotifyCustomerCancelled (CANCELLED): WorkflowFailedException: Stock unavailable // <1>
-[6]: io.namespace.OrderFulfillmentWorkflow#ExecuteFailed (FAILED): RuntimeException: Stock unavailable // <2>
-----
-<.> Running steps are cancelled first — each CANCELLED event carries the `WorkflowFailedException` with the reason.
-<.> Then the workflow itself is terminated with a FAILED event containing the original cause.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="ctx.fail() — event store">
+1 cancelled ShipOrderCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
+2 cancelled NotifyCustomerCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
+3 failed ExecuteFailed {"reason": "RuntimeException: Stock unavailable"}
+  </div>
+</div>
+++++
+
+Running steps are cancelled first — each CANCELLED event carries the reason. Then the workflow itself is terminated with a FAILED event.
 
 === cancel — external termination
 
@@ -135,14 +138,17 @@ execution.cancel("Cancelled by user");
 
 Like `fail`, `cancel` first cancels all running steps, then terminates the workflow:
 
-[source]
-----
-[4]: io.namespace.ShipOrderCancelled (CANCELLED): WorkflowCancelledException: Cancelled by user     // <1>
-[5]: io.namespace.NotifyCustomerCancelled (CANCELLED): WorkflowCancelledException: Cancelled by user // <1>
-[6]: io.namespace.OrderFulfillmentWorkflow#ExecuteCancelled (CANCELLED): WorkflowCancelledException: Cancelled by user // <2>
-----
-<.> All running steps are cancelled — each event carries the `WorkflowCancelledException` with the reason.
-<.> The workflow is terminated with a CANCELLED event (not FAILED), also carrying the reason.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="execution.cancel() — event store">
+1 cancelled ShipOrderCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+2 cancelled NotifyCustomerCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+3 cancelled ExecuteCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+  </div>
+</div>
+++++
+
+All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
 
 == Unhandled exceptions
 

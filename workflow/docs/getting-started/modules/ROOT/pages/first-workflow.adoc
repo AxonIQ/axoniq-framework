@@ -64,19 +64,21 @@ Standard Java control flow — `if`, loops, try/catch — all work exactly as yo
 
 When this workflow executes successfully, the engine records the following events in the event store:
 
-[source]
-----
-[0]: io.namespace.OrderPlaced: {orderId=123, customerId=456, email=joe@example.com, amount=99.95} // <1>
-[1]: io.namespace.OrderFulfillmentWorkflow#ExecuteStarted (STARTED): {}              // <2>
-[2]: io.namespace.ReserveStockStarted (STARTED): {customerId=456, amount=99.95}       // <3>
-[3]: io.namespace.ReserveStockCompleted (COMPLETED): {__reserveStock=true}            // <4>
-[4]: io.namespace.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
-----
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
+1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+2 started ExecuteStarted
+3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
+4 completed ReserveStockCompleted {"__reserveStock": true}
+5 completed ExecuteCompleted
+  </div>
+</div>
+++++
 
-<.> The triggering event — its `orderId` becomes the workflow instance ID (from `idProperty`).
-<.> The engine starts tracking the workflow instance.
-<.> The STARTED event captures the payload passed to the step — `customerId` and `amount` from the workflow payload.
-<.> Once the action returns, a COMPLETED event captures the result. The `__reserveStock` key stores the typed return value (`true`).
+The triggering `OrderPlaced` event's `orderId` becomes the workflow instance ID (from `idProperty`).
+Each `awaitExecute` produces a STARTED/COMPLETED pair — the STARTED event captures the input payload, the COMPLETED event captures the result.
+The `__reserveStock` key stores the typed return value (`true`).
 
 Every primitive call becomes a pair of durable events.
 This is what gives you audit trails, crash recovery, and replay — with zero extra code.
@@ -146,18 +148,21 @@ public void execute(SimpleWorkflowContext ctx) {
 
 Here's the event store after a successful run:
 
-[source]
-----
-[0]: io.namespace.OrderPlaced: {orderId=123, customerId=456, email=joe@example.com, amount=99.95}
-[1]: io.namespace.OrderFulfillmentWorkflow#ExecuteStarted (STARTED): {}
-[2]: io.namespace.ReserveStockStarted (STARTED): {customerId=456, amount=99.95}
-[3]: io.namespace.ReserveStockCompleted (COMPLETED): {__reserveStock=true}
-[4]: io.namespace.InitiatingPaymentForCustomerStarted (STARTED): {customerId=456, amount=99.95} // <1>
-[5]: io.namespace.InitiatingPaymentForCustomerCompleted (COMPLETED): {}
-[6]: io.namespace.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
-----
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
+1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+2 started ExecuteStarted
+3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
+4 completed ReserveStockCompleted {"__reserveStock": true}
+5 started InitiatingPaymentForCustomerStarted {"customerId": 456, "amount": 99.95}
+6 completed InitiatingPaymentForCustomerCompleted
+7 completed ExecuteCompleted
+  </div>
+</div>
+++++
 
-<.> The `baseName("InitiatingPaymentForCustomer")` customizer changed the event name from the default `InitiatePayment` to `InitiatingPaymentForCustomer`.
+Notice how `baseName("InitiatingPaymentForCustomer")` changed the event name from the default `InitiatePayment` to `InitiatingPaymentForCustomer`.
 
 == Kotlin DSL
 

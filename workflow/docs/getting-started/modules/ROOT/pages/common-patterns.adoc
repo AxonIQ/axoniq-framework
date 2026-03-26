@@ -338,21 +338,24 @@ public void execute(SimpleWorkflowContext ctx) {
 
 The event store shows the handoff:
 
-[source]
-----
- [0][PARENT] io.myapp.StartPaymentProcessStarted (STARTED): {childWorkflowId=payment-123, orderId=123, amount=99.95} // <1>
- [1][PARENT] io.myapp.StartPaymentProcessCompleted (COMPLETED): {}
- [2][PARENT] io.myapp.AwaitPaymentProcessStarted (STARTED): {startTime=2026-03-26T10:00:01Z}   // <2>
- [3][CHILD]  io.myapp.payments.PaymentProcessWorkflow#ExecuteStarted (STARTED): {}               // <3>
- [4][CHILD]  io.myapp.payments.ValidatePaymentStarted (STARTED): {...}
- [5][CHILD]  io.myapp.payments.ValidatePaymentCompleted (COMPLETED): {}
- [6][CHILD]  io.myapp.payments.ChargeCustomerStarted (STARTED): {...}
- [7][CHILD]  io.myapp.payments.ChargeCustomerCompleted (COMPLETED): {}
- [8][CHILD]  io.myapp.payments.PaymentProcessWorkflow#ExecuteCompleted (COMPLETED): {} [metadata: workflowId=payment-123] // <4>
- [9][PARENT] io.myapp.AwaitPaymentProcessCompleted (COMPLETED): {}                               // <4>
-[10][PARENT] io.myapp.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
-----
-<.> The parent's no-op step produces a STARTED event — this triggers the child workflow.
-<.> The parent suspends, waiting for the child's completion event.
-<.> The child workflow starts and executes its steps.
-<.> The child completes naturally — `ExecuteCompleted` carries `workflowId=payment-123` in metadata, which unblocks the parent.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="Parent — OrderFulfillmentWorkflow (123)">
+1 started StartPaymentProcessStarted {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
+2 completed StartPaymentProcessCompleted
+3 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
+9 completed AwaitPaymentProcessCompleted
+10 completed ExecuteCompleted
+  </div>
+  <div class="et-src" data-title="Child — PaymentProcessWorkflow (payment-123)">
+4 started ExecuteStarted
+5 started ValidatePaymentStarted {"orderId": 123, "amount": 99.95}
+6 completed ValidatePaymentCompleted
+7 started ChargeCustomerStarted {"orderId": 123, "amount": 99.95}
+8 completed ChargeCustomerCompleted
+9 completed ExecuteCompleted
+  </div>
+</div>
+++++
+
+The parent's no-op step STARTED event triggers the child workflow. The parent suspends at `AwaitPaymentProcessStarted`, and the child runs its steps. When the child completes, `ExecuteCompleted` (with `workflowId=payment-123` in metadata) unblocks the parent.

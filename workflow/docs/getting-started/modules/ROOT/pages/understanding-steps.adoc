@@ -435,13 +435,16 @@ ctx.cancelStep("awaitApproval", someException);              // wrap an existing
 
 Both approaches produce a CANCELLED event in the event store:
 
-[source]
-----
-[4]: io.namespace.AwaitApprovalCancelled (CANCELLED): {}                        // <1>
-[4]: io.namespace.AwaitApprovalCancelled (CANCELLED): StepCancellationException // <2>
-----
-<.> Without a reason — empty payload.
-<.> With a reason — the payload contains the `StepCancellationException` with the message.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="Without reason">
+1 cancelled AwaitApprovalCancelled
+  </div>
+  <div class="et-src" data-title="With reason">
+1 cancelled AwaitApprovalCancelled {"reason": "StepCancellationException: Manager rejected"}
+  </div>
+</div>
+++++
 
 [IMPORTANT]
 ====

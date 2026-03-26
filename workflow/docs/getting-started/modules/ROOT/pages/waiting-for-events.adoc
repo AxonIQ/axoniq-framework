@@ -31,24 +31,29 @@ When a matching event arrives, the workflow resumes and `awaitEvent` returns the
 
 Here's what the event store looks like when a `PaymentConfirmed` event arrives before the timeout:
 
-[source]
-----
-[5]: io.namespace.AwaitPaymentStarted (STARTED): {startTime=2026-03-25T10:00:00Z}                  // <1>
-[6]: io.namespace.PaymentConfirmed: {orderId=123, transactionId=txn-456}                           // <2>
-[7]: io.namespace.AwaitPaymentCompleted (COMPLETED): {orderId=123, transactionId=txn-456}           // <3>
-----
-<.> The engine records when the wait began — `startTime` is used internally to calculate the remaining timeout on replay.
-<.> The external `PaymentConfirmed` event arrives — this is what unblocks the waiting workflow.
-<.> The engine records the COMPLETED event with the matched event's payload.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="awaitEvent — happy path">
+1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z"}
+2 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
+3 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
+  </div>
+</div>
+++++
+
+The STARTED event records when the wait began (`startTime` is used to recalculate remaining timeout on replay).
+When the external `PaymentConfirmed` event arrives, it unblocks the workflow and the matched payload is recorded in the COMPLETED event.
 
 If no matching event arrives within 15 minutes:
 
-[source]
-----
-[5]: io.namespace.AwaitPaymentStarted (STARTED): {startTime=2026-03-25T10:00:00Z}
-[6]: io.namespace.AwaitPaymentTimedOut (TIMED_OUT): 2026-03-25T10:15:00Z                            // <1>
-----
-<.> The TIMED_OUT event records the timestamp when the timeout occurred.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="awaitEvent — timeout">
+1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z"}
+2 timedout AwaitPaymentTimedOut {"timeout": "2026-03-25T10:15:00Z"}
+  </div>
+</div>
+++++
 
 == Filtering with associations
 
@@ -134,12 +139,16 @@ ctx.sleep("cooldownPeriod", Duration.ofDays(10)); // <1>
 <.> Pauses the workflow for 10 days.
 Under the hood, this is a `waitFor` with an event condition that never matches — so it always times out after the specified duration.
 
-[source]
-----
-[4]: io.namespace.CooldownPeriodStarted (STARTED): {startTime=2026-03-25T10:00:00Z}
-[5]: io.namespace.CooldownPeriodTimedOut (TIMED_OUT): 2026-04-04T10:00:00Z            // <1>
-----
-<.> `sleep` always produces a STARTED followed by a TIMED_OUT — that's by design, since the "event" it waits for never arrives.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="sleep — 10-day delay">
+1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z"}
+2 timedout CooldownPeriodTimedOut {"timeout": "2026-04-04T10:00:00Z"}
+  </div>
+</div>
+++++
+
+`sleep` always produces a STARTED followed by a TIMED_OUT — that's by design, since the "event" it waits for never arrives.
 
 == Updated workflow
 
@@ -190,21 +199,24 @@ By subscribing to the event *before* calling the service that produces it, you g
 
 Here's the full event store for this workflow:
 
-[source]
-----
-[0]: io.namespace.OrderPlaced: {orderId=123, customerId=456, email=joe@example.com, amount=99.95}
-[1]: io.namespace.OrderFulfillmentWorkflow#ExecuteStarted (STARTED): {}
-[2]: io.namespace.ReserveStockStarted (STARTED): {}
-[3]: io.namespace.ReserveStockCompleted (COMPLETED): {__reserveStock=true}
-[4]: io.namespace.AwaitPaymentStarted (STARTED): {startTime=2026-03-25T10:00:05Z}                  // <1>
-[5]: io.namespace.InitiatePaymentStarted (STARTED): {orderId=123, customerId=456, email=joe@example.com, amount=99.95}
-[6]: io.namespace.InitiatePaymentCompleted (COMPLETED): {}
-[7]: io.namespace.PaymentConfirmed: {orderId=123, transactionId=txn-456}                           // <2>
-[8]: io.namespace.AwaitPaymentCompleted (COMPLETED): {orderId=123, transactionId=txn-456}           // <3>
-[9]: io.namespace.OrderFulfillmentWorkflow#ExecuteCompleted (COMPLETED): {}
-----
-<.> The event subscription starts *before* initiatePayment — no race condition.
-<.> The external `PaymentConfirmed` event arrives after the payment service processes the request.
-<.> The workflow records the matched event's payload and resumes.
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
+1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+2 started ExecuteStarted
+3 started ReserveStockStarted
+4 completed ReserveStockCompleted {"__reserveStock": true}
+5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z"}
+6 started InitiatePaymentStarted {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+7 completed InitiatePaymentCompleted
+8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
+9 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
+10 completed ExecuteCompleted
+  </div>
+</div>
+++++
+
+The event subscription (`AwaitPaymentStarted`) appears *before* `InitiatePaymentStarted` — no race condition.
+The external `PaymentConfirmed` event unblocks the workflow, and its payload is recorded in `AwaitPaymentCompleted`.
 
 Now that we can execute actions and wait for external events, let's dive deeper into xref:understanding-steps.adoc[all the options] you can configure — timeouts, error handling, event naming, payload reducers, and execution semantics.
