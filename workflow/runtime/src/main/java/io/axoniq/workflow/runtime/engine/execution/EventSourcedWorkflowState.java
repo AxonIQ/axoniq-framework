@@ -195,6 +195,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                          }
                          setStatus(status, terminationCause);
                      });
+        logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
     }
 

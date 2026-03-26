@@ -35,7 +35,7 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 
 import java.time.Clock;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
@@ -74,7 +74,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(Clock.class, cfg -> Clock.systemUTC());
 
         componentRegistry
-                .registerComponent(Executor.class,
+                .registerComponent(ExecutorService.class,
                                    WORKFLOW_ENGINE_EXECUTOR,
                                    cfg -> Executors.newVirtualThreadPerTaskExecutor());
 

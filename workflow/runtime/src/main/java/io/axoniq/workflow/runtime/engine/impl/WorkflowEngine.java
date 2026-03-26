@@ -32,18 +32,13 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-
-import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -75,17 +70,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
-        logger.trace("Received eventMessage {} {} by thread {}",
-                     eventMessage.identifier(),
-                     eventMessage.type(),
-                     Thread.currentThread());
+        logger.warn("Received eventMessage {} {}", eventMessage.identifier(), eventMessage.type());
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
             // TODO: is it safe to put an eventMessage in the queue?
-            var execution = workflowExecutionRepository.findById(workflowId)
-                                                       .orElseThrow(() -> new IllegalStateException(
-                                                               "No workflow found for id: " + workflowId));
+            var execution = workflowExecutionRepository
+                    .findById(workflowId)
+                    .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId));
             execution.onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
@@ -98,107 +90,99 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             }
         }
 
-        logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
+        logger.warn("EventMessage {} successfully handled", eventMessage.identifier());
         return MessageStream.empty();
     }
 
     /**
-     * This is a place to be called from Event Processor
-     */
-    public void runWorkflows() {
-        var running = isRunning.getAndSet(true);
-        if (!running) {
-            logger.info("Starting Workflow Execution.");
-            for (var execution : workflowExecutionRepository.findAll()) {
-                executeInstance(execution);
-            }
-            logger.info("Starting completed.");
-        } else {
-            logger.warn("Workflow Execution is already started.");
-        }
-    }
-
-    void executeInstance(@Nonnull WorkflowExecution execution) {
-
-        boolean runInNewThread = true; // FIXME -> this is the only way to run it currently.
-        if (runInNewThread) {
-            execution.workflowContext().processingContext().component(Executor.class, WORKFLOW_ENGINE_EXECUTOR).execute(
-                    () -> {
-                        this.execute(execution).accept(execution.workflowContext().processingContext());
-                    });
-        } else {
-            execution.workflowContext()
-                     .processingContext()
-                     .whenComplete(this.execute(execution));
-        }
-    }
-
-    private Consumer<ProcessingContext> execute(@Nonnull WorkflowExecution execution) {
-        return pc -> {
-            try {
-                logger.info("Executing workflow {}", execution.workflowId());
-                execution.execute(
-                        finished -> {
-                            logger.debug("Workflow {} finished with status {}, removing it from repository",
-                                         execution.workflowId(),
-                                         finished.state().workflowStatus());
-                            this.workflowExecutionRepository.remove(execution.workflowId());
-                        }
-                );
-            } catch (Throwable t) {
-                throw new RuntimeException("Error during workflow execution", t);
-            }
-        };
-    }
-
-
-    /**
-     * If the replay is finished, start workflow executions.
+     * If the replay is finished, start workflow executions of previously event-sourced executions.
      */
     @Override
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
         if (!statusChange.status().isReplay()) {
-            runWorkflows();
+            executeEventSourcedWorkflows();
         }
         return MessageStream.empty();
     }
 
+
+    private void executeEventSourcedWorkflows() {
+        var running = isRunning.getAndSet(true);
+        if (!running) {
+            var allExecution = workflowExecutionRepository.findAll();
+            if (allExecution.isEmpty()) {
+                logger.info("No running workflow instances found.");
+            } else {
+                logger.info("Restored {} running workflow instances, starting workflow execution.",
+                            allExecution.size());
+                for (var execution : allExecution) {
+                    execute(execution);
+                }
+                logger.info("All workflow instances started.");
+            }
+        } else {
+            logger.warn("Workflow Execution is already started.");
+        }
+    }
+
+    private void execute(@Nonnull WorkflowExecution execution) {
+        execution
+                .workflowContext()
+                .processingContext()
+                .whenComplete(pc -> {
+                    try {
+                        logger.info("Executing workflow execution with id: {}", execution.workflowId());
+                        execution.execute(
+                                finished -> {
+                                    logger.debug("Workflow {} finished with status {}, removing it from repository",
+                                                 execution.workflowId(),
+                                                 finished.state().workflowStatus());
+                                    this.workflowExecutionRepository.remove(execution.workflowId());
+                                }
+                        );
+                    } catch (Throwable t) {
+                        throw new RuntimeException("Error during workflow execution", t);
+                    }
+                });
+    }
+
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
                                            @Nonnull ProcessingContext processingContext) {
-        var definitions = workflowConfigurationRegistry.getWorkflowsConfigurations(eventMessage.type().qualifiedName());
-        definitions.forEach(predicatedWorkflowConfiguration -> {
-
-                                if (predicatedWorkflowConfiguration.predicate().test(eventMessage)) {
-
-                                    var workflowConfiguration = predicatedWorkflowConfiguration.configuration();
-
-                                    var payload = Objects.requireNonNull(eventMessage.payloadAs(
-                                            new TypeReference<Map<String, Object>>() {
-                                            },
-                                            processingContext.component(Converter.class)
-                                    ), "Error converting initial payload");
-                                    var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
-
-                                    var workflowContext = workflowConfiguration
-                                            .workflowContextFactory()
-                                            .createContext(payload,
-                                                           workflowId,
-                                                           processingContext,
-                                                           workflowConfiguration);
-
-                                    // avoid multiple workflows for the same workflow id.
-                                    var execution = workflowExecutionRepository.save(workflowId, () -> {
-                                        logger.info("Starting new workflow with '{}'", eventMessage.payload());
-                                        return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
-                                    });
-                                    if (isRunning.get()) {
-                                        executeInstance(execution);
-                                    }
-                                }
-                            }
+        var configurations = workflowConfigurationRegistry.getWorkflowsConfigurations(
+                eventMessage.type().qualifiedName()
         );
+
+        configurations
+                .forEach(configuration -> {
+
+                             if (configuration.predicate().test(eventMessage)) {
+
+                                 var workflowConfiguration = configuration.configuration();
+
+                                 var payload = Objects.requireNonNull(eventMessage.payloadAs(
+                                         new TypeReference<Map<String, Object>>() {
+                                         },
+                                         processingContext.component(Converter.class)
+                                 ), "Error converting initial payload");
+                                 var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
+
+                                 var workflowContext = workflowConfiguration
+                                         .workflowContextFactory()
+                                         .createContext(payload, workflowId, processingContext, workflowConfiguration);
+
+                                 // avoid multiple workflows for the same workflow id.
+                                 var execution = workflowExecutionRepository.save(workflowId, () -> {
+                                     logger.debug("Creating a new workflow with '{}'", eventMessage.payload());
+                                     return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
+                                 });
+                                 if (isRunning.get()) { // if the engine is already running, start the workflow immediately
+                                     execute(execution);
+                                 }
+                             }
+                         }
+                );
     }
 
     /**
