@@ -68,10 +68,10 @@ When this workflow executes successfully, the engine records the following event
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
-2 started ExecuteStarted
+2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
 4 completed ReserveStockCompleted {"__reserveStock": true}
-5 completed ExecuteCompleted
+5 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
 </div>
 ++++
@@ -152,17 +152,88 @@ Here's the event store after a successful run:
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
-2 started ExecuteStarted
+2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
 4 completed ReserveStockCompleted {"__reserveStock": true}
 5 started InitiatingPaymentForCustomerStarted {"customerId": 456, "amount": 99.95}
 6 completed InitiatingPaymentForCustomerCompleted
-7 completed ExecuteCompleted
+7 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
 </div>
 ++++
 
 Notice how `baseName("InitiatingPaymentForCustomer")` changed the event name from the default `InitiatePayment` to `InitiatingPaymentForCustomer`.
+
+== Waiting for an event
+
+Our workflow initiates payment, but how do we know when it's confirmed?
+The `awaitEvent` primitive suspends the workflow until a matching external event arrives:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
+----
+@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+public void execute(SimpleWorkflowContext ctx) {
+
+    var customerId = ctx.workflowPayload().get("customerId");
+    var amount = ctx.workflowPayload().get("amount");
+
+    var reserved = ctx.awaitExecute("reserveStock",
+            payload("customerId", customerId, "amount", amount).getValues(),
+            Boolean.class,
+            InventoryService::reserveStock);
+    if (!reserved) {
+        ctx.fail("Stock unavailable");
+        return;
+    }
+
+    ctx.awaitExecute("initiatePayment",
+                     payload("customerId", customerId,
+                             "amount", amount).getValues(),
+                     PaymentService::initiatePayment,
+                     Duration.ofSeconds(30),
+                     baseName("InitiatingPaymentForCustomer"));
+
+    var confirmation = ctx.awaitEvent("awaitPayment",       // <1>
+                                       PaymentConfirmed.class,
+                                       Duration.ofMinutes(15)); // <2>
+
+    logger.info("Payment confirmed: {}", confirmation);
+}
+----
+
+<.> `awaitEvent` blocks the workflow until a `PaymentConfirmed` event arrives.
+The engine subscribes to the event bus and watches for events of this type.
+<.> Maximum time to wait. After 15 minutes, the step completes with `StepStatus.TIMED_OUT`.
+
+When the `PaymentConfirmed` event arrives, the workflow resumes and `awaitEvent` returns the deserialized event object.
+Here's the full event store:
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
+1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+2 started OrderFulfillmentWorkflow#ExecuteStarted
+3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
+4 completed ReserveStockCompleted {"__reserveStock": true}
+5 started InitiatingPaymentForCustomerStarted {"customerId": 456, "amount": 99.95}
+6 completed InitiatingPaymentForCustomerCompleted
+7 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z"}
+8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
+9 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
+10 completed OrderFulfillmentWorkflow#ExecuteCompleted
+  </div>
+</div>
+++++
+
+The `AwaitPaymentStarted` event records when the wait began.
+When the external `PaymentConfirmed` event arrives, it unblocks the workflow and the matched payload is recorded in `AwaitPaymentCompleted`.
+
+[NOTE]
+====
+The events that `awaitEvent` listens for are standard Axon Framework events.
+They can be published from anywhere — a command handler, an `EventGateway`, a REST controller, or any component with access to the event bus.
+====
 
 == Kotlin DSL
 
@@ -195,11 +266,18 @@ class OrderFulfillmentWorkflow {
             timeout = 30.seconds,
             eventNameCustomizer = baseName("InitiatingPaymentForCustomer")
         )
+
+        val confirmation = awaitEvent<PaymentConfirmed>(
+            "awaitPayment",
+            timeout = 15.minutes
+        )
+
+        logger.info("Payment confirmed: {}", confirmation)
     }
 }
 ----
 
 The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support (e.g., `30.seconds`).
 
-Our workflow can execute actions, but after initiating payment we need to wait for an external confirmation.
-Let's see how to xref:waiting-for-events.adoc[wait for events].
+That's a complete workflow — it executes actions and waits for external events.
+To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:axon-workflow-reference::index.adoc[Reference Guide].

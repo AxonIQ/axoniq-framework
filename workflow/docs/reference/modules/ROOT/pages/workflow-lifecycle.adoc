@@ -119,7 +119,7 @@ If the workflow has running steps (e.g., parallel steps started with `execute`),
   <div class="et-src" data-title="ctx.fail() — event store">
 1 cancelled ShipOrderCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
 2 cancelled NotifyCustomerCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-3 failed ExecuteFailed {"reason": "RuntimeException: Stock unavailable"}
+3 failed OrderFulfillmentWorkflow#ExecuteFailed {"reason": "RuntimeException: Stock unavailable"}
   </div>
 </div>
 ++++
@@ -143,7 +143,7 @@ Like `fail`, `cancel` first cancels all running steps, then terminates the workf
   <div class="et-src" data-title="execution.cancel() — event store">
 1 cancelled ShipOrderCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
 2 cancelled NotifyCustomerCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-3 cancelled ExecuteCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
   </div>
 </div>
 ++++

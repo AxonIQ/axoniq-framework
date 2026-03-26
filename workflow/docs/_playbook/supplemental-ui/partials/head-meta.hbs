@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function parseLine(line) {
     line = line.trim();
     if (!line) return null;
-    var m = line.match(/^(\d+)\s+(started|completed|timedout|failed|cancelled)\s+(\S+)\s*(.*)?$/);
+    var m = line.match(/^(\d+)\s+(started|completed|timedout|failed|cancelled|external)\s+(\S+)\s*(.*)?$/);
     if (!m) return null;
     return { step: parseInt(m[1]), status: m[2], name: m[3], payload: m[4] || '' };
   }

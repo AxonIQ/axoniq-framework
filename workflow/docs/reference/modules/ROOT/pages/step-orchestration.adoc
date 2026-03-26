@@ -353,22 +353,22 @@ Both workflows receive the same `OrderPlaced` event payload, but they run indepe
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
-1 started ExecuteStarted
+1 started OrderFulfillmentWorkflow#ExecuteStarted
 2 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
 4 completed ReserveStockCompleted {"__reserveStock": true}
 6 started ShipOrderStarted {"orderId": 123, "address": "123 Main St"}
 8 completed ShipOrderCompleted
-9 completed ExecuteCompleted
+9 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
   <div class="et-src" data-title="CustomerNotificationWorkflow (123)">
-1 started ExecuteStarted
+1 started CustomerNotificationWorkflow#ExecuteStarted
 3 started SendConfirmationEmailStarted {"email": "joe@example.com", "orderId": 123}
 5 completed SendConfirmationEmailCompleted
 7 started WaitBeforeFollowUpStarted {"startTime": "2026-03-26T10:00:00Z"}
-10 timedout WaitBeforeFollowUpTimedOut "2026-03-29T10:00:00Z"
+10 timedout WaitBeforeFollowUpTimedOut {"timeout": "2026-03-29T10:00:00Z"}
 11 started SendFollowUpEmailStarted {"email": "joe@example.com", "orderId": 123}
 12 completed SendFollowUpEmailCompleted
-13 completed ExecuteCompleted
+13 completed CustomerNotificationWorkflow#ExecuteCompleted
   </div>
 </div>
 ++++

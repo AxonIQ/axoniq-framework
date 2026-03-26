@@ -85,7 +85,7 @@ public record PaymentConfirmed(
 ----
 
 <.> The `orderId` field lets us correlate this event to the correct workflow instance.
-We'll use this in the xref:waiting-for-events.adoc[Waiting for Events] section.
+We'll use this in xref:first-workflow.adoc[Your First Workflow] when we add an `awaitEvent` call.
 
 [NOTE]
 ====

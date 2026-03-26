@@ -203,7 +203,7 @@ Here's the full event store for this workflow:
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
-2 started ExecuteStarted
+2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted
 4 completed ReserveStockCompleted {"__reserveStock": true}
 5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z"}
@@ -211,7 +211,7 @@ Here's the full event store for this workflow:
 7 completed InitiatePaymentCompleted
 8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
 9 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
-10 completed ExecuteCompleted
+10 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
 </div>
 ++++

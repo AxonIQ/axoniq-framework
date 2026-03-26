@@ -270,9 +270,9 @@ First-class sub-workflow support with built-in lifecycle management is **coming 
 ====
 
 In the meantime, the engine's event-sourced nature makes it straightforward to implement sub-workflows yourself.
-The trick: a step's STARTED event can be the triggering event for a child workflow, and the parent can wait for the child workflow's natural `ExecuteCompleted` event — no explicit signalling needed.
+The trick: a step's STARTED event can be the triggering event for a child workflow, and the parent can wait for the child workflow's natural `ClassName#ExecuteCompleted` event — no explicit signalling needed.
 
-The child's `ExecuteCompleted` event has an empty payload, but carries the child's `workflowId` in its metadata.
+The child's `ClassName#ExecuteCompleted` event has an empty payload, but carries the child's `workflowId` in its metadata.
 Use `metadataProperty("workflowId")` to associate the completion event with the correct child instance.
 
 [source,java]
@@ -311,7 +311,7 @@ public void execute(SimpleWorkflowContext ctx) {
 ----
 <.> The step name `startPaymentProcess` produces a `io.myapp.StartPaymentProcessStarted` event with the child workflow's ID and data in its payload.
 <.> The action is a no-op — it returns immediately. The purpose of this step is just to produce the STARTED event that triggers the child.
-<.> The parent waits for the child workflow's `ExecuteCompleted` event — every workflow emits this naturally when its method returns.
+<.> The parent waits for the child workflow's `ClassName#ExecuteCompleted` event — every workflow emits this naturally when its method returns.
 <.> `metadataProperty("workflowId")` matches the child's workflow ID in the event metadata, ensuring we wait for the correct child instance — not just any workflow completion.
 
 [source,java]
@@ -329,8 +329,9 @@ public void execute(SimpleWorkflowContext ctx) {
     ctx.awaitExecute("chargeCustomer",
             ctx.workflowPayload(),
             PaymentService::charge);
-    // No explicit signalling needed — the engine emits ExecuteCompleted   // <2>
-    // automatically when the workflow method returns.
+    // No explicit signalling needed — the engine emits                    // <2>
+    // PaymentProcessWorkflow#ExecuteCompleted automatically when the
+    // workflow method returns.
 }
 ----
 <.> The child workflow starts when the parent's `StartPaymentProcessStarted` event is published. The `childWorkflowId` from the payload becomes this workflow's instance ID.
@@ -345,17 +346,17 @@ The event store shows the handoff:
 2 completed StartPaymentProcessCompleted
 3 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
 9 completed AwaitPaymentProcessCompleted
-10 completed ExecuteCompleted
+10 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
   <div class="et-src" data-title="Child — PaymentProcessWorkflow (payment-123)">
-4 started ExecuteStarted
+4 started PaymentProcessWorkflow#ExecuteStarted
 5 started ValidatePaymentStarted {"orderId": 123, "amount": 99.95}
 6 completed ValidatePaymentCompleted
 7 started ChargeCustomerStarted {"orderId": 123, "amount": 99.95}
 8 completed ChargeCustomerCompleted
-9 completed ExecuteCompleted
+9 completed PaymentProcessWorkflow#ExecuteCompleted
   </div>
 </div>
 ++++
 
-The parent's no-op step STARTED event triggers the child workflow. The parent suspends at `AwaitPaymentProcessStarted`, and the child runs its steps. When the child completes, `ExecuteCompleted` (with `workflowId=payment-123` in metadata) unblocks the parent.
+The parent's no-op step STARTED event triggers the child workflow. The parent suspends at `AwaitPaymentProcessStarted`, and the child runs its steps. When the child completes, `PaymentProcessWorkflow#ExecuteCompleted` (with `workflowId=payment-123` in metadata) unblocks the parent.

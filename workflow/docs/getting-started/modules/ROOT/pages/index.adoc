@@ -33,27 +33,15 @@ The engine is built on *primitives* and *composables*:
 
 == About this tutorial
 
-In this tutorial, you will build an *Order Fulfillment* workflow step by step.
-The workflow will reserve stock, initiate payment, wait for payment confirmation, store transaction details, and then ship the order and notify the customer in parallel.
-
-Along the way, you will learn each core concept:
+In this tutorial, you will build an *Order Fulfillment* workflow that reserves stock, initiates payment, and waits for payment confirmation.
+Along the way, you will learn the two core primitives:
 
 . *xref:project-setup.adoc[Project Setup]* — Add dependencies and define domain events
-. *Steps*
-.. *xref:first-workflow.adoc[Your First Workflow]* — Create a minimal workflow that executes actions
-.. *xref:waiting-for-events.adoc[Waiting for Events]* — Suspend the workflow until payment is confirmed
-.. *xref:understanding-steps.adoc[Understanding Steps]* — All primitives at a glance, timeouts, error handling, payload reducers, event naming, and execution semantics
-. *xref:workflow-lifecycle.adoc[Workflow Lifecycle]* — Terminal states, fail vs cancel, and lifecycle listeners
-. *xref:step-orchestration.adoc[Step Orchestration]* — Ship and notify the customer concurrently
-. *xref:common-patterns.adoc[Common Patterns]* — Fan-out/fan-in, saga compensation, scatter-gather, human-in-the-loop, and more
-. *xref:payload-and-state.adoc[Payload and State]* — Manage durable workflow state across steps
-. *xref:configuration.adoc[Configuration]* — Declarative setup, workflow ID providers, custom contexts
-. *xref:testing-workflows.adoc[Testing Workflows]* — Write integration tests for your workflow
+. *xref:first-workflow.adoc[Your First Workflow]* — Create a workflow that executes actions and waits for events
 
 [TIP]
-.Looking for more examples?
 ====
-The project repository includes an `example/` module with several workflow implementations demonstrating all features, including Kotlin DSL usage, cancellation handling, and combinator patterns.
+Once you've completed the tutorial, the xref:axon-workflow-reference::index.adoc[Reference Guide] covers everything in depth — all overloads, orchestration patterns, lifecycle management, testing, and configuration.
 ====
 
 Are you ready?
