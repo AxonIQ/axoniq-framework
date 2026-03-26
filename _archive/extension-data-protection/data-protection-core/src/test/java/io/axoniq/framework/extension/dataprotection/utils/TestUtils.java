@@ -18,7 +18,7 @@
 package io.axoniq.framework.extension.dataprotection.utils;
 
 import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.json.JacksonConverter;
+import org.axonframework.conversion.jackson2.Jackson2Converter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -98,6 +98,6 @@ public abstract class TestUtils {
      * @return JacksonConverter instance
      */
     public static Converter defaultTestConverter() {
-        return new JacksonConverter();
+        return new Jackson2Converter();
     }
 }
