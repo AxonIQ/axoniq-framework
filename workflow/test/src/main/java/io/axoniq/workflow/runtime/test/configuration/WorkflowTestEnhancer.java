@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.test.configuration;
 
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.conversion.Converter;
@@ -34,7 +35,7 @@ import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.W
 public class WorkflowTestEnhancer implements ConfigurationEnhancer {
 
     @Override
-    public void enhance(@NotNull ComponentRegistry registry) {
+    public void enhance(@Nonnull ComponentRegistry registry) {
         registry
                 .registerComponent(DelayedPublisher.class, cfg ->
                         new DelayedPublisher(

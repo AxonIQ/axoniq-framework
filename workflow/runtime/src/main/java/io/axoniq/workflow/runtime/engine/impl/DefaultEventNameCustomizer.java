@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.engine.step.StepStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.StringUtils;
 import org.axonframework.messaging.core.QualifiedName;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -261,10 +260,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                                                 @Nonnull EventNameCustomizer child) {
             var defaultCustomizer = new DefaultEventNameCustomizer();
             return new EventNameCustomizer() {
-                @NotNull
+                @Nonnull
                 @Override
-                public QualifiedName getEventName(@NotNull String stepName, @NotNull Map<String, Object> parameters,
-                                                  @NotNull StepStatus stepStatus) {
+                public QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
+                                                  @Nonnull StepStatus stepStatus) {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
                     var childName = child.getEventName(stepName, parameters, stepStatus);
@@ -286,10 +285,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 
-                @NotNull
+                @Nonnull
                 @Override
-                public QualifiedName getEventName(@NotNull String stepName, @NotNull Map<String, Object> parameters,
-                                                  @NotNull WorkflowStatus stepStatus) {
+                public QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
+                                                  @Nonnull WorkflowStatus stepStatus) {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
                     var childName = child.getEventName(stepName, parameters, stepStatus);
@@ -311,7 +310,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 
-                @NotNull
+                @Nonnull
                 @Override
                 public EventNameCustomizer forStepInheritance() {
                     return this;
