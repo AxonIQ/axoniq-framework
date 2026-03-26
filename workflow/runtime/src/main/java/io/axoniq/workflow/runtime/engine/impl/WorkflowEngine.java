@@ -29,7 +29,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,10 +51,10 @@ public class WorkflowEngine implements EventHandler {
         this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@NotNull EventMessage eventMessage,
-                                               @NotNull ProcessingContext processingContext) {
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
+                                               @Nonnull ProcessingContext processingContext) {
         logger.trace("Received eventMessage {}", eventMessage.type());
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());

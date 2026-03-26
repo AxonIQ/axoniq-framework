@@ -21,7 +21,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
-import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -134,43 +133,43 @@ public class PrimitiveCommands {
             this.delegate = delegate;
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public String stepName() {
             return delegate.stepName();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public Map<String, Object> local() {
             return delegate.local();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public PayloadProcessor action() {
             return delegate.action();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public PayloadReducer parameterPayloadReducer() {
             return delegate.parameterPayloadReducer();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public PayloadReducer resultPayloadReducer() {
             return delegate.resultPayloadReducer();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public Duration timeout() {
             return delegate.timeout();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return delegate.eventNameCustomizer();
@@ -186,13 +185,13 @@ public class PrimitiveCommands {
             this.delegate = delegate;
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public String stepName() {
             return delegate.stepName();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public Duration timeout() {
             return delegate.timeout();
@@ -204,7 +203,7 @@ public class PrimitiveCommands {
             return delegate.eventCondition();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return delegate.eventNameCustomizer();
@@ -356,7 +355,7 @@ public class PrimitiveCommands {
         }
 
         @Override
-        public T result(@NotNull WorkflowStepResult result) {
+        public T result(@Nonnull WorkflowStepResult result) {
             if (result.success() && result.<Map<String, Object>>result().isPresent()) {
                 Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
                 return converter.convert(resultPayload, type.getType());
@@ -391,7 +390,7 @@ public class PrimitiveCommands {
         }
 
         @Override
-        public T result(@NotNull WorkflowStepResult result) {
+        public T result(@Nonnull WorkflowStepResult result) {
             if (result.success() && result.<Map<String, Object>>result().isPresent()) {
                 Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
                 return converter.convert(resultPayload, type.getType());

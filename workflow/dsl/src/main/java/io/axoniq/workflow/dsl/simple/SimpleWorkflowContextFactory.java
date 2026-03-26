@@ -35,10 +35,10 @@ import java.util.Map;
  */
 public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
-    @NotNull
+    @Nonnull
     @Override
     public SimpleWorkflowContext createContext(
-            @NotNull Map<String, Object> initialPayload,
+            @Nonnull Map<String, Object> initialPayload,
             @Nonnull String workflowId,
             @Nonnull ProcessingContext processingContext,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration
