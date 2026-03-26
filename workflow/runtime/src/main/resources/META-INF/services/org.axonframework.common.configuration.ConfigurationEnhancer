@@ -16,4 +16,4 @@
 #
 #
 io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer
-# io.axoniq.workflow.runtime.engine.configuration.WorkflowEventProcessingRegistrationEnhancer
+io.axoniq.workflow.runtime.engine.configuration.WorkflowEventProcessingRegistrationEnhancer
