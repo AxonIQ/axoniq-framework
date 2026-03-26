@@ -31,6 +31,7 @@ import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -185,7 +186,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Override
     @Nonnull
     public WorkflowStepResult execute(@Nonnull String stepName,
-                                      @org.jetbrains.annotations.Nullable Map<String, Object> local,
+                                      @Nullable Map<String, Object> local,
                                       @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
                                       @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {

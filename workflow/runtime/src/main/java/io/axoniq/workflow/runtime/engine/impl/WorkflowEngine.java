@@ -71,10 +71,10 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         this.workflowExecutionRepository = workflowExecutionRepository;
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@NotNull EventMessage eventMessage,
-                                               @NotNull ProcessingContext processingContext) {
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
+                                               @Nonnull ProcessingContext processingContext) {
         logger.trace("Received eventMessage {} {} by thread {}",
                      eventMessage.identifier(),
                      eventMessage.type(),

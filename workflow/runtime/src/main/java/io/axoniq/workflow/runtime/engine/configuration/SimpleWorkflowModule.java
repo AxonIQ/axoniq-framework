@@ -35,7 +35,6 @@ import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -95,7 +94,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
      * @param workflowContextType workflow context class.
      */
     @Internal
-    SimpleWorkflowModule(@NotNull String name, @Nonnull Class<C> workflowContextType) {
+    SimpleWorkflowModule(@Nonnull String name, @Nonnull Class<C> workflowContextType) {
         super(name);
         this.workflowContextType = workflowContextType;
         this.workflowConfigurations = new ArrayList<>();
@@ -108,7 +107,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
 
     @Override
-    public Configuration build(@NotNull Configuration parent, @NotNull LifecycleRegistry lifecycleRegistry) {
+    public Configuration build(@Nonnull Configuration parent, @Nonnull LifecycleRegistry lifecycleRegistry) {
         Configuration configuration = super.build(parent, lifecycleRegistry);
         registerWorkflowDefinitions(configuration);
         return configuration;
@@ -116,7 +115,7 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
     @Override
     public LanguagePhase.WorkflowStateFactoryPhase<C> workflowContextFactory(
-            @NotNull ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory) {
+            @Nonnull ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory) {
         this.workflowContextFactory = Objects.requireNonNull(workflowContextFactory,
                                                              "Workflow context factory must no be null");
         return this;
@@ -124,14 +123,14 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
 
     @Override
     public WorkflowDefinitionPhase<C> workflowExecutionFactory(
-            @NotNull ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory) {
+            @Nonnull ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory) {
         this.workflowExecutionFactory = Objects.requireNonNull(workflowExecutionFactory,
                                                                "Workflow execution factory must no be null");
         return this;
     }
 
     @Override
-    public WorkflowModule<C> definitions(@NotNull UnaryOperator<DetectionPhase<C>> definitions) {
+    public WorkflowModule<C> definitions(@Nonnull UnaryOperator<DetectionPhase<C>> definitions) {
         definitions.apply(this);
         return this;
     }
@@ -234,31 +233,31 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                                     return workflowName;
                                                 }
 
-                                                @NotNull
+                                                @Nonnull
                                                 @Override
                                                 public WorkflowDefinition<C> workflowDefinition() {
                                                     return definitionBuilder.build(configuration);
                                                 }
 
-                                                @NotNull
+                                                @Nonnull
                                                 @Override
                                                 public WorkflowContextFactory<C> workflowContextFactory() {
                                                     return workflowContextFactory.build(configuration);
                                                 }
 
-                                                @NotNull
+                                                @Nonnull
                                                 @Override
                                                 public WorkflowExecutionFactory workflowExecutionFactory() {
                                                     return workflowExecutionFactory.build(configuration);
                                                 }
 
-                                                @NotNull
+                                                @Nonnull
                                                 @Override
                                                 public WorkflowIdProvider workflowIdProvider() {
                                                     return workflowModuleConfiguration.workflowIdProvider;
                                                 }
 
-                                                @NotNull
+                                                @Nonnull
                                                 @Override
                                                 public EventNameCustomizer eventNameCustomizer() {
                                                     return workflowModuleConfiguration.eventNameCustomizer;
