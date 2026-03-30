@@ -81,7 +81,7 @@ final class CombinatorSupport {
                                                              Predicate<WorkflowStepResult> matchPredicate,
                                                              WorkflowState workflowState) {
         var matchedNames = Arrays.stream(results)
-                                 .filter(WorkflowStepResult::isCompleted)
+                                 .filter(WorkflowStepResult::isCompleted) //todo, should we remove this predicate? so people can do notCompleted predicate?
                                  .filter(matchPredicate)
                                  .map(WorkflowStepResult::getStepName)
                                  .collect(Collectors.toSet());
