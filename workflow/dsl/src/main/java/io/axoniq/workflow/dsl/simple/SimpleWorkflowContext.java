@@ -193,6 +193,18 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
+     * Non-blocking sleep that returns immediately with a {@link WorkflowStepResult}.
+     * The result completes when the timeout expires.
+     *
+     * @param stepName name of the step.
+     * @param timeout  duration to sleep.
+     * @return workflow step result that completes when the timeout expires.
+     */
+    public WorkflowStepResult sleepAsync(String stepName, Duration timeout) {
+        return waitFor(stepName, EventConditions.never(), PayloadReducer.GLOBAL_ONLY, timeout, defaults());
+    }
+
+    /**
      * Execute a step asynchronously.
      * <p>The payload passed will be used as step input, and the result will not be added to the workflow instance
      * payload.</p>

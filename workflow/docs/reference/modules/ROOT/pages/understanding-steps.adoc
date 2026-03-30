@@ -75,6 +75,11 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 |Yes
 |void
 |xref:waiting-for-events.adoc[]
+
+|`sleepAsync`
+|No
+|`WorkflowStepResult`
+|xref:waiting-for-events.adoc[]
 |===
 
 For `awaitExecute` and `execute` overloads, usage examples, and Kotlin equivalents, see xref:execute-steps.adoc[Execute Steps].

@@ -150,6 +150,21 @@ Under the hood, this is a `waitFor` with an event condition that never matches â
 
 `sleep` always produces a STARTED followed by a TIMED_OUT â€” that's by design, since the "event" it waits for never arrives.
 
+=== sleepAsync (non-blocking)
+
+`sleepAsync` returns a `WorkflowStepResult` immediately, allowing you to compose delays with other steps using combinators:
+
+[source,java]
+----
+var cooldown = ctx.sleepAsync("cooldown", Duration.ofMinutes(5));
+var approval = ctx.waitForEvent("approval",
+        ManagerApproved.class, Duration.ofHours(1));
+
+// Proceed when either the cooldown finishes OR approval arrives
+ctx.anyMatch(WorkflowStepResult::isCompleted, cooldown, approval)
+   .await();
+----
+
 == Updated workflow
 
 Here's our workflow with the payment step added.
