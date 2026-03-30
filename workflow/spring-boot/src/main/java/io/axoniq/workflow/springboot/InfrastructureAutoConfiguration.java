@@ -15,27 +15,24 @@
  *
  *
  */
-package io.axoniq.demo.bikerental;
+package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Role;
 
-@SpringBootApplication
-public class BikeRentalApplication {
-
-    public static void main(String[] args) {
-        SpringApplication.run(BikeRentalApplication.class, args);
-    }
+@AutoConfiguration
+public class InfrastructureAutoConfiguration {
 
     /**
-     * Activate usage of {@link io.axoniq.workflow.dsl.simple.SimpleWorkflowContext}
+     * Provides Spring workflow definition lookup.
      *
-     * @return context factory.
+     * @return The lookup for annotations for later workflow handling registrations.
      */
+    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     @Bean
-    public SimpleWorkflowContextFactory simpleWorkflowContextFactory() {
-        return new SimpleWorkflowContextFactory();
+    public static WorkflowDefinitionLookup workflowDefinitionLookup() {
+        return new WorkflowDefinitionLookup();
     }
 }

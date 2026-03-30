@@ -84,6 +84,11 @@
         <!-- Workflow -->
         <dependency>
             <groupId>io.axoniq.framework.workflow</groupId>
+            <artifactId>axon-workflow-spring-boot</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework.workflow</groupId>
             <artifactId>axon-workflow-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>

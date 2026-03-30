@@ -31,6 +31,7 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Map;
@@ -43,6 +44,7 @@ import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValue
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
 
+@Component
 public class PaymentWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentWorkflow.class);

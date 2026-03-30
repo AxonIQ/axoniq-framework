@@ -38,6 +38,11 @@ public class WorkflowModuleEnhancer implements ConfigurationEnhancer {
 
     private final org.axonframework.common.configuration.Module workflowModule;
 
+    /**
+     * Configures the enhancer to register the given workflow module.
+     *
+     * @param workflowModule module to register.
+     */
     public WorkflowModuleEnhancer(Module workflowModule) {
         this.workflowModule = workflowModule;
     }

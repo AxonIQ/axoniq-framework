@@ -20,6 +20,8 @@ package io.axoniq.workflow.runtime.engine.execution;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -36,7 +38,15 @@ import java.util.function.Supplier;
 @Internal
 public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRepository {
 
+    private static final Logger logger = LoggerFactory.getLogger(InMemoryWorkflowExecutionRepository.class);
     private final ConcurrentHashMap<String, WorkflowExecution> workflowExecutions = new ConcurrentHashMap<>();
+
+    /**
+     * Creates a new instance of {@link InMemoryWorkflowExecutionRepository}.
+     */
+    public InMemoryWorkflowExecutionRepository() {
+        logger.info("Using in-memory workflow execution repository");
+    }
 
     @Nonnull
     @Override

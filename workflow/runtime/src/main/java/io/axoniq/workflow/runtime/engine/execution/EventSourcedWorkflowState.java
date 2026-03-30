@@ -135,7 +135,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
             if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
-                logger.warn("Ignoring step status {} for step '{}' — already in terminal state {}",
+                logger.trace("Ignoring step status {} for step '{}' — already in terminal state {}",
                             stepStatus, stepName, getStep(stepName).status());
                 return;
             }
@@ -179,7 +179,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         MetadataUtils.getWorkflowStatus(metadata).
                      ifPresent(status -> {
                          if (workflowStatus().isTerminal()) {
-                             logger.warn("Ignoring workflow status {} — already in terminal state {}",
+                             logger.trace("Ignoring workflow status {} — already in terminal state {}",
                                          status, workflowStatus());
                              return;
                          }

@@ -30,6 +30,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.slf4j.Logger;
@@ -58,19 +59,29 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
+    /**
+     * Creates a new workflow engine.
+     *
+     * @param workflowConfigurationRegistry configuration registry.
+     * @param workflowExecutionRepository   execution registry.
+     */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository
     ) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
+        logger.info("Workflow Engine started.");
     }
 
     @Nonnull
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
-        logger.trace("Received eventMessage {} {}", eventMessage.identifier(), eventMessage.type());
+        logger.trace("Received eventMessage {} {} {}",
+                     processingContext.resources().get(TrackingToken.RESOURCE_KEY),
+                     eventMessage.identifier(),
+                     eventMessage.type());
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
@@ -101,6 +112,9 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
+        logger.info("Replay status changed to {} at {}",
+                    statusChange.status(),
+                    context.resources().get(TrackingToken.RESOURCE_KEY));
         if (!statusChange.status().isReplay()) {
             executeEventSourcedWorkflows();
         }
@@ -111,6 +125,15 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private void executeEventSourcedWorkflows() {
         var running = isRunning.getAndSet(true);
         if (!running) {
+            logger.info("Workflow instance replay finished. Switching to live mode.");
+            // remove execution which reached the terminal state
+            workflowExecutionRepository
+                    .findAll()
+                    .stream()
+                    .filter(execution -> execution.workflowContext().workflowStatus().isTerminal())
+                    .map(WorkflowExecution::workflowId).forEach(
+                            workflowExecutionRepository::remove
+                    );
             var allExecution = workflowExecutionRepository.findAll();
             if (allExecution.isEmpty()) {
                 logger.info("No running workflow instances found.");

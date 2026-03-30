@@ -39,16 +39,14 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
-import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
-import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**
@@ -71,17 +69,22 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                              }
                          }
                  )
-                 .tokenStore(c.getComponent(TokenStore.class))
                  .eventSource(c.getComponent(StreamableEventSource.class))
+                 .tokenStore(c.getComponent(TokenStore.class))
                  .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
-                 // .coordinatorExecutor(c.getComponent(ScheduledExecutorService.class, "event-processor-coordinator"))
-                 // .workerExecutor(c.getComponent(ScheduledExecutorService.class, "event-processor-worker"))
-                 .initialSegmentCount(1)
-                 .batchSize(1)
-                 .initialToken(s -> completedFuture(
-                                       // FIXME, how can we control the correct index here? switching to 0 breaks it
-                                       createReplayToken(new GlobalSequenceTrackingToken(1))
-                               )
+                 .initialSegmentCount(1) // FIXME -> should be configurable?
+                 .batchSize(1) // FIXME -> should be configurable? currently only 1 is supported / working
+                 .initialToken(s -> c.getComponent(StreamableEventSource.class).latestToken(null)
+                                     .thenCompose(latestToken ->
+                                                          CompletableFuture.completedFuture(
+                                                                  createReplayToken(
+                                                                          latestToken,
+                                                                          // TODO change after MVP
+                                                                          // for the MVP we do a full replay
+                                                                          new GlobalSequenceTrackingToken(0)
+                                                                  )
+                                                          )
+                                     )
                  );
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
