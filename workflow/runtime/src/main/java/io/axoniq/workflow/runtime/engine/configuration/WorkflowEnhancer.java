@@ -41,7 +41,8 @@ import java.util.concurrent.Executors;
 import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
 
 /**
- * Enhancer for registration of the workflow engine, the registry and sets up the eventing.
+ * Enhancer for registration of the workflow component.
+ * For eventing see {@link WorkflowEventProcessingRegistrationEnhancer}.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
