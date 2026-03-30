@@ -75,17 +75,28 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                  .initialSegmentCount(1) // FIXME -> should be configurable?
                  .batchSize(1) // FIXME -> should be configurable? currently only 1 is supported / working
                  .initialToken(s -> c.getComponent(StreamableEventSource.class).latestToken(null)
-                                     .thenCompose(latestToken ->
-                                                          CompletableFuture.completedFuture(
-                                                                  createReplayToken(
-                                                                          latestToken,
-                                                                          // TODO change after MVP
-                                                                          // for the MVP we do a full replay
-                                                                          new GlobalSequenceTrackingToken(0)
-                                                                  )
-                                                          )
-                                     )
+                                     .thenCompose(latestToken -> {
+                                         if (latestToken.position().isPresent()
+                                                 && latestToken.position().getAsLong() > 0) {
+                                             return CompletableFuture.completedFuture(
+                                                     createReplayToken(
+                                                             latestToken,
+                                                             // TODO change after MVP
+                                                             // for the MVP we do a full replay
+                                                             new GlobalSequenceTrackingToken(0)
+                                                     )
+                                             );
+                                         } else {
+                                             // FIXME -> check in in-memory store why it behaves like this
+                                             return CompletableFuture.completedFuture(
+                                                     createReplayToken(
+                                                             new GlobalSequenceTrackingToken(1)
+                                                     )
+                                             );
+                                         }
+                                     })
                  );
+
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
     private final ReplayStatusChangedHandler replayStatusChangedHandler;

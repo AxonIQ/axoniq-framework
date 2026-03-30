@@ -81,7 +81,7 @@ public abstract class AbstractStepExecutor {
         while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
                 || !workflowExecution.isExecutable()) {
             var poll = workflowExecution.getNextTask();
-            if (poll != null) { // FIXME forever?
+            if (poll != null) {
                 poll.accept(this.workflowExecution);
             }
         }

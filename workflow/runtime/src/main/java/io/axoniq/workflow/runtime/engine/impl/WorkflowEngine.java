@@ -126,14 +126,6 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         var running = isRunning.getAndSet(true);
         if (!running) {
             logger.info("Workflow instance replay finished. Switching to live mode.");
-            // remove execution which reached the terminal state
-            workflowExecutionRepository
-                    .findAll()
-                    .stream()
-                    .filter(execution -> execution.workflowContext().workflowStatus().isTerminal())
-                    .map(WorkflowExecution::workflowId).forEach(
-                            workflowExecutionRepository::remove
-                    );
             var allExecution = workflowExecutionRepository.findAll();
             if (allExecution.isEmpty()) {
                 logger.info("No running workflow instances found.");
@@ -156,7 +148,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                 .processingContext()
                 .whenComplete(pc -> {
                     try {
-                        logger.info("Executing workflow execution with id: {}", execution.workflowId());
+                        logger.debug("Executing workflow execution with id: {}", execution.workflowId());
                         execution.execute(
                                 finished -> {
                                     logger.debug("Workflow {} finished with status {}, removing it from repository",
