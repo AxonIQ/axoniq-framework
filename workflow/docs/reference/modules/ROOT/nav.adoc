@@ -39,5 +39,6 @@
 ** xref:configuration.adoc#_start_conditions[Start Conditions]
 ** xref:configuration.adoc#_workflow_id_provider[Workflow ID Provider]
 ** xref:configuration.adoc#_customization_options[Customization Options]
+** xref:configuration.adoc#metadata-and-correlation-data[Metadata & Correlation Data]
 ** xref:configuration.adoc#custom-workflow-context[Custom Workflow Context]
 * xref:testing-workflows.adoc[]

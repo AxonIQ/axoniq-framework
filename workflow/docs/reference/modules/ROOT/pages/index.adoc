@@ -29,7 +29,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 == Data & Configuration
 
 * *xref:payload-and-state.adoc[Payload & State]* — Reading, setting, and managing durable workflow state
-* *xref:configuration.adoc[Configuration]* — Declarative setup, workflow modules, custom contexts
+* *xref:configuration.adoc[Configuration]* — Declarative setup, workflow modules, metadata propagation, custom contexts
 
 == Testing
 
