@@ -213,6 +213,97 @@ The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowC
 
 If you don't need any customizations, use `.notCustomized()`.
 
+[[metadata-and-correlation-data]]
+== Metadata and correlation data
+
+Every workflow event carries metadata — key-value pairs attached to the event message alongside the payload.
+The engine manages a set of internal metadata keys automatically, and Axon Framework's `CorrelationDataProvider` mechanism lets you propagate additional metadata from triggering events through the entire workflow.
+
+=== Engine-managed metadata
+
+The engine attaches the following metadata to every workflow and step event:
+
+[cols="1,2"]
+|===
+|Key |Description
+
+|`workflowId`
+|The unique identifier of the workflow instance.
+
+|`stepName`
+|The name of the step (step events only).
+
+|`stepType`
+|The step status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
+
+|`workflowStatus`
+|The workflow status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (workflow events only).
+
+|`modifyPayload`
+|The payload reducer name, if one was configured on a completed step (e.g., `COMBINE_GLOBAL_AND_LOCAL`).
+|===
+
+These keys are managed by the engine and cannot be overridden.
+
+=== Correlation data propagation
+
+When a workflow is triggered by an incoming event, Axon Framework's `CorrelationDataProvider` mechanism can automatically propagate metadata from that event to all events published by the workflow — including step events.
+
+This works because the workflow engine propagates the `ProcessingContext` from the triggering event through the entire workflow execution.
+Resources attached to the `ProcessingContext` — including correlation data — are copied to child contexts at each step boundary via `ProcessingContextUtils.copyResources()`.
+
+To use this, register a `CorrelationDataProvider` in your Axon configuration.
+For example, to propagate a `traceId` from incoming events to all workflow events:
+
+[source,java]
+----
+configurer.eventProcessing(ep -> ep
+    .registerCorrelationDataProvider(config ->
+        new MessageOriginProvider()) // <1>
+);
+----
+<.> `MessageOriginProvider` is a built-in provider that copies the `correlationId` and `traceId` from the incoming message metadata to all outgoing messages published within the same processing context.
+
+You can also create a custom provider to propagate specific metadata fields:
+
+[source,java]
+----
+configurer.eventProcessing(ep -> ep
+    .registerCorrelationDataProvider(config ->
+        message -> {
+            var metadata = message.metadata();
+            var result = new HashMap<String, Object>();
+            if (metadata.containsKey("tenantId")) {
+                result.put("tenantId", metadata.get("tenantId"));
+            }
+            if (metadata.containsKey("userId")) {
+                result.put("userId", metadata.get("userId"));
+            }
+            return result;
+        })
+);
+----
+
+With this configuration, if the triggering event (e.g., `OrderPlaced`) carries `tenantId` and `userId` in its metadata, every step event (`ReserveStockStarted`, `ReserveStockCompleted`, etc.) will also carry those values — automatically, with no changes to your workflow code.
+
+=== How it works
+
+The propagation path:
+
+1. An incoming event with metadata arrives and triggers a new workflow.
+2. The `CorrelationDataProvider` extracts correlation data and attaches it to the `ProcessingContext`.
+3. The engine passes this `ProcessingContext` to the workflow execution.
+4. When a step publishes events, the engine creates a child `UnitOfWork` and copies all resources from the parent context.
+5. The correlation data flows through to the published event's metadata.
+
+This means correlation data propagation is *transparent* — workflow code does not need to know about it.
+
+[NOTE]
+====
+Correlation data propagation carries metadata that originates from the *triggering event*.
+If you need to attach metadata that doesn't come from the triggering event (e.g., computed values, workflow-specific tags), a dedicated `MetadataCustomizer` API is planned — see https://github.com/AxonIQ/extension-workflow/issues/103[#103].
+====
+
 [[custom-workflow-context]]
 == Custom workflow context
 
