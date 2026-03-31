@@ -44,10 +44,18 @@ import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValue
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
 
+/**
+ * Workflow that handles the payment process. This workflow is a port of the famous Bike Rental Saga taken from AF4
+ * example.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @Component
 public class PaymentWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentWorkflow.class);
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
     private final CommandGateway commandGateway;
 
     public PaymentWorkflow(CommandGateway commandGateway) {
@@ -78,7 +86,7 @@ public class PaymentWorkflow {
                                               PaymentPreparedEvent.class,
                                               associate(payloadProperty("paymentReference"),
                                                         equalsTo(paymentReference)),
-                                              Duration.ofSeconds(10)
+                                              DEFAULT_TIMEOUT
             );
 
             var preparePayment = sendCommand(ctx,
@@ -103,14 +111,15 @@ public class PaymentWorkflow {
                                 paymentReference,
                                 paymentDetails);
                 } else {
-                    logger.info("Did not receive payment prepared event. Retrying in 5 secs.");
-                    ctx.sleep("retryPayment", Duration.ofSeconds(5));
+                    logger.info("Did not receive payment prepared event. Retrying in {} secs.",
+                                DEFAULT_TIMEOUT.toSeconds());
+                    ctx.sleep("retryPayment", DEFAULT_TIMEOUT);
                 }
             } else {
                 // NICE TO HAVE
-                logger.info("Prepare payment command failed. Retrying in 5 secs.");
+                logger.info("Prepare payment command failed. Retrying in {} secs.", DEFAULT_TIMEOUT.toSeconds());
                 paymentPrepared.cancel("Prepare payment command failed.");
-                ctx.sleep("retryPayment", Duration.ofSeconds(5));
+                ctx.sleep("retryPayment", DEFAULT_TIMEOUT);
             }
         }
 
@@ -146,7 +155,7 @@ public class PaymentWorkflow {
                 case "paymentRejected":
                     logger.info("Payment rejected. Rejecting the request.");
                     sendCommand(ctx,
-                                "confirmRequest",
+                                "rejectRequest",
                                 payload -> new RejectRequestCommand(
                                         payload.get("bikeId"),
                                         payload.get("renter")
@@ -167,6 +176,7 @@ public class PaymentWorkflow {
         }
     }
 
+    // helper to send commands
     private WorkflowStepResult sendCommand(
             SimpleWorkflowContext ctx,
             String stepName,
@@ -181,7 +191,7 @@ public class PaymentWorkflow {
                     );
                     return Map.of();
                 },
-                Duration.ofSeconds(5),
+                DEFAULT_TIMEOUT,
                 defaults()
         );
     }
