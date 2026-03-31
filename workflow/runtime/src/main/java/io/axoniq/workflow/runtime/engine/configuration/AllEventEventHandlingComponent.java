@@ -71,7 +71,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                  .initialSegmentCount(1)
                  .batchSize(1)
                  .initialToken(s -> completedFuture(
-                                       // FIXME, how can we control the correct index here? switching to 0 breaks it
+                                       // FIXME, how can we control the correct index here? switching to 0 breaks it. See https://github.com/AxonFramework/AxonFramework/issues/4382
                                        createReplayToken(new GlobalSequenceTrackingToken(1))
                                )
                  );
