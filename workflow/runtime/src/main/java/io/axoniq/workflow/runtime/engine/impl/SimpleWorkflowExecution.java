@@ -121,8 +121,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
 
-        acceptAllPendingTasks();
-
         // Switch to executable mode
         this.executable = true;
 
@@ -140,7 +138,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                             logger.trace("Thread: {}, ProcessingContext {}", currentThread(), ctx);
                                             var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
                                             if (this.state().workflowStatus().isTerminal()) {
-                                                logger.info(
+                                                logger.trace(
                                                         "Workflow instance has reached terminal state {}, skipping execution.",
                                                         this.state().workflowStatus()
                                                 );
@@ -181,8 +179,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                         this.workflowContext()
                                                             .workflowPayload());
 
-                                                if (!this.state().workflowStatus()
-                                                         .isTerminal()) {
+                                                if (!this.state().workflowStatus().isTerminal()) {
                                                     sendWorkflowEvent(
                                                             completedWorkflow(this.workflowContext(),
                                                                               workflowName,
@@ -261,19 +258,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     /**
-     * Before switching the instance to executable, apply everything pending in the task queue.
-     */
-    private void acceptAllPendingTasks() {
-        while (!hasTasks()) {
-            var poll = getNextTask();
-            if (poll != null) {
-                poll.accept(this);
-            }
-        }
-    }
-
-
-    /**
      * Performs internal cleanup of the execution. Everything related to the execution is removed, and only the
      * execution state remains present.
      */
@@ -296,8 +280,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
-        appendTask(i -> i.state().evolve(eventMessage, processingContext));
+        if (executable) {
+            // live mode
+            eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
+            appendTask(i -> i.state().evolve(eventMessage, processingContext));
+        } else {
+            // replay mode
+            state().evolve(eventMessage, processingContext);
+        }
     }
 
     @Override

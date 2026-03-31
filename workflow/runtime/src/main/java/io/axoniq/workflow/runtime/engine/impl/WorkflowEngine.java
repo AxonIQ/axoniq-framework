@@ -126,6 +126,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         var running = isRunning.getAndSet(true);
         if (!running) {
             logger.info("Workflow instance replay finished. Switching to live mode.");
+            // get rid of finished executions
+            workflowExecutionRepository
+                    .findAll()
+                    .stream()
+                    .filter(e -> e.state().workflowStatus().isTerminal())
+                    .map(WorkflowExecution::workflowId)
+                    .forEach(workflowExecutionRepository::remove);
+
             var allExecution = workflowExecutionRepository.findAll();
             if (allExecution.isEmpty()) {
                 logger.info("No running workflow instances found.");

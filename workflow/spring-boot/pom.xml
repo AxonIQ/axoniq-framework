@@ -42,6 +42,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>io.axoniq.framework.workflow</groupId>
+            <artifactId>axon-workflow-dsl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
             <version>${spring-boot.version}</version>
@@ -58,12 +63,6 @@
             <groupId>org.axonframework.extensions.spring</groupId>
             <artifactId>axon-spring-boot-starter</artifactId>
             <version>${axon.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework.workflow</groupId>
-            <artifactId>axon-workflow-dsl</artifactId>
-            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
