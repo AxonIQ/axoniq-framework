@@ -101,18 +101,29 @@ Both terminate the workflow, but they signal different intent and are called fro
 
 === fail — internal termination
 
-Use `fail` inside your workflow code when the business logic determines the workflow should stop:
+Use `fail` inside your workflow code when the business logic determines the workflow should stop.
+
+If the workflow has running steps (e.g., parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
 
 [source,java]
 ----
+// Start two steps in parallel (non-blocking)
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
+                            ShippingService::shipOrder,
+                            Duration.ofMinutes(5), defaults());
+
+var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
+                                NotificationService::notifyCustomer,
+                                Duration.ofMinutes(1), defaults());
+
+// Meanwhile, check stock — if unavailable, fail the workflow
 var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
                                  InventoryService::reserveStock);
 if (!reserved) {
-    ctx.fail("Stock unavailable"); // workflow terminates with FAILED status
+    ctx.fail("Stock unavailable"); // <1>
 }
 ----
-
-If the workflow has running steps (e.g., parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
+<.> Cancels `shipOrder` and `notifyCustomer` first, then terminates the workflow with FAILED status.
 
 ++++
 <div class="et-player" data-autoplay>
@@ -128,15 +139,30 @@ Running steps are cancelled first — each CANCELLED event carries the reason. T
 
 === cancel — external termination
 
-Use `cancel` from outside the workflow — for example, when a user or API wants to stop a running workflow:
+Use `cancel` from outside the workflow — for example, when a user or API wants to stop a running workflow.
+Like `fail`, `cancel` first cancels all running steps, then terminates the workflow.
+
+Given a workflow with parallel steps running:
+
+[source,java]
+----
+// Inside the workflow — two long-running steps in parallel
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
+                            ShippingService::shipOrder,
+                            Duration.ofMinutes(5), defaults());
+
+var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
+                                NotificationService::notifyCustomer,
+                                Duration.ofMinutes(1), defaults());
+----
+
+An external caller cancels the workflow while those steps are still running:
 
 [source,java]
 ----
 var execution = workflowExecutionRepository.findById(workflowId);
 execution.cancel("Cancelled by user");
 ----
-
-Like `fail`, `cancel` first cancels all running steps, then terminates the workflow:
 
 ++++
 <div class="et-player" data-autoplay>
