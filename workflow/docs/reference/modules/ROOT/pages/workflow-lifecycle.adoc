@@ -234,9 +234,9 @@ Each listener method receives the `WorkflowStatus` and the `WorkflowContext`, gi
 
 [NOTE]
 ====
-Lifecycle listeners do not need to be in the same class as the `@Workflow` method.
-They can be defined in a separate class and will be discovered via reflection.
-Use the `workflowName` attribute (e.g., `@OnSuccess(workflowName = "myWorkflow")`) to bind a listener to a specific workflow when multiple workflows are defined.
+Lifecycle listeners must be defined in the same class as the `@Workflow` method.
+Only methods on the workflow instance's class (and its type hierarchy) are scanned for listener annotations.
+Use the `workflowName` attribute (e.g., `@OnSuccess(workflowName = "myWorkflow")`) to bind a listener to a specific workflow when multiple workflows are defined in the same class.
 ====
 
 === Programmatic listeners

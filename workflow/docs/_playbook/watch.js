@@ -1,12 +1,21 @@
 const express = require('express');
 const app = express()
-const chokidar = require('chokidar');
 const childProcess = require("child_process");
 
-const createWatcher = (dir) => chokidar.watch(dir, {ignored: /^\./, persistent: true})
+let chokidar;
+async function init() {
+    chokidar = await import('chokidar');
+    chokidar.watch(__dirname + "/../*", {ignored: /^\./, persistent: true})
         .on('change', rebuild)
         .on('unlink', rebuild)
         .on('error', rebuild);
+
+    const port = process.env.PORT || 3001
+    app.listen(port, () => {
+        console.log(`Started serving files on port ${port}!`)
+    })
+    rebuild("initial build")
+}
 
 let building = false
 let triggeredDuringBuild = false
@@ -33,12 +42,6 @@ const rebuild = (path) => {
     })
 }
 
-createWatcher(__dirname + "/../*")
-
 app.use(express.static('build/site'))
 
-const port = process.env.PORT || 3001
-app.listen(port, () => {
-    console.log(`Started serving files on port ${port}!`)
-})
-rebuild("initial build")
+init()

@@ -6,7 +6,7 @@ This section covers the full configuration available across all step types — t
 
 [NOTE]
 ====
-Everything in this section applies to all step primitives: `awaitExecute`, `execute`, `awaitEvent`, `waitForEvent`, and `sleep` — unless noted otherwise.
+Everything in this section applies to all step primitives — unless noted otherwise.
 ====
 
 [IMPORTANT]
