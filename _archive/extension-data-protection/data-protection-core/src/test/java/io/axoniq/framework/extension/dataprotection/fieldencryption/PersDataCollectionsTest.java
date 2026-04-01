@@ -22,6 +22,7 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import lombok.Data;
 import org.fluttercode.datafactory.impl.DataFactory;
 import org.junit.jupiter.api.*;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests of encryption of collection elements containing personal data (without wrapper objects).
  */
-public class PersDataCollectionsTest {
+class PersDataCollectionsTest {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -51,6 +52,7 @@ public class PersDataCollectionsTest {
     @BeforeEach
     public void setUp() throws Exception {
         cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());

@@ -18,9 +18,6 @@
 
 package io.axoniq.framework.extension.dataprotection.sample.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
@@ -28,13 +25,16 @@ import io.axoniq.framework.extension.dataprotection.cryptoengine.jpa.JpaCryptoEn
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.json.JacksonConverter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.annotation.Order;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Configuration for field-level encryption in Axon Framework 5.x.
@@ -51,7 +51,7 @@ import org.springframework.core.annotation.Order;
  * PooledStreamingEventProcessor, as the pooled version doesn't support token reset in AF5.
  *
  */
-@org.springframework.context.annotation.Configuration
+@Configuration
 @AutoConfigureBefore(name = "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration")
 @Order(0)
 public class DataProtectionConfiguration {
@@ -59,11 +59,11 @@ public class DataProtectionConfiguration {
     /**
      * Provides a JPA-based CryptoEngine that stores encryption keys in H2 database.
      * <p>
-     * Keys are persisted in the axoniq_gdpr_keys table and survive application restarts.
-     * This is the production-ready implementation for encryption key management.
+     * Keys are persisted in the axoniq_gdpr_keys table and survive application restarts. This is the production-ready
+     * implementation for encryption key management.
      *
      * @param entityManagerFactory JPA entity manager factory for database access
-     * @return a JpaCryptoEngine instance for persistent key storage
+     * @return a {@link JpaCryptoEngine} instance for persistent key storage
      */
     @Bean
     public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory) {
@@ -71,14 +71,14 @@ public class DataProtectionConfiguration {
     }
 
     /**
-     * Provides the default ObjectMapper if not already configured.
+     * Provides the default ObjectMapper (Jackson 3) if not already configured.
      */
     @Bean("defaultAxonObjectMapper")
     @ConditionalOnMissingBean(name = "defaultAxonObjectMapper")
     public ObjectMapper defaultAxonObjectMapper() {
-        return new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        return JsonMapper.builder()
+                .findAndAddModules()
+                .build();
     }
 
     /**

@@ -17,6 +17,8 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
@@ -38,6 +40,16 @@ public abstract class AbstractEngineTestSet {
     }
 
     protected abstract CryptoEngine getCryptoEngine();
+
+    /**
+     * Creates an EntitlementManager for testing purposes.
+     * <p>
+     * This returns an EnforcingEntitlementManager with a no-op LicenseSource.
+     * The manager starts in a 1-hour grace period during which all components are allowed.
+     */
+    protected static EntitlementManager mockEntitlementManager() {
+        return TestUtils.mockEntitlementManager();
+    }
 
     @Test
     public void repeatedInvocationsWithSameIdGiveSameResult() {

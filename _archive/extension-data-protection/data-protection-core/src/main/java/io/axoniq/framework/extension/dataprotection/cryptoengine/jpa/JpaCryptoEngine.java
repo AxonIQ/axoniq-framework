@@ -50,8 +50,7 @@ public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {
     private final Constructor<? extends KeyEntity> entityConstructor;
 
     /**
-     * Creates a new {@link JpaCryptoEngine}. Will use {@link DefaultKeyEntity} as the class to
-     * store key entities.
+     * Creates a new {@link JpaCryptoEngine}. Will use {@link DefaultKeyEntity} as the class to store key entities.
      *
      * @param emf the {@link EntityManagerFactory} to use.
      */
@@ -62,7 +61,7 @@ public class JpaCryptoEngine extends DatabaseBackedCryptoEngine {
     /**
      * Creates a new {@link JpaCryptoEngine} for a custom entity class.
      *
-     * @param emf the {@link EntityManagerFactory} to use.
+     * @param emf         the {@link EntityManagerFactory} to use.
      * @param entityClass the entity used to store key information
      */
     public JpaCryptoEngine(EntityManagerFactory emf, Class<? extends KeyEntity> entityClass) {

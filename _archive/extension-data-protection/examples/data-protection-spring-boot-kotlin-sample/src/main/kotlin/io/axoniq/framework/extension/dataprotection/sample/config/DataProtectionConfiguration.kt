@@ -26,10 +26,11 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter
 import io.axoniq.framework.extension.dataprotection.api.FieldEncryptingConverter
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine
 import io.axoniq.framework.extension.dataprotection.cryptoengine.jpa.JpaCryptoEngine
+import io.axoniq.license.entitlement.EntitlementManager
 import jakarta.persistence.EntityManagerFactory
 import org.axonframework.conversion.ChainingContentTypeConverter
 import org.axonframework.conversion.Converter
-import org.axonframework.conversion.json.JacksonConverter
+import org.axonframework.conversion.jackson2.Jackson2Converter
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.AutoConfigureBefore
@@ -65,11 +66,12 @@ class DataProtectionConfiguration {
      * This is the production-ready implementation for encryption key management.
      *
      * @param entityManagerFactory JPA entity manager factory for database access
+     * @param entitlementManager the entitlement manager for license validation
      * @return a JpaCryptoEngine instance for persistent key storage
      */
     @Bean
-    fun cryptoEngine(entityManagerFactory: EntityManagerFactory): CryptoEngine {
-        return JpaCryptoEngine(entityManagerFactory)
+    fun cryptoEngine(entityManagerFactory: EntityManagerFactory, entitlementManager: EntitlementManager): CryptoEngine {
+        return JpaCryptoEngine(entityManagerFactory, entitlementManager)
     }
 
     /**
@@ -87,7 +89,7 @@ class DataProtectionConfiguration {
     /**
      * Creates the base converter bean that Axon Framework will use for all conversions.
      *
-     * This bean is a FieldEncryptingConverter which wraps a JacksonConverter
+     * This bean is a FieldEncryptingConverter which wraps a Jackson2Converter
      * and handles automatic encryption/decryption of @PersonalData annotated fields.
      *
      * Axon's ConverterAutoConfiguration will automatically use this converter to
@@ -102,7 +104,7 @@ class DataProtectionConfiguration {
         val contentTypeConverter = ChainingContentTypeConverter(
             this::class.java.classLoader
         )
-        val delegateConverter = JacksonConverter(objectMapper, contentTypeConverter)
+        val delegateConverter = Jackson2Converter(objectMapper, contentTypeConverter)
         return FieldEncryptingConverter(cryptoEngine, delegateConverter)
     }
 
@@ -121,7 +123,7 @@ class DataProtectionConfiguration {
      */
     @Bean
     fun fieldEncrypter(cryptoEngine: CryptoEngine): FieldEncrypter {
-        val converter = JacksonConverter()
+        val converter = Jackson2Converter()
         return FieldEncrypter(cryptoEngine, converter)
     }
 }
