@@ -114,9 +114,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     @Nonnull
     public List<String> workflowStepNames() {
-        return steps.values().stream().sorted(
-                            Comparator.comparing(WorkflowStep::timestamp))
-                    .map(WorkflowStep::stepName).toList();
+        return steps.values()
+                    .stream()
+                    .sorted(Comparator.comparing(WorkflowStep::timestamp))
+                    .map(WorkflowStep::stepName)
+                    .toList();
     }
 
     @Nonnull
@@ -135,7 +137,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
             if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
-                logger.warn("Ignoring step status {} for step '{}' — already in terminal state {}",
+                logger.debug("Ignoring step status {} for step '{}' — already in terminal state {}",
                             stepStatus, stepName, getStep(stepName).status());
                 return;
             }
@@ -144,32 +146,32 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     addStep(WorkflowStep.started(stepName,
                                                  eventPayload,
                                                  eventMessage.timestamp(),
-                                                 processingContext)); // TODO copy resources of the context
+                                                 processingContext));
                     break;
                 case FAILED:
                     addStep(WorkflowStep.failed(stepName,
                                                 (Throwable) eventPayload,
                                                 eventMessage.timestamp(),
-                                                processingContext)); // TODO copy resources of the context
+                                                processingContext));
                     break;
                 case TIMED_OUT:
                     addStep(WorkflowStep.timedOut(stepName,
                                                   eventPayload,
                                                   eventMessage.timestamp(),
-                                                  processingContext)); // TODO copy resources of the context
+                                                  processingContext));
                     break;
                 case COMPLETED:
                     addStep(WorkflowStep.completed(stepName,
                                                    eventPayload,
                                                    eventMessage.timestamp(),
-                                                   processingContext)); // TODO copy resources of the context
+                                                   processingContext));
                     // set payload if desired
                     evolvePayload(eventMessage, processingContext);
                     break;
                 case CANCELLED:
                     addStep(WorkflowStep.cancelled(stepName,
                                                    eventMessage.timestamp(),
-                                                   processingContext)); // TODO copy resources of the context
+                                                   processingContext));
                     break;
                 default:
                     break;
@@ -179,7 +181,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         MetadataUtils.getWorkflowStatus(metadata).
                      ifPresent(status -> {
                          if (workflowStatus().isTerminal()) {
-                             logger.warn("Ignoring workflow status {} — already in terminal state {}",
+                             logger.debug("Ignoring workflow status {} — already in terminal state {}",
                                          status, workflowStatus());
                              return;
                          }
