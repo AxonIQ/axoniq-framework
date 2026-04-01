@@ -1,7 +1,7 @@
 = Execute Steps
 :navtitle: Execute Steps
 
-Execute steps run actions — calling services, performing computations, triggering side effects.
+Execute steps are the type of execution primitives that allow calling services, performing computations and triggering side effects in workflows.
 The engine records each execution as durable events, giving you crash recovery and audit trails automatically.
 
 There are two variants:
@@ -41,7 +41,7 @@ var reserved = ctx.awaitExecute("reserveStock",
         Boolean.class,
         InventoryService::reserveStock); // <1>
 if (!reserved) {
-    ctx.fail("Stock unavailable"); // <2>
+    ctx.fail(new RuntimeException("Stock unavailable")); // <2>
     return;
 }
 ----
@@ -77,6 +77,12 @@ ctx.awaitExecute("initiatePayment",
 ----
 
 <.> `baseName(...)` replaces the step name in the event name — its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
+
+[NOTE]
+====
+The step name's first letter is automatically uppercased in event names (e.g., `reserveStock` becomes `ReserveStock`).
+For full details on naming rules, see xref:understanding-steps.adoc#event-name-customization[Event name customization].
+====
 
 === All overloads
 
@@ -135,36 +141,39 @@ The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idioma
 
 [source,kotlin]
 ----
-// Blocking awaitExecute
-val reserved = awaitExecute(
-    "reserveStock",
-    { InventoryService.reserveStock() },
-    local = mapOf("customerId" to customerId, "amount" to amount)
-)
-if (!reserved) {
-    fail("Stock unavailable")
-    return
+fun Kontext.fulfillOrder() {
+    // Blocking awaitExecute
+    val reserved = awaitExecute(
+        "reserveStock",
+        { InventoryService.reserveStock() },
+        local = mapOf("customerId" to customerId, "amount" to amount)
+    )
+    if (!reserved) {
+        fail(RuntimeException("Stock unavailable"))
+        return
+    }
+
+    // Blocking awaitExecute with all options
+    val result = awaitExecute(
+        "reserveStock",
+        action = { InventoryService.reserveStock() },
+        local = mapOf("customerId" to customerId),
+        timeout = 10.seconds,
+        eventNameCustomizer = baseName("ReservingStock")
+    )
+
+    // Non-blocking execute with all options
+    execute(
+        "shipOrder",
+        action = { pc, p -> ShippingService.shipOrder(pc, p) },
+        local = mapOf("address" to address),
+        parameterMapping = PayloadReducer.LOCAL_ONLY,
+        resultMapping = PayloadReducer.GLOBAL_ONLY,
+        timeout = 5.minutes,
+        eventNameCustomizer = namespace("io.shipping")
+    )
+
 }
-
-// Blocking awaitExecute with all options
-val result = awaitExecute(
-    "reserveStock",
-    action = { InventoryService.reserveStock() },
-    local = mapOf("customerId" to customerId),
-    timeout = 10.seconds,
-    eventNameCustomizer = baseName("ReservingStock")
-)
-
-// Non-blocking execute with all options
-execute(
-    "shipOrder",
-    action = { pc, p -> ShippingService.shipOrder(pc, p) },
-    local = mapOf("address" to address),
-    parameterMapping = PayloadReducer.LOCAL_ONLY,
-    resultMapping = PayloadReducer.GLOBAL_ONLY,
-    timeout = 5.minutes,
-    eventNameCustomizer = namespace("io.shipping")
-)
 ----
 
 Kotlin's named parameters and default values mean you only specify what you need — everything else falls back to sensible defaults.

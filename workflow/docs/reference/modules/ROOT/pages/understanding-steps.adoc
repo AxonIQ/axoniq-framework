@@ -285,7 +285,7 @@ try {
             payload("customerId", customerId).getValues(),
             InventoryService::releaseStock);
 
-    ctx.fail("Payment failed: " + e.getMessage()); // <1>
+    ctx.fail(new RuntimeException("Payment failed: " + e.getMessage())); // <1>
 }
 ----
 <.> After the compensating action, explicitly fail the workflow. Without this, the workflow would continue to the next step.
@@ -304,7 +304,7 @@ var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         Duration.ofMinutes(5), defaults());
 
 if (paymentConfirmation.timeout()) { // blocks until terminal state
-    ctx.fail("Payment confirmation timed out");
+    ctx.fail(new RuntimeException("Payment confirmation timed out"));
 }
 
 if (shipping.failure()) { // blocks until shipping reaches a terminal state
@@ -313,7 +313,7 @@ if (shipping.failure()) { // blocks until shipping reaches a terminal state
             payload("customerId", customerId).getValues(),
             PaymentService::refund);
 
-    ctx.fail("Shipping failed: " + shipping.error().get().getMessage());
+    ctx.fail(new RuntimeException("Shipping failed: " + shipping.error().get().getMessage()));
 }
 ----
 
@@ -396,25 +396,8 @@ You can catch this in your action to perform cleanup before the step terminates.
 ====
 
 The event name follows the step's `EventNameCustomizer`.
-If the step was started with a custom namespace or base name, the CANCELLED event uses the same customization:
-
-[source,java]
-----
-ctx.execute("shipOrder", ctx.workflowPayload(),
-        ShippingService::shipOrder,
-        Duration.ofMinutes(5),
-        namespace("io.shipping"));
-
-// If cancelled, the event will be: io.shipping.ShipOrderCancelled
-----
-
-The CANCELLED suffix itself can also be customized via `stepCancelled(...)`:
-
-[source,java]
-----
-defaults().stepCancelled("Aborted")
-// produces: io.namespace.ShipOrderAborted
-----
+If the step was started with a custom namespace or base name, the CANCELLED event uses the same customization.
+See xref:#step-level-customizer[Step-level customizer] for how to control event naming, including the CANCELLED suffix.
 
 [TIP]
 ====
@@ -564,9 +547,34 @@ ctx.awaitExecute("initiatePayment",
 ----
 <.> This step's events use `io.myapp.payments` while all other steps still use the workflow-level namespace.
 
+Step-level customizers also control CANCELLED event names consistently.
+If a step uses a custom namespace, its cancellation event uses the same namespace:
+
+[source,java]
+----
+ctx.execute("shipOrder", ctx.workflowPayload(),
+        ShippingService::shipOrder,
+        Duration.ofMinutes(5),
+        namespace("io.shipping"));
+
+// If cancelled, the event will be: io.shipping.ShipOrderCancelled
+----
+
+The CANCELLED suffix itself can also be customized via `stepCancelled(...)`:
+
+[source,java]
+----
+defaults().stepCancelled("Aborted")
+// produces: io.namespace.ShipOrderAborted
+----
+
 If you don't pass a customizer (or pass `defaults()`), the step inherits from the workflow-level customizer.
 
-=== Inheritance
+=== Defaults and Inheritance
+
+Axon Workflows defines sensible defaults for naming workflow events. The workflow-level customizer propagates selected properties to steps via `forStepInheritance()`.
+When a step also has its own customizer, the two are merged — **step-level wins** when it differs from defaults, otherwise the workflow-level value is used.
+The table below explains the naming settings defaults and inheritance in detail.
 
 The workflow-level customizer propagates selected properties to steps via `forStepInheritance()`.
 When a step also has its own customizer, the two are merged — **step-level wins** when it differs from defaults, otherwise the workflow-level value is used.
@@ -721,7 +729,7 @@ payloadCustomization(pc -> {
 })
 ----
 
-This would produce `HighPaymentCompleted` or `NormalPaymentCompleted` depending on the payload.
+This would produce `PriorityPaymentCompleted` or `NormalPaymentCompleted` depending on the payload.
 
 [[kotlin-dsl-equivalents]]
 == Kotlin DSL equivalents

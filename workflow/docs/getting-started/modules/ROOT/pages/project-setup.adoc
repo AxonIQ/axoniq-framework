@@ -109,6 +109,11 @@ public class InventoryService {
         logger.info("Reserving stock for order.");
         return true;
     }
+
+    public static boolean reserveStock(Map<String, Object> payload) {
+        logger.info("Reserving stock for order: {}", payload);
+        return true;
+    }
 }
 ----
 

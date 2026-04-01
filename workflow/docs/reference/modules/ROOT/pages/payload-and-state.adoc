@@ -93,6 +93,3 @@ See xref:understanding-steps.adoc#payload-reducers[Payload Reducers] for details
 Every payload modification is recorded as an event.
 If the application crashes and replays, the engine restores the payload to the exact state it was in before the crash.
 You never need to manage state persistence manually.
-
-So far, our steps run one after another.
-What if we need to ship the order and notify the customer at the same time?

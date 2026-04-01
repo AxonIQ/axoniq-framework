@@ -88,15 +88,37 @@ For production workflows, you will almost always want to use associations to ens
 == Timeouts
 
 When a `waitFor` step times out, it completes with `StepStatus.TIMED_OUT`.
-You can use this to implement fallback logic:
+You can use this to implement fallback logic.
+
+Use `waitForEvent` (non-blocking) and check the result:
 
 [source,java]
 ----
-var confirmation = ctx.awaitEvent("awaitPayment",
+var stepResult = ctx.waitForEvent("awaitPayment",
         PaymentConfirmed.class,
         associate(payloadProperty("orderId"),
-                  equalsTo(ctx.workflowPayload().get("orderId"))),
+                equalsTo(ctx.workflowPayload().get("orderId"))),
         Duration.ofMinutes(15));
+if(stepResult.success()){
+    // handle success
+} else if (stepResult.timeout()) {
+    // handle timeout
+}
+----
+
+Or use `awaitEvent` (blocking) with try-catch:
+
+[source,java]
+----
+try {
+    var confirmation = ctx.awaitEvent("awaitPayment",
+            PaymentConfirmed.class,
+            associate(payloadProperty("orderId"),
+                    equalsTo(ctx.workflowPayload().get("orderId"))),
+            Duration.ofMinutes(15));
+} catch (StepFailedException e) {
+    // handle error, timeout or cancellation
+}
 ----
 
 [TIP]
@@ -179,7 +201,7 @@ public void execute(SimpleWorkflowContext ctx) {
     var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
                                      InventoryService::reserveStock);
     if (!reserved) {
-        ctx.fail("Stock unavailable");
+        ctx.fail(new RuntimeException("Stock unavailable"));
         return;
     }
 

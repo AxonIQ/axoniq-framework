@@ -71,7 +71,7 @@ for (var remaining : result.unmatched()) {                      // <4>
 }
 
 if (winner == declined) {
-    ctx.fail("Payment was declined");
+    ctx.fail(new RuntimeException("Payment was declined"));
 }
 ----
 <.> Resolves when the first result reaches a terminal state matching the predicate.
@@ -130,7 +130,7 @@ if (guard.success()) {                                           // <2>
     for (var failed : guard.unmatched()) {                       // <3>
         logger.warn("Step {} did not succeed", failed.getStepName());
     }
-    ctx.fail("Not all steps completed successfully");
+    ctx.fail(new RuntimeException("Not all steps completed successfully"));
 }
 ----
 <.> Blocks until all steps complete successfully, or one fails (short-circuit).
@@ -167,7 +167,7 @@ if (check.success()) {
     logger.info("No failures — all clear!");
 }
 ----
-<.> Succeeds if none of the steps fail. Short-circuits as soon as one fails.
+<.> Succeeds if none of the steps fail. Short-circuits as soon as one fails. When `success()` returns `true`, all steps have reached a terminal state — no cancellation is needed.
 
 === Cancel remaining on failure
 
@@ -188,7 +188,7 @@ if (!check.success()) {
         remaining.cancel("Cancelled due to failure of " + failedStep.getStepName());
     }
 
-    ctx.fail("Step " + failedStep.getStepName() + " failed");
+    ctx.fail(new RuntimeException("Step " + failedStep.getStepName() + " failed"));
 }
 ----
 <.> `matched()` contains the step(s) that triggered the predicate — the violator(s).
@@ -235,8 +235,8 @@ if (!check.success()) {
         }
     }
 
-    ctx.fail("Order failed at " + failedStep.getStepName()
-             + ": " + failedStep.error().map(Throwable::getMessage).orElse("unknown"));
+    ctx.fail(new RuntimeException("Order failed at " + failedStep.getStepName()
+             + ": " + failedStep.error().map(Throwable::getMessage).orElse("unknown")));
 }
 ----
 <.> Iterate over `unmatched()` — steps that didn't fail. If they already completed successfully, run a compensating action to undo their work.

@@ -16,6 +16,7 @@ public void execute(SimpleWorkflowContext ctx) { /* ... */ }
 ----
 
 The declarative API offers the same capabilities plus additional options not available via annotations.
+The configuration is the same whether you use Java or Kotlin — the API is identical in both languages.
 Here's a complete example showing how to set up the Axon configuration with a workflow module:
 
 [source,java]
@@ -234,7 +235,7 @@ The engine attaches the following metadata to every workflow and step event:
 |The name of the step (step events only).
 
 |`stepType`
-|The step status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
+|The step's lifecycle phase: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
 
 |`workflowStatus`
 |The workflow status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (workflow events only).

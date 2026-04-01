@@ -51,7 +51,7 @@ if (!guard.success()) {
                     InventoryService::releaseStock);
         }
     }
-    ctx.fail("Not all items could be reserved");
+    ctx.fail(new RuntimeException("Not all items could be reserved"));
 }
 
 logger.info("All {} items reserved!", reservations.length);
@@ -84,7 +84,7 @@ var approvals = approvers.stream()
 var result = ctx.allMatch(WorkflowStepResult::isCompleted, approvals);
 
 if (!result.success()) {
-    ctx.fail("Not all approvals received within deadline");
+    ctx.fail(new RuntimeException("Not all approvals received within deadline"));
 }
 
 logger.info("All {} approvers responded!", approvers.size());
@@ -113,7 +113,7 @@ try {
     ctx.awaitExecute("releaseStock",
             payload("orderId", orderId).getValues(),
             InventoryService::releaseStock);
-    ctx.fail("Payment failed: " + e.getMessage());
+    ctx.fail(new RuntimeException("Payment failed: " + e.getMessage()));
 }
 
 // Step 3: ship order
@@ -129,7 +129,7 @@ try {
     ctx.awaitExecute("releaseStock",
             payload("orderId", orderId).getValues(),
             InventoryService::releaseStock);
-    ctx.fail("Shipping failed: " + e.getMessage());
+    ctx.fail(new RuntimeException("Shipping failed: " + e.getMessage()));
 }
 ----
 
@@ -195,7 +195,7 @@ if (decision.timeout()) {                                                // <1>
             ApprovalDecisionEvent.class, Duration.ofDays(1));
 
     if (decision.timeout()) {
-        ctx.fail("No approval received after escalation");
+        ctx.fail(new RuntimeException("No approval received after escalation"));
     }
 }
 
