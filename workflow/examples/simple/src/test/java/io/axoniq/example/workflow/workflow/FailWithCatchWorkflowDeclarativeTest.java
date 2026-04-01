@@ -67,7 +67,6 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
                 );
     }
 
-    @Disabled("FIXME #97 https://github.com/AxonIQ/extension-workflow/issues/97")
     @Test
     void noFurtherStepsAfterFail() {
         delayedPublisher.addSchedules(List.of(

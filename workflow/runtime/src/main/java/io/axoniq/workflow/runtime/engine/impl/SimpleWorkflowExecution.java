@@ -233,23 +233,23 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                                                ctx).join(); // FIXME join without timeout
                                                          }
                                                      }
+                                                     if (!this.workflowContext().workflowStatus().isTerminal()) {
+                                                         try {
+                                                             awaitStateChange(s -> s.workflowStatus().isTerminal());
+                                                         } catch (Exception e) {
+                                                             logger.error(
+                                                                     "Error waiting for termination of workflow instance {}",
+                                                                     workflowId,
+                                                                     e
+                                                             );
+                                                         }
+                                                     }
+                                                     cleanup();
+                                                     terminationHandler.accept(this);
 
-                                                     return CompletableFuture.completedFuture(this.contextDelegate);
+                                                     return CompletableFuture.completedFuture(null);
                                                  }
-                                         ).handle((wc, te) -> {
-                                             try {
-                                                 awaitStateChange(s -> s.workflowStatus().isTerminal());
-                                             } catch (Exception e) {
-                                                 logger.error(
-                                                         "Error waiting for termination of workflow instance {}",
-                                                         workflowId,
-                                                         e
-                                                 );
-                                             }
-                                             cleanup();
-                                             terminationHandler.accept(this);
-                                             return null;
-                                         })
+                                         )
                                          .join()
                 );
     }
