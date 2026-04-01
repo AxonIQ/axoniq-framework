@@ -17,6 +17,7 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine.vault;
 
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import okhttp3.OkHttpClient;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,13 +30,11 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
- * Utility class that has a methode to create the VaultCryptoEngine and it
- * has a factory method to produce an OkHttpClient that accepts
- * untrusted SSL certificates. This is useful to run tests against Vault with SSL
- * (which is important to test, among other things because of performance).
- *
- * Code has been copied from StackOverflow, answer by user sonxurxo:
- * https://stackoverflow.com/a/25992879/8254465
+ * Utility class that has a methode to create the VaultCryptoEngine and it has a factory method to produce an
+ * OkHttpClient that accepts untrusted SSL certificates. This is useful to run tests against Vault with SSL (which is
+ * important to test, among other things because of performance).
+ * <p>
+ * Code has been copied from StackOverflow, answer by user sonxurxo: https://stackoverflow.com/a/25992879/8254465
  */
 public abstract class Utils {
 
@@ -47,7 +46,9 @@ public abstract class Utils {
      * @param rootToken the Vault root token for authentication
      * @return a configured VaultCryptoEngine instance
      */
-    public static VaultCryptoEngine initVaultCryptoEngine(@Nullable Integer engineVersion, String vaultAddress, String rootToken) {
+    public static VaultCryptoEngine initVaultCryptoEngine(@Nullable Integer engineVersion,
+                                                          String vaultAddress,
+                                                          String rootToken) {
         /* Create the OkHttpClient. */
         OkHttpClient okHttpClient = Utils.getUnsafeOkHttpClient();
 
@@ -61,7 +62,9 @@ public abstract class Utils {
          * Both engines can coexist in the same Vault instance on different mount paths.
          */
         String prefix = (engineVersion != null && engineVersion == 2) ? "secret/data/" : "secret-v1/";
-        return new VaultCryptoEngine(okHttpClient, vaultAddress, rootToken, prefix);
+        VaultCryptoEngine cryptoEngine = new VaultCryptoEngine(okHttpClient, vaultAddress, rootToken, prefix);
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
+        return cryptoEngine;
     }
 
     private Utils() {

@@ -17,8 +17,11 @@
  */
 package io.axoniq.framework.extension.dataprotection.utils;
 
+import io.axoniq.license.entitlement.EnforcingEntitlementManager;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.json.JacksonConverter;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.mockito.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -92,12 +95,24 @@ public abstract class TestUtils {
     }
 
     /**
-     * Returns default test Converter for AF5 compatibility.
-     * Use this for FieldEncrypter constructor.
+     * Returns default test Converter using Jackson 3 (tools.jackson).
      *
      * @return JacksonConverter instance
      */
     public static Converter defaultTestConverter() {
         return new JacksonConverter();
+    }
+
+    /**
+     * Creates a mocked EntitlementManager for testing purposes.
+     * <p>
+     * This method creates a Mockito mock of {@link EnforcingEntitlementManager}.
+     * Since {@link EntitlementManager} is a sealed interface, we mock the concrete
+     * implementation class instead.
+     *
+     * @return a mocked EntitlementManager suitable for testing
+     */
+    public static EntitlementManager mockEntitlementManager() {
+        return Mockito.mock(EnforcingEntitlementManager.class);
     }
 }

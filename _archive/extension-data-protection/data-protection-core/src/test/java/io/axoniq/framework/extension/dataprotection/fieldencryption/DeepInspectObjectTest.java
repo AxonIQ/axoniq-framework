@@ -23,6 +23,7 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,7 @@ public class DeepInspectObjectTest {
     @BeforeEach
     public void setUp() throws Exception {
         cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         fieldEncrypter.setModifyImmutableCollections(false);
         dataFactory = new DataFactory();

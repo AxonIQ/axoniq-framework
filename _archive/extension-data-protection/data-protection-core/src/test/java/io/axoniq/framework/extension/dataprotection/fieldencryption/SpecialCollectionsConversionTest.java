@@ -22,6 +22,7 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import org.axonframework.conversion.Converter;
 import org.fluttercode.datafactory.impl.DataFactory;
 import org.jetbrains.annotations.NotNull;
@@ -47,10 +48,10 @@ import static io.axoniq.framework.extension.dataprotection.utils.TestUtils.defau
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests encryption in special collections (immutables, singletons, etc.) using AF5 Converter API.
+ * Tests encryption in special collections (immutable, singletons, etc.) using AF5 Converter API.
  * This is the AF5 equivalent of SpecialCollectionsTest which used the AF4 Serializer API.
  */
-public class SpecialCollectionsConversionTest {
+class SpecialCollectionsConversionTest {
 
     private FieldEncrypter fieldEncrypter;
     private Converter converter;
@@ -58,6 +59,7 @@ public class SpecialCollectionsConversionTest {
     @BeforeEach
     public void setUp() throws Exception {
         CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         converter = defaultTestConverter();
         fieldEncrypter = new FieldEncrypter(cryptoEngine, converter);
         DataFactory dataFactory = new DataFactory();

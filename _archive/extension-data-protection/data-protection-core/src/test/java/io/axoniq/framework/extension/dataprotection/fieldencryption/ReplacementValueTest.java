@@ -24,6 +24,7 @@ import io.axoniq.framework.extension.dataprotection.api.ReplacementValueProvider
 import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import org.fluttercode.datafactory.impl.DataFactory;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -45,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests of the custom replacement value mechanism.
  */
-public class ReplacementValueTest {
+class ReplacementValueTest {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -83,7 +84,10 @@ public class ReplacementValueTest {
     @BeforeEach
     public void setUp() throws Exception {
         cryptoEngine = new InMemoryCryptoEngine();
-        fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter(), new CustomReplacementValueProviderDeleted());
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
+        fieldEncrypter = new FieldEncrypter(cryptoEngine,
+                                            defaultTestConverter(),
+                                            new CustomReplacementValueProviderDeleted());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());
     }
