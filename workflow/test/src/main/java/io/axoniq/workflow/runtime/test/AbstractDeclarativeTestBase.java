@@ -21,7 +21,6 @@ import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModuleEnhancer;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
@@ -68,15 +67,14 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
         var configurer = MessagingConfigurer.create();
 
-        configurer.componentRegistry(r -> r.registerEnhancer(
-                new WorkflowModuleEnhancer(
-                        WorkflowModule
-                                .usingContext(dslType)
-                                .workflowContextFactory(builder)
-                                .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
-                                .definitions(getDeclaredDefinitions())
-                )
-        ));
+        configurer.componentRegistry(r -> r.registerModule(
+                                             WorkflowModule
+                                                     .usingContext(dslType)
+                                                     .workflowContextFactory(builder)
+                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
+                                                     .definitions(getDeclaredDefinitions())
+                                     )
+        );
 
         configuration = configurer.start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);

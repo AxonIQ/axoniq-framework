@@ -20,7 +20,6 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModuleEnhancer;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.BeanDefinitionWithWorkflowContextType;
 import jakarta.annotation.Nonnull;
@@ -92,7 +91,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
                                              )
                                 );
                     }
-                    registry.registerEnhancer(new WorkflowModuleEnhancer(module));
+                    registry.registerModule(module);
                 }
             } else {
                 throw new BadWorkflowConfigurationException(String.format(
