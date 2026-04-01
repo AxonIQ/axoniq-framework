@@ -52,6 +52,7 @@ import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
+import static java.lang.Thread.currentThread;
 
 /**
  * Workflow instance implementation.
@@ -121,149 +122,160 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
-        // TODO: discuss when we switch to the executable
         this.executable = true;
-        contextDelegate
-                .executorService()
-                .execute(() ->
-                                 ProcessingContextUtils
-                                         .executeWithResult(
-                                                 contextDelegate.workflowId(),
-                                                 contextDelegate.unitOfWorkFactory(),
-                                                 contextDelegate.executorService(),
-                                                 this.processingContext(),
-                                                 ctx -> {
-                                                     logger.trace("Thread: {}, ProcessingContext {}",
-                                                                  Thread.currentThread(),
-                                                                  ctx);
-                                                     var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
-                                                     if (this.state().workflowStatus().isTerminal()) {
-                                                         logger.info(
-                                                                 "Workflow instance has reached terminal state {}, skipping execution.",
-                                                                 this.state().workflowStatus());
-                                                         return CompletableFuture.completedFuture(this.contextDelegate);
-                                                     }
+        // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
-                                                     if (this.state().workflowStatus()
-                                                             == WorkflowStatus.NONE) {
-                                                         sendWorkflowEvent(
-                                                                 startedWorkflow(this.workflowContext(),
-                                                                                 workflowName,
-                                                                                 eventNameCustomizer),
-                                                                 ctx
-                                                         ).join(); // FIXME join without timeout?
-                                /*
-                                TODO: question why does it not work to wait for this state to be applied?
-                                try {
-                                    awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
-                                } catch (Exception e) {
-                                    logger.error(
-                                            "Error waiting for start of workflow instance {}", workflowId, e
-                                    );
-                                }
-                                 */
-                                                     }
+        ProcessingContextUtils
+                .executeWithResultInSeparateThread(
+                        contextDelegate.workflowId(),
+                        contextDelegate.unitOfWorkFactory(),
+                        contextDelegate.executorService(),
+                        this.processingContext(),
+                        ctx -> {
 
-                                                     try {
-                                                         logger.info(
-                                                                 "Executing workflow with initial payload {} from thread {}",
-                                                                 this.workflowContext()
-                                                                     .workflowPayload(),
-                                                                 Thread.currentThread());
+                            if (this.state().workflowStatus().isTerminal()) {
+                                logger.trace(
+                                        "Workflow instance has reached terminal state {}, skipping execution.",
+                                        this.state().workflowStatus()
+                                );
+                                return CompletableFuture.completedFuture(this.contextDelegate);
+                            }
+                            logger.trace("Thread: {}, ProcessingContext {}", currentThread(), ctx);
 
-                                                         this.workflowConfiguration.workflowDefinition()
-                                                                                   .accept(this.contextDelegate.typepWorkflowContext());
-                                                         logger.info(
-                                                                 "Workflow executed. Resulting workflow payload {}.",
-                                                                 this.workflowContext()
-                                                                     .workflowPayload());
+                            publishStartWorkflow(ctx);
 
-                                                         if (!this.state().workflowStatus()
-                                                                  .isTerminal()) {
-                                                             sendWorkflowEvent(completedWorkflow(this.workflowContext(),
-                                                                                                 workflowName,
-                                                                                                 eventNameCustomizer),
-                                                                               ctx).get(5,
-                                                                                        TimeUnit.SECONDS); // FIXME constant?
-                                                         }
-                                                     } catch (WorkflowFailedException e) {
-                                                         // if Events are already sent by TerminateDelegate, just let it propagate
-                                                         if (!this.state().workflowStatus()
-                                                                  .isTerminal()) {
-                                                             sendWorkflowEvent(failedWorkflow(this.workflowContext(),
-                                                                                              workflowName,
-                                                                                              e,
-                                                                                              eventNameCustomizer),
-                                                                               ctx).join(); // FIXME join without timeout
-                                                         }
-                                                     } catch (WorkflowCancelledException e) {
-                                                         // if Events are already sent by TerminateDelegate, just let it propagate
-                                                         if (!this.state().workflowStatus()
-                                                                  .isTerminal()) {
-                                                             sendWorkflowEvent(cancelledWorkflow(this.workflowContext(),
-                                                                                                 workflowName,
-                                                                                                 e,
-                                                                                                 eventNameCustomizer),
-                                                                               ctx).join(); // FIXME join without timeout
-                                                         }
-                                                     } catch (Throwable e) {
-                                                         if (e instanceof TimeoutException) {
-                                                             sendWorkflowEvent(timeoutWorkflow(this.workflowContext(),
-                                                                                               workflowName,
-                                                                                               contextDelegate.clock()
-                                                                                                              .instant(),
-                                                                                               eventNameCustomizer),
-                                                                               ctx).join(); // FIXME join without timeout
-                                                         } else if (e instanceof InterruptedException) {
-                                                             sendWorkflowEvent(cancelledWorkflow(this.workflowContext(),
-                                                                                                 workflowName,
-                                                                                                 eventNameCustomizer),
-                                                                               ctx).join(); // FIXME join without timeout
-                                                         } else {
-                                                             logger.error(
-                                                                     "Error occurred in workflow {}",
-                                                                     workflowId,
-                                                                     e);
-                                                             sendWorkflowEvent(failedWorkflow(this.workflowContext(),
-                                                                                              workflowName,
-                                                                                              e instanceof Exception ? (Exception) e
-                                                                                                      : new RuntimeException(
-                                                                                                      e),
-                                                                                              eventNameCustomizer),
-                                                                               ctx).join(); // FIXME join without timeout
-                                                         }
-                                                     }
-                                                     if (!this.workflowContext().workflowStatus().isTerminal()) {
-                                                         try {
-                                                             awaitStateChange(s -> s.workflowStatus().isTerminal());
-                                                         } catch (Exception e) {
-                                                             logger.error(
-                                                                     "Error waiting for termination of workflow instance {}",
-                                                                     workflowId,
-                                                                     e
-                                                             );
-                                                         }
-                                                     }
-                                                     cleanup();
-                                                     terminationHandler.accept(this);
-
-                                                     return CompletableFuture.completedFuture(null);
-                                                 }
-                                         )
-                                         .join()
+                            try {
+                                executeWorkflow(ctx);
+                            } catch (Throwable e) {
+                                handleWorkflowException(ctx, e);
+                            }
+                            terminateWorkflow(terminationHandler);
+                            return CompletableFuture.completedFuture(null);
+                        }
                 );
     }
 
+
     /**
-     * Performs internal cleanup of the execution. Everything related to the execution is removed, and only the
-     * execution state remains present.
+     * Emit start events if not already started.
+     *
+     * @param ctx processing context.
      */
-    private void cleanup() {
+    private void publishStartWorkflow(@Nonnull ProcessingContext ctx) {
+        var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
+        if (this.state().workflowStatus() == WorkflowStatus.NONE) {
+            // FIXME join without timeout?
+            sendWorkflowEvent(startedWorkflow(this.workflowContext(), workflowName, eventNameCustomizer), ctx).join();
+            try {
+                awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
+            } catch (Exception e) {
+                logger.error("Error waiting for start of workflow instance {}", workflowId, e);
+            }
+        }
+    }
+
+    /**
+     * Executes the workflow.
+     *
+     * @param ctx processing context.
+     * @throws Exception if something went wrong.
+     */
+    private void executeWorkflow(@Nonnull ProcessingContext ctx) throws Exception {
+        var workflowPayload = this.workflowContext().workflowPayload();
+        var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
+        logger.info("Executing workflow with initial payload {} from thread {}",
+                    workflowPayload,
+                    currentThread());
+
+        this.workflowConfiguration.workflowDefinition()
+                                  .accept(this.contextDelegate.typepWorkflowContext());
+        logger.info("Workflow executed. Resulting workflow payload {}.", workflowPayload);
+
+        if (!this.state().workflowStatus().isTerminal()) {
+            sendWorkflowEvent(
+                    completedWorkflow(this.workflowContext(),
+                                      workflowName,
+                                      eventNameCustomizer),
+                    ctx).get(5, TimeUnit.SECONDS); // FIXME constant?
+        }
+    }
+
+    /**
+     * Handles exceptions thrown during workflow execution.
+     *
+     * @param ctx       processing context.
+     * @param exception exception to handle.
+     */
+    private void handleWorkflowException(@Nonnull ProcessingContext ctx, @Nonnull Throwable exception) {
+        var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
+        switch (exception) {
+            case WorkflowFailedException e -> {
+                // if Events are already sent by TerminateDelegate, just let it propagate
+                if (!this.state().workflowStatus().isTerminal()) {
+                    sendWorkflowEvent(failedWorkflow(
+                                              this.workflowContext(),
+                                              workflowName,
+                                              e,
+                                              eventNameCustomizer),
+                                      ctx).join(); // FIXME join without timeout
+                }
+            }
+            case WorkflowCancelledException e -> {
+                // if Events are already sent by TerminateDelegate, just let it propagate
+                if (!this.state().workflowStatus().isTerminal()) {
+                    sendWorkflowEvent(
+                            cancelledWorkflow(this.workflowContext(),
+                                              workflowName,
+                                              e,
+                                              eventNameCustomizer),
+                            ctx).join(); // FIXME join without timeout
+                }
+            }
+            case TimeoutException te -> sendWorkflowEvent(timeoutWorkflow(
+                                                                  this.workflowContext(),
+                                                                  workflowName,
+                                                                  contextDelegate.clock().instant(),
+                                                                  eventNameCustomizer),
+                                                          ctx).join(); // FIXME join without timeout
+            case InterruptedException ie -> sendWorkflowEvent(
+                    cancelledWorkflow(this.workflowContext(),
+                                      workflowName,
+                                      eventNameCustomizer),
+                    ctx
+            ).join(); // FIXME join without timeout
+            default -> {
+                logger.error("Error occurred in workflow {}", workflowId, exception);
+                sendWorkflowEvent(failedWorkflow(
+                                          this.workflowContext(),
+                                          workflowName,
+                                          exception instanceof Exception ? (Exception) exception : new RuntimeException(exception),
+                                          eventNameCustomizer),
+                                  ctx).join(); // FIXME join without timeout
+            }
+        }
+    }
+
+
+    /**
+     * Terminate workflow, clen-up everything, and call termination handler.
+     *
+     * @param terminationHandler termination handler to call.
+     */
+    private void terminateWorkflow(Consumer<WorkflowExecution> terminationHandler) {
+        if (!this.workflowContext().workflowStatus().isTerminal()) {
+            try {
+                awaitStateChange(s -> s.workflowStatus().isTerminal());
+            } catch (Exception e) {
+                logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+            }
+        }
         this.taskQueue.clear();
         this.eventWaitConditions.clear();
         this.runningSteps.cancelAll(null, s -> {
         });
+        terminationHandler.accept(this);
     }
+
 
     @Override
     public void awaitStateChange(
@@ -277,8 +289,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
-        appendTask(i -> state().evolve(eventMessage, processingContext));
+        if (executable) {
+            // life mode
+            eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
+            appendTask(i -> state().evolve(eventMessage, processingContext));
+        } else {
+            // replay mode
+            state().evolve(eventMessage, processingContext);
+        }
     }
 
     @Override
