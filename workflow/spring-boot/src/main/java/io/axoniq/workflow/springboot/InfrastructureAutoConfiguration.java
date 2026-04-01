@@ -24,6 +24,9 @@ import org.springframework.context.annotation.Role;
 
 /**
  * Autoconfiguration for workflow infrastructure.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 @AutoConfiguration
 public class InfrastructureAutoConfiguration {

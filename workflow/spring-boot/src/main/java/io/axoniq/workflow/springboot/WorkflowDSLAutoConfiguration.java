@@ -24,12 +24,16 @@ import org.springframework.context.annotation.Bean;
 
 /**
  * Autoconfiguration for workflow DSL context factories.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 @AutoConfiguration
 public class WorkflowDSLAutoConfiguration {
 
     /**
      * Provides a context factory for the Simple workflow DSL.
+     *
      * @return context factory.
      */
     @Bean
@@ -39,6 +43,7 @@ public class WorkflowDSLAutoConfiguration {
 
     /**
      * Provides a context factory for the Kotlin workflow DSL.
+     *
      * @return context factory.
      */
     @Bean

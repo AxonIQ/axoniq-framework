@@ -42,7 +42,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-
+/**
+ * Configuration enhancer responsible for creation of {@link WorkflowModule} instances, based on workflow definitions
+ * detected by the {@link WorkflowDefinitionLookup}.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @Internal
 @RegistrationScope("Don't copy this enhancer in order to avoid cyclic module build in Spring Boot.")
 public class WorkflowModuleConfigurer implements ConfigurationEnhancer, ApplicationContextAware {
