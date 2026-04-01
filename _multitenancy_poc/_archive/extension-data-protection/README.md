@@ -1,4 +1,4 @@
-# AxonIQ Framework - Data Protection Extension
+# Axon Framework - Data Protection Extension
 
 This repository provides an extension to the [Axon Framework](https://github.com/AxonFramework/AxonFramework), offering
 field-level encryption and key management capabilities for event-sourced applications. It enables GDPR compliance through
@@ -33,16 +33,111 @@ unrecoverable without the key.
 * Axon Framework 5.x
 * A valid `axoniq.license` file (contact sales@axoniq.io if you don't have one)
 
-### License File
+### License
 
-The Data Protection Extension is commercial software provided by AxonIQ B.V. and requires a license file named
-`axoniq.license`.
+The Data Protection Extension is commercial software provided by Axoniq B.V. and requires a valid Axoniq license
+with `framework.data_protection.enabled=true`. The license is delivered through an automatic **multi-source**
+system that tries all configured sources in priority order.
 
-The license file will be automatically picked up if it's in the working directory. Otherwise, specify its location through:
-- Environment variable: `AXONIQ_DATAPROTECTION_LICENSE`
-- System property: `axoniq.dataprotection.license`
+#### License Sources
 
-Alternatively, place the license file on the classpath as a resource for easier deployment.
+| Source | Priority | Use Case | Configuration |
+|--------|----------|----------|---------------|
+| **Axoniq Platform** (RSocket) | 200 | Apps connected to Axoniq Platform | `axoniq.platform.*` properties |
+| **Axon Server** (gRPC) | 70 | Apps connected to Axon Server 2026.x+ | Automatic (no config needed) |
+| **Environment Variable** | 50 | Containers, Kubernetes, CI/CD | `AXONIQ_LICENSE` env var |
+| **File** | 10 | Development, on-premise | `axoniq.license` file (default) |
+
+At startup, a `MultiLicenseSource` is created containing all available sources. The source with the
+**highest priority** is tried first. If it fails to provide a license (e.g., server unreachable), the system
+automatically **falls back** to the next highest-priority source. The license is re-evaluated whenever a
+source pushes an update or becomes reachable/unreachable.
+
+#### Axon Server License Source (priority 70)
+
+When Axon Server connector is on the classpath and Axon Server **2026.x or later** is used, the license is
+fetched automatically via gRPC `LicenseService`. The source polls for updates every 60 seconds.
+
+> **Backward compatibility:** Axon Server **2025.x and earlier** does NOT expose the `LicenseService` endpoint.
+> If your app connects to an older Axon Server, this source will fail to fetch a license, triggering a
+> grace period that eventually blocks licensed features.
+>
+> To use an older Axon Server version, disable this source:
+>
+> ```java
+> @Bean
+> public ConfigurationEnhancer disableAxonServerLicenseSource() {
+>     return registry -> registry.registerComponent(
+>             EntitlementConfiguration.class,
+>             c -> {
+>                 EntitlementConfiguration config = new EntitlementConfiguration();
+>                 config.disableLicenseSource(AxonServerLicenseSource.class);
+>                 return config;
+>             }
+>     );
+> }
+> ```
+
+#### Axoniq Platform License Source (priority 200)
+
+When the application is connected to Axoniq Platform (via `framework-client-spring-boot-starter`), the license
+is fetched via RSocket. The Platform also pushes license updates in real-time when the license changes.
+This is the highest-priority source — when available, it takes precedence over all other sources.
+
+Configuration example (`application.properties`):
+```properties
+axoniq.platform.application-name=my-app
+axoniq.platform.credentials=<workspace-id>:<api-key>
+axoniq.platform.host=platform.axoniq.io
+```
+
+#### Environment Variable License Source (priority 50)
+
+Set the `AXONIQ_LICENSE` environment variable to the full license content. Supports both plain text
+and base64-encoded values.
+
+```bash
+# Plain text
+export AXONIQ_LICENSE="$(cat axoniq.license)"
+
+# Base64 encoded (recommended for production/K8s)
+export AXONIQ_LICENSE="$(cat axoniq.license | base64 -w0)"
+```
+
+Kubernetes Secret example:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: axoniq-license
+type: Opaque
+data:
+  license: <base64-encoded-license-content>
+---
+# In your Deployment:
+env:
+  - name: AXONIQ_LICENSE
+    valueFrom:
+      secretKeyRef:
+        name: axoniq-license
+        key: license
+```
+
+#### File License Source (priority 10)
+
+By default, the license file `axoniq.license` is read from the working directory. You can customize the path:
+- System property: `axoniq.license.file=/etc/axoniq/license.properties`
+- Environment variable: `AXONIQ_LICENSE_FILE=/etc/axoniq/license.properties`
+
+The file source automatically reloads the license when the file changes on disk (no restart needed).
+
+#### Grace Periods
+
+If the license source becomes temporarily unavailable, a grace period ensures continued operation:
+- **Unreachable** (24 hours): license source cannot be contacted (e.g., network issues)
+- **Unavailable** (15 minutes): no valid license can be loaded at all
+
+After the grace period expires, licensed features are blocked until a valid license is available.
 
 ### Installation
 
@@ -401,7 +496,7 @@ There are a couple of things to consider when you're traversing anything Axon:
   a [new thread/topic on our forums describing the problem](https://discuss.axoniq.io/).
 * There is a [forum](https://discuss.axoniq.io/) to support you in the case the reference guide did not sufficiently
   answer your question.
-  AxonIQ's developers will help out on a best effort basis.
+  Axoniq's developers will help out on a best effort basis.
   Know that any support from contributors on posted question is very much appreciated on the forum.
 * Next to the forum we also monitor Stack Overflow for any questions which are tagged with `axon`.
 
@@ -411,10 +506,10 @@ For technical questions, bug reports, and improvement requests regarding this ex
 
 Axon Framework consists out of a number of different modules, each with different licenses. Modules residing under
 the [Axon Framework](https://github.com/AxonFramework) GitHub organization, with group identifier `org.axonframework`,
-are Apache 2 licensed. Modules under the [AxonIQ](https://github.com/AxonIQ) GitHub organization, with group identifier
-`io.axoniq`, are licensed under AxonIQ's proprietary license.
+are Apache 2 licensed. Modules under the [Axoniq](https://github.com/Axoniq) GitHub organization, with group identifier
+`io.axoniq`, are licensed under Axoniq's proprietary license.
 
-**This Data Protection Extension is commercial software licensed under AxonIQ's proprietary license.**
+**This Data Protection Extension is commercial software licensed under Axoniq's proprietary license.**
 
 Please refer to individual module's LICENSE file for details.
 
@@ -426,3 +521,5 @@ Please refer to individual module's LICENSE file for details.
 * **Sales:** sales@axoniq.io
 * **Support:** support@axoniq.io
 * **Main Website:** https://axoniq.io/
+
+> **Note:** A web reference with additional details on licensing and configuration will be available here soon.

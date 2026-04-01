@@ -19,6 +19,7 @@ package io.axoniq.framework.extension.dataprotection.fieldencryption
 
 import io.axoniq.framework.extension.dataprotection.api.{FieldEncrypter, dataSubjectId, deepPersonalData, personalData}
 import io.axoniq.framework.extension.dataprotection.cryptoengine.{CryptoEngine, InMemoryCryptoEngine}
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils
 import io.axoniq.framework.extension.dataprotection.utils.TestUtils.{defaultTestConverter, isClear, isEncrypted}
 import org.fluttercode.datafactory.impl.DataFactory
 import org.junit.Assert.{assertEquals, assertTrue}
@@ -44,6 +45,7 @@ class DeepInspectCollectionsScalaTest {
   @Before
   def setUp(): Unit = {
     cryptoEngine = new InMemoryCryptoEngine
+    cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager)
     fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter())
     dataFactory = new DataFactory
     dataFactory.randomize(ThreadLocalRandom.current.nextInt)

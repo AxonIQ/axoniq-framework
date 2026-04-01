@@ -17,13 +17,16 @@
  */
 package io.axoniq.framework.extension.dataprotection.cryptoengine;
 
+import io.axoniq.framework.extension.dataprotection.DataProtectionAxoniqComponent;
 import io.axoniq.framework.extension.dataprotection.internal.utils.ExceptionFactory;
+import io.axoniq.license.entitlement.EntitlementManager;
 
 import java.io.OutputStream;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
+import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.crypto.Cipher;
@@ -50,10 +53,13 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
     private static final String TRANSFORM = "AES/CBC/PKCS5Padding";
     private static final String DIGEST_TRANSFORM = "AES/ECB/NoPadding";
     private static final String ALGORITHM = "AES";
+
     private final KeyStore keyStore;
     private final Lock createKeyLock = new ReentrantLock();
     private KeyType keyType = KeyType.AES_256;
     private ThreadLocal<KeyGenerator> keyGenerator = keyGenerator();
+
+    private EntitlementManager entitlementManager;
 
     private ThreadLocal<KeyGenerator> keyGenerator() {
         int keyLengthBits;
@@ -79,6 +85,7 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
 
     /**
      * Constructs a new {@link JavaKeyStoreCryptoEngine}
+     *
      * @param keyStore the {@link KeyStore} to use
      */
     public JavaKeyStoreCryptoEngine(KeyStore keyStore) {
@@ -86,11 +93,17 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
     }
 
     /**
-     * {@inheritDoc}
-     * Please see the class description for a caveat on key saving.
+     * Validates that the data protection component is enabled in the license. This is called on every cryptographic
+     * operation to ensure the license is valid. If the component is not enabled, an exception will be thrown on each
+     * attempt.
      */
+    private void validateEntitlement() {
+        entitlementManager.useAddon(DataProtectionAxoniqComponent.IDENTIFIER);
+    }
+
     @Override
     public SecretKey getOrCreateKey(String id) {
+        validateEntitlement();
         SecretKey key = getKey(id);
         if(key == null) {
             createKeyLock.lock();
@@ -164,5 +177,10 @@ public class JavaKeyStoreCryptoEngine implements CryptoEngine {
     @Override
     public KeyType getKeyType() {
         return keyType;
+    }
+
+    @Override
+    public void registerEntitlementManager(EntitlementManager entitlementManager) {
+        this.entitlementManager = Objects.requireNonNull(entitlementManager, "The EntitlementManager must not be null");
     }
 }

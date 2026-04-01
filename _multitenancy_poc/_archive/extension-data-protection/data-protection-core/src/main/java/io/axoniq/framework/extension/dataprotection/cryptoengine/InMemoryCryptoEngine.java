@@ -31,11 +31,11 @@ public class InMemoryCryptoEngine extends DatabaseBackedCryptoEngine {
 
     private static final ConcurrentHashMap<String, SecretKeySpec> db = new ConcurrentHashMap<>();
 
-    /**
-     * Constructs an {@link InMemoryCryptoEngine}. There are no parameters to configure.
-     */
-    public InMemoryCryptoEngine() {
-    }
+     /**
+      * Constructs an {@link InMemoryCryptoEngine}. There are no parameters to configure.
+      */
+     public InMemoryCryptoEngine() {
+     }
 
     @Override
     public SecretKey getKey(String id) {

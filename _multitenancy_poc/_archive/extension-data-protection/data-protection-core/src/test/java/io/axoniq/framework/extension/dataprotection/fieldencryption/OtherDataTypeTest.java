@@ -22,6 +22,7 @@ import io.axoniq.framework.extension.dataprotection.api.FieldEncrypter;
 import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import lombok.Data;
 import org.fluttercode.datafactory.impl.DataFactory;
 import org.junit.jupiter.api.*;
@@ -35,7 +36,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static io.axoniq.framework.extension.dataprotection.utils.TestUtils.defaultTestConverter;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class OtherDataTypeTest {
+class OtherDataTypeTest {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -46,6 +47,7 @@ public class OtherDataTypeTest {
     @BeforeEach
     public void setUp() throws Exception {
         cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         fieldEncrypter = new FieldEncrypter(cryptoEngine, defaultTestConverter());
         dataFactory = new DataFactory();
         dataFactory.randomize(ThreadLocalRandom.current().nextInt());
