@@ -30,6 +30,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.slf4j.Logger;
@@ -58,6 +59,12 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
+    /**
+     * Creates a new workflow engine.
+     *
+     * @param workflowConfigurationRegistry configuration registry.
+     * @param workflowExecutionRepository   execution registry.
+     */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository
@@ -70,7 +77,11 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
-        logger.warn("Received eventMessage {} {}", eventMessage.identifier(), eventMessage.type());
+        logger.trace("Received eventMessage {} {} {}",
+                     processingContext.resources().get(TrackingToken.RESOURCE_KEY),
+                     eventMessage.identifier(),
+                     eventMessage.type()
+        );
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
@@ -90,7 +101,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             }
         }
 
-        logger.warn("EventMessage {} successfully handled", eventMessage.identifier());
+        logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
         return MessageStream.empty();
     }
 
@@ -101,6 +112,10 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
+        logger.debug("Replay status changed to {} at {}",
+                    statusChange.status(),
+                    context.resources().get(TrackingToken.RESOURCE_KEY));
+
         if (!statusChange.status().isReplay()) {
             executeEventSourcedWorkflows();
         }
@@ -111,6 +126,15 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private void executeEventSourcedWorkflows() {
         var running = isRunning.getAndSet(true);
         if (!running) {
+            logger.info("Workflow instance replay finished. Switching to live mode.");
+            // get rid of finished executions
+            workflowExecutionRepository
+                    .findAll()
+                    .stream()
+                    .filter(e -> e.state().workflowStatus().isTerminal())
+                    .map(WorkflowExecution::workflowId)
+                    .forEach(workflowExecutionRepository::remove);
+
             var allExecution = workflowExecutionRepository.findAll();
             if (allExecution.isEmpty()) {
                 logger.info("No running workflow instances found.");
@@ -133,7 +157,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                 .processingContext()
                 .whenComplete(pc -> {
                     try {
-                        logger.info("Executing workflow execution with id: {}", execution.workflowId());
+                        logger.debug("Executing workflow execution with id: {}", execution.workflowId());
                         execution.execute(
                                 finished -> {
                                     logger.debug("Workflow {} finished with status {}, removing it from repository",
