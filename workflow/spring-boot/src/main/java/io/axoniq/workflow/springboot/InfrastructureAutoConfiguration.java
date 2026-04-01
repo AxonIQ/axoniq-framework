@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -38,15 +37,5 @@ public class InfrastructureAutoConfiguration {
     @Bean
     public static WorkflowDefinitionLookup workflowDefinitionLookup() {
         return new WorkflowDefinitionLookup();
-    }
-
-    /**
-     * Activate usage of {@link io.axoniq.workflow.dsl.simple.SimpleWorkflowContext}
-     *
-     * @return context factory.
-     */
-    @Bean
-    public SimpleWorkflowContextFactory simpleWorkflowContextFactory() {
-        return new SimpleWorkflowContextFactory();
     }
 }
