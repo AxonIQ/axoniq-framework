@@ -22,6 +22,9 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
 
+/**
+ * Autoconfiguration for workflow infrastructure.
+ */
 @AutoConfiguration
 public class InfrastructureAutoConfiguration {
 
