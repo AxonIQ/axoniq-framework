@@ -18,8 +18,9 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.runtime.api.WorkflowContext;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import io.axoniq.workflow.springboot.SpringUtils.WorkflowBeanDefinition;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.Bean;
@@ -33,6 +34,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test for sorting workflow beans by their {@link Order} annotation.
+ */
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = SpringUtilsSortByOrderTest.TestConfig.class)
 public class SpringUtilsSortByOrderTest {
@@ -42,13 +46,21 @@ public class SpringUtilsSortByOrderTest {
 
     @Test
     void shouldSortByOrder() {
-        SpringUtils.WorkflowBeanDefinition first = new SpringUtils.WorkflowBeanDefinition("firstBean", FirstBean.class, WorkflowContext.class);
-        SpringUtils.WorkflowBeanDefinition second = new SpringUtils.WorkflowBeanDefinition("secondBean", SecondBean.class, WorkflowContext.class);
-        SpringUtils.WorkflowBeanDefinition last = new SpringUtils.WorkflowBeanDefinition("lastBean", LastBean.class, WorkflowContext.class);
-        SpringUtils.WorkflowBeanDefinition unordered = new SpringUtils.WorkflowBeanDefinition("unorderedBean", UnorderedBean.class, WorkflowContext.class);
+        WorkflowBeanDefinition first = new WorkflowBeanDefinition("firstBean",
+                                                                  FirstBean.class,
+                                                                  WorkflowContext.class);
+        WorkflowBeanDefinition second = new WorkflowBeanDefinition("secondBean",
+                                                                   SecondBean.class,
+                                                                   WorkflowContext.class);
+        WorkflowBeanDefinition last = new WorkflowBeanDefinition("lastBean",
+                                                                 LastBean.class,
+                                                                 WorkflowContext.class);
+        WorkflowBeanDefinition unordered = new WorkflowBeanDefinition("unorderedBean",
+                                                                      UnorderedBean.class,
+                                                                      WorkflowContext.class);
 
-        List<SpringUtils.WorkflowBeanDefinition> unsorted = Arrays.asList(unordered, last, second, first);
-        List<SpringUtils.WorkflowBeanDefinition> sorted = SpringUtils.sortByOrder(unsorted, beanFactory);
+        List<WorkflowBeanDefinition> unsorted = Arrays.asList(unordered, last, second, first);
+        List<WorkflowBeanDefinition> sorted = SpringUtils.sortByOrder(unsorted, beanFactory);
 
         assertThat(sorted).containsExactly(first, second, last, unordered);
     }
@@ -78,10 +90,21 @@ public class SpringUtilsSortByOrderTest {
     }
 
     @Order(1)
-    static class FirstBean {}
+    static class FirstBean {
+
+    }
+
     @Order(2)
-    static class SecondBean {}
+    static class SecondBean {
+
+    }
+
     @Order(100)
-    static class LastBean {}
-    static class UnorderedBean {}
+    static class LastBean {
+
+    }
+
+    static class UnorderedBean {
+
+    }
 }

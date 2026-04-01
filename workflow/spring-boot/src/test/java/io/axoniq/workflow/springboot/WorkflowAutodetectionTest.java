@@ -39,6 +39,12 @@ import org.springframework.test.context.ContextConfiguration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Integration test for workflow autodetection.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @SpringBootTest(
         classes = WorkflowAutodetectionTest.TestConfig.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,

@@ -20,11 +20,10 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.Bean;
@@ -37,6 +36,12 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test for detection of workflow context factories in Spring context.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = SpringUtilsFactoryBeanTest.TestConfig.class)
 public class SpringUtilsFactoryBeanTest {
@@ -46,7 +51,8 @@ public class SpringUtilsFactoryBeanTest {
 
     @Test
     void shouldDetectWorkflowContextFactories() {
-        List<SpringUtils.WorkflowContextFactoryBeanDefinition> factoryBeans = SpringUtils.factoryBeans(beanFactory, false);
+        List<SpringUtils.WorkflowContextFactoryBeanDefinition> factoryBeans = SpringUtils.factoryBeans(beanFactory,
+                                                                                                       false);
 
         assertThat(factoryBeans).hasSize(2);
         assertThat(factoryBeans).extracting(SpringUtils.WorkflowContextFactoryBeanDefinition::beanName)
@@ -57,6 +63,7 @@ public class SpringUtilsFactoryBeanTest {
 
     @Configuration
     static class TestConfig {
+
         @Bean
         public MyWorkflowContextFactory myFactory() {
             return new MyWorkflowContextFactory();
@@ -69,26 +76,35 @@ public class SpringUtilsFactoryBeanTest {
     }
 
     static class MyWorkflowContext extends io.axoniq.workflow.dsl.AbstractDSLWorkflowContext {
-        public MyWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext, WorkflowConfiguration<?> workflowConfiguration) {
+
+        public MyWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
+                                 WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }
 
     static class MyWorkflowContextFactory implements WorkflowContextFactory<MyWorkflowContext> {
+
         @Nonnull
         @Override
-        public MyWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId, @Nonnull ProcessingContext processingContext, @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public MyWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId,
+                                               @Nonnull ProcessingContext processingContext,
+                                               @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
             return new MyWorkflowContext(workflowId, initialPayload, processingContext, workflowConfiguration);
         }
     }
 
     static abstract class BaseWorkflowContextFactory<T extends WorkflowContext> implements WorkflowContextFactory<T> {
+
     }
 
     static class MyIndirectWorkflowContextFactory extends BaseWorkflowContextFactory<MyWorkflowContext> {
+
         @Nonnull
         @Override
-        public MyWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId, @Nonnull ProcessingContext processingContext, @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public MyWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId,
+                                               @Nonnull ProcessingContext processingContext,
+                                               @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
             return new MyWorkflowContext(workflowId, initialPayload, processingContext, workflowConfiguration);
         }
     }

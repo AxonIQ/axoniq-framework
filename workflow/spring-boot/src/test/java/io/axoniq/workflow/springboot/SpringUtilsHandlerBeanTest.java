@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.springboot;
 
+import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
@@ -35,6 +36,12 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test for detection of handler beans in Spring context.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = SpringUtilsHandlerBeanTest.TestConfig.class)
 public class SpringUtilsHandlerBeanTest {
@@ -79,7 +86,7 @@ public class SpringUtilsHandlerBeanTest {
         }
     }
 
-    static class MyWorkflowContext extends io.axoniq.workflow.dsl.AbstractDSLWorkflowContext {
+    static class MyWorkflowContext extends AbstractDSLWorkflowContext {
 
         public MyWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
                                  WorkflowConfiguration<?> workflowConfiguration) {
@@ -87,7 +94,7 @@ public class SpringUtilsHandlerBeanTest {
         }
     }
 
-    static class OtherWorkflowContext extends io.axoniq.workflow.dsl.AbstractDSLWorkflowContext {
+    static class OtherWorkflowContext extends AbstractDSLWorkflowContext {
 
         public OtherWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
                                     WorkflowConfiguration<?> workflowConfiguration) {
