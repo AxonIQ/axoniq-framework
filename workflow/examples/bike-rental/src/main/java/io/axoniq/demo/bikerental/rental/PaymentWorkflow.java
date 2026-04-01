@@ -46,7 +46,7 @@ import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate
 
 /**
  * Workflow that handles the payment process. This workflow is a port of the famous Bike Rental Saga taken from AF4
- * example.
+ * example and is migrated without changes to business logic implemented there.
  *
  * @author Simon Zambrovski
  * @since 1.0.0

@@ -89,16 +89,6 @@
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework.workflow</groupId>
-            <artifactId>axon-workflow-runtime</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework.workflow</groupId>
-            <artifactId>axon-workflow-dsl</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework.workflow</groupId>
             <artifactId>axon-workflow-test</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
