@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -64,7 +81,8 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
                         var moduleBuilder = WorkflowModule
                                 .usingContext((Class<WorkflowContext>) workflowContextType)
                                 .workflowContextFactory(
-                                        c -> (WorkflowContextFactory<WorkflowContext>) applicationContext.getBean(factoryName))
+                                        c -> (WorkflowContextFactory<WorkflowContext>) applicationContext.getBean(
+                                                factoryName))
                                 .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(workflowContextType));
 
                         if (!beanDefs.isEmpty()) {
@@ -80,10 +98,12 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
                             registry.registerEnhancer(new WorkflowModuleEnhancer(module));
                         }
                     } else {
-                        logger.error("Detected workflow definition without a WorkflowContextFactory. {}",
-                                     String.join(",",
-                                                 beanDefs.stream().map(BeanDefinitionWithWorkflowContextType::name)
-                                                         .toList())
+                        logger.error(
+                                "Detected workflow definition in '{}' without a WorkflowContextFactory for the workflow type {}.",
+                                String.join(",",
+                                            beanDefs.stream().map(BeanDefinitionWithWorkflowContextType::name).toList()
+                                ),
+                                workflowContextType.getSimpleName()
                         );
                     }
                 });

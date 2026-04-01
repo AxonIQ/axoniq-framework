@@ -76,11 +76,6 @@ public class WorkflowAutodetectionTest {
     static class TestConfig {
 
         @Bean
-        public SimpleWorkflowContextFactory simpleWorkflowContextFactory() {
-            return new SimpleWorkflowContextFactory();
-        }
-
-        @Bean
         public TestWorkflow testWorkflow() {
             return new TestWorkflow();
         }
