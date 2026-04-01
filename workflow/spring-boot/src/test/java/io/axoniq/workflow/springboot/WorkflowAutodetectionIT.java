@@ -46,11 +46,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @since 1.0.0
  */
 @SpringBootTest(
-        classes = WorkflowAutodetectionTest.TestConfig.class,
+        classes = WorkflowAutodetectionIT.TestConfig.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {"axon.axonserver.enabled=false"}
 )
-public class WorkflowAutodetectionTest {
+public class WorkflowAutodetectionIT {
 
     @Autowired
     private WorkflowConfigurationRegistry<?> registry;
