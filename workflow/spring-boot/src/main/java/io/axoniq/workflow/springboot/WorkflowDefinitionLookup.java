@@ -67,6 +67,11 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
                             .getBeanDefinition();
             ((BeanDefinitionRegistry) beanFactory).registerBeanDefinition(configurerBeanName, beanDefinition);
         }
+        logger.info("Detected {} workflow definition bean{}: {}",
+                    found.size(),
+                    found.size() == 1 ? "" : "s",
+                    String.join(", ", found.stream().map(WorkflowBeanDefinition::beanName).toList())
+        );
     }
 
 
