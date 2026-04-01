@@ -49,6 +49,12 @@
             <version>${axon-framework.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.axoniq.platform</groupId>
+            <artifactId>framework-client-spring-boot-starter</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+
         <!-- Data Protection Extension -->
         <dependency>
             <groupId>io.axoniq.framework.extensions.dataprotection</groupId>
@@ -66,11 +72,6 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-        <!-- Jackson for JSON -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
 
         <!-- Database - PostgreSQL -->
         <dependency>
@@ -104,6 +105,14 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Jackson 2 BOM first to override Spring Boot's older Jackson version -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

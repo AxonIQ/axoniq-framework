@@ -54,10 +54,10 @@ public class VaultCryptoEngine extends DatabaseBackedCryptoEngine {
      * Instantiate a new VaultCryptoEngine, using 'key' as the property name.
      *
      * @param okHttpClient the OkHttpClient to use
-     * @param address the URL of the Vault server
-     * @param token the token to be used initially
-     * @param prefix the prefix to use in the Vault namespace; could be "secret/" in a simple
-     *               test, but probably something more specific in a real-life scenario
+     * @param address      the URL of the Vault server
+     * @param token        the token to be used initially
+     * @param prefix       the prefix to use in the Vault namespace; could be "secret/" in a simple test, but probably
+     *                     something more specific in a real-life scenario
      */
     public VaultCryptoEngine(OkHttpClient okHttpClient, String address, String token, String prefix) {
         this(okHttpClient, address, token, prefix, "key");
@@ -67,13 +67,17 @@ public class VaultCryptoEngine extends DatabaseBackedCryptoEngine {
      * Instantiate a new VaultCryptoEngine.
      *
      * @param okHttpClient the OkHttpClient to use
-     * @param address the URL of the Vault server
-     * @param token the token to be used initially
-     * @param prefix the prefix to use in the Vault namespace; could be "secret/" in a simple
-     *               test, but probably something more specific in a real-life scenario
+     * @param address      the URL of the Vault server
+     * @param token        the token to be used initially
+     * @param prefix       the prefix to use in the Vault namespace; could be "secret/" in a simple test, but probably
+     *                     something more specific in a real-life scenario
      * @param propertyName the property to be used to store the AES key.
      */
-    public VaultCryptoEngine(OkHttpClient okHttpClient, String address, String token, String prefix, String propertyName) {
+    public VaultCryptoEngine(OkHttpClient okHttpClient,
+                             String address,
+                             String token,
+                             String prefix,
+                             String propertyName) {
         this.okHttpClient = okHttpClient;
         this.address = address;
         this.token = token;

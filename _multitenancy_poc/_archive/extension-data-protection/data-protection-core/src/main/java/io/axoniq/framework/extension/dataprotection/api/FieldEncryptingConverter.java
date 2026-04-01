@@ -23,6 +23,8 @@ import lombok.Setter;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 
+import java.lang.reflect.Type;
+
 /**
  * Implementation of field-level encryption that wraps a delegate {@link Converter}, performing encryption
  * before converting and decryption after converting, using a {@link FieldEncrypter}.
@@ -175,18 +177,6 @@ public class FieldEncryptingConverter implements Converter {
     }
 
     /**
-     * Checks if this converter can convert between the given source and target types.
-     *
-     * @param sourceType The source type
-     * @param targetType The target type
-     * @return true if conversion is supported, false otherwise
-     */
-    @Override
-    public boolean canConvert(java.lang.reflect.Type sourceType, java.lang.reflect.Type targetType) {
-        return delegateConverter.canConvert(sourceType, targetType);
-    }
-
-    /**
      * Converts the given {@code object} to the expected target type.
      * <p>
      * This method intelligently handles both serialization and deserialization:
@@ -206,7 +196,7 @@ public class FieldEncryptingConverter implements Converter {
      * @return the converted object
      */
     @Override
-    public <T> T convert(Object object, java.lang.reflect.Type targetType) {
+    public <T> T convert(Object object, Type targetType) {
         // DESERIALIZATION: byte[] -> Object (decrypt after conversion)
         // This happens when loading events from the event store
         if (object instanceof byte[]) {
@@ -237,7 +227,7 @@ public class FieldEncryptingConverter implements Converter {
      * @return the converted object
      */
     public <T> T convert(Object object, Class<T> expectedRepresentation) {
-        return convert(object, (java.lang.reflect.Type) expectedRepresentation);
+        return convert(object, (Type) expectedRepresentation);
     }
 
     /**
@@ -282,8 +272,8 @@ public class FieldEncryptingConverter implements Converter {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         // Delegate to the underlying converter if it's describable
-        if (delegateConverter instanceof org.axonframework.common.infra.DescribableComponent) {
-            ((org.axonframework.common.infra.DescribableComponent) delegateConverter).describeTo(descriptor);
+        if (delegateConverter != null) {
+            delegateConverter.describeTo(descriptor);
         }
     }
 }

@@ -45,9 +45,9 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
     /**
      * Constructs a new JdbcCryptoEngine.
      *
-     * @param dataSource the DataSource
-     * @param tableName the SQL name table in which keys will be stored
-     * @param keyIdColumnName the SQL name of the column in which the key id will be stored
+     * @param dataSource        the DataSource
+     * @param tableName         the SQL name table in which keys will be stored
+     * @param keyIdColumnName   the SQL name of the column in which the key id will be stored
      * @param keyDataColumnName the SQL name of the column in which the key data will be stored
      */
     public JdbcCryptoEngine(DataSource dataSource, String tableName, String keyIdColumnName, String keyDataColumnName) {
@@ -58,11 +58,11 @@ public class JdbcCryptoEngine extends DatabaseBackedCryptoEngine {
     }
 
     /**
-     * Constructs a new JdbcCryptoEngine, using "id" as the SQL name of the key id column, and "secret_key" as the
-     * SQL name of the key data column.
+     * Constructs a new JdbcCryptoEngine, using "id" as the SQL name of the key id column, and "secret_key" as the SQL
+     * name of the key data column.
      *
      * @param dataSource the DataSource
-     * @param tableName the SQL name table in which keys will be stored
+     * @param tableName  the SQL name table in which keys will be stored
      */
     public JdbcCryptoEngine(DataSource dataSource, String tableName) {
         this(dataSource, tableName, "id", "secret_key");

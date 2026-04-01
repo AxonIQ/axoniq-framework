@@ -29,7 +29,7 @@ import io.axoniq.framework.extension.dataprotection.cryptoengine.jpa.JpaCryptoEn
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.json.JacksonConverter;
+import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
@@ -61,11 +61,11 @@ public class DataProtectionConfiguration {
     /**
      * Provides a JPA-based CryptoEngine that stores encryption keys in H2 database.
      * <p>
-     * Keys are persisted in the axoniq_gdpr_keys table and survive application restarts.
-     * This is the production-ready implementation for encryption key management.
+     * Keys are persisted in the axoniq_gdpr_keys table and survive application restarts. This is the production-ready
+     * implementation for encryption key management.
      *
      * @param entityManagerFactory JPA entity manager factory for database access
-     * @return a JpaCryptoEngine instance for persistent key storage
+     * @return a {@link JpaCryptoEngine} instance for persistent key storage
      */
     @Bean
     public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory) {
@@ -87,7 +87,7 @@ public class DataProtectionConfiguration {
     /**
      * Creates the base converter bean that Axon Framework will use for all conversions.
      * <p>
-     * This bean is a {@link FieldEncryptingConverter} which wraps a {@link JacksonConverter}
+     * This bean is a {@link FieldEncryptingConverter} which wraps a {@link Jackson2Converter}
      * and handles automatic encryption/decryption of @PersonalData annotated fields.
      * <p>
      * Axon's {@code ConverterAutoConfiguration} will automatically use this converter to
@@ -100,7 +100,7 @@ public class DataProtectionConfiguration {
         ChainingContentTypeConverter contentTypeConverter = new ChainingContentTypeConverter(
                 getClass().getClassLoader()
         );
-        Converter delegateConverter = new JacksonConverter(objectMapper, contentTypeConverter);
+        Converter delegateConverter = new Jackson2Converter(objectMapper, contentTypeConverter);
         return new FieldEncryptingConverter(cryptoEngine, delegateConverter);
     }
 
@@ -119,7 +119,7 @@ public class DataProtectionConfiguration {
      */
     @Bean
     public FieldEncrypter fieldEncrypter(CryptoEngine cryptoEngine) {
-        Converter converter = new JacksonConverter();
+        Converter converter = new Jackson2Converter();
         return new FieldEncrypter(cryptoEngine, converter);
     }
 }

@@ -24,6 +24,7 @@ import io.axoniq.framework.extension.dataprotection.api.PersonalData;
 import io.axoniq.framework.extension.dataprotection.api.SerializedPersonalData;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.CryptoEngine;
 import io.axoniq.framework.extension.dataprotection.cryptoengine.InMemoryCryptoEngine;
+import io.axoniq.framework.extension.dataprotection.utils.TestUtils;
 import lombok.Data;
 import org.axonframework.conversion.Converter;
 import org.fluttercode.datafactory.impl.DataFactory;
@@ -47,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Tests encryption in objects within collections at multiple levels using AF5 Converter API.
  * This is the AF5 equivalent of MultiLevelRecursionTest which used the AF4 Serializer API.
  */
-public class MultiLevelRecursionConversionTest {
+class MultiLevelRecursionConversionTest {
 
     private FieldEncrypter fieldEncrypter;
     private Converter converter;
@@ -56,6 +57,7 @@ public class MultiLevelRecursionConversionTest {
     @BeforeEach
     public void setUp() throws Exception {
         CryptoEngine cryptoEngine = new InMemoryCryptoEngine();
+        cryptoEngine.registerEntitlementManager(TestUtils.mockEntitlementManager());
         converter = defaultTestConverter();
         fieldEncrypter = new FieldEncrypter(cryptoEngine, converter);
         dataFactory = new DataFactory();
