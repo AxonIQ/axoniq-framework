@@ -36,7 +36,7 @@ import jakarta.annotation.Nonnull;
 @Internal
 public class WorkflowModuleEnhancer implements ConfigurationEnhancer {
 
-    private final org.axonframework.common.configuration.Module workflowModule;
+    private final Module workflowModule;
 
     /**
      * Configures the enhancer to register the given workflow module.
