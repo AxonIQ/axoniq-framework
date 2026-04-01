@@ -20,7 +20,6 @@ package io.axoniq.framework.extension.dataprotection.utils;
 import io.axoniq.license.entitlement.EnforcingEntitlementManager;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.jackson.JacksonConverter;
 import org.mockito.*;
 import org.axonframework.conversion.jackson2.Jackson2Converter;
 
