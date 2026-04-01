@@ -48,15 +48,16 @@ class Kontext(
         PrimitiveCommands.DelegatingExecuteCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
             if (result.success() && result.result<Any>().isPresent) {
+                val map = result.result<Map<String, Any?>>().get()
                 @Suppress("UNCHECKED_CAST")
-                return (result.result<Map<String, Any?>>().get())[resultPropertyName] as T
+                return map[resultPropertyName] as T
             } else {
                 throw result.error().get()
             }
         }
     }
 
-    class TypeConvertingWaitForCommand<T>(
+    class TypeConvertingWaitForCommand<T : Any>(
         command: PrimitiveCommands.WorkflowStepResultWaitForCommand,
         val type: Class<T>,
         val converter: Converter
@@ -64,9 +65,8 @@ class Kontext(
         PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
             if (result.success() && result.result<Any>().isPresent) {
-                val converted: T? = converter.convert(result.result<Map<String, Any?>>().get(), type)
-                @Suppress("UNCHECKED_CAST")
-                return converted as T
+                val map = result.result<Map<String, Any?>>().get()
+                return converter.convert(map, type)!!
             } else {
                 throw result.error().get()
             }
@@ -83,12 +83,13 @@ class Kontext(
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
         val stepSpecificName = "__$stepName"
+        @Suppress("UNCHECKED_CAST")
         return workflowKontext.execute(
             MapPropertyExtractingExecuteCommand<T>(
                 stepSpecificName,
                 PrimitiveCommands.WorkflowStepResultExecuteCommand(
                     stepName,
-                    local,
+                    local as Map<String, Any>?,
                     { pc, payload ->
                         mapOf(stepSpecificName to action.invoke(payload))
                     },
@@ -147,7 +148,7 @@ class Kontext(
     ): WorkflowStepResult = workflowKontext.execute(
         PrimitiveCommands.WorkflowStepResultExecuteCommand(
             stepName,
-            local,
+            local as Map<String, Any>?,
             action,
             parameterMapping,
             resultMapping,

@@ -32,13 +32,20 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**
  * Event handling component handling all events.
@@ -59,10 +66,18 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                                  return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
                              }
                          }
-                 ).initialSegmentCount(1)
-                 .batchSize(1);
+                 )
+                 .eventSource(c.getComponent(StreamableEventSource.class))
+                 .initialSegmentCount(1)
+                 .batchSize(1)
+                 .initialToken(s -> completedFuture(
+                                       // FIXME, how can we control the correct index here? switching to 0 breaks it. See https://github.com/AxonFramework/AxonFramework/issues/4382
+                                       createReplayToken(new GlobalSequenceTrackingToken(1))
+                               )
+                 );
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
+    private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
      * Constructs the component.
@@ -75,6 +90,11 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
+        if (eventHandler instanceof ReplayStatusChangedHandler) {
+            replayStatusChangedHandler = (ReplayStatusChangedHandler) eventHandler;
+        } else {
+            replayStatusChangedHandler = null;
+        }
     }
 
     @Nonnull
@@ -85,6 +105,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     }
 
     @Override
+    @Nonnull
     public Set<QualifiedName> supportedEvents() {
         return Set.of();
     }
@@ -96,12 +117,26 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     @Nonnull
     @Override
-    public Object sequenceIdentifierFor(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
+    public Object sequenceIdentifierFor(@Nonnull EventMessage event,
+                                        @Nonnull ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
+    }
+
+    @Override
+    @Nonnull
+    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
+                                               @Nonnull ProcessingContext context) {
+        if (replayStatusChangedHandler != null) { // just forward
+            return replayStatusChangedHandler.handle(statusChange, context);
+        }
+        return MessageStream.empty();
     }
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
+        if (replayStatusChangedHandler != null) {
+            descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());
+        }
     }
 }

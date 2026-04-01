@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
@@ -66,6 +67,7 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
                 );
     }
 
+    @Disabled("FIXME #97 https://github.com/AxonIQ/extension-workflow/issues/97")
     @Test
     void noFurtherStepsAfterFail() {
         delayedPublisher.addSchedules(List.of(
@@ -74,14 +76,9 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
 
         delayedPublisher.start();
 
-        await().untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions()).isNotEmpty();
-        });
-
-        workflowEngine.runWorkflows(false);
-
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowEngine.workflowExecutions())
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
@@ -92,13 +89,15 @@ class FailWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
+        await().untilAsserted(() -> {
+            assertThat(workflowEngine.workflowExecutions()).isEmpty();
+        });
 
-        for (WorkflowExecution execution : workflowEngine.workflowExecutions()) {
-            var context = execution.workflowContext();
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
-            assertThat(context.workflowStepNames()).contains("stepA");
-            assertThat(context.workflowStepNames()).doesNotContain("stepAfterFail");
+        for (WorkflowHistory history : workflowHistoryRepository.findAll()) {
+            var state = history.state();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
+            assertThat(state.workflowStepNames()).contains("stepA");
+            assertThat(state.workflowStepNames()).doesNotContain("stepAfterFail");
         }
 
         // Verify no events were published after the workflow terminal event

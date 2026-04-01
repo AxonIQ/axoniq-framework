@@ -27,13 +27,15 @@ import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.annotation.RegistrationScope;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 
 import java.time.Clock;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
@@ -45,6 +47,8 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+@Internal
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 
     public static final String WORKFLOW_ENGINE_EVENT_MODULE = "WorkflowEngine";
@@ -70,7 +74,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(Clock.class, cfg -> Clock.systemUTC());
 
         componentRegistry
-                .registerComponent(Executor.class,
+                .registerComponent(ExecutorService.class,
                                    WORKFLOW_ENGINE_EXECUTOR,
                                    cfg -> Executors.newVirtualThreadPerTaskExecutor());
 
@@ -97,10 +101,10 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 EventProcessorModule
                         .pooledStreaming(WORKFLOW_ENGINE_EVENT_MODULE)
                         .eventHandlingComponents(req -> req
-                                .declarative(cfg -> new AllEventEventHandlingComponent(
+                                .declarative("workflowEngineComponent", cfg -> new AllEventEventHandlingComponent(
                                                      cfg.getComponent(WorkflowEngine.class)
                                              )
-                                ).declarative(cfg -> new AllEventEventHandlingComponent(
+                                ).declarative("workflowHistoryProjector", cfg -> new AllEventEventHandlingComponent(
                                         cfg.getComponent(WorkflowHistoryProjector.class)
                                 ))
                         )

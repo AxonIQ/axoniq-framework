@@ -163,18 +163,19 @@ class UserSignupTest {
         });
 
         // simulate all-replayed and start workflows
-        workflowEngine.runWorkflows(false);
 
         assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
         // run to the end
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
             assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
-        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
+        assertThat(workflowEngine.workflowExecutions()).isEmpty(); // no running workflows anymore
+
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1); // history is still present
 
         // Verify that both workflows executed all steps
         for (WorkflowHistory workflowHistory : workflowHistoryRepository.findAll()) {
