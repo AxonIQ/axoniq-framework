@@ -198,8 +198,7 @@ public class FieldEncryptingConverter implements Converter {
      */
     @Override
     @Nullable
-    public <T> T convert(@Nullable Object object, java.lang.reflect.Type targetType) {
-    public <T> T convert(Object object, Type targetType) {
+    public <T> T convert(@Nullable Object object, Type targetType) {
         // DESERIALIZATION: byte[] -> Object (decrypt after conversion)
         // This happens when loading events from the event store
         if (object instanceof byte[]) {
