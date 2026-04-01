@@ -33,7 +33,7 @@ import java.util.List;
 import static io.axoniq.workflow.springboot.SpringUtils.*;
 
 /**
- * Workflow definition lookup.
+ * Workflow definition lookup looking for beans with {@link @Workflow} annotated methods.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
