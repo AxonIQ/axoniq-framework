@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit
 @ActiveProfiles("test")
 @AutoConfigureTestRestTemplate
 @Testcontainers
-class BikeRentalIntegrationTest {
+class BikeRentalIT {
 
     companion object {
         @Container

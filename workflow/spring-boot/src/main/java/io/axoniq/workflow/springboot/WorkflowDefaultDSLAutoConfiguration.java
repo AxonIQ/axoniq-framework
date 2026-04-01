@@ -17,28 +17,37 @@
  */
 package io.axoniq.workflow.springboot;
 
-import org.springframework.beans.factory.config.BeanDefinition;
+import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory;
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Role;
 
 /**
- * Autoconfiguration for workflow infrastructure.
+ * Autoconfiguration for default workflow DSL context factories.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 @AutoConfiguration
-public class InfrastructureAutoConfiguration {
+public class WorkflowDefaultDSLAutoConfiguration {
 
     /**
-     * Provides Spring workflow definition lookup.
+     * Provides a context factory for the Simple workflow DSL.
      *
-     * @return The lookup for annotations for later workflow handling registrations.
+     * @return context factory.
      */
-    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     @Bean
-    public static WorkflowDefinitionLookup workflowDefinitionLookup() {
-        return new WorkflowDefinitionLookup();
+    public SimpleWorkflowContextFactory simpleWorkflowContextFactory() {
+        return new SimpleWorkflowContextFactory();
+    }
+
+    /**
+     * Provides a context factory for the Kotlin workflow DSL.
+     *
+     * @return context factory.
+     */
+    @Bean
+    public WorkflowKontextFactory workflowKontextFactory() {
+        return new WorkflowKontextFactory();
     }
 }

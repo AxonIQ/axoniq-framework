@@ -29,8 +29,10 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
-import static io.axoniq.workflow.springboot.SpringUtils.*;
+import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.*;
 
 /**
  * Workflow definition lookup looking for beans with {@link @Workflow} annotated methods.
@@ -55,23 +57,37 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
             return;
         }
 
-        List<SpringUtils.WorkflowContextFactoryBeanDefinition> workflowFactoryBeanDefinitions = factoryBeans(beanFactory,
-                                                                                                             false);
-        List<SpringUtils.WorkflowBeanDefinition> found = handlerBeans(WorkflowContext.class, beanFactory, false);
-        if (!found.isEmpty()) {
-            List<SpringUtils.WorkflowBeanDefinition> sortedFound = sortByOrder(found, beanFactory);
+        List<WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition> factoryBeanDefinitions
+                = factoryBeans(beanFactory, false);
+
+        List<WorkflowDefinitionLookupUtils.WorkflowBeanDefinition> handlerBeanDefinitions
+                = handlerBeans(WorkflowContext.class, beanFactory, false);
+
+        if (!handlerBeanDefinitions.isEmpty()) {
+            Map<Class<? extends WorkflowContext>, List<BeanDefinitionWithWorkflowContextType>> groupedWorkflowBeanDefinitions
+                    = groupByContextType(handlerBeanDefinitions, beanFactory);
+
+            Map<Class<? extends WorkflowContext>, String> groupedWorkflowContextFactoryBeanDefinitions = factoryBeanDefinitions
+                    .stream().collect(
+                            Collectors.toMap(
+                                    WorkflowContextFactoryBeanDefinition::workflowContextType,
+                                    WorkflowContextFactoryBeanDefinition::beanName
+                            )
+                    );
+
             AbstractBeanDefinition beanDefinition =
                     BeanDefinitionBuilder
                             .genericBeanDefinition(WorkflowModuleConfigurer.class)
-                            .addConstructorArgValue(workflowFactoryBeanDefinitions)
-                            .addConstructorArgValue(sortedFound)
+                            .addConstructorArgValue(groupedWorkflowContextFactoryBeanDefinitions)
+                            .addConstructorArgValue(groupedWorkflowBeanDefinitions)
                             .getBeanDefinition();
+
             ((BeanDefinitionRegistry) beanFactory).registerBeanDefinition(configurerBeanName, beanDefinition);
         }
         logger.info("Detected {} workflow definition bean{}: {}",
-                    found.size(),
-                    found.size() == 1 ? "" : "s",
-                    String.join(", ", found.stream().map(WorkflowBeanDefinition::beanName).toList())
+                    handlerBeanDefinitions.size(),
+                    handlerBeanDefinitions.size() == 1 ? "" : "s",
+                    String.join(", ", handlerBeanDefinitions.stream().map(WorkflowBeanDefinition::beanName).toList())
         );
     }
 
