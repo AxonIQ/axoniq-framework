@@ -43,8 +43,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @since 1.0.0
  */
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = SpringUtilsHandlerBeanTest.TestConfig.class)
-public class SpringUtilsHandlerBeanTest {
+@ContextConfiguration(classes = WorkflowDefinitionLookupUtilsHandlerBeanTest.TestConfig.class)
+public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
 
     @Autowired
     private ConfigurableListableBeanFactory beanFactory;
@@ -53,15 +53,15 @@ public class SpringUtilsHandlerBeanTest {
     void shouldDetectWorkflowHandlerBeans() {
         // We look for any workflow context type or a specific one.
         // SpringUtils.handlerBeans takes a Class<? extends WorkflowContext> as a first argument.
-        List<SpringUtils.WorkflowBeanDefinition> handlerBeans = SpringUtils.handlerBeans(WorkflowContext.class,
+        List<WorkflowDefinitionLookupUtils.WorkflowBeanDefinition> handlerBeans = WorkflowDefinitionLookupUtils.handlerBeans(WorkflowContext.class,
                                                                                          beanFactory,
                                                                                          false);
 
         assertThat(handlerBeans).hasSize(2);
         assertThat(handlerBeans)
                 .containsExactlyInAnyOrder(
-                        new SpringUtils.WorkflowBeanDefinition("myWorkflow", MyWorkflow.class, MyWorkflowContext.class),
-                        new SpringUtils.WorkflowBeanDefinition("myOtherWorkflow",
+                        new WorkflowDefinitionLookupUtils.WorkflowBeanDefinition("myWorkflow", MyWorkflow.class, MyWorkflowContext.class),
+                        new WorkflowDefinitionLookupUtils.WorkflowBeanDefinition("myOtherWorkflow",
                                                                MyOtherWorkflow.class,
                                                                OtherWorkflowContext.class)
                 );

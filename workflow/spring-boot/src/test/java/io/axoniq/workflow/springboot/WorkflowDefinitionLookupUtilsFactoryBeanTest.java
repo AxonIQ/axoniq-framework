@@ -43,21 +43,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @since 1.0.0
  */
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = SpringUtilsFactoryBeanTest.TestConfig.class)
-public class SpringUtilsFactoryBeanTest {
+@ContextConfiguration(classes = WorkflowDefinitionLookupUtilsFactoryBeanTest.TestConfig.class)
+public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     @Autowired
     private ConfigurableListableBeanFactory beanFactory;
 
     @Test
     void shouldDetectWorkflowContextFactories() {
-        List<SpringUtils.WorkflowContextFactoryBeanDefinition> factoryBeans = SpringUtils.factoryBeans(beanFactory,
+        List<WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition> factoryBeans = WorkflowDefinitionLookupUtils.factoryBeans(beanFactory,
                                                                                                        false);
 
         assertThat(factoryBeans).hasSize(2);
-        assertThat(factoryBeans).extracting(SpringUtils.WorkflowContextFactoryBeanDefinition::beanName)
+        assertThat(factoryBeans).extracting(WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition::beanName)
                                 .containsExactlyInAnyOrder("myFactory", "myIndirectFactory");
-        assertThat(factoryBeans).extracting(SpringUtils.WorkflowContextFactoryBeanDefinition::workflowContextType)
+        assertThat(factoryBeans).extracting(WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition::workflowContextType)
                                 .containsExactlyInAnyOrder(MyWorkflowContext.class, MyWorkflowContext.class);
     }
 
