@@ -163,7 +163,6 @@ class UserSignupTest {
         });
 
         // simulate all-replayed and start workflows
-        // workflowEngine.runWorkflows(false);
 
         assertThat(workflowEngine.workflowExecutions()).hasSize(1);
 
