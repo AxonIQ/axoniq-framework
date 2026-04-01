@@ -163,7 +163,7 @@ public abstract class AbstractStepExecutor {
                                                   @Nonnull EventMessage eventMessage,
                                                   @Nonnull Context context) {
         if (workflowContext.workflowStatus().isTerminal()) {
-            logger.trace("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
+            logger.debug("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
                         workflowContext.workflowStatus());
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Workflow is in terminal state " + workflowContext.workflowStatus()
@@ -171,7 +171,7 @@ public abstract class AbstractStepExecutor {
         }
         if (workflowExecution.state().containsStep(stepName) && workflowExecution.state().getStep(stepName).status()
                                                                                  .isTerminal()) {
-            logger.warn("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
+            logger.debug("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
                         stepName, workflowExecution.state().getStep(stepName).status());
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Step '" + stepName + "' is in terminal state " + workflowExecution.state().getStep(stepName)

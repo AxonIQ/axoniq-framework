@@ -20,6 +20,8 @@ package io.axoniq.workflow.runtime.engine.configuration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -47,6 +49,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
+import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**
@@ -58,7 +61,7 @@ import static org.axonframework.messaging.eventhandling.processing.streaming.tok
 public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
-    public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
+    @SuppressWarnings("NullableProblems") public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
             pcepc.eventCriteria(
                          set -> {
@@ -74,7 +77,8 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                  .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
                  .initialSegmentCount(1) // FIXME -> should be configurable?
                  .batchSize(1) // FIXME -> should be configurable? currently only 1 is supported / working
-                 .initialToken(s -> c.getComponent(StreamableEventSource.class).latestToken(null)
+                 .initialToken(s -> c.getComponent(StreamableEventSource.class)
+                                     .latestToken(null)
                                      .thenCompose(latestToken -> {
                                          if (latestToken.position().isPresent()
                                                  && latestToken.position().getAsLong() > 0) {
@@ -87,7 +91,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                                                      )
                                              );
                                          } else {
-                                             // FIXME -> check in in-memory store why it behaves like this
+                                             // FIXME -> check how to handle replay if there are no events in the store
                                              return CompletableFuture.completedFuture(
                                                      createReplayToken(
                                                              new GlobalSequenceTrackingToken(1)
@@ -96,7 +100,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                                          }
                                      })
                  );
-
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
     private final ReplayStatusChangedHandler replayStatusChangedHandler;

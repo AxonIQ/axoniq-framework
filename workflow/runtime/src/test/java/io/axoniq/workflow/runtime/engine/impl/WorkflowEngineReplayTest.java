@@ -51,14 +51,14 @@ class WorkflowEngineReplayTest {
 
     private WorkflowEngine workflowEngine;
     private WorkflowExecutionRepository workflowExecutionRepository;
-    private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
         workflowExecutionRepository = spy(new InMemoryWorkflowExecutionRepository());
-        workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
-        workflowEngine = new WorkflowEngine(workflowConfigurationRegistry, workflowExecutionRepository);
+        workflowEngine = new WorkflowEngine(
+                mock(WorkflowConfigurationRegistry.class),
+                workflowExecutionRepository
+        );
     }
 
     @Test
@@ -79,7 +79,6 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void replayFinishedCleanupAndExecute() {
 
         WorkflowExecution terminalExecution = mock(WorkflowExecution.class);

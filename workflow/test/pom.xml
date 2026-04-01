@@ -52,7 +52,6 @@
             <artifactId>axon-test</artifactId>
             <scope>compile</scope>
         </dependency>
-
     </dependencies>
 
 </project>

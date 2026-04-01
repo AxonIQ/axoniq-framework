@@ -22,12 +22,16 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.test.fixture.RecordingEventStore;
+import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
@@ -40,8 +44,8 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_
  */
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
-    private static volatile PrettyPrintingRecordingEventStore lastInstance;
     private static final Set<String> IGNORED_KEYS = Set.of("correlationId", "causationId");
+    private static volatile PrettyPrintingRecordingEventStore lastInstance;
 
     /**
      * Constructs a new {@link PrettyPrintingRecordingEventStore} wrapping the given {@link EventStore}.
@@ -69,7 +73,6 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-        // descriptor.describeWrapperOf(this.delegate);
         var eventsByWorkflowId = recorded().stream()
                                            .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
                                            .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(
@@ -94,7 +97,8 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
                                           .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))
                                           .orElse("none");
                 var name = event.type().qualifiedName().toString();
-                return String.format("%s (%s): %s, %s", name, status, event.payload(), event.metadata().withoutKeys(IGNORED_KEYS));
+                return String.format("%s (%s): %s, %s", name, status, event.payload(),
+                                     event.metadata().withoutKeys(IGNORED_KEYS));
             }).toList());
         }
     }

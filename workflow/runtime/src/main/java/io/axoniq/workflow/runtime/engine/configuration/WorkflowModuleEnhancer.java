@@ -17,12 +17,12 @@
  */
 package io.axoniq.workflow.runtime.engine.configuration;
 
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.Module;
-import jakarta.annotation.Nonnull;
 
 /**
  * A workflow module enhancer is responsible for registration of a single workflow module. A workflow module is a

@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 
 /**
@@ -43,7 +44,7 @@ public class ProcessingContextUtils {
     }
 
     /**
-     * Executes supplied action in a new processing context created via unit of work factory as a child of provided
+     * Executes supplied action in a new processing context created via unit of work factory as a child of the provided
      * processing context.
      *
      * @param id                id of the unit of work.
@@ -84,7 +85,35 @@ public class ProcessingContextUtils {
     }
 
     /**
-     * Copies resources from given context to the target processing context.
+     * Executes supplied action in a new thread and processing context created via unit of work factory as a child of
+     * the provided processing context. See
+     * {@link #executeWithResult(String, UnitOfWorkFactory, Executor, Context, Function)} for running the action in the
+     * same thread.
+     *
+     * @param id                id of the unit of work.
+     * @param unitOfWorkFactory unit of work factory to use.
+     * @param executorService   executor service to offload the action to.
+     * @param parentContext     parent processing context.
+     * @param action            action to execute.
+     * @param <R>               type of action result.
+     */
+    public static <R> void executeWithResultInSeparateThread(
+            @Nullable String id,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull ExecutorService executorService,
+            @Nonnull ProcessingContext parentContext,
+            @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
+        executorService.execute(() -> executeWithResult(id,
+                                                        unitOfWorkFactory,
+                                                        executorService,
+                                                        parentContext,
+                                                        action).join() // FIXME join without timeout
+        );
+    }
+
+
+    /**
+     * Copies resources from the given context to the target processing context.
      *
      * @param from source containing resources.
      * @param to   target processing context.

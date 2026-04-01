@@ -282,15 +282,14 @@ public class AutoDetectionUtils {
 
     static Class<? extends WorkflowContext> findWorkflowContextType(@Nonnull Method method) {
         var parameterTypes = method.getParameterTypes();
-        //noinspection unchecked
         return Stream.of(parameterTypes)
-                      .filter(WorkflowContext.class::isAssignableFrom)
-                      .findFirst()
-                      .map(p -> (Class<? extends WorkflowContext>) p)
-                      .orElseThrow(
-                              () -> new IllegalArgumentException(
-                                      "Method must have at least one parameter of type assignable to WorkflowContext")
-                      );
+                     .filter(WorkflowContext.class::isAssignableFrom)
+                     .findFirst()
+                     .map(p -> (Class<? extends WorkflowContext>) p)
+                     .orElseThrow(
+                             () -> new IllegalArgumentException(
+                                     "Method must have at least one parameter of type assignable to WorkflowContext")
+                     );
     }
 
     /**

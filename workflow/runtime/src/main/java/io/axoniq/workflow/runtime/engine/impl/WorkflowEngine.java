@@ -71,7 +71,6 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     ) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
-        logger.info("Workflow Engine started.");
     }
 
     @Nonnull
@@ -81,7 +80,8 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         logger.trace("Received eventMessage {} {} {}",
                      processingContext.resources().get(TrackingToken.RESOURCE_KEY),
                      eventMessage.identifier(),
-                     eventMessage.type());
+                     eventMessage.type()
+        );
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
             // TODO: discussion regarding hibernating workflows ->
@@ -112,9 +112,10 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
-        logger.info("Replay status changed to {} at {}",
+        logger.debug("Replay status changed to {} at {}",
                     statusChange.status(),
                     context.resources().get(TrackingToken.RESOURCE_KEY));
+
         if (!statusChange.status().isReplay()) {
             executeEventSourcedWorkflows();
         }

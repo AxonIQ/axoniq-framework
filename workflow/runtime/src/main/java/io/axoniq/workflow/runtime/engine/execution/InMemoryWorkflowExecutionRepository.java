@@ -45,7 +45,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
      * Creates a new instance of {@link InMemoryWorkflowExecutionRepository}.
      */
     public InMemoryWorkflowExecutionRepository() {
-        logger.info("Using in-memory workflow execution repository");
+        logger.info("Using in-memory workflow execution repository.");
     }
 
     @Nonnull

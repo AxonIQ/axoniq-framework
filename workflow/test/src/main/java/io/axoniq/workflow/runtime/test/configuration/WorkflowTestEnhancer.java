@@ -31,6 +31,12 @@ import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
 
+/**
+ * Test enhancer for workflow testing, registering an in-mem event store and a delayed publisher.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class WorkflowTestEnhancer implements ConfigurationEnhancer {
 
     @Override

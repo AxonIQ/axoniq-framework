@@ -67,7 +67,6 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
                 );
     }
 
-    @Disabled("FIXME #97 https://github.com/AxonIQ/extension-workflow/issues/97")
     @Test
     void noFurtherStepsAfterCancel() {
         delayedPublisher.addSchedules(List.of(
@@ -89,7 +88,9 @@ class CancelWithCatchWorkflowDeclarativeTest extends AbstractDeclarativeTestBase
             Thread.currentThread().interrupt();
         }
 
-        assertThat(workflowEngine.workflowExecutions()).isEmpty();
+        await().untilAsserted(() -> {
+            assertThat(workflowEngine.workflowExecutions()).isEmpty();
+        });
 
         for (WorkflowHistory history : workflowHistoryRepository.findAll()) {
             var state = history.state();

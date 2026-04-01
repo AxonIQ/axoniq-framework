@@ -31,7 +31,7 @@ import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
 /**
- * Workflow module encapsulates configuration for one workflow definition.
+ * Workflow module encapsulates configuration for one DSL and multiple definitions created using this DSL.
  *
  * @param <C> workflow context type.
  * @author Simon Zambrovski
