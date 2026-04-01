@@ -240,7 +240,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                 }
             } catch (ClassNotFoundException e) {
                 throw new IllegalArgumentException(
-                        "Found Jackson 3 on the classpath, but cannot find the CBOR dataformat. Please add the com.fasterxml.jackson.dataformat:jackson-dataformat-cbor dependency to your project.");
+                        "Found Jackson 3 on the classpath, but cannot find the CBOR dataformat. Please add the tools.jackson.dataformat:jackson-dataformat-cbor dependency to your project.");
             }
         } catch (ClassNotFoundException e) {
             // Do nothing, Jackson 3 is not on the classpath. Continue to check for 2
