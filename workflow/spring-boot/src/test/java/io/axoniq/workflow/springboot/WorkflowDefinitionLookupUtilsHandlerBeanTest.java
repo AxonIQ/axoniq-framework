@@ -31,13 +31,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Test for detection of handler beans in Spring context.
+ * Test for detection of workflow definitions in Spring context.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -50,21 +49,17 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
     private ConfigurableListableBeanFactory beanFactory;
 
     @Test
-    void shouldDetectWorkflowHandlerBeans() {
+    void shouldDetectWorkflowWorkflowBeanDefinitions() {
         // We look for any workflow context type or a specific one.
         // SpringUtils.handlerBeans takes a Class<? extends WorkflowContext> as a first argument.
-        List<WorkflowDefinitionLookupUtils.WorkflowBeanDefinition> handlerBeans = WorkflowDefinitionLookupUtils.handlerBeans(WorkflowContext.class,
-                                                                                         beanFactory,
-                                                                                         false);
+        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(WorkflowContext.class,
+                                                                                 beanFactory,
+                                                                                 false);
 
         assertThat(handlerBeans).hasSize(2);
-        assertThat(handlerBeans)
-                .containsExactlyInAnyOrder(
-                        new WorkflowDefinitionLookupUtils.WorkflowBeanDefinition("myWorkflow", MyWorkflow.class, MyWorkflowContext.class),
-                        new WorkflowDefinitionLookupUtils.WorkflowBeanDefinition("myOtherWorkflow",
-                                                               MyOtherWorkflow.class,
-                                                               OtherWorkflowContext.class)
-                );
+        assertThat(handlerBeans).containsOnlyKeys(MyWorkflowContext.class, OtherWorkflowContext.class);
+        assertThat(handlerBeans.get(MyWorkflowContext.class)).containsExactlyInAnyOrder("myWorkflow");
+        assertThat(handlerBeans.get(OtherWorkflowContext.class)).containsExactlyInAnyOrder("myOtherWorkflow");
     }
 
     @Configuration
