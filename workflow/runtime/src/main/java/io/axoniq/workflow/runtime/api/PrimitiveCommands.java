@@ -211,7 +211,7 @@ public class PrimitiveCommands {
             return delegate.eventNameCustomizer();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public RetryPolicy retryPolicy() {
             return delegate.retryPolicy();
