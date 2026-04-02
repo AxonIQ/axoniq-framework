@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.engine.execution.InMemoryWorkflowExecutionRepo
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.history.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
@@ -45,13 +44,34 @@ import java.util.concurrent.Executors;
  * @since 1.0.0
  */
 @Internal
-// @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
+
+    /**
+     * Name of the event handling component used for workflow history projector.
+     */
+    public static final String COMPONENT_WORKFLOW_HISTORY_REPO = "WorkflowHistoryRepository";
+    /**
+     * Name of the event handling component used for workflow history projector.
+     */
+    public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "WorkflowHistoryProjector";
+    /**
+     * Name of the event handling component used for workflow engine.
+     */
+    public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
+    /**
+     * Name of the event handling component used for workflow engine.
+     */
+    public static final String COMPONENT_WORKFLOW_ENGINE_EXECUTION_REPO = "WorkflowEngineExecutionRepository";
+    /**
+     * Name of the event handling component used for workflow engine.
+     */
+    public static final String COMPONENT_WORKFLOW_ENGINE_CONFIG_REGISTRY = "WorkflowEngineConfigRegistry";
 
     /**
      * Name of the executor service component.
      */
-    public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngine";
+    public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
     /**
      * Order for this enhancer.
      * <p>
@@ -69,10 +89,6 @@ public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
     public void enhance(@Nonnull ComponentRegistry componentRegistry) {
 
         componentRegistry
-                .registerIfNotPresent(WorkflowConfigurationRegistry.class,
-                                      cfg -> new SimpleWorkflowConfigurationRegistry());
-
-        componentRegistry
                 .registerIfNotPresent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.defaults());
 
         componentRegistry
@@ -83,25 +99,36 @@ public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
                                       WORKFLOW_ENGINE_EXECUTOR,
                                       cfg -> Executors.newVirtualThreadPerTaskExecutor());
 
+        registerWorkflowExecutionRepository(componentRegistry);
+        registerMutableWorkflowHistoryRepository(componentRegistry);
+        registerWorkflowConfigurationRegistry(componentRegistry);
+
+        componentRegistry.registerIfNotPresent(WorkflowEngine.class,
+                                               COMPONENT_WORKFLOW_ENGINE,
+                                               cfg -> new WorkflowEngine(
+                                                       cfg.getComponent(WorkflowConfigurationRegistry.class),
+                                                       cfg.getComponent(WorkflowExecutionRepository.class)
+                                               ));
+    }
+
+    void registerWorkflowExecutionRepository(@Nonnull ComponentRegistry componentRegistry) {
         componentRegistry
                 .registerIfNotPresent(WorkflowExecutionRepository.class,
+                                      COMPONENT_WORKFLOW_ENGINE_EXECUTION_REPO,
                                       cfg -> new InMemoryWorkflowExecutionRepository());
+    }
 
-        componentRegistry
-                .registerIfNotPresent(WorkflowEngine.class, cfg ->
-                        new WorkflowEngine(
-                                cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                cfg.getComponent(WorkflowExecutionRepository.class)
-                        )
-                );
+    void registerMutableWorkflowHistoryRepository(@Nonnull ComponentRegistry componentRegistry) {
         componentRegistry
                 .registerIfNotPresent(MutableWorkflowHistoryRepository.class,
+                                      COMPONENT_WORKFLOW_HISTORY_REPO,
                                       cfg -> new InMemoryWorkflowHistoryRepository());
+    }
 
-        componentRegistry
-                .registerIfNotPresent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(
-                        cfg.getComponent(MutableWorkflowHistoryRepository.class)
-                ));
+    void registerWorkflowConfigurationRegistry(@Nonnull ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowConfigurationRegistry.class,
+                                               COMPONENT_WORKFLOW_ENGINE_CONFIG_REGISTRY,
+                                               cfg -> new SimpleWorkflowConfigurationRegistry());
     }
 
     @Override

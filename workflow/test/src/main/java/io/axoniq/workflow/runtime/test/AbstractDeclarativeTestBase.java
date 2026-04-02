@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.test;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
@@ -59,19 +60,17 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     @BeforeEach
     void setUp() {
 
-        var configurer = MessagingConfigurer.create();
+        var configurer = WorkflowConfigurer.create();
 
         configurer
-                .componentRegistry(r -> r
-                        .registerEnhancer(registry -> registry.registerModule(
-                                                  WorkflowModule
-                                                          .usingContext(dslType)
-                                                          .workflowContextFactory(builder)
-                                                          .definition(
-                                                                  getDeclaredDefinition()
-                                                          )
-                                          )
-                        )
+                .componentRegistry(r -> r.registerModule(
+                                           WorkflowModule
+                                                   .defaults(getClass().getSimpleName(), dslType)
+                                                   .workflowContextFactory(builder)
+                                                   .definition(
+                                                           getDeclaredDefinition()
+                                                   )
+                                   )
                 );
 
         configuration = configurer.start();

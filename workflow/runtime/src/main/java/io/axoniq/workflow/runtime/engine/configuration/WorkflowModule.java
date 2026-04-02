@@ -18,9 +18,12 @@
 package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
@@ -38,16 +41,28 @@ import java.util.function.Function;
  */
 public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
+
     /**
-     * Creates a new workflow module using the specified workflow context.
+     * Creates a new workflow module with default settings.
      *
-     * @param contextType context class.
-     * @param <C>         type of the workflow context.
+     * @param <C> type of the workflow context.
      * @return module builder.
      */
-    static <C extends WorkflowContext> LanguagePhase.WorkflowContextFactoryPhase<C> usingContext(
-            @Nonnull Class<C> contextType) {
-        return new SimpleWorkflowModule<>(contextType);
+    static <C extends WorkflowContext> LanguagePhase.WorkflowContextFactoryPhase<C> defaults(
+            @Nonnull String name, @Nonnull Class<C> contextType
+    ) {
+        return new SimpleWorkflowModule<>(name, contextType, true);
+    }
+
+    /**
+     * Creates a new workflow module with default settings.
+     *
+     * @param <C> type of the workflow context.
+     * @return module builder.
+     */
+    static <C extends WorkflowContext> ConfigurationPhase.WorkflowConfigurationRegistryPhase<C> configure(
+            @Nonnull String name, @Nonnull Class<C> contextType) {
+        return new SimpleWorkflowModule<>(name, contextType);
     }
 
     /**
@@ -56,6 +71,56 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      * @return workflow context type.
      */
     Class<C> getWorkflowContextType();
+
+    /**
+     * Configuration phase for the workflow module.
+     */
+    interface ConfigurationPhase {
+
+        interface WorkflowConfigurationRegistryPhase<C extends WorkflowContext>
+                extends WorkflowExecutionRepositoryPhase<C> {
+
+            /**
+             * Sets the workflow configuration registry.
+             *
+             * @param workflowConfigurationRegistry builder for the workflow configuration registry.
+             * @return builder for the next phase.
+             */
+            WorkflowExecutionRepositoryPhase<C> workflowConfigurationRegistry(
+                    @Nonnull ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry);
+        }
+
+        interface WorkflowExecutionRepositoryPhase<C extends WorkflowContext> extends HistoryPhase<C> {
+
+            /**
+             * Sets the workflow execution repository.
+             *
+             * @param workflowExecutionRepository builder for the workflow execution repository.
+             * @return builder for the next phase.
+             */
+            HistoryPhase<C> workflowExecutionRepository(
+                    @Nonnull ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepository);
+        }
+
+        interface HistoryPhase<C extends WorkflowContext> extends LanguagePhase.WorkflowContextFactoryPhase<C> {
+
+            /**
+             * Configures the workflow module to use history.
+             *
+             * @param workflowHistoryProjector builder for the workflow history projector.
+             * @return builder for the next phase.
+             */
+            LanguagePhase.WorkflowContextFactoryPhase<C> withHistory(
+                    @Nonnull ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjector);
+
+            /**
+             * Configures the workflow module to not use history.
+             *
+             * @return builder for the next phase.
+             */
+            LanguagePhase.WorkflowContextFactoryPhase<C> withoutHistory();
+        }
+    }
 
     /**
      * Defines the DSL part of the workflow definition.
@@ -73,7 +138,6 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             WorkflowDefinitionPhase<C> workflowContextFactory(
                     @Nonnull ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory);
         }
-
     }
 
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {

@@ -3,11 +3,7 @@ package io.axoniq.workflow.runtime.engine.configuration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.common.configuration.Component;
-import org.axonframework.common.configuration.ComponentDecorator;
 import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.axonframework.common.configuration.DefaultAxonApplication;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.messaging.core.configuration.MessagingConfigurationDefaults;
@@ -16,6 +12,7 @@ import org.axonframework.messaging.eventhandling.configuration.EventBusConfigura
 
 import java.util.function.Consumer;
 
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.*;
 import static java.util.Objects.requireNonNull;
 
 public class WorkflowConfigurer implements ApplicationConfigurer {
@@ -33,8 +30,16 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
                         .registerEnhancer(new MessagingConfigurationDefaults())
                         .registerEnhancer(new EventSourcingConfigurationDefaults())
                         .registerEnhancer(new WorkflowConfigurerDefaults())
-                        .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer())
+                        .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
+                                "Workflow",
+                                COMPONENT_WORKFLOW_ENGINE,
+                                COMPONENT_WORKFLOW_HISTORY_PROJECTOR
+                        ))
                 );
+    }
+
+    public WorkflowConfigurer workflowModule(@Nonnull WorkflowModule<?> workflowModule) {
+        return componentRegistry(cr -> cr.registerModule(workflowModule));
     }
 
     public static WorkflowConfigurer create() {

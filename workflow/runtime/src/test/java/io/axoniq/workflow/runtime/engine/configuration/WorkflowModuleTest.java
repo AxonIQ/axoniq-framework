@@ -44,6 +44,7 @@ import org.junit.jupiter.api.*;
 import org.mockito.*;
 
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,7 +66,7 @@ class WorkflowModuleTest {
 
     @BeforeEach
     void setUp() {
-        module = new SimpleWorkflowModule<>(TestWorkflowContext.class);
+        module = new SimpleWorkflowModule<>(UUID.randomUUID().toString(), TestWorkflowContext.class);
         configuration = mock(Configuration.class);
         registry = mock(WorkflowConfigurationRegistry.class);
         messageTypeResolver = mock(MessageTypeResolver.class);
@@ -89,7 +90,7 @@ class WorkflowModuleTest {
         EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
-        var myModule = WorkflowModule.usingContext(TestWorkflowContext.class)
+        var myModule = WorkflowModule.defaults(UUID.randomUUID().toString(), TestWorkflowContext.class)
                                      .workflowContextFactory(c -> contextFactory)
                                      .definition(d -> d.declarative(c -> definition).workflowName("name")
                                                        .on(c -> startCondition).notCustomized());
@@ -152,7 +153,7 @@ class WorkflowModuleTest {
         assertThat(config.eventNameCustomizer()).isSameAs(customizer);
         assertThat(config.workflowIdProvider()).isSameAs(idProvider);
     }
-    
+
     @Test
     @SuppressWarnings("unchecked")
     void testAutodetectedWorkflowDefinition() {

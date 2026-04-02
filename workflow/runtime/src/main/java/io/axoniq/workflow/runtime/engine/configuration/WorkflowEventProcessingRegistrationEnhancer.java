@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.engine.configuration;
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -39,18 +40,18 @@ import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandl
 @Internal
 public class WorkflowEventProcessingRegistrationEnhancer implements ConfigurationEnhancer {
 
-    /**
-     * Name of the event handling module used for workflow.
-     */
-    public static final String MODULE_EVENT_WORKFLOW_ENGINE = "WorkflowEngine";
-    /**
-     * Name of the event handling component used for workflow history projector.
-     */
-    public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "workflowHistoryProjector";
-    /**
-     * Name of the event handling component used for workflow engine.
-     */
-    public static final String COMPONENT_WORKFLOW_ENGINE = "workflowEngineComponent";
+    private final String engineComponentName;
+    private final String projectorComponentName;
+    private final String moduleName;
+
+    public WorkflowEventProcessingRegistrationEnhancer(
+            @Nonnull String moduleName,
+            @Nonnull String engineComponentName,
+            @Nullable String projectorComponentName) {
+        this.moduleName = moduleName;
+        this.engineComponentName = engineComponentName;
+        this.projectorComponentName = projectorComponentName;
+    }
 
     /**
      * Order for this enhancer.
@@ -64,15 +65,25 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     public void enhance(@Nonnull ComponentRegistry componentRegistry) {
         componentRegistry.registerModule(
                 EventProcessorModule
-                        .pooledStreaming(MODULE_EVENT_WORKFLOW_ENGINE)
-                        .eventHandlingComponents(req -> req
-                                .declarative(COMPONENT_WORKFLOW_ENGINE, cfg -> new AllEventEventHandlingComponent(
-                                                     cfg.getComponent(WorkflowEngine.class)
-                                             )
-                                ).declarative(COMPONENT_WORKFLOW_HISTORY_PROJECTOR,
-                                              cfg -> new AllEventEventHandlingComponent(
-                                                      cfg.getComponent(WorkflowHistoryProjector.class)
-                                              ))
+                        .pooledStreaming(moduleName)
+                        .eventHandlingComponents(
+                                req -> {
+                                    var engineRegistration = req
+                                            .declarative(engineComponentName + "Eventing",
+                                                         cfg -> new AllEventEventHandlingComponent(
+                                                                 cfg.getComponent(WorkflowEngine.class, engineComponentName)
+                                                         )
+                                            );
+                                    if (projectorComponentName != null) {
+                                        engineRegistration = engineRegistration.
+                                                declarative(projectorComponentName + "Eventing",
+                                                            cfg -> new AllEventEventHandlingComponent(
+                                                                    cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
+                                                            )
+                                                );
+                                    }
+                                    return engineRegistration;
+                                }
                         )
                         .customized(ANY_EVENT_IN_ONE_SEGMENT)
                         .build()
