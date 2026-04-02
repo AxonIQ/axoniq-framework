@@ -145,7 +145,7 @@ public class RetryWorkflow {
             return Map.of("retryWithBackoff", "done");
         }, RetryPolicy.maxRetries(3).withBackoff(BackoffStrategy.fixed(Duration.ofMillis(200))));
 
-        // Step 8: retryWhile — fails always, predicate stops after attempt 2 → FAILED
+        // Step 8: retryWhile — always fails, predicate stops retrying after attempt 2 → FAILED
         WorkflowStepResult r8 = ctx.execute("retryUntilStop", Map.of(), (c, p) -> {
             int attempt = retryUntilStopAttempts.incrementAndGet();
             throw new RuntimeException("retryUntilStop failure on attempt " + attempt);

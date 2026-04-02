@@ -132,7 +132,7 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
             // Step 7: Retry with backoff — COMPLETED (failed 2x with 200ms backoff, succeeded on attempt 3)
             assertThat(state.getStep("retryWithBackoff").status()).isEqualTo(StepStatus.COMPLETED);
 
-            // Step 8: retryUntil — FAILED (predicate stopped retrying after attempt 2)
+            // Step 8: retryWhile — FAILED (predicate stopped retrying after attempt 2)
             assertThat(state.getStep("retryUntilStop").status()).isEqualTo(StepStatus.FAILED);
 
         }
