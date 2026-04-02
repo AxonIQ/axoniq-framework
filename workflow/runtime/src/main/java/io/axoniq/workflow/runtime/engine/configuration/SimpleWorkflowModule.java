@@ -125,21 +125,19 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                 if (workflowConfigurationRegistryBuilder != null) {
                     cr.registerComponent(
                             WorkflowConfigurationRegistry.class,
-                            name + COMPONENT_WORKFLOW_ENGINE_CONFIG_REGISTRY,
                             (ComponentBuilder) workflowConfigurationRegistryBuilder
                     );
                 }
                 if (workflowExecutionRepositoryBuilder != null) {
                     cr.registerComponent(
                             WorkflowExecutionRepository.class,
-                            name + COMPONENT_WORKFLOW_ENGINE_EXECUTION_REPO,
                             workflowExecutionRepositoryBuilder
                     );
                 }
 
                 cr.registerComponent(
                         WorkflowEngine.class,
-                        name + COMPONENT_WORKFLOW_ENGINE,
+                        COMPONENT_WORKFLOW_ENGINE,
                         cfg -> new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class)
@@ -149,17 +147,18 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                 if (workflowHistoryProjectorBuilder != null) {
                     cr.registerComponent(
                             WorkflowHistoryProjector.class,
-                            name + COMPONENT_WORKFLOW_HISTORY_PROJECTOR,
+                            COMPONENT_WORKFLOW_HISTORY_PROJECTOR,
                             workflowHistoryProjectorBuilder
                     );
                 }
 
                 cr.registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
                         name,
-                        name + COMPONENT_WORKFLOW_ENGINE,
+                        COMPONENT_WORKFLOW_ENGINE,
                         useHistory
-                                ? name + COMPONENT_WORKFLOW_HISTORY_PROJECTOR
-                                : null
+                                ? COMPONENT_WORKFLOW_HISTORY_PROJECTOR
+                                : null,
+                        useHistory
                 ));
             }
         });

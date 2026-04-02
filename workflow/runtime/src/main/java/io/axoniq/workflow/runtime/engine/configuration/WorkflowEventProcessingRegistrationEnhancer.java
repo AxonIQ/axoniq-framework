@@ -43,14 +43,17 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     private final String engineComponentName;
     private final String projectorComponentName;
     private final String moduleName;
+    private final boolean registerHistoryProjector;
 
     public WorkflowEventProcessingRegistrationEnhancer(
             @Nonnull String moduleName,
-            @Nonnull String engineComponentName,
-            @Nullable String projectorComponentName) {
+            @Nullable String engineComponentName,
+            @Nullable String projectorComponentName,
+            boolean registerHistoryProjector) {
         this.moduleName = moduleName;
         this.engineComponentName = engineComponentName;
         this.projectorComponentName = projectorComponentName;
+        this.registerHistoryProjector = registerHistoryProjector;
     }
 
     /**
@@ -69,17 +72,43 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                         .eventHandlingComponents(
                                 req -> {
                                     var engineRegistration = req
-                                            .declarative(engineComponentName + "Eventing",
-                                                         cfg -> new AllEventEventHandlingComponent(
-                                                                 cfg.getComponent(WorkflowEngine.class, engineComponentName)
-                                                         )
+                                            .declarative(
+                                                    engineComponentName != null
+                                                            ? engineComponentName + "ExecutionEventing"
+                                                            : "WorkflowExecutionEventing",
+                                                    cfg -> {
+                                                        if (engineComponentName != null) {
+                                                            return new AllEventEventHandlingComponent(
+                                                                    cfg.getComponent(WorkflowEngine.class,
+                                                                                     engineComponentName)
+                                                            );
+                                                        } else {
+                                                            return new AllEventEventHandlingComponent(
+                                                                    cfg.getComponent(WorkflowEngine.class)
+                                                            );
+                                                        }
+                                                    }
                                             );
-                                    if (projectorComponentName != null) {
+                                    if (registerHistoryProjector) {
                                         engineRegistration = engineRegistration.
-                                                declarative(projectorComponentName + "Eventing",
-                                                            cfg -> new AllEventEventHandlingComponent(
-                                                                    cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
-                                                            )
+                                                declarative(
+                                                        projectorComponentName != null ?
+                                                                projectorComponentName + "Eventing"
+                                                                : "WorkflowHistoryEventing",
+                                                        cfg -> {
+                                                            if (projectorComponentName != null) {
+                                                                return new AllEventEventHandlingComponent(
+                                                                        cfg.getComponent(
+                                                                                WorkflowHistoryProjector.class,
+                                                                                projectorComponentName
+                                                                        )
+                                                                );
+                                                            } else {
+                                                                return new AllEventEventHandlingComponent(
+                                                                        cfg.getComponent(WorkflowHistoryProjector.class)
+                                                                );
+                                                            }
+                                                        }
                                                 );
                                     }
                                     return engineRegistration;

@@ -12,7 +12,6 @@ import org.axonframework.messaging.eventhandling.configuration.EventBusConfigura
 
 import java.util.function.Consumer;
 
-import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.*;
 import static java.util.Objects.requireNonNull;
 
 public class WorkflowConfigurer implements ApplicationConfigurer {
@@ -31,9 +30,7 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
                         .registerEnhancer(new EventSourcingConfigurationDefaults())
                         .registerEnhancer(new WorkflowConfigurerDefaults())
                         .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
-                                "Workflow",
-                                COMPONENT_WORKFLOW_ENGINE,
-                                COMPONENT_WORKFLOW_HISTORY_PROJECTOR
+                                "Workflow", null, null, true
                         ))
                 );
     }
