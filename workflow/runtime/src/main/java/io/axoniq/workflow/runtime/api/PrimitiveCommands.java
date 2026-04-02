@@ -139,8 +139,8 @@ public class PrimitiveCommands {
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    PayloadReducer.local(),
-                                                    PayloadReducer.all(),
+                                                    PayloadReducer.LOCAL_ONLY,
+                                                    PayloadReducer.GLOBAL_ONLY,
                                                     duration,
                                                     eventNameCustomizer,
                                                     retryPolicy);
