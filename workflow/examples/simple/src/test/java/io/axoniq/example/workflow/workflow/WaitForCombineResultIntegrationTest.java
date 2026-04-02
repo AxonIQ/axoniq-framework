@@ -39,7 +39,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
+import static io.axoniq.example.workflow.workflow.WaitForCombineResultIntegrationTest.*;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
@@ -53,14 +55,14 @@ import static org.awaitility.Awaitility.await;
  * Integration test for COMBINE result reducer for WaitFor primitive.
  */
 class WaitForCombineResultIntegrationTest
-        extends AbstractDeclarativeTestBase<WaitForCombineResultIntegrationTest.WaitForCombineWorkflowContext> {
+        extends AbstractDeclarativeTestBase<WaitForCombineWorkflowContext> {
 
     public WaitForCombineResultIntegrationTest() {
         super(WaitForCombineWorkflowContext.class, c -> new WaitForCombineWorkflowContextFactory());
     }
 
     @Override
-    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WaitForCombineWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WaitForCombineWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<WaitForCombineWorkflowContext>> getDeclaredDefinition() {
         return d -> d
                 .declarative(c -> new WaitForCombineWorkflow()::execute)
                 .workflowName("WaitForCombineWorkflow")

@@ -20,10 +20,9 @@ package io.axoniq.example.workflow.workflow;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowState;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistory;
@@ -32,7 +31,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -54,7 +53,7 @@ class AllMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
     }
 
     @Override
-    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new AllMatchGuardWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
@@ -94,7 +93,7 @@ class AllMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<S
         assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
         for (WorkflowState state : workflowHistoryRepository.findAll().stream()
-                                                              .map(WorkflowHistory::state).toList()) {
+                                                            .map(WorkflowHistory::state).toList()) {
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             // Both steps should be in history

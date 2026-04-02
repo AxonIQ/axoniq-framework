@@ -23,7 +23,6 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -37,7 +36,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
@@ -68,7 +67,7 @@ class UserSignupTest {
         }
 
         @Override
-        protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+        protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
             return d -> d
                     .declarative(c -> new UserSignupWorkflow()::execute)
                     .workflowName("MyWorkflow")
@@ -111,15 +110,9 @@ class UserSignupTest {
         }
 
         @Override
-        protected void customize(WorkflowConfigurer configurer) {
-            configurer.componentRegistry(cr -> cr.registerComponent(Object.class, "UserSignupWorkflow", c -> new UserSignupWorkflow()));
-        }
-
-        @Override
-        protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-            return (d) -> {
-                // No manual definition needed, detected from component registry
-            };
+        protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
+            return d -> d
+                    .autodetected(c -> new UserSignupWorkflow());
         }
 
         @Test

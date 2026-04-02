@@ -20,9 +20,9 @@ package io.axoniq.workflow.runtime.test;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
@@ -30,24 +30,15 @@ import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.function.Consumer;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
-/**
- * Abstract test base for workflow test, until we develop a test fixture.
- *
- * @param <T> type of the workflow context.
- * @author Simon Zambrovski
- * @since 1.0.0
- */
 public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
     protected final Logger logger = LoggerFactory.getLogger(getClass());
@@ -68,17 +59,20 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     @BeforeEach
     void setUp() {
 
-        var configurer = WorkflowConfigurer.create();
+        var configurer = MessagingConfigurer.create();
 
-        customize(configurer);
-
-        configurer.componentRegistry(r -> r.registerModule(
-                                             WorkflowModule
-                                                     .usingContext(dslType)
-                                                     .workflowContextFactory(builder)
-                                                     .definition(getDeclaredDefinitions())
-                                     )
-        );
+        configurer
+                .componentRegistry(r -> r
+                        .registerEnhancer(registry -> registry.registerModule(
+                                                  WorkflowModule
+                                                          .usingContext(dslType)
+                                                          .workflowContextFactory(builder)
+                                                          .definition(
+                                                                  getDeclaredDefinition()
+                                                          )
+                                          )
+                        )
+                );
 
         configuration = configurer.start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
@@ -87,21 +81,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
     }
 
-    /**
-     * Customize the configurer.
-     *
-     * @param configurer configurer to customize.
-     */
-    protected void customize(WorkflowConfigurer configurer) {
-        // do nothing by default
-    }
-
-    /**
-     * Retrieves workflow definitions.
-     *
-     * @return definitions phase.
-     */
-    protected abstract Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
+    protected abstract Function<DetectionPhase<T>, FinalizedPhase<T>> getDeclaredDefinition();
 
     @AfterEach
     void shutdown() {

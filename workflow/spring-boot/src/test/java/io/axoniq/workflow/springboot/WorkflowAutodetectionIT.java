@@ -45,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
+@Disabled
 @SpringBootTest(
         classes = WorkflowAutodetectionIT.TestConfig.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,

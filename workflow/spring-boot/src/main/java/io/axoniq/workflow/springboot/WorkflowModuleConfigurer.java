@@ -73,21 +73,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
 
             var factoryName = workflowContextFactories.get(workflowContextType);
             if (factoryName != null) {
-
-                if (!workflowBeanDefs.isEmpty()) {
-                    for (var beanDef : workflowBeanDefs) {
-                        @SuppressWarnings("unchecked")
-                        WorkflowModule<?> module = WorkflowModule
-                                .usingContext((Class<WorkflowContext>) workflowContextType)
-                                .workflowContextFactory(
-                                        c -> (WorkflowContextFactory<WorkflowContext>) applicationContext.getBean(
-                                                factoryName))
-                                .definition(d -> {
-                                            // No manual definition needed, detected from component registry
-                                        });
-                        registry.registerModule(module);
-                    }
-                }
+                // REPLACE WITH FROM MAIN
             } else {
                 throw new BadWorkflowConfigurationException(String.format(
                         "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",

@@ -31,6 +31,7 @@ import org.junit.jupiter.api.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -52,7 +53,7 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
     }
 
     @Override
-    protected Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new NoneMatchGuardWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)

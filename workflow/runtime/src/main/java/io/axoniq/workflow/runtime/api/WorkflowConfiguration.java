@@ -17,14 +17,11 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionFactory;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 
 import java.util.Map;
@@ -38,6 +35,13 @@ import java.util.Map;
  * @since 1.0.0
  */
 public interface WorkflowConfiguration<T extends WorkflowContext> {
+
+    /**
+     * Returns the type of the workflow context.
+     *
+     * @return type of the workflow context.
+     */
+    Class<T> getWorkflowContextType();
 
     /**
      * Returns workflow definition.
@@ -61,7 +65,9 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      * @return factory for workflow state.
      */
     @Nonnull
-    WorkflowExecutionFactory workflowExecutionFactory();
+    default WorkflowExecutionFactory workflowExecutionFactory() {
+        return new DSLAdoptingExecutionFactory<>(getWorkflowContextType());
+    }
 
     /**
      * Returns workflow id provider.
@@ -74,7 +80,7 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     }
 
     /**
-     * Returns workflow name.
+     * Returns the workflow name.
      *
      * @return name of the workflow.
      */
@@ -102,36 +108,4 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     default Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
         return Map.of();
     }
-
-    /**
-     * Returns workflow engine.
-     *
-     * @return workflow engine.
-     */
-    @Nonnull
-    WorkflowEngine workflowEngine();
-
-    /**
-     * Returns workflow execution repository.
-     *
-     * @return workflow execution repository.
-     */
-    @Nonnull
-    WorkflowExecutionRepository workflowExecutionRepository();
-
-    /**
-     * Returns workflow history repository.
-     *
-     * @return workflow history repository.
-     */
-    @Nonnull
-    MutableWorkflowHistoryRepository workflowHistoryRepository();
-
-    /**
-     * Returns workflow history projector.
-     *
-     * @return workflow history projector.
-     */
-    @Nonnull
-    WorkflowHistoryProjector workflowHistoryProjector();
 }

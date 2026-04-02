@@ -21,8 +21,8 @@ import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistory
@@ -35,16 +35,16 @@ import org.awaitility.Awaitility.await
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
+import java.util.function.Function
 import java.util.function.Predicate
-import java.util.function.Consumer
 
 class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): Consumer<DetectionPhase<WorkflowKontext>> {
-        return Consumer { d ->
+    override fun getDeclaredDefinition(): Function<DetectionPhase<WorkflowKontext>, FinalizedPhase<WorkflowKontext>> {
+        return { d ->
             d.declarative { WorkflowKontext.from(UserSignupWorkflow()::execute) }
                 .workflowName("User signup workflow in Kotlin")
                 .on(EventConditions.fromType(RegistrationReceivedEvent::class.java))

@@ -27,10 +27,10 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
 
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
- * Workflow module encapsulates configuration for one DSL and exactly one definition created using this DSL.
+ * Workflow module encapsulates configuration for one workflow definition.
  *
  * @param <C> workflow context type.
  * @author Simon Zambrovski
@@ -55,7 +55,7 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      *
      * @return workflow context type.
      */
-    Class<C> getContextType();
+    Class<C> getWorkflowContextType();
 
     /**
      * Defines the DSL part of the workflow definition.
@@ -73,18 +73,22 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             WorkflowDefinitionPhase<C> workflowContextFactory(
                     @Nonnull ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory);
         }
+
     }
 
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {
+
         /**
-         * Defines exactly one workflow definition.
+         * Defines workflow definitions.
          *
          * @param definition definition phase.
          * @return workflow module.
          */
-        WorkflowModule<C> definition(@Nonnull Consumer<DetectionPhase<C>> definition);
+        WorkflowModule<C> definition(@Nonnull Function<DetectionPhase<C>, FinalizedPhase<C>> definition);
+
 
         interface DetectionPhase<C extends WorkflowContext> {
+
             /**
              * Names the workflow.
              *
@@ -92,6 +96,13 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * @return builder for the trigger definition phase.
              */
             NamingPhase<C> declarative(@Nonnull ComponentBuilder<WorkflowDefinition<C>> componentBuilder);
+
+            /**
+             * Auto-detects workflows on the given component.
+             *
+             * @return builder of customization phase.
+             */
+            FinalizedPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder);
         }
 
         interface NamingPhase<C extends WorkflowContext> {
@@ -122,20 +133,24 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * Applies customizations to workflow definition.
              *
              * @param instanceCustomization customization function.
-             * @return workflow module.
+             * @return definitions phase for the next workflow.
              */
-            WorkflowModule<C> customized(
+            FinalizedPhase<C> customized(
                     @Nonnull BiFunction<Configuration, WorkflowCustomization, WorkflowCustomization> instanceCustomization
             );
 
             /**
              * Don't apply any customizations and use defaults.
              *
-             * @return workflow module.
+             * @return definitions phase for the next workflow.
              */
-            default WorkflowModule<C> notCustomized() {
+            default FinalizedPhase<C> notCustomized() {
                 return customized((c, wc) -> wc);
             }
+        }
+
+        interface FinalizedPhase<C> {
+
         }
     }
 }
