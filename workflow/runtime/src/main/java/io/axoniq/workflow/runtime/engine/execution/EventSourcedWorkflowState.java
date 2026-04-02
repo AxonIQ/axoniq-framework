@@ -173,8 +173,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                    processingContext)); // TODO copy resources of the context
                     break;
                 case RETRYING:
+                    StepRetryInfo retryInfo = eventMessage.payloadAs(StepRetryInfo.class,
+                                                                     processingContext.component(Converter.class));
                     addStep(WorkflowStep.retrying(stepName,
-                                                  (StepRetryInfo) eventPayload,
+                                                  retryInfo,
                                                   eventMessage.timestamp(),
                                                   processingContext)); // TODO copy resources of the context
                     break;

@@ -17,6 +17,8 @@
  */
 package io.axoniq.workflow.runtime.engine.step;
 
+import jakarta.annotation.Nonnull;
+
 /**
  * Payload for the RETRYING event. Contains retry state for event sourcing and crash recovery.
  *
@@ -27,4 +29,4 @@ package io.axoniq.workflow.runtime.engine.step;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public record StepRetryInfo(int attempt, int maxRetries, Throwable error) {}
+public record StepRetryInfo(int attempt, int maxRetries, @Nonnull Throwable error) {}

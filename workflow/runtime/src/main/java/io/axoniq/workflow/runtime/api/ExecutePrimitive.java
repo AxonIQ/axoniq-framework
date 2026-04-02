@@ -66,8 +66,8 @@ public interface ExecutePrimitive {
      * @param stepName            name of the step.
      * @param local               local context passed to the call.
      * @param action              action to execute.
-     * @param parameterMapping    reducer for parameters.
-     * @param resultMapping       reducer for result.
+     * @param parameterPayloadReducer reducer for parameters.
+     * @param resultPayloadReducer    reducer for result.
      * @param timeout             timeout of the action.
      * @param eventNameCustomizer event name customizer.
      * @param retryPolicy         retry policy for the step.
@@ -78,13 +78,13 @@ public interface ExecutePrimitive {
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy
     ) {
-        return execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
+        return execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout, eventNameCustomizer);
     }
 
     /**

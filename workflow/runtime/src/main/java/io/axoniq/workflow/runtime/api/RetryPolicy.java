@@ -17,6 +17,8 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import jakarta.annotation.Nonnull;
+
 import java.util.function.Predicate;
 
 /**
@@ -32,36 +34,42 @@ import java.util.function.Predicate;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffStrategy backoffStrategy,
-                           Predicate<RetryContext> retryPredicate) {
+public record RetryPolicy(int maxRetries, @Nonnull RetryHandler onRetryHandler,
+                           @Nonnull BackoffStrategy backoffStrategy,
+                           @Nonnull Predicate<RetryContext> retryPredicate) {
 
-    public RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffStrategy backoffStrategy) {
+    public RetryPolicy(int maxRetries, @Nonnull RetryHandler onRetryHandler,
+                       @Nonnull BackoffStrategy backoffStrategy) {
         this(maxRetries, onRetryHandler, backoffStrategy, ctx -> true);
     }
 
-    public RetryPolicy(int maxRetries, RetryHandler onRetryHandler) {
+    public RetryPolicy(int maxRetries, @Nonnull RetryHandler onRetryHandler) {
         this(maxRetries, onRetryHandler, BackoffStrategy.NONE, ctx -> true);
     }
 
     public static final RetryPolicy NONE = new RetryPolicy(0, RetryHandler.NOOP);
 
+    @Nonnull
     public static RetryPolicy maxRetries(int maxRetries) {
         return new RetryPolicy(maxRetries, RetryHandler.NOOP);
     }
 
-    public RetryPolicy onRetry(RetryHandler handler) {
+    @Nonnull
+    public RetryPolicy onRetry(@Nonnull RetryHandler handler) {
         return new RetryPolicy(this.maxRetries, handler, this.backoffStrategy, this.retryPredicate);
     }
 
-    public RetryPolicy withBackoff(BackoffStrategy strategy) {
+    @Nonnull
+    public RetryPolicy withBackoff(@Nonnull BackoffStrategy strategy) {
         return new RetryPolicy(this.maxRetries, this.onRetryHandler, strategy, this.retryPredicate);
     }
 
-    public RetryPolicy retryWhile(Predicate<RetryContext> predicate) {
+    @Nonnull
+    public RetryPolicy retryWhile(@Nonnull Predicate<RetryContext> predicate) {
         return new RetryPolicy(this.maxRetries, this.onRetryHandler, this.backoffStrategy, predicate);
     }
 
-    public boolean shouldRetry(RetryContext context) {
+    public boolean shouldRetry(@Nonnull RetryContext context) {
         return context.attempt() < maxRetries && retryPredicate.test(context);
     }
 }

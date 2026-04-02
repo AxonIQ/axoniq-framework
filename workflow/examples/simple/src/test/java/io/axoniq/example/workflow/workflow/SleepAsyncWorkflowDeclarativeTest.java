@@ -20,10 +20,8 @@ package io.axoniq.example.workflow.workflow;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.Test;
@@ -76,19 +74,18 @@ class SleepAsyncWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
                 assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
         );
 
-        workflowEngine.runWorkflows(false);
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll()).allMatch(h ->
+                    h.state().workflowStatus().isTerminal());
+        });
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(workflowEngine.workflowExecutions()).allMatch(h ->
-                        h.workflowContext().workflowStatus().isTerminal())
-        );
+        assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
-        assertThat(workflowEngine.workflowExecutions()).hasSize(1);
-
-        for (WorkflowContext context : workflowEngine.workflowExecutions().stream()
-                                                     .map(WorkflowExecution::workflowContext).toList()) {
-            assertThat(context.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
-            assertThat(context.workflowStepNames()).containsExactlyInAnyOrder("cooldown", "doWork");
+        for (var history : workflowHistoryRepository.findAll()) {
+            var state = history.state();
+            assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("cooldown", "doWork");
         }
     }
 }

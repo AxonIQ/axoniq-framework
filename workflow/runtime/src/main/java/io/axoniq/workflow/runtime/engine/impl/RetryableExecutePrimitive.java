@@ -84,12 +84,12 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-        return delegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout, eventNameCustomizer);
+        return delegate.execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout, eventNameCustomizer);
     }
 
     // ---- Retry path ----
@@ -100,14 +100,14 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy
     ) {
         if (retryPolicy == RetryPolicy.NONE || retryPolicy.maxRetries() <= 0) {
-            return delegate.execute(stepName, local, action, parameterMapping, resultMapping, timeout,
+            return delegate.execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout,
                                     eventNameCustomizer);
         }
 
@@ -116,7 +116,7 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             var step = workflowExecution.state().getStep(stepName);
             if (step.status() == StepStatus.RETRYING && step.result() instanceof StepRetryInfo info) {
                 Instant retryReadyAt = computeRetryReadyAt(retryPolicy, info.attempt(), step.timestamp());
-                scheduleRetryAttempt(stepName, local, action, parameterMapping, resultMapping,
+                scheduleRetryAttempt(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                                      timeout, eventNameCustomizer, retryPolicy,
                                      info.attempt() + 1, retryReadyAt);
                 return WorkflowStepResults.stateBased(stepName, workflowExecution);
@@ -124,7 +124,7 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
         }
 
         // Normal path: first attempt
-        return launchWithRetry(stepName, local, action, parameterMapping, resultMapping,
+        return launchWithRetry(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                                timeout, eventNameCustomizer, retryPolicy, 1);
     }
 
@@ -134,22 +134,22 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy,
             int attempt
     ) {
         FailureHandler failureHandler = (name, error, enc) ->
-                handleAttemptFailure(name, error, false, local, action, parameterMapping,
-                                     resultMapping, timeout, enc, retryPolicy, attempt);
+                handleAttemptFailure(name, error, false, local, action, parameterPayloadReducer,
+                                     resultPayloadReducer, timeout, enc, retryPolicy, attempt);
 
         TimeoutHandler timeoutHandler = (name, enc) ->
-                handleAttemptFailure(name, null, true, local, action, parameterMapping,
-                                     resultMapping, timeout, enc, retryPolicy, attempt);
+                handleAttemptFailure(name, null, true, local, action, parameterPayloadReducer,
+                                     resultPayloadReducer, timeout, enc, retryPolicy, attempt);
 
-        return delegate.execute(stepName, local, action, parameterMapping, resultMapping,
+        return delegate.execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                                timeout, eventNameCustomizer, failureHandler, timeoutHandler);
     }
 
@@ -159,8 +159,8 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             boolean isTimeout,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy,
@@ -176,7 +176,7 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
 
             Instant retryReadyAt = computeRetryReadyAt(retryPolicy, attempt, clock.instant());
-            scheduleRetryAttempt(stepName, local, action, parameterMapping, resultMapping,
+            scheduleRetryAttempt(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                                  timeout, eventNameCustomizer, retryPolicy,
                                  attempt + 1, retryReadyAt);
         } else {
@@ -205,8 +205,8 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy,
@@ -220,7 +220,7 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             // No backoff or already elapsed (crash recovery) — launch on next task cycle
             workflowExecution.appendTask(i -> {
                 if (!i.state().getStep(stepName).status().isTerminal()) {
-                    relaunchWithRetry(stepName, local, action, parameterMapping, resultMapping,
+                    relaunchWithRetry(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                                       timeout, eventNameCustomizer, retryPolicy, nextAttempt);
                 }
             });
@@ -229,7 +229,7 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             var backoffFuture = CompletableFuture.runAsync(
                     () -> workflowExecution.appendTask(i -> {
                         if (!i.state().getStep(stepName).status().isTerminal()) {
-                            relaunchWithRetry(stepName, local, action, parameterMapping, resultMapping,
+                            relaunchWithRetry(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                                               timeout, eventNameCustomizer, retryPolicy, nextAttempt);
                         }
                     }),
@@ -246,22 +246,22 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
             @Nonnull String stepName,
             @Nullable Map<String, Object> local,
             @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterMapping,
-            @Nonnull PayloadReducer resultMapping,
+            @Nonnull PayloadReducer parameterPayloadReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy,
             int attempt
     ) {
         FailureHandler failureHandler = (name, error, enc) ->
-                handleAttemptFailure(name, error, false, local, action, parameterMapping,
-                                     resultMapping, timeout, enc, retryPolicy, attempt);
+                handleAttemptFailure(name, error, false, local, action, parameterPayloadReducer,
+                                     resultPayloadReducer, timeout, enc, retryPolicy, attempt);
 
         TimeoutHandler timeoutHandler = (name, enc) ->
-                handleAttemptFailure(name, null, true, local, action, parameterMapping,
-                                     resultMapping, timeout, enc, retryPolicy, attempt);
+                handleAttemptFailure(name, null, true, local, action, parameterPayloadReducer,
+                                     resultPayloadReducer, timeout, enc, retryPolicy, attempt);
 
-        delegate.execute(stepName, local, action, parameterMapping, resultMapping,
+        delegate.execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
                          timeout, eventNameCustomizer, failureHandler, timeoutHandler);
     }
 }

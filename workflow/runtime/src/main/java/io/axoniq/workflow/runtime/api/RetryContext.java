@@ -17,6 +17,8 @@
  */
 package io.axoniq.workflow.runtime.api;
 
+import jakarta.annotation.Nonnull;
+
 /**
  * Context passed to a {@link RetryHandler} on each retry attempt.
  *
@@ -29,9 +31,10 @@ package io.axoniq.workflow.runtime.api;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public record RetryContext(String stepName, int attempt, int maxRetries, Throwable error, java.time.Duration delay) {
+public record RetryContext(@Nonnull String stepName, int attempt, int maxRetries, @Nonnull Throwable error,
+                           @Nonnull java.time.Duration delay) {
 
-    public RetryContext(String stepName, int attempt, int maxRetries, Throwable error) {
+    public RetryContext(@Nonnull String stepName, int attempt, int maxRetries, @Nonnull Throwable error) {
         this(stepName, attempt, maxRetries, error, java.time.Duration.ZERO);
     }
 }
