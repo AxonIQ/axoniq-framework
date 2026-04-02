@@ -20,8 +20,11 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.TerminatePrimitive.TerminateCommand;
+import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -139,6 +142,39 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param stepName step name.
      */
     void removeRunningStep(@Nonnull String stepName);
+
+    /**
+     * Cancels the entire workflow — all running steps are cancelled first,
+     * then the workflow is terminated with {@link WorkflowStatus#CANCELLED}.
+     */
+    default void cancel() {
+        workflowContext().terminate(
+                TerminateCommand.cancel(DefaultEventNameCustomizer.Builder.defaults()));
+    }
+
+    /**
+     * Cancels the entire workflow with a reason — all running steps are cancelled first,
+     * then the workflow is terminated with {@link WorkflowStatus#CANCELLED}.
+     *
+     * @param reason human-readable cancellation reason.
+     */
+    default void cancel(@Nonnull String reason) {
+        workflowContext().terminate(
+                TerminateCommand.cancel(new WorkflowCancelledException(reason),
+                                        DefaultEventNameCustomizer.Builder.defaults()));
+    }
+
+    /**
+     * Cancels the entire workflow with a cause — all running steps are cancelled first,
+     * then the workflow is terminated with {@link WorkflowStatus#CANCELLED}.
+     *
+     * @param cause the exception that triggered the cancellation.
+     */
+    default void cancel(@Nonnull Throwable cause) {
+        workflowContext().terminate(
+                TerminateCommand.cancel(cause,
+                                        DefaultEventNameCustomizer.Builder.defaults()));
+    }
 
     /**
      * Cancel a running step.
