@@ -74,7 +74,7 @@ public class RetryWorkflow {
     public List<Instant> getBackoffTimestamps() {
         return backoffTimestamps;
     }
-    //todo retry handle - decide not to want to retry any more
+
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
         logger.info("Retry workflow started for {}", ctx.workflowPayload());
 
@@ -104,7 +104,7 @@ public class RetryWorkflow {
                 throw new RuntimeException("retryWithHandler failure on attempt " + attempt);
             }
             return Map.of("retryWithHandler", "done");
-        }, RetryPolicy.maxRetries(2).onRetry(handlerCalls::add)); //todo retryUntil - maxRetries short version  of retryUntil
+        }, RetryPolicy.maxRetries(2).onRetry(handlerCalls::add));
 
         // Step 4: Cancel during retry — fails attempt 1 (triggers retry), throws StepCancellationException on attempt 2
         WorkflowStepResult r4 = ctx.execute("cancelDuringRetry", Map.of(), (c, p) -> {
