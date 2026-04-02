@@ -26,7 +26,7 @@ import java.util.function.Predicate;
  * @param maxRetries     maximum number of retry attempts.
  * @param onRetryHandler handler invoked before each retry event is published.
  * @param backoffStrategy backoff strategy between retry attempts.
- * @param retryUntil     predicate evaluated on each retry; returns {@code true} to continue retrying,
+ * @param retryPredicate predicate evaluated on each retry; returns {@code true} to continue retrying,
  *                       {@code false} to stop. Checked in addition to {@code maxRetries}.
  *
  * @author Stefan Dragisic
@@ -57,7 +57,7 @@ public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler, BackoffSt
         return new RetryPolicy(this.maxRetries, this.onRetryHandler, strategy, this.retryPredicate);
     }
 
-    public RetryPolicy retryUntil(Predicate<RetryContext> predicate) {
+    public RetryPolicy retryWhile(Predicate<RetryContext> predicate) {
         return new RetryPolicy(this.maxRetries, this.onRetryHandler, this.backoffStrategy, predicate);
     }
 
