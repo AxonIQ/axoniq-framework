@@ -20,11 +20,11 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.BeanDefinitionWithWorkflowContextType;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.jspecify.annotations.NonNull;
@@ -73,7 +73,16 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
 
             var factoryName = workflowContextFactories.get(workflowContextType);
             if (factoryName != null) {
-                // REPLACE WITH FROM MAIN
+                    WorkflowContextFactory factory = applicationContext.getBean(factoryName, WorkflowContextFactory.class);
+                workflowBeanDefs.forEach(beanDefinition -> {
+                    Class<WorkflowContext> workflowContextTypeClass = (Class<WorkflowContext>) beanDefinition.workflowContextType();
+                    ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanDefinition.name());
+                    WorkflowModule.WorkflowDefinitionPhase<WorkflowContext> definitionPhase = WorkflowModule.defaults(beanDefinition.name(), workflowContextTypeClass)
+                                                                                                            .workflowContextFactory(c -> factory);
+                    registry.registerModule(
+                            definitionPhase.definition(d -> d.autodetected(builder))
+                    );
+                });
             } else {
                 throw new BadWorkflowConfigurationException(String.format(
                         "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
