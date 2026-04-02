@@ -149,8 +149,8 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
                 handleAttemptFailure(name, null, true, local, action, parameterMapping,
                                      resultMapping, timeout, enc, retryPolicy, attempt);
 
-        return delegate.executeWithHandlers(stepName, local, action, parameterMapping, resultMapping,
-                                            timeout, eventNameCustomizer, failureHandler, timeoutHandler);
+        return delegate.execute(stepName, local, action, parameterMapping, resultMapping,
+                               timeout, eventNameCustomizer, failureHandler, timeoutHandler);
     }
 
     private void handleAttemptFailure(
@@ -261,7 +261,7 @@ class RetryableExecutePrimitive extends AbstractStepExecutor implements ExecuteP
                 handleAttemptFailure(name, null, true, local, action, parameterMapping,
                                      resultMapping, timeout, enc, retryPolicy, attempt);
 
-        delegate.executeWithHandlers(stepName, local, action, parameterMapping, resultMapping,
-                                     timeout, eventNameCustomizer, failureHandler, timeoutHandler);
+        delegate.execute(stepName, local, action, parameterMapping, resultMapping,
+                         timeout, eventNameCustomizer, failureHandler, timeoutHandler);
     }
 }
