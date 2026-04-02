@@ -63,7 +63,7 @@ public class RetryWorkflow {
     private final AtomicInteger timeoutDuringRetryAttempts = new AtomicInteger(0);
     private final AtomicInteger retryExhaustionAttempts = new AtomicInteger(0);
     private final AtomicInteger retryWithBackoffAttempts = new AtomicInteger(0);
-    private final AtomicInteger retryUntilStopAttempts = new AtomicInteger(0);
+    private final AtomicInteger retryWhileStopAttempts = new AtomicInteger(0);
     private final CopyOnWriteArrayList<RetryContext> handlerCalls = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<Instant> backoffTimestamps = new CopyOnWriteArrayList<>();
 
@@ -146,9 +146,9 @@ public class RetryWorkflow {
         }, RetryPolicy.maxRetries(3).withBackoff(BackoffStrategy.fixed(Duration.ofMillis(200))));
 
         // Step 8: retryWhile — always fails, predicate stops retrying after attempt 2 → FAILED
-        WorkflowStepResult r8 = ctx.execute("retryUntilStop", Map.of(), (c, p) -> {
-            int attempt = retryUntilStopAttempts.incrementAndGet();
-            throw new RuntimeException("retryUntilStop failure on attempt " + attempt);
+        WorkflowStepResult r8 = ctx.execute("retryWhileStop", Map.of(), (c, p) -> {
+            int attempt = retryWhileStopAttempts.incrementAndGet();
+            throw new RuntimeException("retryWhileStop failure on attempt " + attempt);
         }, RetryPolicy.maxRetries(5).retryWhile(rc -> rc.attempt() < 2));
         r8.await();
 
