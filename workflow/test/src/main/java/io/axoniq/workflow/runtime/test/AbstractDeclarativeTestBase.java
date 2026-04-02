@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.test;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
@@ -29,13 +30,15 @@ import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 /**
@@ -65,14 +68,15 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     @BeforeEach
     void setUp() {
 
-        var configurer = MessagingConfigurer.create();
+        var configurer = WorkflowConfigurer.create();
+
+        customize(configurer);
 
         configurer.componentRegistry(r -> r.registerModule(
                                              WorkflowModule
                                                      .usingContext(dslType)
                                                      .workflowContextFactory(builder)
-                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
-                                                     .definitions(getDeclaredDefinitions())
+                                                     .definition(getDeclaredDefinitions())
                                      )
         );
 
@@ -83,7 +87,21 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
     }
 
-    protected abstract UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
+    /**
+     * Customize the configurer.
+     *
+     * @param configurer configurer to customize.
+     */
+    protected void customize(WorkflowConfigurer configurer) {
+        // do nothing by default
+    }
+
+    /**
+     * Retrieves workflow definitions.
+     *
+     * @return definitions phase.
+     */
+    protected abstract Consumer<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
 
     @AfterEach
     void shutdown() {

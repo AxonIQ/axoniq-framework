@@ -20,9 +20,13 @@ package io.axoniq.workflow.runtime.engine.configuration;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
+import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.MessageWorkflowIdProvider;
+import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -45,6 +49,10 @@ public class WorkflowCustomization {
     protected final Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> workflowStatusListeners;
     protected EventNameCustomizer eventNameCustomizer;
     protected WorkflowIdProvider workflowIdProvider;
+    protected WorkflowEngine workflowEngine;
+    protected WorkflowExecutionRepository workflowExecutionRepository;
+    protected MutableWorkflowHistoryRepository workflowHistoryRepository;
+    protected WorkflowHistoryProjector workflowHistoryProjector;
 
     /**
      * Create default module configuration.
@@ -76,6 +84,10 @@ public class WorkflowCustomization {
                                                                   DefaultEventNameCustomizer.Builder::defaults);
             this.workflowIdProvider = configuration.getComponent(WorkflowIdProvider.class,
                                                                  MessageWorkflowIdProvider::new);
+            this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
+            this.workflowExecutionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
+            this.workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
+            this.workflowHistoryProjector = configuration.getComponent(WorkflowHistoryProjector.class);
         } else {
             this.eventNameCustomizer = DefaultEventNameCustomizer.Builder.defaults();
             this.workflowIdProvider = new MessageWorkflowIdProvider();
@@ -98,6 +110,60 @@ public class WorkflowCustomization {
         this.eventNameCustomizer = base.eventNameCustomizer;
         this.workflowIdProvider = base.workflowIdProvider;
         this.workflowStatusListeners = base.workflowStatusListeners;
+        this.workflowEngine = base.workflowEngine;
+        this.workflowExecutionRepository = base.workflowExecutionRepository;
+        this.workflowHistoryRepository = base.workflowHistoryRepository;
+        this.workflowHistoryProjector = base.workflowHistoryProjector;
+    }
+
+    /**
+     * Sets workflow engine.
+     *
+     * @param workflowEngine workflow engine to set.
+     * @return module configuration instance.
+     */
+    public WorkflowCustomization workflowEngine(@Nonnull WorkflowEngine workflowEngine) {
+        Objects.requireNonNull(workflowEngine, "Workflow engine must not be null.");
+        this.workflowEngine = workflowEngine;
+        return this;
+    }
+
+    /**
+     * Sets workflow execution repository.
+     *
+     * @param workflowExecutionRepository workflow execution repository to set.
+     * @return module configuration instance.
+     */
+    public WorkflowCustomization workflowExecutionRepository(
+            @Nonnull WorkflowExecutionRepository workflowExecutionRepository) {
+        Objects.requireNonNull(workflowExecutionRepository, "Workflow execution repository must not be null.");
+        this.workflowExecutionRepository = workflowExecutionRepository;
+        return this;
+    }
+
+    /**
+     * Sets workflow history repository.
+     *
+     * @param workflowHistoryRepository workflow history repository to set.
+     * @return module configuration instance.
+     */
+    public WorkflowCustomization workflowHistoryRepository(
+            @Nonnull MutableWorkflowHistoryRepository workflowHistoryRepository) {
+        Objects.requireNonNull(workflowHistoryRepository, "Workflow history repository must not be null.");
+        this.workflowHistoryRepository = workflowHistoryRepository;
+        return this;
+    }
+
+    /**
+     * Sets workflow history projector.
+     *
+     * @param workflowHistoryProjector workflow history projector to set.
+     * @return module configuration instance.
+     */
+    public WorkflowCustomization workflowHistoryProjector(@Nonnull WorkflowHistoryProjector workflowHistoryProjector) {
+        Objects.requireNonNull(workflowHistoryProjector, "Workflow history projector must not be null.");
+        this.workflowHistoryProjector = workflowHistoryProjector;
+        return this;
     }
 
     /**

@@ -34,6 +34,7 @@ import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
@@ -115,7 +116,7 @@ public class AutoDetectionUtils {
      */
     @Nonnull
     public static <C extends WorkflowContext> Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> statusChangeListeners(
-            @Nonnull Object instance,
+            @Nullable Object instance,
             @Nonnull Class<C> workflowContextType,
             @Nonnull String workflowName) {
 
@@ -123,6 +124,9 @@ public class AutoDetectionUtils {
         Arrays.stream(WorkflowStatus.values()).forEach(workflowStatus -> {
             listeners.put(workflowStatus, new CompositeWorkflowStatusChangeListener(workflowStatus));
         });
+        if (instance == null) {
+            return listeners;
+        }
         var type = instance.getClass();
 
         var mc = ((Collection<Method>) ReflectionUtils.methodsOf(type));

@@ -21,17 +21,16 @@ import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.WorkflowDefinition;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
 
 import java.util.function.BiFunction;
-import java.util.function.UnaryOperator;
+import java.util.function.Consumer;
 
 /**
- * Workflow module encapsulates configuration for one DSL and multiple definitions created using this DSL.
+ * Workflow module encapsulates configuration for one DSL and exactly one definition created using this DSL.
  *
  * @param <C> workflow context type.
  * @author Simon Zambrovski
@@ -71,36 +70,21 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * @param workflowContextFactory factory to create a new workflow context.
              * @return builder for the state factory.
              */
-            WorkflowStateFactoryPhase<C> workflowContextFactory(
+            WorkflowDefinitionPhase<C> workflowContextFactory(
                     @Nonnull ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory);
-        }
-
-        interface WorkflowStateFactoryPhase<C extends WorkflowContext> {
-
-            /**
-             * Provide a workflow execution factory.
-             *
-             * @param workflowExecutionFactory factory to create a new workflow execution from the given context.
-             * @return builder for workflow definition.
-             */
-            WorkflowDefinitionPhase<C> workflowExecutionFactory(
-                    @Nonnull ComponentBuilder<WorkflowExecutionFactory> workflowExecutionFactory);
         }
     }
 
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {
-
         /**
-         * Defines workflow definitions.
+         * Defines exactly one workflow definition.
          *
-         * @param definitions definitions phase.
+         * @param definition definition phase.
          * @return workflow module.
          */
-        WorkflowModule<C> definitions(@Nonnull UnaryOperator<DetectionPhase<C>> definitions);
-
+        WorkflowModule<C> definition(@Nonnull Consumer<DetectionPhase<C>> definition);
 
         interface DetectionPhase<C extends WorkflowContext> {
-
             /**
              * Names the workflow.
              *
@@ -108,14 +92,6 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * @return builder for the trigger definition phase.
              */
             NamingPhase<C> declarative(@Nonnull ComponentBuilder<WorkflowDefinition<C>> componentBuilder);
-
-            /**
-             * Auto-detects workflows on the given component.
-             *
-             * @return builder of customization phase.
-             */
-            DetectionPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder,
-                                           @Nonnull Class<C> workflowContextType);
         }
 
         interface NamingPhase<C extends WorkflowContext> {
@@ -146,18 +122,18 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
              * Applies customizations to workflow definition.
              *
              * @param instanceCustomization customization function.
-             * @return definitions phase for the next workflow.
+             * @return workflow module.
              */
-            DetectionPhase<C> customized(
+            WorkflowModule<C> customized(
                     @Nonnull BiFunction<Configuration, WorkflowCustomization, WorkflowCustomization> instanceCustomization
             );
 
             /**
              * Don't apply any customizations and use defaults.
              *
-             * @return definitions phase for the next workflow.
+             * @return workflow module.
              */
-            default DetectionPhase<C> notCustomized() {
+            default WorkflowModule<C> notCustomized() {
                 return customized((c, wc) -> wc);
             }
         }

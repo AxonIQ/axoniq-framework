@@ -27,74 +27,85 @@ import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
-
 /**
- * Enhancer for registration of the workflow component.
- * For eventing see {@link WorkflowEventProcessingRegistrationEnhancer}.
+ * Defaults for workflow configuration.
  *
  * @author Simon Zambrovski
- * @author Stefan Dragisic
  * @since 1.0.0
  */
-@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 @Internal
-public class WorkflowEnhancer implements ConfigurationEnhancer {
-
-    public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngine";
+// @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
 
     /**
-     * {@inheritDoc}
+     * Name of the executor service component.
+     */
+    public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngine";
+    /**
+     * Order for this enhancer.
      * <p>
-     * Registers the workflow engine, definition registry, execution repository, and event processing module into the
-     * given {@link ComponentRegistry}.
+     * Enhancer math: we have to run AFTER the event souring part is set up and let some space for others to register.
+     * </p>
+     */
+    public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER + 50;
+
+    /**
+     * Registers default components.
+     *
+     * @param componentRegistry registry to use.
      */
     @Override
     public void enhance(@Nonnull ComponentRegistry componentRegistry) {
 
         componentRegistry
-                .registerComponent(WorkflowConfigurationRegistry.class,
-                                   cfg -> new SimpleWorkflowConfigurationRegistry());
+                .registerIfNotPresent(WorkflowConfigurationRegistry.class,
+                                      cfg -> new SimpleWorkflowConfigurationRegistry());
 
         componentRegistry
-                .registerComponent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.defaults());
+                .registerIfNotPresent(EventNameCustomizer.class, cfg -> DefaultEventNameCustomizer.Builder.defaults());
 
         componentRegistry
-                .registerComponent(Clock.class, cfg -> Clock.systemUTC());
+                .registerIfNotPresent(Clock.class, cfg -> Clock.systemUTC());
 
         componentRegistry
-                .registerComponent(ExecutorService.class,
-                                   WORKFLOW_ENGINE_EXECUTOR,
-                                   cfg -> Executors.newVirtualThreadPerTaskExecutor());
+                .registerIfNotPresent(ExecutorService.class,
+                                      WORKFLOW_ENGINE_EXECUTOR,
+                                      cfg -> Executors.newVirtualThreadPerTaskExecutor());
 
         componentRegistry
-                .registerComponent(WorkflowExecutionRepository.class, cfg -> new InMemoryWorkflowExecutionRepository());
+                .registerIfNotPresent(WorkflowExecutionRepository.class,
+                                      cfg -> new InMemoryWorkflowExecutionRepository());
 
         componentRegistry
-                .registerComponent(MutableWorkflowHistoryRepository.class,
-                                   cfg -> new InMemoryWorkflowHistoryRepository());
-
-        componentRegistry
-                .registerComponent(WorkflowEngine.class, cfg ->
+                .registerIfNotPresent(WorkflowEngine.class, cfg ->
                         new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class)
                         )
                 );
         componentRegistry
-                .registerComponent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(
+                .registerIfNotPresent(MutableWorkflowHistoryRepository.class,
+                                      cfg -> new InMemoryWorkflowHistoryRepository());
+
+        componentRegistry
+                .registerIfNotPresent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(
                         cfg.getComponent(MutableWorkflowHistoryRepository.class)
                 ));
+    }
+
+    @Override
+    public int order() {
+        return WORKFLOW_DEFAULTS_ENHANCER_ORDER;
     }
 }

@@ -73,25 +73,20 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
 
             var factoryName = workflowContextFactories.get(workflowContextType);
             if (factoryName != null) {
-                @SuppressWarnings("unchecked") var moduleBuilder = WorkflowModule
-                        .usingContext((Class<WorkflowContext>) workflowContextType)
-                        .workflowContextFactory(
-                                c -> (WorkflowContextFactory<WorkflowContext>) applicationContext.getBean(
-                                        factoryName))
-                        .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(workflowContextType));
 
                 if (!workflowBeanDefs.isEmpty()) {
-                    WorkflowModule<?> module = null;
                     for (var beanDef : workflowBeanDefs) {
-                        //noinspection unchecked
-                        module = moduleBuilder
-                                .definitions(d -> d.autodetected(
-                                                     c -> applicationContext.getBean(beanDef.name()),
-                                                     ((Class<WorkflowContext>) workflowContextType)
-                                             )
-                                );
+                        @SuppressWarnings("unchecked")
+                        WorkflowModule<?> module = WorkflowModule
+                                .usingContext((Class<WorkflowContext>) workflowContextType)
+                                .workflowContextFactory(
+                                        c -> (WorkflowContextFactory<WorkflowContext>) applicationContext.getBean(
+                                                factoryName))
+                                .definition(d -> {
+                                            // No manual definition needed, detected from component registry
+                                        });
+                        registry.registerModule(module);
                     }
-                    registry.registerModule(module);
                 }
             } else {
                 throw new BadWorkflowConfigurationException(String.format(

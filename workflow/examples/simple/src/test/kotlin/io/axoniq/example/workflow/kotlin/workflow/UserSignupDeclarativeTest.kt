@@ -22,6 +22,7 @@ import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule
+import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
 import io.axoniq.workflow.runtime.engine.execution.EventConditions
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
 import io.axoniq.workflow.runtime.engine.history.WorkflowHistory
@@ -35,24 +36,24 @@ import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
 import java.util.function.Predicate
-import java.util.function.UnaryOperator
+import java.util.function.Consumer
 
 class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
-        return UnaryOperator { d ->
-            d.declarative({ c -> WorkflowKontext.from(UserSignupWorkflow()::execute) })
+    override fun getDeclaredDefinitions(): Consumer<DetectionPhase<WorkflowKontext>> {
+        return Consumer { d ->
+            d.declarative { WorkflowKontext.from(UserSignupWorkflow()::execute) }
                 .workflowName("User signup workflow in Kotlin")
                 .on(EventConditions.fromType(RegistrationReceivedEvent::class.java))
                 .customized { c, wc ->
                     wc.eventNameCustomizer(namespace("io.axoniq.dsl.wf"))
                         .workflowIdProvider(
                             fromPayloadAttribute(
-                                c, "id",
-                                UnaryOperator { id: String? -> "signup-$id" })
+                                c, "id"
+                            ) { id: String? -> "signup-$id" }
                         )
                 }
         }

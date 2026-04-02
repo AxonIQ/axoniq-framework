@@ -50,7 +50,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer.WORKFLOW_ENGINE_EXECUTOR;
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.engine.util.EventMessageUtils.*;
 import static java.lang.Thread.currentThread;
 
