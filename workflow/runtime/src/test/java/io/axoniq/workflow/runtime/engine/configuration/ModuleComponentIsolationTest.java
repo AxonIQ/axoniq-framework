@@ -21,9 +21,6 @@ package io.axoniq.workflow.runtime.engine.configuration;
 import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
@@ -34,11 +31,9 @@ import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.common.configuration.Configuration;
-import org.axonframework.common.configuration.Module;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 

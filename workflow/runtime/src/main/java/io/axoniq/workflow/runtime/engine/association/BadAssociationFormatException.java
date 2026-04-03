@@ -18,7 +18,6 @@
 package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
 

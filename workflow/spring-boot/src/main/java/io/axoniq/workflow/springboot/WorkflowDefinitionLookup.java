@@ -31,7 +31,8 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProce
 import java.util.List;
 import java.util.Map;
 
-import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.*;
+import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.workflowBeanDefinitions;
+import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.workflowContextFactoryBeans;
 
 /**
  * Workflow definition lookup looking for beans with {@link @Workflow} annotated methods.

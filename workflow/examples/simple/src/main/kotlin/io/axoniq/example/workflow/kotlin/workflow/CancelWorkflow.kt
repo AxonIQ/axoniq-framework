@@ -18,7 +18,6 @@
 package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.workflow.dsl.kotlin.Kontext
-import io.axoniq.workflow.runtime.api.WorkflowStepResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.time.Duration.Companion.minutes
 

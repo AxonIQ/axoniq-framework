@@ -38,10 +38,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static io.axoniq.example.workflow.workflow.WaitForCombineResultIntegrationTest.*;
+import static io.axoniq.example.workflow.workflow.WaitForCombineResultIntegrationTest.WaitForCombineWorkflowContext;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;

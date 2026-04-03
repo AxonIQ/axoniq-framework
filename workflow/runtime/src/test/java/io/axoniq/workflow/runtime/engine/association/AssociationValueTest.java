@@ -19,16 +19,14 @@ package io.axoniq.workflow.runtime.engine.association;
 
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**

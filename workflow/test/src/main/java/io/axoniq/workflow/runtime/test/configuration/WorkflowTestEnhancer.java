@@ -19,7 +19,6 @@ package io.axoniq.workflow.runtime.test.configuration;
 
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -30,8 +29,6 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 
 import java.util.concurrent.Executor;
-
-import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.WORKFLOW_ENGINE_EXECUTOR;
 
 /**
  * Test enhancer for workflow testing, registering an in-mem event store and a delayed publisher.

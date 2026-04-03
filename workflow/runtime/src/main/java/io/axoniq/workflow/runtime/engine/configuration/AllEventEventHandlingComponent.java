@@ -20,8 +20,6 @@ package io.axoniq.workflow.runtime.engine.configuration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -49,7 +47,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
-import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**

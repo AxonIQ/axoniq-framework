@@ -18,10 +18,8 @@
 package io.axoniq.workflow.runtime.engine.history;
 
 import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 

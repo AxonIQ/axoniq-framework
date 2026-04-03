@@ -32,7 +32,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;

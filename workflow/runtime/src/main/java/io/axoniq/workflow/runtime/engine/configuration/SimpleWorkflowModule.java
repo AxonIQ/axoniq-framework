@@ -47,7 +47,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils.*;
-import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.*;
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.COMPONENT_WORKFLOW_ENGINE;
+import static io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults.COMPONENT_WORKFLOW_HISTORY_PROJECTOR;
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
