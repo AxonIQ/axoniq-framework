@@ -19,21 +19,17 @@
 package io.axoniq.workflow.runtime.engine.configuration;
 
 import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
-import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowDefinition;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
@@ -41,6 +37,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test for full configuration of workflow modules.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class FullConfigurationTest {
 
@@ -51,18 +50,21 @@ class FullConfigurationTest {
         var module = WorkflowModule.defaults("defaults-module", TestContext.class)
                                    .workflowContextFactory(c -> TestContext::new)
                                    .definition(d -> d
-                                           .declarative(c -> (ctx) -> {})
+                                           .declarative(c -> (ctx) -> {
+                                           })
                                            .workflowName("wf-defaults")
                                            .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                            .notCustomized()
                                    );
 
-        configurer.workflowModule(module);
+        configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
 
         // Should use global components
-        assertThat(configuration.getComponent(WorkflowConfigurationRegistry.class)).isInstanceOf(SimpleWorkflowConfigurationRegistry.class);
-        assertThat(configuration.getComponent(WorkflowExecutionRepository.class)).isInstanceOf(InMemoryWorkflowExecutionRepository.class);
+        assertThat(configuration.getComponent(WorkflowConfigurationRegistry.class)).isInstanceOf(
+                SimpleWorkflowConfigurationRegistry.class);
+        assertThat(configuration.getComponent(WorkflowExecutionRepository.class)).isInstanceOf(
+                InMemoryWorkflowExecutionRepository.class);
     }
 
     @Test
@@ -85,7 +87,7 @@ class FullConfigurationTest {
                                            .notCustomized()
                                    );
 
-        configurer.workflowModule(module);
+        configurer.componentRegistry(cr -> cr.registerModule(module));
         AxonConfiguration configuration = configurer.build();
 
         // The module-local configuration should have these components.
@@ -99,6 +101,7 @@ class FullConfigurationTest {
     }
 
     static class TestContext extends AbstractDSLWorkflowContext {
+
         public TestContext(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
                            @Nonnull ProcessingContext processingContext,
                            @Nonnull WorkflowConfiguration<?> workflowConfiguration) {

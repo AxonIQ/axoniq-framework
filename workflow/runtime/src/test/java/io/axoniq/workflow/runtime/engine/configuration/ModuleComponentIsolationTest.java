@@ -46,6 +46,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test demonstrating that different modules use different components (global, local with history, local without history).
+ * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class ModuleComponentIsolationTest {
 
@@ -90,9 +92,11 @@ class ModuleComponentIsolationTest {
                                                                         .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
                                                                         .notCustomized());
 
-        configurer.workflowModule(globalModule)
-                  .workflowModule(localWithHistoryModule)
-                  .workflowModule(localWithoutHistoryModule);
+        configurer.componentRegistry(cr -> cr
+                .registerModule(globalModule)
+                .registerModule(localWithHistoryModule)
+                .registerModule(localWithoutHistoryModule)
+        );
 
         AxonConfiguration configuration = configurer.build();
 

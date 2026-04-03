@@ -76,9 +76,8 @@ class MultiModuleConfigurationTest {
                                             .notCustomized()
                                     );
 
-        configurer.workflowModule(module1);
-        configurer.workflowModule(module2);
-
+        configurer.componentRegistry(componentRegistry -> componentRegistry.registerModule(module1)
+                                                                           .registerModule(module2));
         AxonConfiguration configuration = configurer.build();
 
         // Verify that we have two workflow modules registered

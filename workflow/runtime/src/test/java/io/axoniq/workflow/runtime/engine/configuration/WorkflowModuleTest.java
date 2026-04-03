@@ -55,6 +55,7 @@ import static org.mockito.Mockito.*;
  * Test for {@link WorkflowModule} and {@link SimpleWorkflowModule}.
  *
  * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class WorkflowModuleTest {
 
