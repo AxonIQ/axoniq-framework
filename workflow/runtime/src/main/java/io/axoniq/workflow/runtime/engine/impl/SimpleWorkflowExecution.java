@@ -149,7 +149,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                             } catch (Throwable e) {
                                 handleWorkflowException(ctx, e);
                             }
-                            terminateWorkflow(terminationHandler);
+                            finishWorkflow(terminationHandler);
                             return CompletableFuture.completedFuture(null);
                         }
                 );
@@ -257,11 +257,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
 
     /**
-     * Terminate workflow, clen-up everything, and call termination handler.
+     * Finish the workflow execution, clean up everything, and call the termination handler.
      *
      * @param terminationHandler termination handler to call.
      */
-    private void terminateWorkflow(Consumer<WorkflowExecution> terminationHandler) {
+    private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
         if (!this.workflowContext().workflowStatus().isTerminal()) {
             try {
                 awaitStateChange(s -> s.workflowStatus().isTerminal());
@@ -290,7 +290,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         if (executable) {
-            // life mode
+            // live mode
             eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
             appendTask(i -> state().evolve(eventMessage, processingContext));
         } else {
