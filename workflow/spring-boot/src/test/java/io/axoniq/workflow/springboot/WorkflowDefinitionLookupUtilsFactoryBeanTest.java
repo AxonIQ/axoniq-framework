@@ -17,6 +17,8 @@
  */
 package io.axoniq.workflow.springboot;
 
+import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
@@ -31,7 +33,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,14 +52,13 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     @Test
     void shouldDetectWorkflowContextFactories() {
-        List<WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition> factoryBeans = WorkflowDefinitionLookupUtils.factoryBeans(beanFactory,
-                                                                                                       false);
+        var factoryBeans = WorkflowDefinitionLookupUtils.workflowContextFactoryBeans(beanFactory, false);
 
         assertThat(factoryBeans).hasSize(2);
-        assertThat(factoryBeans).extracting(WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition::beanName)
-                                .containsExactlyInAnyOrder("myFactory", "myIndirectFactory");
-        assertThat(factoryBeans).extracting(WorkflowDefinitionLookupUtils.WorkflowContextFactoryBeanDefinition::workflowContextType)
-                                .containsExactlyInAnyOrder(MyWorkflowContext.class, MyWorkflowContext.class);
+        assertThat(factoryBeans).containsOnlyKeys(MyWorkflowContext.class, OtherWorkflowContext.class);
+
+        assertThat(factoryBeans.get(MyWorkflowContext.class)).isEqualTo("myFactory");
+        assertThat(factoryBeans.get(OtherWorkflowContext.class)).isEqualTo("myIndirectFactory");
     }
 
     @Configuration
@@ -75,13 +75,22 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
         }
     }
 
-    static class MyWorkflowContext extends io.axoniq.workflow.dsl.AbstractDSLWorkflowContext {
+    static class MyWorkflowContext extends SimpleWorkflowContext {
 
         public MyWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
                                  WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }
+
+    static class OtherWorkflowContext extends AbstractDSLWorkflowContext {
+
+        public OtherWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
+                                    WorkflowConfiguration<?> workflowConfiguration) {
+            super(workflowId, payload, processingContext, workflowConfiguration);
+        }
+    }
+
 
     static class MyWorkflowContextFactory implements WorkflowContextFactory<MyWorkflowContext> {
 
@@ -98,14 +107,14 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     }
 
-    static class MyIndirectWorkflowContextFactory extends BaseWorkflowContextFactory<MyWorkflowContext> {
+    static class MyIndirectWorkflowContextFactory extends BaseWorkflowContextFactory<OtherWorkflowContext> {
 
         @Nonnull
         @Override
-        public MyWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId,
+        public OtherWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId,
                                                @Nonnull ProcessingContext processingContext,
                                                @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
-            return new MyWorkflowContext(workflowId, initialPayload, processingContext, workflowConfiguration);
+            return new OtherWorkflowContext(workflowId, initialPayload, processingContext, workflowConfiguration);
         }
     }
 }

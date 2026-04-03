@@ -20,7 +20,6 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.BeanDefinitionWithWorkflowContextType;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -48,51 +47,58 @@ import java.util.Objects;
 @RegistrationScope("Don't copy this enhancer in order to avoid cyclic module build in Spring Boot.")
 public class WorkflowModuleConfigurer implements ConfigurationEnhancer, ApplicationContextAware {
 
-    private final Map<Class<? extends WorkflowContext>, List<BeanDefinitionWithWorkflowContextType>> workflowDefinitionBeansRefs;
-    private final Map<Class<? extends WorkflowContext>, String> workflowContextFactories;
-    private @Nullable ApplicationContext applicationContext;
+    private final Map<Class<? extends WorkflowContext>, List<String>> workflowDefinitionBeanRefs;
+    private final Map<Class<? extends WorkflowContext>, String> workflowContextFactoryBeanRefs;
+    private ApplicationContext applicationContext;
 
 
     /**
-     * Creates a new configurer responsible for registration of all found workflows definitions.
+     * Creates a new configurer responsible for registration of found workflows definitions using in a single module.
      */
     @Internal
     WorkflowModuleConfigurer(
-            Map<Class<? extends WorkflowContext>, String> workflowContextFactories,
-            Map<Class<? extends WorkflowContext>, List<BeanDefinitionWithWorkflowContextType>> workflowDefinitionBeansRefs
+            Map<Class<? extends WorkflowContext>, String> workflowContextFactoryBeanRefs,
+            Map<Class<? extends WorkflowContext>, List<String>> workflowDefinitionBeanRefs
     ) {
-        this.workflowDefinitionBeansRefs = workflowDefinitionBeansRefs;
-        this.workflowContextFactories = workflowContextFactories;
+        this.workflowDefinitionBeanRefs = workflowDefinitionBeanRefs;
+        this.workflowContextFactoryBeanRefs = workflowContextFactoryBeanRefs;
     }
 
     @Override
     public void enhance(@NonNull ComponentRegistry registry) {
-
         Objects.requireNonNull(applicationContext, "ApplicationContext must not be null");
-        workflowDefinitionBeansRefs.forEach((workflowContextType, workflowBeanDefs) -> {
+        workflowDefinitionBeanRefs
+                .forEach((workflowContextType, workflowBeanNames) -> register(registry,
+                                                                              workflowContextType,
+                                                                              workflowBeanNames));
+    }
 
-            var factoryName = workflowContextFactories.get(workflowContextType);
-            if (factoryName != null) {
-                    WorkflowContextFactory factory = applicationContext.getBean(factoryName, WorkflowContextFactory.class);
-                workflowBeanDefs.forEach(beanDefinition -> {
-                    Class<WorkflowContext> workflowContextTypeClass = (Class<WorkflowContext>) beanDefinition.workflowContextType();
-                    ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanDefinition.name());
-                    WorkflowModule.WorkflowDefinitionPhase<WorkflowContext> definitionPhase = WorkflowModule.defaults(beanDefinition.name(), workflowContextTypeClass)
-                                                                                                            .workflowContextFactory(c -> factory);
-                    registry.registerModule(
-                            definitionPhase.definition(d -> d.autodetected(builder))
-                    );
-                });
-            } else {
-                throw new BadWorkflowConfigurationException(String.format(
-                        "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
-                        String.join(",",
-                                    workflowBeanDefs.stream().map(BeanDefinitionWithWorkflowContextType::name).toList()
-                        ),
-                        workflowContextType.getSimpleName()
-                ));
+    @SuppressWarnings("unchecked")
+    private <C extends WorkflowContext> void register(
+            @Nonnull ComponentRegistry registry,
+            @Nonnull Class<C> workflowContextType,
+            @Nonnull List<String> workflowBeanNames) {
+        var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
+        if (factoryName != null) {
+            var workflowContextFactory = (WorkflowContextFactory<C>) applicationContext.getBean(factoryName);
+            for (var beanName : workflowBeanNames) {
+                ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanName);
+                registry.registerModule(
+                        WorkflowModule
+                                .defaults(beanName, workflowContextType)
+                                .workflowContextFactory(c -> workflowContextFactory)
+                                .definition(d -> d
+                                        .autodetected(builder)
+                                )
+                );
             }
-        });
+        } else {
+            throw new BadWorkflowConfigurationException(String.format(
+                    "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
+                    String.join(",", workflowBeanNames.stream().toList()),
+                    workflowContextType.getSimpleName()
+            ));
+        }
     }
 
     @Override
