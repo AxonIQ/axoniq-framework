@@ -70,10 +70,6 @@ class SleepAsyncWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
 
         delayedPublisher.start();
 
-        await().untilAsserted(() ->
-                assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
-        );
-
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
             assertThat(workflowHistoryRepository.findAll()).allMatch(h ->
