@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -32,6 +32,7 @@ public interface WorkflowContext extends
         ExecutePrimitive,
         WaitForPrimitive,
         TerminatePrimitive,
+        PayloadPrimitive,
         AllMatchCombinator,
         NoneMatchCombinator,
         AnyMatchCombinator,
@@ -52,13 +53,6 @@ public interface WorkflowContext extends
      */
     @Nonnull
     Map<String, Object> workflowPayload();
-
-    /**
-     * Applies payload modification.
-     *
-     * @param payloadModification payload modification.
-     */
-    void applyPayloadModification(@Nonnull PayloadModification payloadModification);
 
     /**
      * Retrieves workflow status.

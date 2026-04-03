@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -21,7 +21,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
-import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -81,13 +80,14 @@ public class PrimitiveCommands {
     public static <T> BlockingWaitForCommand<T> blockingWait(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultReducer,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
             @Nonnull Converter converter,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
         return new BlockingWaitForCommand<>(
-                PrimitiveCommands.wait(stepName, eventCondition, duration, eventNameCustomizer),
+                PrimitiveCommands.wait(stepName, eventCondition, resultReducer, duration, eventNameCustomizer),
                 type,
                 converter
         );
@@ -104,8 +104,8 @@ public class PrimitiveCommands {
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    PayloadReducer.local(),
-                                                    PayloadReducer.all(),
+                                                    PayloadReducer.LOCAL_ONLY,
+                                                    PayloadReducer.GLOBAL_ONLY,
                                                     duration,
                                                     eventNameCustomizer);
     }
@@ -113,10 +113,15 @@ public class PrimitiveCommands {
     public static WorkflowStepResultWaitForCommand wait(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultReducer,
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
-        return new WorkflowStepResultWaitForCommand(stepName, eventCondition, duration, eventNameCustomizer);
+        return new WorkflowStepResultWaitForCommand(stepName,
+                                                    eventCondition,
+                                                    resultReducer,
+                                                    duration,
+                                                    eventNameCustomizer);
     }
 
     @Internal
@@ -128,43 +133,43 @@ public class PrimitiveCommands {
             this.delegate = delegate;
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public String stepName() {
             return delegate.stepName();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public Map<String, Object> local() {
             return delegate.local();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public PayloadProcessor action() {
             return delegate.action();
         }
 
-        @NotNull
+        @Nonnull
         @Override
-        public PayloadReducer parameterMapping() {
-            return delegate.parameterMapping();
+        public PayloadReducer parameterPayloadReducer() {
+            return delegate.parameterPayloadReducer();
         }
 
-        @NotNull
+        @Nonnull
         @Override
-        public PayloadReducer resultMapping() {
-            return delegate.resultMapping();
+        public PayloadReducer resultPayloadReducer() {
+            return delegate.resultPayloadReducer();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public Duration timeout() {
             return delegate.timeout();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return delegate.eventNameCustomizer();
@@ -180,13 +185,13 @@ public class PrimitiveCommands {
             this.delegate = delegate;
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public String stepName() {
             return delegate.stepName();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public Duration timeout() {
             return delegate.timeout();
@@ -198,10 +203,16 @@ public class PrimitiveCommands {
             return delegate.eventCondition();
         }
 
-        @NotNull
+        @Nonnull
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return delegate.eventNameCustomizer();
+        }
+
+        @Nonnull
+        @Override
+        public PayloadReducer resultPayloadReducer() {
+            return delegate.resultPayloadReducer();
         }
     }
 
@@ -252,13 +263,13 @@ public class PrimitiveCommands {
 
         @Nonnull
         @Override
-        public PayloadReducer parameterMapping() {
+        public PayloadReducer parameterPayloadReducer() {
             return parameterMapping;
         }
 
         @Nonnull
         @Override
-        public PayloadReducer resultMapping() {
+        public PayloadReducer resultPayloadReducer() {
             return resultMapping;
         }
 
@@ -284,6 +295,7 @@ public class PrimitiveCommands {
     public record WorkflowStepResultWaitForCommand(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) implements WaitForPrimitive.WaitForCommand<WorkflowStepResult> {
@@ -343,7 +355,7 @@ public class PrimitiveCommands {
         }
 
         @Override
-        public T result(@NotNull WorkflowStepResult result) {
+        public T result(@Nonnull WorkflowStepResult result) {
             if (result.success() && result.<Map<String, Object>>result().isPresent()) {
                 Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
                 return converter.convert(resultPayload, type.getType());
@@ -378,7 +390,7 @@ public class PrimitiveCommands {
         }
 
         @Override
-        public T result(@NotNull WorkflowStepResult result) {
+        public T result(@Nonnull WorkflowStepResult result) {
             if (result.success() && result.<Map<String, Object>>result().isPresent()) {
                 Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
                 return converter.convert(resultPayload, type.getType());

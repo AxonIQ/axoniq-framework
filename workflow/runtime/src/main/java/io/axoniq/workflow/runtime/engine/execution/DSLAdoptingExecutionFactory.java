@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.engine.execution;
 import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
-import org.jetbrains.annotations.NotNull;
 
 import static io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils.requireIsAssignableFrom;
 
@@ -46,7 +45,7 @@ public class DSLAdoptingExecutionFactory<C extends WorkflowContext> implements W
 
     @Override
     @Nonnull
-    public WorkflowExecution create(@NotNull WorkflowContext context) {
+    public WorkflowExecution create(@Nonnull WorkflowContext context) {
         if (workflowContextType.isAssignableFrom(context.getClass())) {
             return ((AbstractDSLWorkflowContext) context).execution();
         }

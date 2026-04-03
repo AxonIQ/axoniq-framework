@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -24,7 +24,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.QualifiedName;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Objects;
@@ -78,7 +77,7 @@ public class SimpleWorkflowConfigurationRegistry
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         var qualifiedNamesToDefinitions = this.workflowsConfigurations.entrySet().stream()
                                                                       .map((e) -> new WorkflowDefinitionDescriptor(e.getKey(),
                                                                                                                    e.getValue()))
@@ -92,7 +91,7 @@ public class SimpleWorkflowConfigurationRegistry
     ) implements DescribableComponent {
 
         @Override
-        public void describeTo(@NotNull ComponentDescriptor descriptor) {
+        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
             descriptor.describeProperty(qualifiedName.toString(), configurations.stream().map(configuration -> {
                 var definitionClass = configuration.configuration().workflowDefinition().getClass();
                 return String.format("%s", definitionClass.getName());

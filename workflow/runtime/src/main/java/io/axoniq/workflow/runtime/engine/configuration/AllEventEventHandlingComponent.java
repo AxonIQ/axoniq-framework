@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -32,14 +32,21 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.jetbrains.annotations.NotNull;
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**
  * Event handling component handling all events.
@@ -53,16 +60,26 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
             pcepc.eventCriteria(
-                    set -> {
-                        if (set.isEmpty()) {
-                            return EventCriteria.havingAnyTag();
-                        } else {
-                            return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-                        }
-                    }
-            ).initialSegmentCount(1);
-    private final SequencingPolicy sequencingPolicy;
+                         set -> {
+                             if (set.isEmpty()) {
+                                 return EventCriteria.havingAnyTag();
+                             } else {
+                                 return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+                             }
+                         }
+                 )
+                 .eventSource(c.getComponent(StreamableEventSource.class))
+                 .tokenStore(c.getComponent(TokenStore.class))
+                 .initialSegmentCount(1) // FIXME -> should be configurable?
+                 .batchSize(1) // FIXME -> should be configurable? currently only 1 is supported / working
+                 .initialToken(s -> completedFuture(
+                                       // FIXME, how can we control the correct index here? switching to 0 breaks it. See https://github.com/AxonFramework/AxonFramework/issues/4382
+                                       createReplayToken(new GlobalSequenceTrackingToken(1))
+                               )
+                 );
+    private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
+    private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
      * Constructs the component.
@@ -71,37 +88,57 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
      */
     public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
-        this.sequencingPolicy = new HierarchicalSequencingPolicy(
+        this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
+        if (eventHandler instanceof ReplayStatusChangedHandler) {
+            replayStatusChangedHandler = (ReplayStatusChangedHandler) eventHandler;
+        } else {
+            replayStatusChangedHandler = null;
+        }
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
         logger.debug("Handling event {}", event);
         return eventHandler.handle(event, context);
     }
 
     @Override
+    @Nonnull
     public Set<QualifiedName> supportedEvents() {
         return Set.of();
     }
 
     @Override
-    public boolean supports(@NotNull QualifiedName eventName) {
+    public boolean supports(@Nonnull QualifiedName eventName) {
         return true;
     }
 
-    @NotNull
+    @Nonnull
     @Override
-    public Object sequenceIdentifierFor(@NotNull EventMessage event, @NotNull ProcessingContext context) {
+    public Object sequenceIdentifierFor(@Nonnull EventMessage event,
+                                        @Nonnull ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
     @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    @Nonnull
+    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
+                                               @Nonnull ProcessingContext context) {
+        if (replayStatusChangedHandler != null) { // just forward
+            return replayStatusChangedHandler.handle(statusChange, context);
+        }
+        return MessageStream.empty();
+    }
+
+    @Override
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
+        if (replayStatusChangedHandler != null) {
+            descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());
+        }
     }
 }

@@ -11,18 +11,21 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
 package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
 
 /**
  * Exception thrown when an association string is in the wrong format or uses unsupported operators.
+ * @since 1.0.0
+ * @author Simon Zambrovski
  */
 public class BadAssociationFormatException extends RuntimeException {
 

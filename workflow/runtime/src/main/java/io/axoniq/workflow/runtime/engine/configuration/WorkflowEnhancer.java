@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -28,28 +28,32 @@ import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
 import io.axoniq.workflow.runtime.engine.registry.SimpleWorkflowConfigurationRegistry;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.annotation.RegistrationScope;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import org.jetbrains.annotations.NotNull;
 
 import java.time.Clock;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static io.axoniq.workflow.runtime.engine.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
 
 /**
- * Enhancer for registration of the workflow engine, the registry and sets up the eventing.
+ * Enhancer for registration of the workflow component.
+ * For eventing see {@link WorkflowEventProcessingRegistrationEnhancer}.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @since 1.0.0
  */
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+@Internal
 public class WorkflowEnhancer implements ConfigurationEnhancer {
 
-    public static final String WORKFLOW_ENGINE_EVENT_MODULE = "WorkflowEngine";
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngine";
 
     /**
@@ -59,7 +63,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
      * given {@link ComponentRegistry}.
      */
     @Override
-    public void enhance(@NotNull ComponentRegistry componentRegistry) {
+    public void enhance(@Nonnull ComponentRegistry componentRegistry) {
 
         componentRegistry
                 .registerComponent(WorkflowConfigurationRegistry.class,
@@ -72,7 +76,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(Clock.class, cfg -> Clock.systemUTC());
 
         componentRegistry
-                .registerComponent(Executor.class,
+                .registerComponent(ExecutorService.class,
                                    WORKFLOW_ENGINE_EXECUTOR,
                                    cfg -> Executors.newVirtualThreadPerTaskExecutor());
 
@@ -94,22 +98,7 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                 .registerComponent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(
                         cfg.getComponent(MutableWorkflowHistoryRepository.class)
                 ));
-
-        componentRegistry.registerModule(
-                EventProcessorModule
-                        .pooledStreaming(WORKFLOW_ENGINE_EVENT_MODULE)
-                        .eventHandlingComponents(req -> req
-                                .declarative(cfg -> new AllEventEventHandlingComponent(
-                                                     cfg.getComponent(WorkflowEngine.class)
-                                             )
-                                ).declarative(cfg -> new AllEventEventHandlingComponent(
-                                        cfg.getComponent(WorkflowHistoryProjector.class)
-                                ))
-                        )
-                        .customized(ANY_EVENT_IN_ONE_SEGMENT)
-                        .build()
-        );
-
+        
         ParameterResolverFactoryUtils.registerToComponentRegistry(
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new

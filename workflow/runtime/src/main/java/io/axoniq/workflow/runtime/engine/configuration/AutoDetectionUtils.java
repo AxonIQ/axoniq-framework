@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -26,14 +26,15 @@ import io.axoniq.workflow.runtime.api.annotation.OnFailure;
 import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
 import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
+import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
+import org.apache.commons.lang3.stream.Streams;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
@@ -70,9 +71,17 @@ public class AutoDetectionUtils {
         // hide
     }
 
-    record MethodWithWorkflowAttributes(
+    /**
+     * Method with workflow attributes.
+     *
+     * @param method              method.
+     * @param attributes          attributes as map.
+     * @param workflowContextType workflow context type.
+     */
+    public record MethodWithWorkflowAttributes(
             Method method,
-            Map<String, Object> attributes
+            Map<String, Object> attributes,
+            Class<? extends WorkflowContext> workflowContextType
     ) {
 
     }
@@ -85,7 +94,7 @@ public class AutoDetectionUtils {
      * @return workflow methods.
      */
     @Nonnull
-    static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
+    public static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
             @Nonnull Class<?> type,
             @Nonnull Class<C> workflowContextType) {
         var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(type));
@@ -154,7 +163,8 @@ public class AutoDetectionUtils {
                             listeners.get(status).addListener(
                                     new WorkflowStatusChangeListener() {
                                         @Override
-                                        public <X extends WorkflowContext> void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull X context) {
+                                        public <X extends WorkflowContext> void onWorkflowStatus(
+                                                @Nonnull WorkflowStatus state, @Nonnull X context) {
                                             WorkflowReflectionUtils.invoke(instance, method.method, state, context);
                                         }
                                     }
@@ -248,8 +258,8 @@ public class AutoDetectionUtils {
     static Predicate<Method> parameterOfType(@Nonnull Class<?> expectedType, int parameterIndex) {
         return m -> {
             var parameterTypes = m.getParameterTypes();
-            return parameterTypes.length > parameterIndex && parameterTypes[parameterIndex].isAssignableFrom(
-                    expectedType);
+            return parameterTypes.length > parameterIndex && expectedType.isAssignableFrom(
+                    parameterTypes[parameterIndex]);
         };
     }
 
@@ -265,8 +275,22 @@ public class AutoDetectionUtils {
             @Nonnull Class<? extends Annotation> type) {
         return m -> {
             var annotations = findAnnotationAttributes(m, type);
-            return annotations.map(attributes -> new MethodWithWorkflowAttributes(m, attributes)).orElse(null);
+            return annotations
+                    .map(attributes -> new MethodWithWorkflowAttributes(m, attributes, findWorkflowContextType(m)))
+                    .orElse(null);
         };
+    }
+
+    static Class<? extends WorkflowContext> findWorkflowContextType(@Nonnull Method method) {
+        var parameterTypes = method.getParameterTypes();
+        return Streams.of(parameterTypes)
+                      .filter(WorkflowContext.class::isAssignableFrom)
+                      .findFirst()
+                      .map(p -> (Class<? extends WorkflowContext>) p)
+                      .orElseThrow(
+                              () -> new IllegalArgumentException(
+                                      "Method must have at least one parameter of type assignable to WorkflowContext")
+                      );
     }
 
     /**

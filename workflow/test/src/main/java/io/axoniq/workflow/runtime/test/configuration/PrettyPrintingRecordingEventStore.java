@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -26,13 +26,11 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.test.fixture.RecordingEventStore;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
@@ -46,8 +44,6 @@ import static io.axoniq.workflow.runtime.engine.util.MetadataUtils.METADATA_KEY_
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 
     private static volatile PrettyPrintingRecordingEventStore lastInstance;
-
-    private final List<EventMessage> publishedEvents = new CopyOnWriteArrayList<>();
 
     public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
         super(delegate);
@@ -68,26 +64,14 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
         }
     }
 
-    @Nonnull
-    public List<EventMessage> getPublishedEvents() {
-        return List.copyOf(publishedEvents);
-    }
-
     @Override
-    public CompletableFuture<Void> publish(@Nullable ProcessingContext context, @Nonnull EventMessage... events) {
-        publishedEvents.addAll(Arrays.asList(events));
-        return super.publish(context, events);
-    }
-
-
-    @Override
-    public void describeTo(@NotNull ComponentDescriptor descriptor) {
+    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         // descriptor.describeWrapperOf(this.delegate);
-        var eventsByWorkflowId = publishedEvents.stream()
-                                                .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
-                                                .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(
-                                                        METADATA_KEY_WORKFLOW_ID,
-                                                        "none")));
+        var eventsByWorkflowId = recorded().stream()
+                                           .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
+                                           .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(
+                                                   METADATA_KEY_WORKFLOW_ID,
+                                                   "none")));
         var events = eventsByWorkflowId.entrySet().stream()
                                        .filter(entry -> !entry.getKey().equals("none"))
                                        .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))
@@ -101,13 +85,13 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     ) implements DescribableComponent {
 
         @Override
-        public void describeTo(@NotNull ComponentDescriptor descriptor) {
+        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
             descriptor.describeProperty(workflowId, events.stream().map(event -> {
                 var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name)
-                        .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))
-                        .orElse("none");
+                                          .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))
+                                          .orElse("none");
                 var name = event.type().qualifiedName().toString();
-                return String.format("%s (%s): %s", name, status, event.payload());
+                return String.format("%s (%s): %s, %s", name, status, event.payload(), event.metadata());
             }).toList());
         }
     }

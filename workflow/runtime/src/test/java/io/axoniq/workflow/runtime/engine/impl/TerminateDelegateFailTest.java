@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -77,7 +77,7 @@ class TerminateDelegateFailTest {
                     return action.apply(processingContext);
                 });
 
-        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState(workflowContext, Map.of()));
+        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
@@ -152,7 +152,7 @@ class TerminateDelegateFailTest {
     @Test
     void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        EventSourcedWorkflowState state = new EventSourcedWorkflowState(workflowContext, Map.of(WorkflowStatus.FAILED, listener));
+        EventSourcedWorkflowState state = new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
 
         var cause = new RuntimeException("boom");

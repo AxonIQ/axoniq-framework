@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -27,16 +27,19 @@ public interface WaitForPrimitive {
     /**
      * Wait for event.
      *
-     * @param stepName            name of the workflow step.
-     * @param eventCondition      event condition of event to wait for.
-     * @param timeout             maximum wait duration until timeout.
-     * @param eventNameCustomizer event name customizer.
+     * @param stepName             name of the workflow step.
+     * @param eventCondition       event condition of event to wait for.
+     * @param timeout              maximum wait duration until timeout.
+     * @param resultPayloadReducer payload reducer controlling how the result payload (message payload) is combined with
+     *                             the workflow payload.
+     * @param eventNameCustomizer  event name customizer.
      * @return result.
      */
     @Nonnull
     WorkflowStepResult waitFor(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
     );
@@ -47,6 +50,7 @@ public interface WaitForPrimitive {
                 waitFor(
                         command.stepName(),
                         command.eventCondition(),
+                        command.resultPayloadReducer(),
                         command.timeout(),
                         command.eventNameCustomizer()
                 )
@@ -68,6 +72,14 @@ public interface WaitForPrimitive {
 
         @Nonnull
         Duration timeout();
+
+        /**
+         * Returns the result reducer.
+         *
+         * @return result reducer.
+         */
+        @Nonnull
+        PayloadReducer resultPayloadReducer();
 
         @Nonnull
         EventNameCustomizer eventNameCustomizer();

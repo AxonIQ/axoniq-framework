@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -20,15 +20,16 @@ package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventCondition;
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
-import org.apache.commons.lang3.function.TriConsumer;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
 
@@ -45,32 +46,42 @@ public class EventWaitConditions implements DescribableComponent {
     /**
      * Internal representation.
      *
-     * @param eventCondition      condition to match.
-     * @param eventNameCustomizer customizer.
+     * @param eventCondition       condition to match.
+     * @param resultPayloadReducer payload reducer to combine payload delivered by the event (result of the step) with
+     *                             the workflow payload.
+     * @param eventNameCustomizer  customizer.
      */
     @Internal
     record EventConditionWithStepNameCustomizer(
             @Nonnull EventCondition eventCondition,
-            @Nonnull EventNameCustomizer eventNameCustomizer) {
+            @Nonnull PayloadReducer resultPayloadReducer,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
 
     }
 
     /**
-     * Adds a new event wait condition for specified workflow step.
      *
-     * @param stepName       step waiting for event.
-     * @param eventCondition await condition
+     * Adds a new event wait condition for the specified workflow step.
+     *
+     * @param stepName             step waiting for event.
+     * @param resultPayloadReducer payload reducer to combine payload delivered by the event (result of the step) with
+     *                             the workflow payload.
+     * @param eventCondition       await condition
      */
-    public void add(@Nonnull String stepName, @Nonnull EventCondition eventCondition,
+    public void add(@Nonnull String stepName,
+                    @Nonnull EventCondition eventCondition,
+                    @Nonnull PayloadReducer resultPayloadReducer,
                     @Nullable EventNameCustomizer eventNameCustomizer) {
         waitConditions.put(stepName,
                            new EventConditionWithStepNameCustomizer(eventCondition,
+                                                                    resultPayloadReducer,
                                                                     eventNameCustomizer
                                                                             != null ? eventNameCustomizer : defaults()));
     }
 
     /**
-     * Removes condition for given step.
+     * Removes condition for a given step.
      *
      * @param stepName step name waiting for event.
      */
@@ -79,27 +90,51 @@ public class EventWaitConditions implements DescribableComponent {
     }
 
     /**
-     * Evaluates existing conditions on provided event message and applies the provided action, if the match is found.
+     * Evaluates existing conditions on the provided event message and applies the provided action if the match is
+     * found.
      * <p>
-     * If the condition is met on provided message, it will be removed from wait conditions and the message will be
+     * If the condition is met on the provided message, it will be removed from wait conditions and the message will be
      * passed to the action.
      * </p>
      *
      * @param eventMessage event message to execute evaluation on.
-     * @param action       action executed on event message, stepName and condition, if the condition is met.
+     * @param action       action executed on an event message, step name and condition if the condition is met.
      *
      */
     public void evaluateAndApply(@Nonnull EventMessage eventMessage,
-                                 @Nonnull TriConsumer<EventMessage, String, EventNameCustomizer> action) {
+                                 @Nonnull Consumer<Awaited> action) {
         // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
-            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(eventMessage)) {
+            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(
+                    eventMessage)) {
                 remove(stepName);
-                action.accept(eventMessage, stepName, entry.getValue().eventNameCustomizer());
+                action.accept(
+                        new Awaited(eventMessage,
+                                    stepName,
+                                    entry.getValue().resultPayloadReducer(),
+                                    entry.getValue().eventNameCustomizer())
+                );
             }
         }
+    }
+
+    /**
+     * Expresses the arrival of the event message passed to the {@link #evaluateAndApply(EventMessage, Consumer)}.
+     *
+     * @param eventMessage        event message.
+     * @param payloadReducer      payload reducer.
+     * @param stepName            step name.
+     * @param eventNameCustomizer event name customizer.
+     */
+    public record Awaited(
+            @Nonnull EventMessage eventMessage,
+            @Nonnull String stepName,
+            @Nonnull PayloadReducer payloadReducer,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+
     }
 
     /**

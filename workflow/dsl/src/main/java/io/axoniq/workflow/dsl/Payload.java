@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -48,11 +49,11 @@ public class Payload {
      * @param payload payload map.
      */
     public Payload(@Nonnull Map<String, Object> payload) {
-        this.payload = Objects.requireNonNull(payload, "Payload must not be null");
+        this.payload = new HashMap<>(Objects.requireNonNull(payload, "Payload must not be null"));
     }
 
     /**
-     * Constructs a new payload around the given value, converting it using converter from workflow context..
+     * Constructs a new payload around the given value, converting it using converter from workflow context.
      *
      * @param context workflow context.
      * @param value   payload value.

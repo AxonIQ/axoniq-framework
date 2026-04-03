@@ -11,12 +11,13 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
 package io.axoniq.workflow.runtime.engine.execution;
 
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
@@ -25,13 +26,15 @@ import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,15 +54,26 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private WorkflowStatus status = WorkflowStatus.NONE;
+    private Map<String, Object> payload = Map.of();
     private volatile Throwable terminationCause;
 
     private final WorkflowStateListenerSupport listenerSupport;
 
     /**
-     * Creates a new workflow state without reference to a workflow context.
+     * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
      */
     public EventSourcedWorkflowState() {
+        this(Map.of());
+    }
+
+    /**
+     * Creates a new workflow state without reference to a workflow context.
+     */
+    public EventSourcedWorkflowState(
+            @Nonnull Map<String, Object> payload
+    ) {
         this.listenerSupport = WorkflowStateListenerSupport.EMPTY;
+        this.payload = Objects.requireNonNull(payload, "Payload must be set.");
     }
 
     /**
@@ -69,9 +83,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param listeners workflow status change listeners.
      */
     public EventSourcedWorkflowState(
+            @Nonnull Map<String, Object> payload,
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
+        this.payload = Objects.requireNonNull(payload, "Payload must be set.");
         this.listenerSupport = new WorkflowStateListenerSupport(
                 Objects.requireNonNull(listeners, "Workflow status listeners must be set."),
                 Objects.requireNonNull(context, "Workflow context must be set.")
@@ -98,7 +114,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     @Nonnull
     public List<String> workflowStepNames() {
-        return new ArrayList<>(steps.keySet());
+        return steps.values().stream().sorted(
+                            Comparator.comparing(WorkflowStep::timestamp))
+                    .map(WorkflowStep::stepName).toList();
+    }
+
+    @Nonnull
+    public Map<String, Object> payload() {
+        return Map.copyOf(payload);
     }
 
     @Override
@@ -106,7 +129,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
-        Object eventPayload = eventMessage.payloadAs(Object.class);
+        Object eventPayload = eventMessage.payloadAs(Object.class, processingContext.component(Converter.class));
         var metadata = eventMessage.metadata();
         // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
@@ -140,6 +163,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                    eventPayload,
                                                    eventMessage.timestamp(),
                                                    processingContext)); // TODO copy resources of the context
+                    // set payload if desired
+                    evolvePayload(eventMessage, processingContext);
                     break;
                 case CANCELLED:
                     addStep(WorkflowStep.cancelled(stepName,
@@ -151,22 +176,47 @@ public class EventSourcedWorkflowState implements WorkflowState {
             }
         });
         // Apply workflow-level state changes — ignore transitions once already terminal
-        MetadataUtils.getWorkflowStatus(metadata).ifPresent(status -> {
-            if (workflowStatus().isTerminal()) {
-                logger.warn("Ignoring workflow status {} — already in terminal state {}",
-                            status, workflowStatus());
-                return;
-            }
-            final Throwable terminationCause;
-            if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
-                    && eventPayload instanceof Throwable t) {
-                terminationCause = t;
-            } else {
-                terminationCause = null;
-            }
-            setStatus(status, terminationCause);
-        });
+        MetadataUtils.getWorkflowStatus(metadata).
+                     ifPresent(status -> {
+                         if (workflowStatus().isTerminal()) {
+                             logger.warn("Ignoring workflow status {} — already in terminal state {}",
+                                         status, workflowStatus());
+                             return;
+                         }
+                         final Throwable terminationCause;
+                         if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
+                                 && eventPayload instanceof Throwable t) {
+                             terminationCause = t;
+                         } else {
+                             terminationCause = null;
+                         }
+                         if (status == WorkflowStatus.STARTED) {
+                             evolvePayload(eventMessage, processingContext);
+                         }
+                         setStatus(status, terminationCause);
+                     });
+        logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
+    }
+
+    /**
+     * Changes payload using named payload reducer from the metadata.
+     *
+     * @param eventMessage      event message contaning new payload and metadata.
+     * @param processingContext processing context.
+     */
+    void evolvePayload(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+        // set payload if desired
+        MetadataUtils.payloadReducer(eventMessage.metadata()).ifPresent(reducerName -> {
+            if (PayloadReducer.isDefault(reducerName)) {
+                var resultReducer = PayloadReducer.byName(reducerName);
+                Map<String, Object> stepPayload = eventMessage.payloadAs(new TypeReference<>() {
+                }, processingContext.component(Converter.class));
+                var result = resultReducer.apply(this.payload, stepPayload);
+                logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
+                this.payload = result;
+            }
+        });
     }
 
     /**
@@ -219,6 +269,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             descriptor.describeProperty("terminationCause", terminationCause.getMessage());
         }
         descriptor.describeProperty("steps", List.copyOf(steps.keySet()));
+        descriptor.describeProperty("payload", payload);
     }
 
     /**

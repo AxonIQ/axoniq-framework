@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -23,7 +23,7 @@ import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
-import org.testcontainers.shaded.com.google.common.base.Predicate
+import java.util.function.Predicate
 import kotlin.reflect.KClass
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -48,15 +48,16 @@ class Kontext(
         PrimitiveCommands.DelegatingExecuteCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
             if (result.success() && result.result<Any>().isPresent) {
+                val map = result.result<Map<String, Any?>>().get()
                 @Suppress("UNCHECKED_CAST")
-                return (result.result<Map<String, Any?>>().get())[resultPropertyName] as T
+                return map[resultPropertyName] as T
             } else {
                 throw result.error().get()
             }
         }
     }
 
-    class TypeConvertingWaitForCommand<T>(
+    class TypeConvertingWaitForCommand<T : Any>(
         command: PrimitiveCommands.WorkflowStepResultWaitForCommand,
         val type: Class<T>,
         val converter: Converter
@@ -64,8 +65,8 @@ class Kontext(
         PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
             if (result.success() && result.result<Any>().isPresent) {
-                @Suppress("UNCHECKED_CAST")
-                return converter.convert(result.result<Map<String, Any?>>().get(), type) as T
+                val map = result.result<Map<String, Any?>>().get()
+                return converter.convert(map, type)!!
             } else {
                 throw result.error().get()
             }
@@ -76,18 +77,19 @@ class Kontext(
         stepName: String,
         action: (payload: Map<String, Any?>) -> T,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.local(),
-        resultMapping: PayloadReducer = PayloadReducer.all(),
+        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
         val stepSpecificName = "__$stepName"
+        @Suppress("UNCHECKED_CAST")
         return workflowKontext.execute(
             MapPropertyExtractingExecuteCommand<T>(
                 stepSpecificName,
                 PrimitiveCommands.WorkflowStepResultExecuteCommand(
                     stepName,
-                    local,
+                    local as Map<String, Any>?,
                     { pc, payload ->
                         mapOf(stepSpecificName to action.invoke(payload))
                     },
@@ -103,6 +105,7 @@ class Kontext(
     fun <T : Any> awaitEvent(
         stepName: String,
         type: KClass<T>,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
@@ -115,6 +118,7 @@ class Kontext(
                             .resolve(type.java)
                             .orElseThrow().qualifiedName
                     ),
+                    resultMapping,
                     timeout.toJavaDuration(),
                     eventNameCustomizer
                 ),
@@ -137,14 +141,14 @@ class Kontext(
         stepName: String,
         action: PayloadProcessor,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.local(),
-        resultMapping: PayloadReducer = PayloadReducer.all(),
+        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.execute(
         PrimitiveCommands.WorkflowStepResultExecuteCommand(
             stepName,
-            local,
+            local as Map<String, Any>?,
             action,
             parameterMapping,
             resultMapping,
@@ -156,12 +160,14 @@ class Kontext(
     fun waitFor(
         stepName: String,
         qualifiedName: QualifiedName,
+        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.waitFor(
         PrimitiveCommands.WorkflowStepResultWaitForCommand(
             stepName,
             EventConditions.fromQualifiedName(qualifiedName),
+            resultMapping,
             timeout.toJavaDuration(),
             eventNameCustomizer
         )
@@ -174,10 +180,10 @@ class Kontext(
         eventNameCustomizer: EventNameCustomizer = defaults()
     ) {
         val result = waitFor(
-            stepName,
-            QualifiedName(Void::class.java),
-            timeout,
-            eventNameCustomizer
+            stepName = stepName,
+            qualifiedName = QualifiedName(Void::class.java),
+            timeout = timeout,
+            eventNameCustomizer = eventNameCustomizer
         )
         if (result.failure() && result.error().isPresent) {
             throw result.error().get()
@@ -218,7 +224,7 @@ class Kontext(
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(
             TerminatePrimitive.TerminateCommand.cancel(
-                io.axoniq.workflow.runtime.api.WorkflowCancelledException(
+                WorkflowCancelledException(
                     reason
                 ), eventNameCustomizer
             )
@@ -286,7 +292,7 @@ class Kontext(
         workflowKontext.terminate(
             TerminatePrimitive.TerminateCommand.cancelledStep(
                 stepName,
-                io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                StepCancellationException(reason),
                 eventNameCustomizer
             )
         )

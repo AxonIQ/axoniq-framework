@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -78,7 +78,8 @@ public abstract class AbstractStepExecutor {
     }
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
-        while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks()) || !workflowExecution.isExecutable()) {
+        while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
+                || !workflowExecution.isExecutable()) {
             var poll = workflowExecution.getNextTask();
             if (poll != null) { // FIXME forever?
                 poll.accept(this.workflowExecution);
@@ -97,7 +98,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> started(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, startedStep(workflowContext, stepName, sanitize(payload),
-                                         merge(parentEventNameCustomizer, eventNameCustomizer)
+                                                   merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -105,7 +106,18 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
-                                           merge(parentEventNameCustomizer, eventNameCustomizer)
+                                                     null,
+                                                     merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
+                                                @Nullable String payloadReducerName,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
+                                                     payloadReducerName,
+                                                     merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -120,16 +132,15 @@ public abstract class AbstractStepExecutor {
                                                 @Nullable Throwable cause,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, cancelledStep(workflowContext, stepName, cause,
-                                           merge(parentEventNameCustomizer, eventNameCustomizer)
+                                                     merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
     @Nonnull
     protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
-        LoggerFactory.getLogger(AbstractStepExecutor.class).error("Error", ex);
         return sendStepEvent(stepName, failStep(workflowContext, stepName, ex,
-                                      merge(parentEventNameCustomizer, eventNameCustomizer)
+                                                merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -143,7 +154,7 @@ public abstract class AbstractStepExecutor {
     protected CompletableFuture<Void> timedOut(@Nonnull String stepName, @Nonnull Instant timeoutTimestamp,
                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, timeoutStep(workflowContext, stepName, timeoutTimestamp,
-                                         merge(parentEventNameCustomizer, eventNameCustomizer)
+                                                   merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -158,21 +169,27 @@ public abstract class AbstractStepExecutor {
                     "Workflow is in terminal state " + workflowContext.workflowStatus()
                             + ", cannot publish step event " + eventMessage.type()));
         }
-        if (workflowExecution.state().containsStep(stepName) && workflowExecution.state().getStep(stepName).status().isTerminal()) {
+        if (workflowExecution.state().containsStep(stepName) && workflowExecution.state().getStep(stepName).status()
+                                                                                 .isTerminal()) {
             logger.warn("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
                         stepName, workflowExecution.state().getStep(stepName).status());
             return CompletableFuture.failedFuture(new IllegalStateException(
-                    "Step '" + stepName + "' is in terminal state " + workflowExecution.state().getStep(stepName).status()
+                    "Step '" + stepName + "' is in terminal state " + workflowExecution.state().getStep(stepName)
+                                                                                       .status()
                             + ", cannot publish step event " + eventMessage.type()));
         }
         logger.trace("Appending event {}", eventMessage.type());
-        return ProcessingContextUtils.executeWithResult(
-                null,
-                unitOfWorkFactory,
-                executor,
-                context,
-                ctx -> eventSink.publish(ctx, eventMessage)
-        );
+        return ProcessingContextUtils
+                .executeWithResult(
+                        workflowExecution.workflowId(),
+                        unitOfWorkFactory,
+                        executor,
+                        context,
+                        ctx -> {
+                            logger.trace("Thread: {}, ProcessingContext {}", Thread.currentThread(), ctx);
+                            return eventSink.publish(ctx, eventMessage);
+                        }
+                );
     }
 
     @Nonnull

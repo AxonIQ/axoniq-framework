@@ -1,4 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+  ~ Version September 2025 (the "License");
+  ~ The software is available under Non-Production Free License.
+  ~ Production use requires a paid license. See the License for the
+  ~ specific language governing permissions and limitations under
+  ~ the License.
+  ~
+  ~ You may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at:
+  ~
+  ~    https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~
+  -->
+
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -8,20 +26,21 @@
     <artifactId>axon-workflow-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <name>Axon Extension - Workflow - Parent</name>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <kotlin.version>2.3.10</kotlin.version>
-        <axon.version>5.0.3</axon.version>
+        <kotlin.version>2.3.20</kotlin.version>
+        <axon.version>5.1.0-RC2</axon.version>
     </properties>
 
     <modules>
         <module>dsl</module>
+        <module>spring-boot</module>
         <module>runtime</module>
         <module>test</module>
-        <module>example</module>
     </modules>
 
     <dependencyManagement>
@@ -99,35 +118,6 @@
                         </compilerPlugins>
                     </configuration>
 
-                    <executions>
-                        <execution>
-                            <id>default-compile</id>
-                            <phase>compile</phase>
-                            <goals>
-                                <goal>compile</goal>
-                            </goals>
-                            <configuration>
-                                <sourceDirs>
-                                    <sourceDir>src/main/kotlin</sourceDir>
-                                    <sourceDir>src/main/java</sourceDir>
-                                </sourceDirs>
-                            </configuration>
-                        </execution>
-                        <execution>
-                            <id>default-test-compile</id>
-                            <phase>test-compile</phase>
-                            <goals>
-                                <goal>test-compile</goal>
-                            </goals>
-                            <configuration>
-                                <sourceDirs>
-                                    <sourceDir>src/test/kotlin</sourceDir>
-                                    <sourceDir>src/test/java</sourceDir>
-                                </sourceDirs>
-                            </configuration>
-                        </execution>
-                    </executions>
-
                     <dependencies>
                         <dependency>
                             <groupId>org.jetbrains.kotlin</groupId>
@@ -146,9 +136,47 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.15.0</version>
                 </plugin>
+                <plugin>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.5</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>3.5.5</version>
+                    <executions>
+                        <execution>
+                            <id>integration-tests</id>
+                            <phase>integration-test</phase>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <artifactId>maven-failsafe-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>examples</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <property>
+                    <name>!skipExamples</name>
+                </property>
+            </activation>
+            <modules>
+                <module>examples</module>
+            </modules>
+        </profile>
+    </profiles>
 
     <repositories>
         <repository>
@@ -163,4 +191,35 @@
             </snapshots>
         </repository>
     </repositories>
+
+    <developers>
+        <developer>
+            <id>abuijze</id>
+            <name>Allard Buijze</name>
+            <email>allard.buijze@axoniq.io</email>
+            <organization>AxonIQ</organization>
+            <organizationUrl>https://axoniq.io</organizationUrl>
+        </developer>
+        <developer>
+            <id>smcvb</id>
+            <name>Steven van Beelen</name>
+            <email>steven.vanbeelen@axoniq.io</email>
+            <organization>AxonIQ</organization>
+            <organizationUrl>https://axoniq.io</organizationUrl>
+        </developer>
+        <developer>
+            <id>schananas</id>
+            <name>Stefan Dragisic</name>
+            <email>stefan.dragisic@axoniq.io</email>
+            <organization>AxonIQ</organization>
+            <organizationUrl>https://axoniq.io</organizationUrl>
+        </developer>
+        <developer>
+            <id>zambrovski</id>
+            <name>Simon Zambrovski</name>
+            <email>simon.zambrovski@holisticon.de</email>
+            <organization>Holisticon AG</organization>
+            <organizationUrl>https://holisticon.de</organizationUrl>
+        </developer>
+    </developers>
 </project>

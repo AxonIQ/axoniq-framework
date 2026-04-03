@@ -11,15 +11,15 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
 package io.axoniq.workflow.runtime.test;
 
+import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
@@ -38,6 +38,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.function.UnaryOperator;
 
+/**
+ * Abstract test base for workflow test, until we develop a test fixture.
+ *
+ * @param <T> type of the workflow context.
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
     protected final Logger logger = LoggerFactory.getLogger(getClass());
@@ -60,16 +67,12 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
 
         var configurer = MessagingConfigurer.create();
 
-        configurer.componentRegistry(r -> r.registerEnhancer(registry ->
-                                                                     registry.registerModule(
-                                                                             WorkflowModule
-                                                                                     .usingContext(dslType)
-                                                                                     .workflowContextFactory(builder)
-                                                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
-                                                                                     .definitions(
-                                                                                             getDeclaredDefinitions()
-                                                                                     )
-                                                                     )
+        configurer.componentRegistry(r -> r.registerModule(
+                                             WorkflowModule
+                                                     .usingContext(dslType)
+                                                     .workflowContextFactory(builder)
+                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
+                                                     .definitions(getDeclaredDefinitions())
                                      )
         );
 
@@ -90,6 +93,6 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         logger.info(descriptor.describe());
         workflowEngine.shutdown();
         configuration.shutdown();
-        ((MutableWorkflowHistoryRepository)workflowHistoryRepository).clear();
+        ((MutableWorkflowHistoryRepository) workflowHistoryRepository).clear();
     }
 }

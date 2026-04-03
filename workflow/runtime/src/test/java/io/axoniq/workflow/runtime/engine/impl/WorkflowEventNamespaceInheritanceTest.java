@@ -11,17 +11,18 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
 package io.axoniq.workflow.runtime.engine.impl;
 
 import io.axoniq.workflow.runtime.api.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.engine.util.EventMessageUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
@@ -47,7 +48,11 @@ class WorkflowEventNamespaceInheritanceTest {
         when(ctx.workflowPayload()).thenReturn(Map.of());
 
         // When producing a completed step event using the merged customizer
-        EventMessage evt = EventMessageUtils.completedStep(ctx, "myStep", Map.of(), merged);
+        EventMessage evt = EventMessageUtils.completedStep(ctx,
+                                                           "myStep",
+                                                           Map.of(),
+                                                           PayloadReducer.NAME_GLOBAL_ONLY,
+                                                           merged);
 
         // Then the namespace should be inherited from the workflow customizer
         assertThat(evt.type().qualifiedName().namespace()).isEqualTo("wf.ns");
@@ -67,7 +72,11 @@ class WorkflowEventNamespaceInheritanceTest {
         when(ctx.workflowPayload()).thenReturn(Map.of());
 
         // When producing a completed step event using the merged customizer
-        EventMessage evt = EventMessageUtils.completedStep(ctx, "myStep", Map.of(), merged);
+        EventMessage evt = EventMessageUtils.completedStep(ctx,
+                                                           "myStep",
+                                                           Map.of(),
+                                                           PayloadReducer.NAME_GLOBAL_ONLY,
+                                                           merged);
 
         // Then the step-level namespace should win
         assertThat(evt.type().qualifiedName().namespace()).isEqualTo("step.ns");

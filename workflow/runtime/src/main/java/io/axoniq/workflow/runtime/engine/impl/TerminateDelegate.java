@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -116,7 +116,7 @@ public class TerminateDelegate implements TerminatePrimitive {
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
 
         ProcessingContextUtils.executeWithResult(
-                null,
+                workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
@@ -138,7 +138,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         var eventNameCustomizer = command.eventNameCustomizer();
 
         ProcessingContextUtils.executeWithResult(
-                null,
+                workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),

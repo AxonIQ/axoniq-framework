@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -20,12 +20,14 @@ package io.axoniq.workflow.runtime.engine.history;
 import io.axoniq.workflow.runtime.engine.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.engine.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+
+import java.util.HashMap;
 
 /**
  * Workflow history projector collecting historic information.
@@ -60,7 +62,9 @@ public class WorkflowHistoryProjector implements EventHandler {
                 );
             }, () -> {
                 historyRepository.save(new WorkflowHistory(workflowId,
-                                                           new EventSourcedWorkflowState().evolve(event, context)));
+                                                           new EventSourcedWorkflowState(
+                                                                   new HashMap<>()
+                                                           ).evolve(event, context)));
             });
         }
         return MessageStream.empty();

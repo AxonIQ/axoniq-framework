@@ -11,7 +11,7 @@
  * You may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
+ *    https://www.axoniq.io/legal/terms-of-service
  *
  *
  */
@@ -26,6 +26,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -69,6 +70,14 @@ public interface WorkflowState extends DescribableComponent {
      */
     @Nonnull
     WorkflowStatus workflowStatus();
+
+    /**
+     * Retrieves the payload of the workflow execution.
+     *
+     * @return payload of the workflow execution.
+     */
+    @Nonnull
+    Map<String, Object> payload();
 
     /**
      * Guards against invoking any primitive when the workflow has already reached a terminal state. Rethrows the
