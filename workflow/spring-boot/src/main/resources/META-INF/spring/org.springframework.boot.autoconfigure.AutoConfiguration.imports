@@ -16,5 +16,5 @@
 #
 #
 io.axoniq.workflow.springboot.WorkflowAutoConfiguration
-io.axoniq.workflow.springboot.WorkflowDefaultDSLAutoConfiguration
+io.axoniq.workflow.springboot.WorkflowDefaultContextFactoryAutoConfiguration
 

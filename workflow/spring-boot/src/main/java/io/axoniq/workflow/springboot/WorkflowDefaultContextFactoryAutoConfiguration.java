@@ -29,7 +29,7 @@ import org.springframework.context.annotation.Bean;
  * @since 1.0.0
  */
 @AutoConfiguration
-public class WorkflowDefaultDSLAutoConfiguration {
+public class WorkflowDefaultContextFactoryAutoConfiguration {
 
     /**
      * Provides a context factory for the Simple workflow DSL.
