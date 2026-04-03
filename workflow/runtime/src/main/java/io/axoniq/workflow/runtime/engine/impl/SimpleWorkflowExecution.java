@@ -395,7 +395,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         processingContext.component(Executor.class, WORKFLOW_ENGINE_EXECUTOR),
                         processingContext,
                         childCtx -> {
-                            logger.warn("Publishing workflow event {} from {}",
+                            logger.trace("Publishing workflow event {} from {}",
                                         eventMessage.type(),
                                         Thread.currentThread());
                             return contextDelegate.publishEvent(childCtx, eventMessage);
