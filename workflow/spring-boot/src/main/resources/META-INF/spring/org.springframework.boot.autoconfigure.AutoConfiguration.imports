@@ -15,5 +15,6 @@
 #
 #
 #
-io.axoniq.workflow.runtime.engine.configuration.WorkflowEnhancer
-io.axoniq.workflow.runtime.engine.configuration.WorkflowEventProcessingRegistrationEnhancer
+io.axoniq.workflow.springboot.WorkflowAutoConfiguration
+io.axoniq.workflow.springboot.WorkflowDefaultContextFactoryAutoConfiguration
+

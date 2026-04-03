@@ -33,6 +33,7 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -68,8 +69,9 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                          }
                  )
                  .eventSource(c.getComponent(StreamableEventSource.class))
-                 .initialSegmentCount(1)
-                 .batchSize(1)
+                 .tokenStore(c.getComponent(TokenStore.class))
+                 .initialSegmentCount(1) // FIXME -> should be configurable?
+                 .batchSize(1) // FIXME -> should be configurable? currently only 1 is supported / working
                  .initialToken(s -> completedFuture(
                                        // FIXME, how can we control the correct index here? switching to 0 breaks it. See https://github.com/AxonFramework/AxonFramework/issues/4382
                                        createReplayToken(new GlobalSequenceTrackingToken(1))

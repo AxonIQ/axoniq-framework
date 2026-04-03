@@ -18,11 +18,14 @@
 package io.axoniq.workflow.runtime.engine.association;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
 
 /**
  * Exception thrown when an association string is in the wrong format or uses unsupported operators.
+ * @since 1.0.0
+ * @author Simon Zambrovski
  */
 public class BadAssociationFormatException extends RuntimeException {
 
