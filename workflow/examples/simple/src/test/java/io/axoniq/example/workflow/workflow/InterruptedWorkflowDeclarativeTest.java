@@ -93,6 +93,10 @@ class InterruptedWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Sim
                     .isFalse();
             // stepA completed before the interrupt
             assertThat(state.workflowStepNames()).contains("stepA");
+            // No steps should be started after the interrupt — interruption must be immediate
+            assertThat(state.workflowStepNames())
+                    .as("No steps should be started after interruption, but found: %s", state.workflowStepNames())
+                    .doesNotContain("stepB");
         }
     }
 }

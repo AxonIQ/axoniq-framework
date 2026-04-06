@@ -93,6 +93,9 @@ class ExceptionBetweenStepsWorkflowDeclarativeTest extends AbstractDeclarativeTe
                     .isFalse();
             // stepA completed before the exception
             assertThat(state.workflowStepNames()).contains("stepA");
+            assertThat(state.workflowStepNames())
+                    .as("No steps should be started after interruption, but found: %s", state.workflowStepNames())
+                    .doesNotContain("stepB");
         }
     }
 }
