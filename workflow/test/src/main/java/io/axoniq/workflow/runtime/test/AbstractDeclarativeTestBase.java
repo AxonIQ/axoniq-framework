@@ -17,14 +17,14 @@
  */
 package io.axoniq.workflow.runtime.test;
 
-import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
-import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
+import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContextFactory;
+import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.runtime.execution.runtime.DSLAdoptingExecutionFactory;
+import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.workflow.history.api.WorkflowHistoryRepository;
+import io.axoniq.workflow.runtime.execution.runtime.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;

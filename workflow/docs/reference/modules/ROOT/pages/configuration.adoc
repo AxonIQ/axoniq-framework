@@ -10,7 +10,8 @@ The `@Workflow` annotation is the simplest way to define a workflow:
 
 [source,java]
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced",
+@Workflow(idProperty = "orderId",
+          startOnEvent = "OrderPlaced",
           workflowNamespace = "io.myapp.orders")
 public void execute(SimpleWorkflowContext ctx) { /* ... */ }
 ----
