@@ -21,11 +21,14 @@ import io.axoniq.workflow.runtime.api.StepCancellationException;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
 import io.axoniq.workflow.runtime.engine.step.StepFailedException;
+import io.axoniq.workflow.runtime.engine.step.WorkflowStep;
 import jakarta.annotation.Nonnull;
+import org.axonframework.conversion.Converter;
 
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
+import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.PAYLOAD_TYPE;
 import static io.axoniq.workflow.runtime.engine.step.StepStatus.*;
 
 /**
@@ -62,8 +65,10 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     @Override
     @Nonnull
     public <T> Optional<T> result() {
-        //noinspection unchecked
-        return Optional.of(workflowExecution.state().getStep(stepName)).map(step -> (T) step.result());
+        return Optional.of(workflowExecution.state().getStep(stepName))
+                       .map(WorkflowStep::result)
+                       .map(o -> workflowExecution.processingContext().component(Converter.class)
+                                                      .convert(o, PAYLOAD_TYPE.getType()));
     }
 
     @Override

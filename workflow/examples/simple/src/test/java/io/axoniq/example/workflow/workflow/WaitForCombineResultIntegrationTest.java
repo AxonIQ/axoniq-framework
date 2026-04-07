@@ -33,6 +33,8 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -40,6 +42,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 
+import static io.axoniq.workflow.dsl.Payload.payload;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
@@ -97,9 +100,10 @@ class WaitForCombineResultIntegrationTest
 
     public static class WaitForCombineWorkflow {
 
+        static final Logger logger = LoggerFactory.getLogger(WaitForCombineWorkflow.class);
         public void execute(WaitForCombineWorkflowContext ctx) {
             // Using the new overload of awaitEvent with COMBINE
-            ctx.awaitEvent("waitStep",
+            var event = ctx.awaitEvent("waitStep",
                            RegistrationReceivedEvent.class,
                            associate(payloadProperty("status"), equalsTo("arrived")),
                            Duration.ofSeconds(5)
