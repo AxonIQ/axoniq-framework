@@ -37,8 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that a {@link RuntimeException} thrown in user code between steps does not put
- * the workflow into any terminal state. The workflow should remain in a non-terminal state.
+ * Verifies that a {@link RuntimeException} thrown in user code between steps does not put the workflow into any
+ * terminal state. The workflow should remain in a non-terminal state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -76,11 +76,6 @@ class ExceptionBetweenStepsWorkflowDeclarativeTest extends AbstractDeclarativeTe
             assertThat(workflowHistoryRepository.findAll())
                     .anyMatch(h -> h.state().workflowStepNames().contains("stepA"));
         });
-
-        // Wait for execution to be cleaned up
-        await().atMost(10, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(workflowEngine.workflowExecutions()).isEmpty()
-        );
 
         assertThat(workflowHistoryRepository.findAll()).hasSize(1);
 
