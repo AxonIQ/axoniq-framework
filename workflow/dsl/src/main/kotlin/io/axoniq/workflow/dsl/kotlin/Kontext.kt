@@ -96,7 +96,8 @@ class Kontext(
                     parameterMapping,
                     resultMapping,
                     timeout.toJavaDuration(),
-                    eventNameCustomizer
+                    eventNameCustomizer,
+                    RetryPolicy.NONE
                 )
             )
         )
@@ -153,7 +154,8 @@ class Kontext(
             parameterMapping,
             resultMapping,
             timeout.toJavaDuration(),
-            eventNameCustomizer
+            eventNameCustomizer,
+            RetryPolicy.NONE
         )
     )
 

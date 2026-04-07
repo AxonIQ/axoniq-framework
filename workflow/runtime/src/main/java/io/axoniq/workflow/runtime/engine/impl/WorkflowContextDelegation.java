@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadModification;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
+import io.axoniq.workflow.runtime.api.RetryPolicy;
 import io.axoniq.workflow.runtime.api.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
@@ -61,7 +62,7 @@ import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.
 public class WorkflowContextDelegation implements WorkflowContext {
 
     // Primitive implementations
-    private final ExecuteDelegate executeDelegate;
+    private final RetryableExecutePrimitive retryableExecutePrimitive;
     private final WaitForDelegate waitForDelegate;
     private final TerminateDelegate terminateDelegate;
     private final PayloadDelegate payloadDelegate;
@@ -114,13 +115,21 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                 "Could not retrieve EventSink");
 
 
-        this.executeDelegate = new ExecuteDelegate(workflowContext,
+        var executeDelegate = new ExecuteDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
                                                    executorService);
+        this.retryableExecutePrimitive = new RetryableExecutePrimitive(executeDelegate,
+                                                                        workflowContext,
+                                                                        workflowExecution,
+                                                                        stepParent,
+                                                                        clock,
+                                                                        unitOfWorkFactory,
+                                                                        eventSink,
+                                                                        executorService);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
@@ -192,13 +201,32 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                       @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
                                       @Nonnull EventNameCustomizer eventNameCustomizer) {
         workflowExecution.state().throwTerminalCause();
-        return executeDelegate.execute(stepName,
-                                       local,
-                                       action,
-                                       parameterPayloadReducer,
-                                       resultPayloadReducer,
-                                       timeout,
-                                       eventNameCustomizer);
+        return retryableExecutePrimitive.execute(stepName,
+                                                  local,
+                                                  action,
+                                                  parameterPayloadReducer,
+                                                  resultPayloadReducer,
+                                                  timeout,
+                                                  eventNameCustomizer);
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult execute(@Nonnull String stepName,
+                                      @org.jetbrains.annotations.Nullable Map<String, Object> local,
+                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
+                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer,
+                                      @Nonnull RetryPolicy retryPolicy) {
+        workflowExecution.state().throwTerminalCause();
+        return retryableExecutePrimitive.execute(stepName,
+                                                  local,
+                                                  action,
+                                                  parameterPayloadReducer,
+                                                  resultPayloadReducer,
+                                                  timeout,
+                                                  eventNameCustomizer,
+                                                  retryPolicy);
     }
 
     @Override

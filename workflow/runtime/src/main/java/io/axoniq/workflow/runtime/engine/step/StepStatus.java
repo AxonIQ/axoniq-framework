@@ -27,6 +27,7 @@ package io.axoniq.workflow.runtime.engine.step;
  */
 public enum StepStatus {
     STARTED,
+    RETRYING,
     COMPLETED,
     FAILED,
     TIMED_OUT,
@@ -39,7 +40,7 @@ public enum StepStatus {
      */
     public boolean isTerminal() {
         return switch (this) {
-            case STARTED -> false;
+            case STARTED, RETRYING -> false;
             case COMPLETED, FAILED, CANCELLED, TIMED_OUT -> true;
         };
     }

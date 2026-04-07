@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.PayloadReducer;
 import io.axoniq.workflow.runtime.api.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.RetryPolicy;
 import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowStepResult;
@@ -343,6 +344,48 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, defaultTimeout, defaults());
     }
 
+    /**
+     * Execute a step asynchronously with retry support.
+     *
+     * @param stepName            name of the step.
+     * @param payload             payload to be passed to a step.
+     * @param action              action to be executed.
+     * @param duration            maximum time of execution.
+     * @param eventNameCustomizer event name customizer.
+     * @param retryPolicy         retry policy for the step.
+     * @return workflow step result.
+     */
+    public WorkflowStepResult execute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull Duration duration,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy
+    ) {
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, duration, eventNameCustomizer,
+                       retryPolicy);
+    }
+
+    /**
+     * Execute a step asynchronously with retry support using default timeout and event names.
+     *
+     * @param stepName    name of the step.
+     * @param payload     payload to be passed to a step.
+     * @param action      action to be executed.
+     * @param retryPolicy retry policy for the step.
+     * @return workflow step result.
+     */
+    public WorkflowStepResult execute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull RetryPolicy retryPolicy
+    ) {
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, defaultTimeout, defaults(),
+                       retryPolicy);
+    }
+
 
     /**
      * Executes the step synchronously.
@@ -393,6 +436,55 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
             @Nonnull Map<String, Object> payload,
             @Nonnull PayloadProcessor action) {
         return this.awaitExecute(stepName, payload, action, defaultTimeout, defaults());
+    }
+
+    /**
+     * Executes the step synchronously with retry support.
+     *
+     * @param stepName            name of the step.
+     * @param payload             payload to be passed to a step.
+     * @param action              action to be executed.
+     * @param duration            maximum time of execution.
+     * @param eventNameCustomizer event name customizer.
+     * @param retryPolicy         retry policy for the step.
+     * @return successful result of processing.
+     */
+    public Map<String, Object> awaitExecute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull Duration duration,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy) {
+        return execute(
+                PrimitiveCommands.blockingLocalExecute(stepName,
+                                                       payload,
+                                                       action,
+                                                       duration,
+                                                       new TypeReference<>() {
+                                                       },
+                                                       super.processingContext().component(Converter.class),
+                                                       eventNameCustomizer,
+                                                       retryPolicy
+                )
+        );
+    }
+
+    /**
+     * Executes the step synchronously with retry support using default duration and event names.
+     *
+     * @param stepName    name of the step.
+     * @param payload     payload to be passed to a step.
+     * @param action      action to be executed.
+     * @param retryPolicy retry policy for the step.
+     * @return successful result of processing.
+     */
+    public Map<String, Object> awaitExecute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull RetryPolicy retryPolicy) {
+        return this.awaitExecute(stepName, payload, action, defaultTimeout, defaults(), retryPolicy);
     }
 
 

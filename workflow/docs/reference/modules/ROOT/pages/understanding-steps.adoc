@@ -39,7 +39,7 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 * <<error-handling>> — try/catch, checking results, compensating actions
 * <<cancelling-a-step>> — cancelling individual steps
 * <<execution-semantics>> — at-least-once, exactly-once (planned)
-* <<retries>> — coming soon
+* <<retries>> — retry policies, backoff, crash recovery
 * <<event-name-customization>> — namespaces, suffixes, inheritance, builders
 * <<kotlin-dsl-equivalents>> — Kotlin syntax for all of the above
 --
@@ -422,59 +422,67 @@ The engine will use consistency markers to guarantee that each step action execu
 ====
 
 [[retries]]
-== Retries [.badge]#coming soon#
+== Retries
 
-[NOTE]
-====
-**Built-in retry support is coming soon.** The API below is planned but not yet available.
-====
-
-The `RetryPolicy` API will let you configure retries per step — max attempts, backoff strategy, and programmatic control:
+The `RetryPolicy` API lets you configure retries per step — max attempts, backoff strategy, and programmatic control:
 
 [source,java]
 ----
 // Simple: retry up to 3 times (uses default timeout and event names)
-ctx.awaitExecute("callApi",
+ctx.awaitExecute("reserveInventory",
         payload("orderId", orderId).getValues(),
-        ExternalApi::call,
+        InventoryService::reserve,
         RetryPolicy.maxRetries(3));                                       // <1>
 
 // With fixed backoff: wait 500ms between retries
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
+ctx.awaitExecute("chargePayment",
+        payload("orderId", orderId, "amount", amount).getValues(),
+        PaymentGateway::charge,
         RetryPolicy.maxRetries(3)
                 .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(500))));
 
 // With exponential backoff (base 200ms, capped at 5s)
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
+ctx.awaitExecute("notifyCarrier",
+        payload("shipmentId", shipmentId).getValues(),
+        CarrierService::notify,
         RetryPolicy.maxRetries(5)
                 .withBackoff(BackoffStrategy.exponential(Duration.ofMillis(200), Duration.ofSeconds(5))));
 
 // With retry handler and conditional stop
-ctx.awaitExecute("callApi",
-        payload("orderId", orderId).getValues(),
-        ExternalApi::call,
+ctx.awaitExecute("validateAddress",
+        payload("address", address).getValues(),
+        AddressService::validate,
         RetryPolicy.maxRetries(5)
                 .onRetry(retryCtx -> logger.warn("Retry {}/{} for {}: {}",       // <2>
                         retryCtx.attempt(), retryCtx.maxRetries(),
                         retryCtx.stepName(), retryCtx.error().getMessage()))
-                .retryUntil(retryCtx -> isTransient(retryCtx.error())));          // <3>
+                .retryWhile(retryCtx -> isTransient(retryCtx.error())));          // <3>
 ----
 <.> If the step fails, the engine retries up to 3 times before marking it as FAILED. `maxRetries=3` means up to 4 total executions (1 initial + 3 retries).
 <.> `onRetry` is called before each retry — use it for logging, metrics, or alerts.
-<.> `retryUntil` stops retrying early if the error is not transient (e.g., a 404 should not be retried).
+<.> `retryWhile` continues retrying as long as the predicate returns true — here, only transient errors are retried (e.g., a 404 is not retried).
 
-The `BackoffStrategy` options:
+The `reserveInventory` step with `RetryPolicy.maxRetries(3)` — fails twice, succeeds on the third attempt:
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="reserveInventory with retry">
+1 started   ReserveInventoryStarted
+2 retrying  ReserveInventoryRetrying  {"attempt": 1, "maxRetries": 3, "error": "InventoryUnavailableException"}
+3 retrying  ReserveInventoryRetrying  {"attempt": 2, "maxRetries": 3, "error": "InventoryUnavailableException"}
+4 completed ReserveInventoryCompleted {"reserved": true}
+  </div>
+</div>
+++++
+
+=== Backoff strategies
 
 [cols="1,2"]
 |===
 |Strategy |Behavior
 
 |`BackoffStrategy.NONE`
-|No delay between retries.
+|No delay between retries (default).
 
 |`BackoffStrategy.fixed(Duration)`
 |Constant delay between retries.
@@ -486,7 +494,19 @@ The `BackoffStrategy` options:
 |Delay doubles each attempt: `base * 2^(attempt-1)`, capped at `max`.
 |===
 
+=== Cancellation during retry
+
+[NOTE]
+====
+If a step throws `StepCancellationException` during any retry attempt, the step immediately transitions to `CANCELLED` — remaining retries are skipped.
+Cancellation always takes precedence over the retry policy.
+This also applies when the step is cancelled externally via `ctx.cancelStep()` or when the workflow itself is cancelled — any in-flight backoff delay is interrupted and the step moves to a terminal state.
+====
+
+=== Crash recovery
+
 Retries are event-sourced — on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
+If the process restarts while a step is in `RETRYING` state, the engine resumes from the correct attempt number with the remaining backoff delay.
 
 [[event-name-customization]]
 == Event name customization

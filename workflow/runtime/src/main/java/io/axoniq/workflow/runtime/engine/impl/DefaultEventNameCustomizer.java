@@ -29,6 +29,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
+/**
+ * Default implementation of {@link EventNameCustomizer} that builds event names from a base name and status suffix.
+ *
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
 public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     private final Map<StepStatus, String> stepStatusToName = new HashMap<>();
@@ -43,6 +49,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     DefaultEventNameCustomizer() {
         stepStarted("Started");
+        stepRetrying("Retrying");
         stepCompleted("Completed");
         stepTimedOut("TimedOut");
         stepFailed("Failed");
@@ -77,6 +84,11 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     public DefaultEventNameCustomizer capitalizeSimpleName(boolean capitalizeSimpleName) {
         this.capitalizeSimpleName = capitalizeSimpleName;
+        return this;
+    }
+
+    public DefaultEventNameCustomizer stepRetrying(String retrying) {
+        this.stepStatusToName.put(StepStatus.RETRYING, retrying);
         return this;
     }
 
@@ -225,6 +237,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
         public static DefaultEventNameCustomizer namespace(String namespace) {
             return defaults().namespace(namespace);
+        }
+
+        public static DefaultEventNameCustomizer stepRetrying(String retrying) {
+            return defaults().stepRetrying(retrying);
         }
 
         public static DefaultEventNameCustomizer stepCompleted(String completed) {

@@ -65,6 +65,23 @@ public class PrimitiveCommands {
                                                                    eventNameCustomizer), converter, type);
     }
 
+    public static <T> BlockingExecuteWithResultCommand<T> blockingLocalExecute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull Duration duration,
+            @Nonnull TypeReference<T> type,
+            @Nonnull Converter converter,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy) {
+        return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
+                                                                   payload,
+                                                                   action,
+                                                                   duration,
+                                                                   eventNameCustomizer,
+                                                                   retryPolicy), converter, type);
+    }
+
     /**
      * Constructs a blocking wait for command.
      *
@@ -107,7 +124,26 @@ public class PrimitiveCommands {
                                                     PayloadReducer.LOCAL_ONLY,
                                                     PayloadReducer.GLOBAL_ONLY,
                                                     duration,
-                                                    eventNameCustomizer);
+                                                    eventNameCustomizer,
+                                                    RetryPolicy.NONE);
+    }
+
+    public static WorkflowStepResultExecuteCommand localExecute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> local,
+            @Nonnull PayloadProcessor action,
+            @Nonnull Duration duration,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy
+    ) {
+        return new WorkflowStepResultExecuteCommand(stepName,
+                                                    local,
+                                                    action,
+                                                    PayloadReducer.LOCAL_ONLY,
+                                                    PayloadReducer.GLOBAL_ONLY,
+                                                    duration,
+                                                    eventNameCustomizer,
+                                                    retryPolicy);
     }
 
     public static WorkflowStepResultWaitForCommand wait(
@@ -174,6 +210,12 @@ public class PrimitiveCommands {
         public EventNameCustomizer eventNameCustomizer() {
             return delegate.eventNameCustomizer();
         }
+
+        @Nonnull
+        @Override
+        public RetryPolicy retryPolicy() {
+            return delegate.retryPolicy();
+        }
     }
 
     @Internal
@@ -222,7 +264,8 @@ public class PrimitiveCommands {
     @Internal
     public record WorkflowStepResultExecuteCommand(String stepName, Map<String, Object> local, PayloadProcessor action,
                                                    PayloadReducer parameterMapping, PayloadReducer resultMapping,
-                                                   Duration timeout, EventNameCustomizer eventNameCustomizer)
+                                                   Duration timeout, EventNameCustomizer eventNameCustomizer,
+                                                   RetryPolicy retryPolicy)
             implements ExecutePrimitive.ExecuteCommand<WorkflowStepResult> {
 
         public WorkflowStepResultExecuteCommand(
@@ -232,7 +275,8 @@ public class PrimitiveCommands {
                 @Nonnull PayloadReducer parameterMapping,
                 @Nonnull PayloadReducer resultMapping,
                 @Nonnull Duration timeout,
-                @Nonnull EventNameCustomizer eventNameCustomizer
+                @Nonnull EventNameCustomizer eventNameCustomizer,
+                @Nonnull RetryPolicy retryPolicy
         ) {
             this.stepName = stepName;
             this.local = local;
@@ -241,6 +285,7 @@ public class PrimitiveCommands {
             this.resultMapping = resultMapping;
             this.timeout = timeout;
             this.eventNameCustomizer = eventNameCustomizer;
+            this.retryPolicy = retryPolicy;
         }
 
         @Nonnull
@@ -283,6 +328,12 @@ public class PrimitiveCommands {
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return eventNameCustomizer;
+        }
+
+        @Nonnull
+        @Override
+        public RetryPolicy retryPolicy() {
+            return retryPolicy;
         }
 
         @Override

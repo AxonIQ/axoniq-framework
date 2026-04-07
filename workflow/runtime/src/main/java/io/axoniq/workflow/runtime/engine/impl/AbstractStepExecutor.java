@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.WorkflowContext;
 import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowExecution;
+import io.axoniq.workflow.runtime.engine.step.StepRetryInfo;
 import io.axoniq.workflow.runtime.engine.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -141,6 +142,15 @@ public abstract class AbstractStepExecutor {
                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, failStep(workflowContext, stepName, ex,
                                                 merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> retrying(@Nonnull String stepName,
+                                               @Nonnull StepRetryInfo retryInfo,
+                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, retryingStep(workflowContext, stepName, retryInfo,
+                                           merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
