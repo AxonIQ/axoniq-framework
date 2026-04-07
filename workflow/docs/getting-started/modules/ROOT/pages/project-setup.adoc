@@ -6,7 +6,7 @@ Before we can build our order fulfillment workflow, we need to set up the projec
 == Prerequisites
 
 * Java 21 or higher
-* Axon Framework 5.0.4
+* Axon Framework 5.1.0
 * Maven (Gradle works too, but this tutorial uses Maven)
 
 == Adding dependencies
