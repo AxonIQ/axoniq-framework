@@ -17,23 +17,17 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever;
-import io.axoniq.workflow.runtime.association.ValueRetriever;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link PayloadPropertyValueRetriever}.

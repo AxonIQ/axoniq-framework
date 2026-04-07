@@ -19,14 +19,14 @@ package io.axoniq.workflow.runtime.delegate;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.workflow.runtime.execution.WorkflowStepResults;
+import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.execution.EventWaitConditions;
+import io.axoniq.workflow.runtime.execution.WorkflowStepResults;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;

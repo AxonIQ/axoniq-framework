@@ -17,19 +17,19 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 

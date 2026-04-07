@@ -18,12 +18,12 @@
 
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.OnCancellation;
 import io.axoniq.workflow.runtime.api.annotation.OnFailure;
 import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.junit.jupiter.api.*;
 

@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 

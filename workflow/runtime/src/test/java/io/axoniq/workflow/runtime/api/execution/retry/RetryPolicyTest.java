@@ -21,10 +21,12 @@ import io.axoniq.workflow.runtime.api.execution.context.retry.BackoffStrategy;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryHandler;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
+
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class RetryPolicyTest {

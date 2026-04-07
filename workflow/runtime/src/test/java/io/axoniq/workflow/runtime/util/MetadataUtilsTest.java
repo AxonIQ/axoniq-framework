@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.Metadata;
 import org.junit.jupiter.api.*;
 

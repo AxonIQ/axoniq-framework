@@ -1,7 +1,6 @@
 package io.axoniq.workflow.runtime.util;
 
-import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;

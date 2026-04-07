@@ -19,9 +19,9 @@ package io.axoniq.example.workflow.kotlin.workflow
 
 
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
+import io.axoniq.workflow.configuration.WorkflowModule
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.configuration.WorkflowModule
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus

@@ -31,11 +31,11 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 
+import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 
 /**
  * Sample user registration.

@@ -29,8 +29,8 @@ import org.axonframework.conversion.Converter;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
-import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.PAYLOAD_TYPE;
 import static io.axoniq.workflow.runtime.api.execution.status.StepStatus.*;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.PAYLOAD_TYPE;
 
 /**
  * Workflow Step result based on the Workflow State.

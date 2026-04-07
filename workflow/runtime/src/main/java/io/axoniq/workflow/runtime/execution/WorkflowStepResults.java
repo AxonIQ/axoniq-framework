@@ -17,7 +17,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;

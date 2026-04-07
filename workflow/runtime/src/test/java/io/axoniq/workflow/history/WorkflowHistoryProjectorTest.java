@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.history;
 
-import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.api.WorkflowHistory;
+import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
@@ -26,11 +26,10 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
 class WorkflowHistoryProjectorTest {
 

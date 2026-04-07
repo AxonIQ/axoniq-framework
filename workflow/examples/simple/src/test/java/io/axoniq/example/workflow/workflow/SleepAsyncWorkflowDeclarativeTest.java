@@ -18,13 +18,13 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
+import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;

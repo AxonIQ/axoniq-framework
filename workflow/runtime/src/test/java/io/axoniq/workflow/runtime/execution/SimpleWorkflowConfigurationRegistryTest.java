@@ -21,12 +21,12 @@ import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
@@ -40,7 +40,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 

@@ -21,15 +21,12 @@ import io.axoniq.demo.bikerental.coreapi.payment.ConfirmPaymentCommand;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentConfirmedEvent;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentPreparedEvent;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentRejectedEvent;
-import io.axoniq.demo.bikerental.coreapi.payment.PreparePaymentCommand;
 import io.axoniq.demo.bikerental.coreapi.payment.RejectPaymentCommand;
 import org.axonframework.eventsourcing.annotation.EventSourcingHandler;
 import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
 import org.axonframework.extension.spring.stereotype.EventSourced;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-
-import java.util.UUID;
 
 @EventSourced(tagKey = "Payment")
 public class Payment {

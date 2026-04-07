@@ -18,19 +18,17 @@
 package io.axoniq.workflow.runtime.delegate;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.workflow.runtime.delegate.NoneMatchCombinatorDelegate;
-import io.axoniq.workflow.runtime.execution.WorkflowStepResults;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.execution.WorkflowStepResults;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**

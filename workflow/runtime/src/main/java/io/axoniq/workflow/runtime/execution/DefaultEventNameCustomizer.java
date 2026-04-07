@@ -18,8 +18,8 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;

@@ -18,13 +18,11 @@
 
 package io.axoniq.workflow.runtime.util;
 
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
@@ -35,8 +33,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.eq;
 
 /**
  * Unit test class for the {@code ProcessingContextUtils} utility class.

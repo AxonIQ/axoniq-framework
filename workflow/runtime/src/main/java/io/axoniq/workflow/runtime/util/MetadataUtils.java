@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.runtime.util;
 
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Metadata;
 

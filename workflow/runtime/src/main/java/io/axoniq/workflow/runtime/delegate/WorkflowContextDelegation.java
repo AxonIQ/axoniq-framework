@@ -17,21 +17,21 @@
  */
 package io.axoniq.workflow.runtime.delegate;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.payload.PayloadModification;
-import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.workflow.runtime.execution.EventWaitConditions;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.payload.PayloadModification;
+import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.EventWaitConditions;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;

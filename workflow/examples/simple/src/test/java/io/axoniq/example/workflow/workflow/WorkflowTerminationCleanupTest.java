@@ -17,11 +17,11 @@
  */
 package io.axoniq.example.workflow.workflow;
 
+import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;

@@ -18,8 +18,8 @@
 
 package io.axoniq.workflow.runtime.delegate;
 
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.ArrayList;

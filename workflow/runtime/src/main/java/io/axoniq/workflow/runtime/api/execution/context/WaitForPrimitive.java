@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
