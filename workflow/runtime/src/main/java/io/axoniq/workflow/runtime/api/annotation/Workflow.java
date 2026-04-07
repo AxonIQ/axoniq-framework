@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.runtime.api.annotation;
 
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowIdProvider;
-import io.axoniq.workflow.runtime.execution.runtime.PayloadPropertyWorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

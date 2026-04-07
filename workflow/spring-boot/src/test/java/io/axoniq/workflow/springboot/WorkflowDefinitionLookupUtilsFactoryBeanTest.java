@@ -17,11 +17,11 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.runtime.execution.runtime.AbstractDSLWorkflowContext;
+import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;

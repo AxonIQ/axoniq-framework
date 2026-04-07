@@ -18,22 +18,22 @@
 
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.runtime.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.runtime.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowDefinition;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowIdProvider;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.execution.association.ValueComparisonOperatorRegistry;
-import io.axoniq.workflow.runtime.execution.runtime.EventConditions;
-import io.axoniq.workflow.runtime.execution.runtime.WorkflowExecutionFactory;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.runtime.PayloadPropertyWorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
+import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageType;

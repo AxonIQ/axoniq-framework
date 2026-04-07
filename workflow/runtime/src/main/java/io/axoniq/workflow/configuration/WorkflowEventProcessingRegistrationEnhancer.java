@@ -18,7 +18,7 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.execution.runtime.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;

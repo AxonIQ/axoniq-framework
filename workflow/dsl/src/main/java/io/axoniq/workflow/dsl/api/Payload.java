@@ -18,7 +18,7 @@
 package io.axoniq.workflow.dsl.api;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
 

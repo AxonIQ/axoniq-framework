@@ -18,14 +18,15 @@ public class WorkflowArchUnitConventionTests
 {
 
 
-    // @ArchTest
-    private final ArchRule packagesShouldBeFreeOfCycles = FreezingArchRule.freeze(
-            slices()
-                    .matching("(**)")
-                    .should()
-                    .beFreeOfCycles()
-                    .as("Package Cycles")
-        );
+    @ArchTest
+    private final ArchRule packagesShouldBeFreeOfCycles =
+            FreezingArchRule.freeze(
+                    slices()
+                            .matching("(**)")
+                            .should()
+                            .beFreeOfCycles()
+                            .as("Package Cycles")
+            );
 
     @ArchTest
     private final ArchRule noClassesShouldDependOnUpperPackages =

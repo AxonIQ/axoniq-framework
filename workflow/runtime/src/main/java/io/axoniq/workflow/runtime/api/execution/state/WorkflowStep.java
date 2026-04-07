@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
+import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import org.axonframework.messaging.core.Context;
 
 import java.time.Instant;

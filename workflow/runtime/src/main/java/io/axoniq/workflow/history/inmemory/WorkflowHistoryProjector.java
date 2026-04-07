@@ -18,8 +18,8 @@
 package io.axoniq.workflow.history.inmemory;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
-import io.axoniq.workflow.runtime.execution.runtime.EventSourcedWorkflowState;
-import io.axoniq.workflow.runtime.execution.util.MetadataUtils;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;

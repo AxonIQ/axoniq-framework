@@ -18,12 +18,12 @@
 
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.runtime.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowIdProvider;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.runtime.MessageWorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.MessageWorkflowIdProvider;
 import org.axonframework.common.configuration.Configuration;
 import org.junit.jupiter.api.*;
 

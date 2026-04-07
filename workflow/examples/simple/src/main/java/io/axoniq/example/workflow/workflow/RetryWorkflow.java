@@ -18,9 +18,9 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.retry.BackoffStrategy;
-import io.axoniq.workflow.runtime.api.execution.retry.RetryContext;
-import io.axoniq.workflow.runtime.api.execution.retry.RetryPolicy;
+import io.axoniq.workflow.runtime.api.execution.context.retry.BackoffStrategy;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -35,7 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Workflow exercising all retry scenarios:

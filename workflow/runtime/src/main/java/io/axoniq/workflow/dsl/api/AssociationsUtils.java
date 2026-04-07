@@ -17,12 +17,12 @@
  */
 package io.axoniq.workflow.dsl.api;
 
-import io.axoniq.workflow.runtime.execution.association.AssociationValue;
-import io.axoniq.workflow.runtime.execution.association.BadAssociationFormatException;
-import io.axoniq.workflow.runtime.execution.association.PayloadPropertyValueRetriever;
-import io.axoniq.workflow.runtime.execution.association.PredicateBuilder;
-import io.axoniq.workflow.runtime.execution.association.ValueComparisonOperatorRegistry;
-import io.axoniq.workflow.runtime.execution.association.ValueRetriever;
+import io.axoniq.workflow.runtime.association.AssociationValue;
+import io.axoniq.workflow.runtime.association.BadAssociationFormatException;
+import io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever;
+import io.axoniq.workflow.runtime.association.PredicateBuilder;
+import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
+import io.axoniq.workflow.runtime.association.ValueRetriever;
 import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;

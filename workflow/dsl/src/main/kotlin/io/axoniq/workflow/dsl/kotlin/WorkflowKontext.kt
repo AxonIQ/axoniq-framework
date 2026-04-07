@@ -17,9 +17,9 @@
  */
 package io.axoniq.workflow.dsl.kotlin
 
-import io.axoniq.workflow.runtime.execution.runtime.AbstractDSLWorkflowContext
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowConfiguration
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowDefinition
+import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
 /**

@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.retry;
 
+import io.axoniq.workflow.runtime.api.execution.context.retry.BackoffStrategy;
 import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,7 +53,7 @@ class BackoffStrategyTest {
         Duration base = Duration.ofSeconds(1);
         Duration max = Duration.ofSeconds(10);
         BackoffStrategy strategy = BackoffStrategy.exponential(base, max);
-        
+
         assertEquals(Duration.ofSeconds(1), strategy.delay(1)); // 1 * 2^0 = 1
         assertEquals(Duration.ofSeconds(2), strategy.delay(2)); // 1 * 2^1 = 2
         assertEquals(Duration.ofSeconds(4), strategy.delay(3)); // 1 * 2^2 = 4

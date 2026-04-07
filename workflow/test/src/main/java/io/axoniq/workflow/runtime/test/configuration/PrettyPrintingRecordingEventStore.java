@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.test.configuration;
 
-import io.axoniq.workflow.runtime.execution.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -30,7 +30,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static io.axoniq.workflow.runtime.execution.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
+import static io.axoniq.workflow.runtime.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
 
 /**
  * Pretty printing event store used for testing.

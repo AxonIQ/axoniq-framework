@@ -17,11 +17,11 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.runtime.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowDefinition;
-import io.axoniq.workflow.runtime.execution.runtime.WorkflowExecutionFactory;
+import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;

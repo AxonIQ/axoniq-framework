@@ -27,7 +27,7 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * @author Stefan Dragisic

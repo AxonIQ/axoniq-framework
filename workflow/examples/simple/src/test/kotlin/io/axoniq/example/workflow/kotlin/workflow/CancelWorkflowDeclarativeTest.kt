@@ -22,11 +22,11 @@ import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.configuration.WorkflowModule
-import io.axoniq.workflow.runtime.execution.runtime.EventConditions
-import io.axoniq.workflow.runtime.execution.runtime.WorkflowExecution
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus
-import io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.execution.runtime.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus
+import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace
+import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions.assertThat

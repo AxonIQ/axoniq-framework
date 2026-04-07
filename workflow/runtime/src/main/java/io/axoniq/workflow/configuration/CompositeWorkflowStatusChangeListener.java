@@ -17,9 +17,9 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 

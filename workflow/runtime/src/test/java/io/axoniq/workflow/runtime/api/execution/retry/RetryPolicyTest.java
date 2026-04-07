@@ -17,6 +17,10 @@
  */
 package io.axoniq.workflow.runtime.api.execution.retry;
 
+import io.axoniq.workflow.runtime.api.execution.context.retry.BackoffStrategy;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryHandler;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,7 +35,7 @@ class RetryPolicyTest {
         assertEquals(0, policy.maxRetries());
         assertEquals(RetryHandler.NOOP, policy.onRetryHandler());
         assertEquals(BackoffStrategy.NONE, policy.backoffStrategy());
-        
+
         RetryContext context = new RetryContext("step", 0, 0, new RuntimeException());
         assertFalse(policy.shouldRetry(context));
     }
@@ -42,10 +46,10 @@ class RetryPolicyTest {
         assertEquals(3, policy.maxRetries());
         assertEquals(RetryHandler.NOOP, policy.onRetryHandler());
         assertEquals(BackoffStrategy.NONE, policy.backoffStrategy());
-        
+
         RetryContext context = new RetryContext("step", 1, 3, new RuntimeException());
         assertTrue(policy.shouldRetry(context));
-        
+
         RetryContext contextMax = new RetryContext("step", 3, 3, new RuntimeException());
         assertFalse(policy.shouldRetry(contextMax));
     }
@@ -54,7 +58,7 @@ class RetryPolicyTest {
     void testConstructors() {
         RetryHandler handler = context -> {};
         BackoffStrategy backoff = BackoffStrategy.fixed(Duration.ofSeconds(1));
-        
+
         RetryPolicy p1 = new RetryPolicy(2, handler);
         assertEquals(2, p1.maxRetries());
         assertEquals(handler, p1.onRetryHandler());
@@ -69,23 +73,23 @@ class RetryPolicyTest {
     @Test
     void testWithers() {
         RetryPolicy base = RetryPolicy.maxRetries(5);
-        
+
         RetryHandler handler = context -> {};
         RetryPolicy p1 = base.onRetry(handler);
         assertEquals(5, p1.maxRetries());
         assertEquals(handler, p1.onRetryHandler());
-        
+
         BackoffStrategy backoff = BackoffStrategy.linear(Duration.ofSeconds(1));
         RetryPolicy p2 = p1.withBackoff(backoff);
         assertEquals(backoff, p2.backoffStrategy());
         assertEquals(handler, p2.onRetryHandler());
-        
+
         Predicate<RetryContext> predicate = ctx -> ctx.attempt() < 2;
         RetryPolicy p3 = p2.retryWhile(predicate);
-        
+
         RetryContext ctx1 = new RetryContext("step", 1, 5, new RuntimeException());
         assertTrue(p3.shouldRetry(ctx1));
-        
+
         RetryContext ctx2 = new RetryContext("step", 2, 5, new RuntimeException());
         assertFalse(p3.shouldRetry(ctx2));
     }
@@ -94,7 +98,7 @@ class RetryPolicyTest {
     void testShouldRetryWithPredicate() {
         RetryPolicy policy = RetryPolicy.maxRetries(5)
                 .retryWhile(ctx -> ctx.error() instanceof IllegalArgumentException);
-        
+
         RetryContext ctx1 = new RetryContext("step", 1, 5, new IllegalArgumentException());
         assertTrue(policy.shouldRetry(ctx1));
 
@@ -109,10 +113,10 @@ class RetryPolicyTest {
     void testRetryHandlerNoop() {
         AtomicBoolean called = new AtomicBoolean(false);
         RetryHandler handler = ctx -> called.set(true);
-        
+
         RetryHandler.NOOP.onRetry(new RetryContext("step", 1, 1, new RuntimeException()));
         assertFalse(called.get());
-        
+
         handler.onRetry(new RetryContext("step", 1, 1, new RuntimeException()));
         assertTrue(called.get());
     }

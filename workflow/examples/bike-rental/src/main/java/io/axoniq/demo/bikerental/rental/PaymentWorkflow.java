@@ -40,8 +40,8 @@ import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.execution.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 
 /**

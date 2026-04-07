@@ -18,17 +18,17 @@
 package io.axoniq.workflow.dsl.kotlin
 
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult
-import io.axoniq.workflow.runtime.api.execution.runtime.EventNameCustomizer
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowCancelledException
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult
-import io.axoniq.workflow.runtime.api.execution.retry.RetryPolicy
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer
-import io.axoniq.workflow.runtime.api.primitive.PrimitiveCommands
-import io.axoniq.workflow.runtime.api.primitive.TerminatePrimitive
-import io.axoniq.workflow.runtime.execution.runtime.EventConditions
-import io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer.Builder.defaults
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands
+import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions
+import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
 import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
@@ -207,7 +207,7 @@ class Kontext(
      *
      * @param cause the exception that caused the failure
      * @param eventNameCustomizer customizer for the published failure event name
-     * @throws io.axoniq.workflow.runtime.api.execution.runtime.WorkflowFailedException always, after the failure event is published
+     * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException always, after the failure event is published
      */
     fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.fail(cause, eventNameCustomizer))
@@ -218,7 +218,7 @@ class Kontext(
      * cancelling all running steps.
      *
      * @param eventNameCustomizer customizer for the published cancellation event name
-     * @throws io.axoniq.workflow.runtime.api.execution.runtime.WorkflowCancelledException always, after the cancellation event is published
+     * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException always, after the cancellation event is published
      */
     fun cancel(eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(eventNameCustomizer))
@@ -230,7 +230,7 @@ class Kontext(
      *
      * @param reason descriptive reason for the cancellation
      * @param eventNameCustomizer customizer for the published cancellation event name
-     * @throws io.axoniq.workflow.runtime.api.execution.runtime.WorkflowCancelledException always, after the cancellation event is published
+     * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException always, after the cancellation event is published
      */
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
         workflowKontext.terminate(

@@ -20,7 +20,7 @@ package io.axoniq.workflow.history;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.execution.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;

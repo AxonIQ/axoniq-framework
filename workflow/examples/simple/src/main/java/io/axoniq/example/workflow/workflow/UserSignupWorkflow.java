@@ -23,7 +23,7 @@ import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,8 +33,8 @@ import java.time.Instant;
 
 import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.execution.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 
 /**

@@ -22,17 +22,17 @@ import io.axoniq.workflow.runtime.api.annotation.OnFailure;
 import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.runtime.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.runtime.WorkflowIdProvider;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.execution.association.ValueComparisonOperatorRegistry;
-import io.axoniq.workflow.runtime.execution.runtime.EventConditions;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.runtime.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.runtime.PayloadPropertyWorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.dsl.api.AssociationsUtils;
-import io.axoniq.workflow.runtime.execution.util.WorkflowReflectionUtils;
+import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
@@ -54,7 +54,7 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
-import static io.axoniq.workflow.runtime.api.execution.state.WorkflowStatus.*;
+import static io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus.*;
 import static org.axonframework.common.annotation.AnnotationUtils.findAnnotationAttributes;
 
 /**

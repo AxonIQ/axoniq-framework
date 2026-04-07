@@ -17,6 +17,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;

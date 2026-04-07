@@ -19,7 +19,7 @@ package io.axoniq.workflow.history;
 
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.api.WorkflowHistory;
-import io.axoniq.workflow.runtime.execution.runtime.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
