@@ -32,7 +32,7 @@
     <name>Axon Extension - Workflow - Spring-Boot</name>
 
     <properties>
-        <spring-boot.version>4.0.4</spring-boot.version>
+        <spring-boot.version>4.0.5</spring-boot.version>
     </properties>
 
     <dependencies>

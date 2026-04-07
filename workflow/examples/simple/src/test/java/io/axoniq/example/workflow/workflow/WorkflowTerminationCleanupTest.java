@@ -19,6 +19,7 @@ package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.WorkflowFailedException;
 import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.engine.execution.EventConditions;
 import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
@@ -60,7 +61,7 @@ class WorkflowExecutionTerminationCleanupTest extends AbstractDeclarativeTestBas
         if ("complete".equals(action)) {
             ctx.setPayload("step1", Map.of("status", "done"));
         } else if ("fail".equals(action)) {
-            throw new RuntimeException("Intentional failure");
+            throw new WorkflowFailedException("Intentional workflow failure");
         } else if ("timeout".equals(action)) {
             // FIXME -> Support workflow timeout, currently not in MVP.
         } else if ("cancel".equals(action)) {
