@@ -34,7 +34,6 @@ import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
 import io.axoniq.workflow.runtime.engine.util.WorkflowReflectionUtils;
 import jakarta.annotation.Nonnull;
-import org.apache.commons.lang3.stream.Streams;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
@@ -283,14 +282,14 @@ public class AutoDetectionUtils {
 
     static Class<? extends WorkflowContext> findWorkflowContextType(@Nonnull Method method) {
         var parameterTypes = method.getParameterTypes();
-        return Streams.of(parameterTypes)
-                      .filter(WorkflowContext.class::isAssignableFrom)
-                      .findFirst()
-                      .map(p -> (Class<? extends WorkflowContext>) p)
-                      .orElseThrow(
-                              () -> new IllegalArgumentException(
-                                      "Method must have at least one parameter of type assignable to WorkflowContext")
-                      );
+        return Stream.of(parameterTypes)
+                     .filter(WorkflowContext.class::isAssignableFrom)
+                     .findFirst()
+                     .map(p -> (Class<? extends WorkflowContext>) p)
+                     .orElseThrow(
+                             () -> new IllegalArgumentException(
+                                     "Method must have at least one parameter of type assignable to WorkflowContext")
+                     );
     }
 
     /**

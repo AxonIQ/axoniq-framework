@@ -71,6 +71,15 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
 
+    /**
+     * Constructs the simple context. This parameter is called by the corresponding workflow context factory, see
+     * {@link SimpleWorkflowContextFactory}.
+     *
+     * @param workflowId            workflow id.
+     * @param payload               initial payload.
+     * @param processingContext     processing context.
+     * @param workflowConfiguration workflow configuration.
+     */
     public SimpleWorkflowContext(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
@@ -81,6 +90,73 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         defaultTimeout = Duration.ofSeconds(5);
     }
 
+    /**
+     * Asynchronous wait for an event to be published.
+     *
+     * @param stepName  name of the step.
+     * @param eventType type of event.
+     * @param predicate condition on event.
+     * @param timeout   maximum time to wait.
+     * @param <T>       type of the event.
+     * @return workflow step result.
+     */
+    public <T> WorkflowStepResult waitFor(
+            String stepName,
+            Class<T> eventType,
+            Predicate<T> predicate,
+            Duration timeout) {
+        return waitFor(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                             .qualifiedName(),
+                        e -> predicate.test(e.payloadAs(eventType))
+                ),
+                GLOBAL_ONLY,
+                timeout,
+                defaults()
+        );
+    }
+
+    /**
+     * Asynchronous wait for an event to be published.
+     *
+     * @param stepName          name of the step.
+     * @param eventType         event type.
+     * @param associationsUtils condition on event encapsulated in an {@link AssociationsUtils} instance.
+     * @param timeout           maximum time to wait.
+     * @param <T>               type of the event.
+     * @return workflow step result.
+     */
+    public <T> WorkflowStepResult waitFor(
+            String stepName,
+            Class<T> eventType,
+            AssociationsUtils associationsUtils,
+            Duration timeout) {
+        return waitFor(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
+                        e -> associationsUtils.build(super.processingContext()).test(e)
+                ),
+                GLOBAL_ONLY,
+                timeout,
+                defaults()
+        );
+    }
+
+
+    /**
+     * Synchronous (blocking) wait for an event to be published.
+     *
+     * @param stepName  step name.
+     * @param eventType event type.
+     * @param predicate condition on event.
+     * @param timeout   maximum time to wait.
+     * @param <T>       type of the event.
+     * @return event payload.
+     */
     public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
@@ -97,6 +173,16 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         ));
     }
 
+    /**
+     * Synchronous (blocking) wait for an event to be published.
+     *
+     * @param stepName          step name.
+     * @param eventType         event type.
+     * @param associationsUtils condition on event encapsulated in an {@link AssociationsUtils} instance.
+     * @param timeout           maximum time to wait.
+     * @param <T>               type of the event.
+     * @return event payload.
+     */
     public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
                             Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
@@ -114,6 +200,15 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         ));
     }
 
+    /**
+     * Synchronous (blocking) wait for an event to be published.
+     *
+     * @param stepName  step name.
+     * @param eventType event type.
+     * @param timeout   maximum time to wait.
+     * @param <T>       type of the event.
+     * @return event payload.
+     */
     public <T> T awaitEvent(String stepName, Class<T> eventType, Duration timeout) {
         return this.awaitEvent(stepName, eventType, e -> true, timeout);
     }
@@ -301,6 +396,17 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
 
+    /**
+     * Synchronous (blocking) execute a step.
+     *
+     * @param stepName            name of the step.
+     * @param payload             payload to be passed to a step.
+     * @param returnType          type of the result.
+     * @param action              action to be executed.
+     * @param eventNameCustomizer event name customizer.
+     * @param <T>                 type of result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Map<String, Object> payload, Class<T> returnType,
                               Function<Map<String, Object>, T> action, EventNameCustomizer eventNameCustomizer) {
         var stepSpecificName = "__" + stepName;
@@ -324,6 +430,13 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return (T) execute(command).get(stepSpecificName);
     }
 
+    /**
+     * Synchronous (blocking) execute a step (without a result).
+     *
+     * @param stepName step name.
+     * @param payload  payload to pass
+     * @param action   action to execute.
+     */
     public void awaitExecute(String stepName, Map<String, Object> payload, Consumer<Map<String, Object>> action) {
         this.awaitExecute(stepName, payload, (pc, p) -> {
             action.accept(p);
@@ -331,15 +444,43 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         });
     }
 
+    /**
+     * Synchronous (blocking) execute a step (with a result).
+     *
+     * @param stepName   name of the step.
+     * @param payload    payload to pass to the step.
+     * @param returnType return type of the result.
+     * @param action     action to execute.
+     * @param <T>        type of the result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Map<String, Object> payload, Class<T> returnType,
                               Function<Map<String, Object>, T> action) {
         return this.awaitExecute(stepName, payload, returnType, action, defaults());
     }
 
+    /**
+     * Synchronous (blocking) execute a step (with a result).
+     *
+     * @param stepName   name of the step.
+     * @param returnType return type of the result.
+     * @param action     action to execute.
+     * @param <T>        type of the result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Class<T> returnType, Function<Map<String, Object>, T> action) {
         return this.awaitExecute(stepName, Map.of(), returnType, action);
     }
 
+    /**
+     * Synchronous (blocking) execute a step (without a result).
+     *
+     * @param stepName   name of the step.
+     * @param returnType return type of the result.
+     * @param action     action to execute.
+     * @param <T>        type of the result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Class<T> returnType, Supplier<T> action) {
         return this.awaitExecute(stepName, Map.of(), returnType, (p) -> action.get());
     }
@@ -490,6 +631,11 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                       eventNameCustomizer);
     }
 
+    /**
+     * Sets default timeout for all steps.
+     *
+     * @param defaultTimeout default timeout for all steps, if not specified explicitly
+     */
     public void setDefaultTimeout(@Nonnull Duration defaultTimeout) {
         this.defaultTimeout = Objects.requireNonNull(defaultTimeout, "Default timeout must not be null.");
     }

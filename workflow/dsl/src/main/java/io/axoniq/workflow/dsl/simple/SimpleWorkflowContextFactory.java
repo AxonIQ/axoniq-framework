@@ -21,7 +21,6 @@ import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 

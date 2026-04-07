@@ -49,7 +49,7 @@ import static io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils
 
 /**
  * Workflow module used to create multiple {@link WorkflowConfiguration} (one per workflow definition) defined for the
- * given {@link WorkflowContext}. As a result the module will register its configuration in the
+ * given {@link WorkflowContext}. As a result, the module will register its configuration in the
  * {@link WorkflowConfigurationRegistry}, used by the {@link io.axoniq.workflow.runtime.engine.impl.WorkflowEngine}.
  *
  * @param <C> type of workflow context.
