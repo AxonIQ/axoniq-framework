@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Create Release Notes Markdown
       uses: docker://decathlon/release-notes-generator-action:3.1.5
@@ -36,7 +36,7 @@ jobs:
 
     - name: Add Release Notes to cache
       id: cache-notes
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ${{ env.RELEASE_NOTES_FILE }}
         key: notes
