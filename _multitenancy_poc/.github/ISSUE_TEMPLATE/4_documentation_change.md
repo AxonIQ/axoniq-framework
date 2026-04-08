@@ -1,6 +1,6 @@
 ---
 name: 'Documentation change'
-about: 'Suggest a documentation change in Axon Framework'
+about: 'Suggest a documentation change in Axoniq Framework'
 title:
 type: 'Documentation'
 ---
