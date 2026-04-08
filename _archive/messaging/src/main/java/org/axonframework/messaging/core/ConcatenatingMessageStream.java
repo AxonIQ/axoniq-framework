@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package org.axonframework.messaging.core;
+
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
+
+/**
+ * Implementation of the {@link MessageStream} that concatenates two {@code MessageStreams}.
+ * <p>
+ * Will only start streaming {@link Entry entries} from the {@code second MessageStream} when the
+ * {@code first MessageStream} completes successfully.
+ *
+ * @param <M> The type of {@link Message} contained in the {@link Entry entries} of this stream.
+ * @author Allard Buijze
+ * @author Steven van Beelen
+ * @since 5.0.0
+ */
+class ConcatenatingMessageStream<M extends Message> implements MessageStream<M> {
+
+    private final MessageStream<M> first;
+    private final MessageStream<M> second;
+
+    /**
+     * Construct a {@link MessageStream stream} that initially consume from the {@code first MessageStream}, followed by
+     * the {@code second} if the {@code first MessageStream} completes successfully
+     *
+     * @param first  The initial {@link MessageStream stream} to consume entries from.
+     * @param second The second {@link MessageStream stream} to start consuming from once the {@code first} stream
+     *               completes successfully.
+     */
+    ConcatenatingMessageStream(MessageStream<M> first,
+                               MessageStream<M> second) {
+        this.first = first;
+        this.second = second;
+    }
+
+    @Override
+    public Optional<Entry<M>> next() {
+        if (!first.hasNextAvailable()  // this may trigger a completition state change, so call **before** isCompleted
+                && first.isCompleted() && first.error().isEmpty()) {
+            return second.next();
+        }
+        return first.next();
+    }
+
+    @Override
+    public void setCallback(Runnable callback) {
+        first.setCallback(() -> {
+            if (!(first.isCompleted() && first.error().isEmpty()) || second.hasNextAvailable()
+                    || second.isCompleted()) {
+                if (first.error().isPresent()) {
+                    second.close();
+                }
+                callback.run();
+            }
+        });
+        second.setCallback(() -> {
+            if (first.isCompleted() && first.error().isEmpty()) {
+                callback.run();
+            }
+        });
+    }
+
+    @Override
+    public Optional<Throwable> error() {
+        return first.isCompleted() ? first.error().or(second::error) : first.error();
+    }
+
+    @Override
+    public boolean isCompleted() {
+        return first.isCompleted() && (second.isCompleted() || first.error().isPresent());
+    }
+
+    @Override
+    public boolean hasNextAvailable() {
+        return first.isCompleted() && first.error().isEmpty() ? second.hasNextAvailable() : first.hasNextAvailable();
+    }
+
+    @Override
+    public void close() {
+        first.close();
+        second.close();
+    }
+
+    @Override
+    public <R> CompletableFuture<R> reduce(R identity,
+                                           BiFunction<R, Entry<M>, R> accumulator) {
+        return first.reduce(identity, accumulator)
+                    .thenCompose(intermediate -> second.reduce(intermediate, accumulator));
+    }
+
+    @Override
+    public Optional<Entry<M>> peek() {
+        if (first.isCompleted() && first.error().isEmpty()) {
+            return second.peek();
+        }
+        return first.peek();
+    }
+}

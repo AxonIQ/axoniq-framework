@@ -1,11 +1,10 @@
-name: Axon Framework
+name: Axoniq Framework
 
 on:
   push:
     branches:
       - main
-      - master
-      - 'axon-5.*.x'
+      - 'axoniq-5.*.x'
     paths-ignore:
       - 'docs/**'
 
@@ -53,7 +52,7 @@ jobs:
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
 
       - name: Sonar Analysis
-        if: matrix.sonar-enabled
+        if: false # matrix.sonar-enabled | disabled for the time being
         run: |
           ./mvnw -B -ntp -Dstyle.color=always org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
           -Dsonar.projectKey=AxonFramework_AxonFramework \

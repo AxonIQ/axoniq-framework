@@ -1,6 +1,6 @@
 ---
 name: 'Bug report'
-about: 'Report a bug in Axon Framework'
+about: 'Report a bug in Axoniq Framework'
 title:
 type: 'Bug'
 ---
@@ -9,8 +9,9 @@ type: 'Bug'
 
 ### Basic information
 
-* Axon Framework version:
-* JDK version:  
+* Axoniq Framework version:
+* Axon Framework version (when different from Axoniq Framework version):
+* JDK version:
 * Complete executable reproducer if available (e.g. GitHub Repo):
 
 ### Steps to reproduce
