@@ -14,7 +14,8 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
         importOptions = {ImportOption.DoNotIncludeTests.class}
 )
 public class WorkflowArchUnitConventionTests
-//        implements MainArchUnitConventions <- Null marked package infos
+        // TODO#115 as part of the implementation of https://github.com/AxonIQ/extension-workflow/issues/115 uncomment the following line
+//        implements MainArchUnitConventions
 {
 
 

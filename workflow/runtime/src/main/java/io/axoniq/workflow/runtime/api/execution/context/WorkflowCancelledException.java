@@ -27,14 +27,30 @@ import jakarta.annotation.Nonnull;
  */
 public class WorkflowCancelledException extends RuntimeException {
 
+    /**
+     * Constructs a {@code WorkflowCancelledException} with a descriptive message.
+     *
+     * @param message message describing the cancellation reason.
+     */
     public WorkflowCancelledException(@Nonnull String message) {
         super(message);
     }
 
+    /**
+     * Constructs a {@code WorkflowCancelledException} with a descriptive message and a cause.
+     *
+     * @param message message describing the cancellation reason.
+     * @param cause   cause of the cancellation.
+     */
     public WorkflowCancelledException(@Nonnull String message, Throwable cause) {
         super(message, cause);
     }
 
+    /**
+     * Constructs a {@code WorkflowCancelledException} wrapping an underlying cause.
+     *
+     * @param cause cause of the cancellation.
+     */
     public WorkflowCancelledException(@Nonnull Throwable cause) {
         super(cause);
     }
