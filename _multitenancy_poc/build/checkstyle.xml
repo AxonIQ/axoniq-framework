@@ -38,4 +38,8 @@
             />
         </module>
     </module>
+    <module name="RegexpSingleline">
+        <property name="format" value="System\.out"/>
+        <property name="message" value="Use Logger instead of System.out."/>
+    </module>
 </module>
