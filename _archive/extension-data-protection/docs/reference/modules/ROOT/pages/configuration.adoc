@@ -1,0 +1,124 @@
+= Configuration
+:navtitle: Configuration
+
+This guide covers how to configure Axon Data Protection in your Spring Boot and Axon Framework application.
+
+== The `FieldEncryptingConverter`
+
+The `FieldEncryptingConverter` is an implementation of `Converter` from Axon Framework 5.x. It takes another `Converter` as a constructor argument and wraps this one. When converting for serialization, it will perform encryption first using an encapsulated `FieldEncrypter`, and then perform conversion. It will do the reverse upon deserialization. This allows for elegant integration into an Axon Framework application.
+
+Assuming Axon Framework 5.x on Spring and a JPA `CryptoEngine`, configuration of Axon Data Protection could be as easy as this:
+
+[source,java]
+----
+@Bean
+public CryptoEngine cryptoEngine(EntityManagerFactory entityManagerFactory) {
+    return new JpaCryptoEngine(entityManagerFactory);
+}
+
+@Bean("defaultAxonObjectMapper")
+@ConditionalOnMissingBean(name = "defaultAxonObjectMapper")
+public ObjectMapper defaultAxonObjectMapper() {
+    return new ObjectMapper();
+}
+
+@Bean(name = "converter")
+@Primary
+@ConditionalOnMissingBean(Converter.class)
+public Converter converter(CryptoEngine cryptoEngine,
+                           @Qualifier("defaultAxonObjectMapper") ObjectMapper objectMapper) {
+    ChainingContentTypeConverter contentTypeConverter = new ChainingContentTypeConverter(
+            getClass().getClassLoader()
+    );
+    Converter delegateConverter = new JacksonConverter(objectMapper, contentTypeConverter);
+    return new FieldEncryptingConverter(cryptoEngine, delegateConverter);
+}
+
+@Bean
+public FieldEncrypter fieldEncrypter(CryptoEngine cryptoEngine, Converter converter) {
+    return new FieldEncrypter(cryptoEngine, converter);
+}
+----
+
+This configuration provides:
+
+* `CryptoEngine` - manages encryption keys, stored in database via JPA
+* `defaultAxonObjectMapper` - provides default ObjectMapper if not already configured
+* `converter` - the base Converter bean that Axon Framework uses for all conversions. This is a `FieldEncryptingConverter` that wraps a `JacksonConverter` and handles automatic encryption/decryption
+* `fieldEncrypter` - optional bean for manual field-level encryption/decryption operations (useful in query handlers)
+
+Axon's auto-configuration will automatically use the `converter` bean to construct `MessageConverter` and `EventConverter` implementations, ensuring that events are stored encrypted in the event store and automatically decrypted when loaded.
+
+The constructor may be provided with a `FieldEncrypter` for detailed control. If the constructor gets a `CryptoEngine` and optionally a `ReplacementValueProvider`, it will construct its `FieldEncrypter` itself where the `Converter` used by the `FieldEncrypter` for dealing with `@SerializedPersonalData` is the same one as the delegate converter of the `FieldEncryptingConverter` (which would be a reasonable choice in many cases).
+
+== The `FieldEncrypter`
+
+The `FieldEncrypter` class can encrypt and decrypt classes having Axon Data Protection annotations. Other objects may be processed by it, it will simply leave those unaltered. This class may be used directly by applications, but in most Axon Framework-based applications it would be used by the `FieldEncryptingConverter` instead of being used directly. In addition to having encrypt/decrypt operations, it has a `willProcess` method to determine whether or not a particular object would potentially be modified by the encrypt/decrypt operation. This allows for some performance optimizations in the `FieldEncryptingConverter`.
+
+An important property realized by the `FieldEncrypter` is _idempotency_: encrypting an already-encrypted field will simply leave the field untouched, and similarly decrypting an non-encrypted field will leave the field in its current state. The `FieldEncrypter` is also `null`-safe: `null` values will simply remain `null` upon encryption and decryption.
+
+The `FieldEncrypter` constructor needs as a minimum a `CryptoEngine` implementation. Additionally, you may provide it with a `Converter` to be used for processing `@SerializedPersonalData` fields. You may also provide it with a `ReplacementValueProvider` - if not present, it will use the module's default implementation.
+
+The `FieldEncrypter` has a `setModifyImmutableCollections(boolean value)` method which determines how it processed immutable Java collections; see xref:annotations.adoc[annotations] for details.
+
+=== Using preset encryption contexts [[presetencryptioncontexts]]
+
+When encrypting and decrypting fields using the `FieldEncrypter`, key identifiers are normally obtained by inspecting the object's `@DataSubjectId` fields. In some cases, this may not work because there is no field in the object that contains an appropriate key id. This is in fact common in use cases where the module is used to protect confidential data from accidental disclosure rather than enabling cryptographic erasure. In those cases, it may make sense to use a system wide key.
+
+These use cases are supported by Axon Data Protection through additional methods on `FieldEncrypter` beyond the default `#encrypt(Object)` and `#decrypt(Object)`. The additional methods allow the application to specify one or more preset keys that will always be there regardless of `@DataSubjectId` annotations. Still, these keys are treated as a default only and may be overridden by subsequent `@DataSubjectId` fields, much in the same way a objects deeper in the object graph may override a keyId set by an object higher in the graph.
+
+Specifically, the methods signatures are the following:
+
+[source,java]
+----
+encrypt(Object object, String keyId);
+decrypt(Object object, String keyId);
+encrypt(Object object, Map<String, String> keyIds);
+decrypt(Object object, Map<String, String> keyIds);
+----
+
+When only providing a `String` keyId, this keyId will be included in the context with the default, empty group. When providing a `Map`, the elements will be treated as group/keyId pairs.
+
+=== Performing partial encryption/decryption [[partialencryption]]
+
+Normally, the `FieldEncrypter` will process and act on all Axon Data Protection annotations. In some cases, it may be desirable to exercise more control over this process. The `FieldEncrypter` does offer the possibility of specifying a `Set` of groups (which are included in `@DataSubjectId`, `@PersonalData` and `@SerializedPersonalData` which must be processed. If this set is `null` (which is the default), all groups will be processed.
+
+There are two ways to specify this set of groups:
+
+1. By invoking the `setGroups` method of the `FieldEncrypter`. After doing this, the specified set of groups becomes the default for all subsequent `encrypt` and `decrypt` operations. This can also be used to limit the groups in conjunction with a `FieldEncryptingSerializer`.
+
+2. By specifying the set of groups as an argument to `encrypt` or `decrypt`. In this case, it only applies to that particular invocation. The value provided in this way overrides any value set through the first method.
+
+=== Performing immediate replacement [[immediatereplacement]]
+
+In some cases, it is useful to immediately replace any cleartext value with the value that it would effectively have after crypto-erasure. This could be achieved by encrypting, then deleting the key, and then do decrypting. However, this is cumbersome and a waste of resources in this scenario. Therefore, there is a specific `replace` call in the API that does this immediately while avoiding all encryption.
+
+The `replace` call supports the partial encryption/decryption mechanism described above.
+
+The `replace` call also supports the custom replacement value mechanism described in xref:advanced.adoc#replacementvalueprovider[ReplacementValueProvider].
+
+Specifically, the `FieldEncrypter` does the following when processing a `replace` call:
+
+* When processing a field, it detects whether it is encrypted or not. If it's encrypted, it obtains the storedPartialValue from the encrypted data. (None of that is a cryptographic operation by itself.) If it's not encrypted, it obtains a storedPartialValue from invoking `ReplacementValueProvider#partialValueForStorage` on the cleartext.
+* Then, it directly invokes `ReplacementValueProvider#replacementValue` to obtain a new value.
+
+== Application properties
+
+Configure the database settings in `application.properties`:
+
+[source,properties]
+----
+# Database settings (if using JPA/JDBC crypto engine)
+spring.datasource.url=jdbc:postgresql://localhost:5432/myapp
+spring.datasource.username=myuser
+spring.datasource.password=mypassword
+
+# JPA settings
+spring.jpa.hibernate.ddl-auto=update
+----
+
+== Next steps
+
+* xref:crypto-engines.adoc[Learn about crypto engine options]
+* xref:java-records.adoc[Working with Java records]
+* xref:advanced.adoc[Advanced encryption scenarios]

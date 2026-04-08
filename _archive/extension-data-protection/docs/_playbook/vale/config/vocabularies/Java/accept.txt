@@ -1,0 +1,14 @@
+[Cc]lasspaths?
+[Cc]lassloaders?
+[Dd]eserializable
+[Dd]eserialization
+[Dd]eserialize
+[Dd]eserializers?
+[J]avadoc
+JVMs?
+JPA
+POJOs?
+[Ss]erializable
+[Ss]erialization
+[Ss]erialize
+[Ss]erializers?

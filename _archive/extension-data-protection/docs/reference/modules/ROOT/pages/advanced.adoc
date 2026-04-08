@@ -1,0 +1,105 @@
+= Advanced topics
+:navtitle: Advanced
+
+This guide covers advanced encryption scenarios and customization.
+
+== The replacement value provider [[replacementvalueprovider]]
+
+The `ReplacementValueProvider` class is used to determine the behaviour of the module in case it tries to decrypt a field for which a key has been deleted. The default `ReplacementValueProvider` will lead to the following behaviour: On any `String` field, it will replace that field value by the value of the `replacement` attribute of the `@PersonalData` annotation. In other cases, the field value will be `null` (except for primitives, which will get the Java default value).
+
+By subclassing `ReplacementValueProvider` and providing this implementation to the `FieldEncrypter`, this behaviour can be modified. There are two methods that be overridden:
+
+* `replacementValue` gets invoked when decryption can't take place. The return value of this method will be put in the field. The method gets a large number of arguments which it can use to determine the appropriate value of the field - please see the Javadoc for a complete list.
+* `partialValueForStorage` gets invoked when encrypting a value. The default implementation returns `null`. It may return a piece of clear text data (as a `byte[]`), which will be stored alongside the encrypted data. This data will be available for the `replacementValue` method upon failed decryption. This functionality can be used to do things like deleting a full date but keeping the year field, or deleting a full credit card number but keeping the last 4 digits.
+
+=== Example: year-only date of birth
+
+For instance, suppose you store a date of birth in `LocalDate` field. The full date of birth may be considered personal data which must be erased, whereas the year or it by itself would not be personal information and may still be kept for analytics purposes. This could be done by setting the `LocalDate` to a year with a fixed month/day of January 1. To indicate to Axon Data Protection to proceed like this, we might want to use the constant `*YEARONLY*` as value of the replacement attribute, like this:
+
+[source,java]
+----
+@SerializedPersonalData(replacement = "*YEARONLY*")
+LocalDate dateOfBirth;
+byte[] dateOfBirthEncrypted;
+----
+
+With the default `ReplacementValueProvider`, this won't achieve anything, we we may easily subclass the `ReplacementValueProvider` to implement this desired behaviour, like this:
+
+[source,java]
+----
+public static class YearOnlyReplacementValueProvider
+        extends ReplacementValueProvider {
+    @Override
+    public Object replacementValue(Class<?> clazz, Field field,
+            Type fieldType, String groupName, String replacement,
+            byte[] storedPartialValue) {
+        if(LocalDate.class.equals(fieldType) &&
+                "*YEARONLY*".equals(replacement) &&
+                storedPartialValue != null) {
+            ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+            buffer.put(storedPartialValue);
+            buffer.flip();
+            return LocalDate.of(buffer.getInt(), Month.JANUARY, 1);
+        } else {
+            return super.replacementValue(clazz, field,
+                fieldType, groupName, replacement, storedPartialValue);
+        }
+    }
+
+    @Override
+    public byte[] partialValueForStorage(Class<?> clazz, Field field,
+            Type fieldType, String groupName, String replacement,
+            Object inputValue) {
+        if(LocalDate.class.equals(fieldType) &&
+                "*YEARONLY*".equals(replacement) &&
+                inputValue instanceof LocalDate) {
+            ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+            buffer.putInt(((LocalDate)inputValue).getYear());
+            return buffer.array();
+        } else {
+            return super.partialValueForStorage(clazz, field,
+                fieldType, groupName, replacement, inputValue);
+        }
+    }
+}
+----
+
+Upon encryption, the `partialValueForStorage` method would extract the `year` from the `LocalDate` and store this as a sequence of bytes. Upon a failed decryption attempt, the module would invoke the `replacementValue` method where these stored bytes would be available as the `storedPartialValue` parameter. Based on that, it will return a `LocalDate` instance with month and day set to January 1 regardless of the original value.
+
+== Exception handling
+
+Axon Data Protection defines two exceptions, both of them being `RuntimeException`. These are:
+
+ConfigurationException::
+This is used to report situations where something is wrong with the way the system has been configured, which may be in the setup of the `CryptoEngine`, or in the placement of annotations on data classes.
+
+DataException::
+This is used to report situation where something is wrong with an individual data record, but the system as a whole can continue.
+
+In general, it may make sense to catch `DataException` to attempt some recovery. A `ConfigurationException` would usually be indicative that something is wrong with the code and/or the platform and is therefore unrecoverable within the platform.
+
+Exceptions thrown by Axon Data Protection have an error code. Error codes have the following ranges:
+
+ADPM-0000::
+internal exceptions (should never occur - indicates a bug in Axon Data Protection)
+
+ADPM-1000::
+platform exceptions (should never occur - indicates that the Java platform doesn't meet all standards)
+
+ADPM-2000::
+platform warnings, in particular inability to reflectively modify unmodifiable collections
+
+ADPM-4000::
+configuration exceptions
+
+ADPM-5000::
+keystore-related exceptions (which may be `ConfigurationException` or `DataException`)
+
+ADPM-6000::
+data-related exceptions
+
+== Next steps
+
+* xref:annotations.adoc[Complete annotation reference]
+* xref:configuration.adoc[Configuration details]
+* xref:crypto-engines.adoc[Crypto engine options]
