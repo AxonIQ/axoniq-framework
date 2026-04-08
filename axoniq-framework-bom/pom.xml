@@ -23,14 +23,14 @@
     <parent>
         <groupId>io.axoniq.framework</groupId>
         <artifactId>axoniq-framework</artifactId>
-        <version>5.1.0-SNAPSHOT</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>axoniq-framework-bom</artifactId>
 
-    <name>AxonIQ Framework - Bill of Materials</name>
+    <name>Axoniq Framework - Bill of Materials</name>
     <description>
-        Bill of Materials providing all contained modules of the AxonIQ Framework.
+        Bill of Materials providing all contained modules of the Axoniq Framework.
     </description>
 
     <packaging>pom</packaging>

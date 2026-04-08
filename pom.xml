@@ -22,14 +22,48 @@
 
     <groupId>io.axoniq.framework</groupId>
     <artifactId>axoniq-framework</artifactId>
-    <version>5.1.0-SNAPSHOT</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
-    <name>AxonIQ Framework - Root</name>
+    <name>Axoniq Framework - Root</name>
     <description>
-        AxonIQ Framework builds upon Axon Framework providing features and enhancements to improve an application's
+        Axoniq Framework builds upon Axon Framework providing features and enhancements to improve an application's
         production "readyness," specifically for message-driven and event-sourced applications.
     </description>
+
+    <properties>
+        <revision>5.1.0-SNAPSHOT</revision>
+        <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
+
+        <java.version>21</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <!-- Main -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${project.basedir}/coverage-report/target/site/jacoco-aggregate/jacoco.xml,
+            ${project.basedir}/../coverage-report/target/site/jacoco-aggregate/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
+
+
+        <!-- Build / Plugin -->
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <eclipse.transformer-maven-plugin.version>1.0.0</eclipse.transformer-maven-plugin.version>
+        <jacoco-maven.version>0.8.14</jacoco-maven.version>
+        <maven-assembly.version>3.8.0</maven-assembly.version>
+        <maven-clean.version>3.5.0</maven-clean.version>
+        <maven-compiler.version>3.15.0</maven-compiler.version>
+        <maven-enforcer.version>3.6.2</maven-enforcer.version>
+        <maven-failsafe.version>3.5.5</maven-failsafe.version>
+        <maven-gpg.version>3.2.8</maven-gpg.version>
+        <maven-install.version>3.1.4</maven-install.version>
+        <maven-jar.version>3.5.0</maven-jar.version>
+        <maven-javadoc.version>3.12.0</maven-javadoc.version>
+        <maven-release.version>3.3.1</maven-release.version>
+        <maven-source.version>3.4.0</maven-source.version>
+        <maven-surefire.version>3.5.5</maven-surefire.version>
+        <maven-resources.version>3.5.0</maven-resources.version>
+    </properties>
 
     <modules>
         <module>build/parent</module>
@@ -53,37 +87,7 @@
         <url>https://axoniq.io</url>
     </organization>
 
-    <properties>
-        <java.version>21</java.version>
-        <maven.compiler.source>${java.version}</maven.compiler.source>
-        <maven.compiler.target>${java.version}</maven.compiler.target>
-        <!-- Main -->
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <sonar.coverage.jacoco.xmlReportPaths>
-            ${project.basedir}/coverage-report/target/site/jacoco-aggregate/jacoco.xml,
-            ${project.basedir}/../coverage-report/target/site/jacoco-aggregate/jacoco.xml
-        </sonar.coverage.jacoco.xmlReportPaths>
 
-        <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
-
-        <!-- Build / Plugin -->
-        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
-        <eclipse.transformer-maven-plugin.version>1.0.0</eclipse.transformer-maven-plugin.version>
-        <jacoco-maven.version>0.8.14</jacoco-maven.version>
-        <maven-assembly.version>3.8.0</maven-assembly.version>
-        <maven-clean.version>3.5.0</maven-clean.version>
-        <maven-compiler.version>3.15.0</maven-compiler.version>
-        <maven-enforcer.version>3.6.2</maven-enforcer.version>
-        <maven-failsafe.version>3.5.5</maven-failsafe.version>
-        <maven-gpg.version>3.2.8</maven-gpg.version>
-        <maven-install.version>3.1.4</maven-install.version>
-        <maven-jar.version>3.5.0</maven-jar.version>
-        <maven-javadoc.version>3.12.0</maven-javadoc.version>
-        <maven-release.version>3.3.1</maven-release.version>
-        <maven-source.version>3.4.0</maven-source.version>
-        <maven-surefire.version>3.5.5</maven-surefire.version>
-        <maven-resources.version>3.5.0</maven-resources.version>
-    </properties>
 
     <!-- Dependencies are managed in axon-parent -->
     <dependencyManagement />
