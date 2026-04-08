@@ -68,6 +68,8 @@
     <modules>
         <module>build/parent</module>
         <module>axoniq-framework-bom</module>
+
+        <module>messaging/axoniq-distributed-messaging</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>
