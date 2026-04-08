@@ -1,0 +1,99 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package org.axonframework.extension.springboot.autoconfig;
+
+import org.axonframework.extension.springboot.DeadLetterQueueProcessorProperties;
+import org.axonframework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
+import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+
+/**
+ * Spring Boot autoconfiguration that provides a
+ * {@link PooledStreamingEventProcessorModule.Customization} for Dead Letter Queue support.
+ * <p>
+ * This configuration is implementation-agnostic — it reads per-processor DLQ settings from
+ * {@link DeadLetterQueueProcessorProperties} and configures the {@link DeadLetterQueueConfiguration}
+ * extension. The actual queue backend (JPA, JDBC, etc.) is provided by a separate autoconfiguration
+ * that registers a {@link SequencedDeadLetterQueueFactory} bean.
+ *
+ * @author Mateusz Nowak
+ * @since 5.1.0
+ * @see JpaDeadLetterQueueAutoConfiguration
+ * @see JdbcDeadLetterQueueAutoConfiguration
+ */
+@AutoConfiguration(
+        after = {JpaDeadLetterQueueAutoConfiguration.class, JdbcDeadLetterQueueAutoConfiguration.class},
+        before = EventProcessingAutoConfiguration.class
+)
+@ConditionalOnBean(SequencedDeadLetterQueueFactory.class)
+@EnableConfigurationProperties(DeadLetterQueueProcessorProperties.class)
+public class DeadLetterQueueAutoConfiguration {
+
+    /**
+     * Creates a {@link PooledStreamingEventProcessorModule.Customization} that enables the Dead Letter Queue
+     * extension on each processor where {@code axon.eventhandling.processors.<name>.dlq.enabled=true}.
+     *
+     * @param properties The DLQ processor properties.
+     * @param factory    The {@link SequencedDeadLetterQueueFactory} to use for queue creation.
+     * @return A customization that applies DLQ extension settings per processor.
+     */
+    @Bean
+    PooledStreamingEventProcessorModule.Customization dlqCustomization(
+            DeadLetterQueueProcessorProperties properties,
+            SequencedDeadLetterQueueFactory factory
+    ) {
+        return (axonConfig, processorConfig) -> {
+            // FIXME #4392 - workaround, it should not be needed to unwrap the processor name
+            var processorName = unwrapProcessorName(processorConfig.processorName());
+            var dlqProps = properties.forProcessor(processorName);
+            if (dlqProps.getDlq().isEnabled()) {
+                return processorConfig.extend(DeadLetterQueueConfiguration.class,
+                        () -> new DeadLetterQueueConfiguration().enabled()
+                                .factory(factory)
+                                .cacheMaxSize(dlqProps.getDlq().getCache().getSize()));
+            }
+            return processorConfig;
+        };
+    }
+
+    /**
+     * Extracts the bare processor name from a Spring-registered configuration name.
+     * <p>
+     * In Spring, processor configurations are registered under names of the form
+     * {@code EventProcessor[processorName]}. The properties keys, however, use the bare
+     * {@code processorName}, so the wrapper must be stripped before looking up properties.
+     * If the input does not match the wrapped form, it is returned unchanged.
+     *
+     * @param name the configuration name as registered, possibly wrapped as
+     *             {@code EventProcessor[processorName]}
+     * @return the bare processor name
+     */
+    private static String unwrapProcessorName(String name) {
+        if (name.startsWith(EVENT_PROCESSOR_PREFIX) && name.endsWith("]")) {
+            return name.substring(EVENT_PROCESSOR_PREFIX.length(), name.length() - 1);
+        }
+        return name;
+    }
+
+    private static final String EVENT_PROCESSOR_PREFIX = "EventProcessor[";
+}

@@ -4,13 +4,13 @@ on:
   push:
     branches:
       - 'main'
-      - 'axon-*'
+      - 'axoniq-*'
     paths:
       - 'docs/**'
   pull_request:
     branches:
       - 'main'
-      - 'axon-*'
+      - 'axoniq-*'
     paths:
       - 'docs/**'
 
@@ -42,7 +42,7 @@ jobs:
           echo 'Using' `vale -v`
           npx antora playbook.yaml
 
-      - name: Notify AxonIQ Library (if a push to a tracked branch)
+      - name: Notify Axoniq Docs (if a push to a tracked branch)
         if: ${{ github.event_name == 'push'}}
         uses: actions/github-script@v8
         with:

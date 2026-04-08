@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package org.axonframework.modelling.saga.repository;
+
+import org.axonframework.common.caching.Cache;
+import org.axonframework.common.caching.EhCacheAdapter;
+import org.ehcache.CacheManager;
+import org.ehcache.config.CacheConfiguration;
+import org.ehcache.config.builders.CacheConfigurationBuilder;
+import org.ehcache.config.builders.ResourcePoolsBuilder;
+import org.ehcache.core.Ehcache;
+import org.ehcache.core.EhcacheManager;
+import org.ehcache.core.config.DefaultConfiguration;
+import org.junit.jupiter.api.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Concrete implementation of the {@link CachingSagaStoreTest} using the {@link EhCacheAdapter}.
+ *
+ * @author Steven van Beelen
+ * @author Gerard Klijs
+ */
+class EhCacheSagaStoreTest extends CachingSagaStoreTest {
+
+    private CacheManager cacheManager;
+    private org.ehcache.core.Ehcache ehCache;
+
+    @AfterEach
+    void tearDown() {
+        cacheManager.close();
+    }
+
+    @Override
+    Cache sagaCache() {
+        if (ehCache == null) {
+            buildEhCache();
+        }
+        return new EhCacheAdapter(ehCache);
+    }
+
+    @Override
+    Cache associationCache() {
+        if (ehCache == null) {
+            buildEhCache();
+        }
+        return new EhCacheAdapter(ehCache);
+    }
+
+    private void buildEhCache() {
+        Map<String, CacheConfiguration<?, ?>> caches = new HashMap<>();
+        DefaultConfiguration config = new DefaultConfiguration(caches, null);
+        cacheManager = new EhcacheManager(config);
+        cacheManager.init();
+        ehCache = (Ehcache) cacheManager
+                .createCache(
+                        "test",
+                        CacheConfigurationBuilder
+                                .newCacheConfigurationBuilder(
+                                        Object.class,
+                                        Object.class,
+                                        ResourcePoolsBuilder.heap(100L).build())
+                                .build());
+    }
+}
