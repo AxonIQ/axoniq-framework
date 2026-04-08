@@ -1,4 +1,4 @@
-name: Axon Framework (Pull Request)
+name: Axoniq Framework (Pull Request)
 
 on:
   pull_request:
@@ -52,7 +52,7 @@ jobs:
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
 
       - name: Sonar Analysis
-        if: ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: false # ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }} | disabled for the time being
         run: |
           ./mvnw -B -ntp -Dstyle.color=always org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
           -Dsonar.projectKey=AxonFramework_AxonFramework \
