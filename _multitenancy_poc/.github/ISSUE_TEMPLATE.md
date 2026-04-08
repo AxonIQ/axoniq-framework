@@ -1,11 +1,11 @@
 <!--
-Thanks for taking the time to draft up an issue for Axon Framework!
+Thanks for taking the time to draft up an issue for Axoniq Framework!
 Prior to starting off, please read the following:
 
 ## Usage Questions
 
-If you are having difficulty using Axon Framework,
- please consider checking AxonIQ's Library first if it answers your question: https://library.axoniq.io/
+If you are having difficulty using Axoniq Framework,
+ please consider checking Axoniq's documentation first if it answers your question: https://docs.axoniq.io/home/
  
 When the library does not cover the specific question you have, take the following into account:
 - GitHub is *not* intended for usages questions, instead:
@@ -23,7 +23,7 @@ After that's done, your issue will typically fall under one of the following opt
 4. It's a `documentation` change
 
 It is recommended that for either of the three you use one of the prepared issue template.
-You can find all three of them [here](https://github.com/AxonFramework/issues/new/choose). 
+You can find all three of them [here](https://github.com/AxonIQ/AxoniqFramework/issues/new/choose). 
 
 ## None of the above fit!
 
