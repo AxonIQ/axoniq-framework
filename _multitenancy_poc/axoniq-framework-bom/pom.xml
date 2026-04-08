@@ -45,6 +45,20 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <!-- Axoniq Framework: Connectors -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-server-connector</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Axoniq Framework: Messaging -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-distributed-messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>
