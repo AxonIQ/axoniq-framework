@@ -89,10 +89,10 @@
 
 
 
-    <!-- Dependencies are managed in axon-parent -->
+    <!-- Dependencies are managed in axoniq-framework-parent -->
     <dependencyManagement />
 
-    <!-- Dependencies are managed in axon-parent -->
+    <!-- Dependencies are managed in axoniq-framework-parent -->
     <dependencies />
 
     <build>
