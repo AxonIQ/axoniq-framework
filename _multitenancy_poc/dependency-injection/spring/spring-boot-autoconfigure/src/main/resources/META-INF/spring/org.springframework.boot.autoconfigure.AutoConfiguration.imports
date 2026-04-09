@@ -16,4 +16,4 @@
 #
 #
 
-io.axoniq.framework.extension.postgresql.springboot.autoconfig.PostgresqlAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration

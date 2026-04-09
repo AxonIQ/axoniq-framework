@@ -16,11 +16,11 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import io.axoniq.framework.extension.postgresql.PostgresqlConfigurationEnhancer;
-import io.axoniq.framework.extension.postgresql.PostgresqlEventStorageEngine;
-import io.axoniq.framework.extension.postgresql.springboot.PostgresqlProperties;
+import io.axoniq.framework.postgresql.PostgresqlConfigurationEnhancer;
+import io.axoniq.framework.postgresql.PostgresqlEventStorageEngine;
+import io.axoniq.framework.springboot.PostgresqlProperties;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;

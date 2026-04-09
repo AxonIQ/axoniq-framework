@@ -20,4 +20,4 @@
  * Spring Boot properties for Postgres extension.
  */
 @org.jspecify.annotations.NullMarked
-package io.axoniq.framework.extension.postgresql.springboot;
+package io.axoniq.framework.springboot;
