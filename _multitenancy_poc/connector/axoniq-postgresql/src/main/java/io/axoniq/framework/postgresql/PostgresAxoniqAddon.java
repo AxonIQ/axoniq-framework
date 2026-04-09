@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql;
+package io.axoniq.framework.postgresql;
 
 import io.axoniq.license.entitlement.AxoniqAddon;
 
