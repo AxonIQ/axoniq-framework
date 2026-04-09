@@ -17,7 +17,9 @@
  */
 
 /**
- * Spring Boot properties for Postgres extension.
+ * Spring Boot root for Axoniq Framework.
  */
-@org.jspecify.annotations.NullMarked
+@NullMarked
 package io.axoniq.framework.springboot;
+
+import org.jspecify.annotations.NullMarked;
