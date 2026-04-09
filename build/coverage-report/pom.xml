@@ -58,26 +58,6 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <profile>
-            <id>examples</id>
-            <activation>
-                <activeByDefault>false</activeByDefault>
-                <property>
-                    <name>examples</name>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>io.axoniq.framework.examples</groupId>
-                    <artifactId>axoniq-framework-examples</artifactId>
-                    <version>${project.version}</version>
-                    <type>pom</type>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
-
     <build>
         <plugins>
             <plugin>

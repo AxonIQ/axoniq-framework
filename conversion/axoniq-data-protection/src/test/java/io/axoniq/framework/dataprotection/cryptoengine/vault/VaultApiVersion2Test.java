@@ -43,6 +43,7 @@ import java.lang.invoke.MethodHandles;
  * Note: Docker must be running on the system for these tests to execute.
  */
 @Testcontainers
+@Disabled("FIXME: ContainerFetch Can't get Docker image: RemoteDockerImage(imageName=hashicorp/vault:1.15 ...)")
 public class VaultApiVersion2Test extends AbstractEngineTestSet {
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     private static final int VAULT_ENGINE_VERSION = 2;
