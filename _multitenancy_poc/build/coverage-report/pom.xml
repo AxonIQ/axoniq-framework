@@ -59,7 +59,7 @@
         <!-- Axoniq Framework: Spring -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-framework-spring-boot-autoconfigure</artifactId>
+            <artifactId>axoniq-spring-boot-autoconfigure</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
