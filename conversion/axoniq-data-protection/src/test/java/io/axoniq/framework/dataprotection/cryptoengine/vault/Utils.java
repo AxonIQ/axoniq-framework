@@ -19,7 +19,7 @@ package io.axoniq.framework.dataprotection.cryptoengine.vault;
 
 import io.axoniq.framework.dataprotection.utils.TestUtils;
 import okhttp3.OkHttpClient;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.security.cert.CertificateException;
 import javax.net.ssl.HostnameVerifier;

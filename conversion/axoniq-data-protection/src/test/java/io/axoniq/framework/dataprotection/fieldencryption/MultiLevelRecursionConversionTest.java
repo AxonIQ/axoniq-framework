@@ -70,7 +70,6 @@ class MultiLevelRecursionConversionTest {
 
         // Convert to String before encryption
         String converted1 = converter.convert(a, String.class);
-        System.out.println(converted1);
         assertTrue(converted1.contains("@"), "Should contain email before encryption");
         assertTrue(converted1.contains("AAAAAAAAAAAAAA=="),
                          "Should contain fixed byte array before encryption");
@@ -85,7 +84,6 @@ class MultiLevelRecursionConversionTest {
         assertFalse(converted2.contains("AAAAAAAAAAAAAA=="),
                           "Should NOT contain fixed byte array after encryption");
         assertFalse(converted2.contains("2017"), "Should NOT contain date after encryption");
-        System.out.println(converted2);
 
         // Decrypt
         fieldEncrypter.decrypt(a);

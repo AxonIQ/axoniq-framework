@@ -25,7 +25,7 @@ import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
 import io.axoniq.framework.dataprotection.utils.TestUtils;
 import org.axonframework.conversion.Converter;
 import org.fluttercode.datafactory.impl.DataFactory;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -110,14 +110,12 @@ class SpecialCollectionsConversionTest {
         A a = new A(1L, Collections.unmodifiableList(list));
 
         String converted1 = converter.convert(a, String.class);
-        System.out.println(converted1);
         assertNotNull(converted1);
         assertTrue(converted1.contains("TEST"));
 
         a = fieldEncrypter.encryptAndReturn(a);
 
         String converted2 = converter.convert(a, String.class);
-        System.out.println(converted2);
         assertNotNull(converted2);
         assertFalse(converted2.contains("TEST"));
 
@@ -132,14 +130,12 @@ class SpecialCollectionsConversionTest {
         A a = new A(1L, Arrays.asList("TEST1", "TEST2"));
 
         String converted1 = converter.convert(a, String.class);
-        System.out.println(converted1);
         assertNotNull(converted1);
         assertTrue(converted1.contains("TEST"));
 
         a = fieldEncrypter.encryptAndReturn(a);
 
         String converted2 = converter.convert(a, String.class);
-        System.out.println(converted2);
         assertNotNull(converted2);
         assertFalse(converted2.contains("TEST"));
 
@@ -157,14 +153,12 @@ class SpecialCollectionsConversionTest {
         A a = new A(1L, Collections.synchronizedList(Collections.unmodifiableList(list)));
 
         String converted1 = converter.convert(a, String.class);
-        System.out.println(converted1);
         assertNotNull(converted1);
         assertTrue(converted1.contains("TEST"));
 
         a = fieldEncrypter.encryptAndReturn(a);
 
         String converted2 = converter.convert(a, String.class);
-        System.out.println(converted2);
         assertNotNull(converted2);
         assertFalse(converted2.contains("TEST"));
 
@@ -182,14 +176,12 @@ class SpecialCollectionsConversionTest {
         B a = new B(1L, Collections.checkedSortedSet(Collections.unmodifiableSortedSet(set), String.class));
 
         String converted1 = converter.convert(a, String.class);
-        System.out.println(converted1);
         assertNotNull(converted1);
         assertTrue(converted1.contains("TEST"));
 
         a = fieldEncrypter.encryptAndReturn(a);
 
         String converted2 = converter.convert(a, String.class);
-        System.out.println(converted2);
         assertNotNull(converted2);
         assertFalse(converted2.contains("TEST"));
 
@@ -205,14 +197,12 @@ class SpecialCollectionsConversionTest {
         A a = new A(1L, list);
 
         String converted1 = converter.convert(a, String.class);
-        System.out.println(converted1);
         assertNotNull(converted1);
         assertTrue(converted1.contains("TEST"), "Original should contain TEST");
 
         a = fieldEncrypter.encryptAndReturn(a);
 
         String converted2 = converter.convert(a, String.class);
-        System.out.println(converted2);
         assertNotNull(converted2);
         assertFalse(converted2.contains("TEST"), "Encrypted should NOT contain TEST");
 
@@ -261,21 +251,21 @@ class SpecialCollectionsConversionTest {
             return backend.contains(o);
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Iterator<String> iterator() {
             return backend.iterator();
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Object[] toArray() {
             return backend.toArray();
         }
 
-        @NotNull
+        @NonNull
         @Override
-        public <T> T[] toArray(@NotNull T[] a) {
+        public <T> T[] toArray(@NonNull T[] a) {
             return backend.toArray(a);
         }
 
@@ -290,27 +280,27 @@ class SpecialCollectionsConversionTest {
         }
 
         @Override
-        public boolean containsAll(@NotNull Collection<?> c) {
+        public boolean containsAll(@NonNull Collection<?> c) {
             return backend.containsAll(c);
         }
 
         @Override
-        public boolean addAll(@NotNull Collection<? extends String> c) {
+        public boolean addAll(@NonNull Collection<? extends String> c) {
             throw new UnsupportedOperationException("Immutable list");
         }
 
         @Override
-        public boolean addAll(int index, @NotNull Collection<? extends String> c) {
+        public boolean addAll(int index, @NonNull Collection<? extends String> c) {
             throw new UnsupportedOperationException("Immutable list");
         }
 
         @Override
-        public boolean removeAll(@NotNull Collection<?> c) {
+        public boolean removeAll(@NonNull Collection<?> c) {
             throw new UnsupportedOperationException("Immutable list");
         }
 
         @Override
-        public boolean retainAll(@NotNull Collection<?> c) {
+        public boolean retainAll(@NonNull Collection<?> c) {
             throw new UnsupportedOperationException("Immutable list");
         }
 
@@ -359,42 +349,42 @@ class SpecialCollectionsConversionTest {
             return backend.lastIndexOf(o);
         }
 
-        @NotNull
+        @NonNull
         @Override
         public ListIterator<String> listIterator() {
             return backend.listIterator();
         }
 
-        @NotNull
+        @NonNull
         @Override
         public ListIterator<String> listIterator(int index) {
             return backend.listIterator(index);
         }
 
-        @NotNull
+        @NonNull
         @Override
         public List<String> subList(int fromIndex, int toIndex) {
             return backend.subList(fromIndex, toIndex);
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Spliterator<String> spliterator() {
             return backend.spliterator();
         }
 
         @Override
-        public boolean removeIf(@NotNull Predicate<? super String> filter) {
+        public boolean removeIf(@NonNull Predicate<? super String> filter) {
             throw new UnsupportedOperationException("Immutable list");
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Stream<String> stream() {
             return backend.stream();
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Stream<String> parallelStream() {
             return backend.parallelStream();
