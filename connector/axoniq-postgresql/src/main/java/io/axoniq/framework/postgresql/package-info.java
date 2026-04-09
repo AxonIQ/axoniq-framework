@@ -20,4 +20,4 @@
  * Postgres extension main package.
  */
 @org.jspecify.annotations.NullMarked
-package io.axoniq.framework.extension.postgresql;
+package io.axoniq.framework.postgresql;

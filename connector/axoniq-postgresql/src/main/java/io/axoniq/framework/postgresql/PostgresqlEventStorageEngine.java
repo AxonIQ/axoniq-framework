@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql;
+package io.axoniq.framework.postgresql;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;

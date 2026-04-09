@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql;
+package io.axoniq.framework.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;

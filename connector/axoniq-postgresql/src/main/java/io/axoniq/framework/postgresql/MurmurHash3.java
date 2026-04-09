@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql;
+package io.axoniq.framework.postgresql;
 
 /**
  * MurmurHash3 x86 32-bit implementation in Java
