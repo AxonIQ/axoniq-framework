@@ -16,9 +16,9 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import io.axoniq.framework.extension.postgresql.PostgresqlEventStorageEngine;
+import io.axoniq.framework.postgresql.PostgresqlEventStorageEngine;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;

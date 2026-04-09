@@ -21,51 +21,34 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.axoniq.framework.extensions.postgresql</groupId>
-        <artifactId>axon-postgresql-extension</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-spring</artifactId>
+        <version>${revision}</version>
     </parent>
 
-    <artifactId>axon-postgresql-spring-boot-autoconfigure</artifactId>
+    <artifactId>axoniq-framework-spring-boot-autoconfigure</artifactId>
 
-    <name>AxonIQ Framework - PostgreSQL - Spring Boot Autoconfigure</name>
+    <name>Axoniq Framework - Spring Boot Autoconfigure</name>
     <description>
-        Autoconfiguration of Axon Framework's PostgreSQL extension for Spring Boot.
+        Autoconfiguration of Axoniq Framework's components for Spring Boot.
     </description>
 
     <dependencies>
         <dependency>
-            <groupId>io.axoniq.framework.extensions.postgresql</groupId>
-            <artifactId>axon-postgresql</artifactId>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-postgresql</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
-            <version>${spring-boot.version}</version>
             <optional>true</optional>
         </dependency>
 
         <!-- Test -->
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <version>${spring-boot.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

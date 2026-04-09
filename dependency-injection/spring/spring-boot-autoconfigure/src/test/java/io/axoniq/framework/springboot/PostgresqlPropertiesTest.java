@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.postgresql.springboot;
+package io.axoniq.framework.springboot;
 
 import org.junit.jupiter.api.*;
 
