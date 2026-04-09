@@ -44,7 +44,7 @@
         <!-- Axoniq Framework:  Messaging -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-distributed-bus</artifactId>
+            <artifactId>axoniq-distributed-messaging</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
