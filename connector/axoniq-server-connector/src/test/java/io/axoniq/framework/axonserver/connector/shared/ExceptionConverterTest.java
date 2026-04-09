@@ -22,7 +22,7 @@ import io.axoniq.axonserver.grpc.ErrorMessage;
 
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Author: marc
@@ -33,8 +33,8 @@ class ExceptionConverterTest {
         ErrorMessage result = ExceptionConverter.convertToErrorMessage(null, null,
                                                                        new RuntimeException(
                                                                     "Something went wrong"));
-        assertEquals("", result.getLocation());
-        assertEquals("", result.getErrorCode());
+        assertThat(result.getLocation()).isEmpty();
+        assertThat(result.getErrorCode()).isEmpty();
     }
 
     @Test
@@ -42,7 +42,7 @@ class ExceptionConverterTest {
         ErrorMessage result = ExceptionConverter.convertToErrorMessage("Client", ErrorCode.QUERY_EXECUTION_ERROR,
                                                                        new RuntimeException(
                                                                     "Something went wrong"));
-        assertEquals("Client", result.getLocation());
-        assertEquals("AXONIQ-5001", result.getErrorCode());
+        assertThat(result.getLocation()).isEqualTo("Client");
+        assertThat(result.getErrorCode()).isEqualTo("AXONIQ-5001");
     }
 }

@@ -29,7 +29,7 @@ import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.conversion.ConversionException;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 
 /**
@@ -42,24 +42,24 @@ class ErrorCodeTest {
         ErrorCode errorCode = ErrorCode.getFromCode("AXONIQ-4002");
         AxonException exception = ExceptionFactory.convert(errorCode, ErrorMessage.newBuilder().setMessage("myMessage").build(),
                                                     () -> "myCustomObject");
-        assertTrue(exception instanceof CommandExecutionException);
-        assertEquals("myMessage", exception.getMessage());
-        assertEquals("myCustomObject", ((CommandExecutionException) exception).getDetails().orElse("null"));
+        assertThat(exception).isInstanceOf(CommandExecutionException.class);
+        assertThat(exception.getMessage()).isEqualTo("myMessage");
+        assertThat(((CommandExecutionException) exception).getDetails().orElse("null")).isEqualTo("myCustomObject");
     }
 
     @Test
     void convertUnknownFromCodeAndMessage() {
         ErrorCode errorCode = ErrorCode.getFromCode("????????");
         AxonException exception = ExceptionFactory.convert(errorCode, ErrorMessage.newBuilder().setMessage("myMessage").build());
-        assertTrue(exception instanceof AxonServerException);
-        assertEquals("myMessage", exception.getMessage());
+        assertThat(exception).isInstanceOf(AxonServerException.class);
+        assertThat(exception.getMessage()).isEqualTo("myMessage");
     }
 
     @Test
     void convertWithoutSource() {
         RuntimeException exception = new RuntimeException("oops");
         AxonException axonException = ExceptionFactory.convert(ErrorCode.getFromCode("AXONIQ-4002"), exception);
-        assertEquals(exception.getMessage(), axonException.getMessage());
+        assertThat(axonException.getMessage()).isEqualTo(exception.getMessage());
     }
 
     @Test
@@ -67,10 +67,10 @@ class ErrorCodeTest {
         ErrorCode errorCode = ErrorCode.getFromCode("AXONIQ-4005");
         AxonException exception = ExceptionFactory.convert(errorCode, ErrorMessage.newBuilder().setMessage("myMessage").build(),
                                                     () -> "myCustomObject");
-        assertTrue(exception instanceof CommandExecutionException);
-        assertTrue(exception.getCause() instanceof AxonServerNonTransientRemoteCommandHandlingException);
-        assertEquals("myMessage", exception.getMessage());
-        assertEquals("myCustomObject", ((CommandExecutionException) exception).getDetails().orElse("null"));
+        assertThat(exception).isInstanceOf(CommandExecutionException.class);
+        assertThat(exception.getCause()).isInstanceOf(AxonServerNonTransientRemoteCommandHandlingException.class);
+        assertThat(exception.getMessage()).isEqualTo("myMessage");
+        assertThat(((CommandExecutionException) exception).getDetails().orElse("null")).isEqualTo("myCustomObject");
     }
 
     @Test
@@ -78,33 +78,33 @@ class ErrorCodeTest {
         ErrorCode errorCode = ErrorCode.getFromCode("AXONIQ-5003");
         AxonException exception = ExceptionFactory.convert(errorCode, ErrorMessage.newBuilder().setMessage("myMessage").build(),
                                                     () -> "myCustomObject");
-        assertTrue(exception instanceof QueryExecutionException);
-        assertTrue(exception.getCause() instanceof AxonServerNonTransientRemoteQueryHandlingException);
-        assertEquals("myMessage", exception.getMessage());
-        assertEquals("myCustomObject", ((QueryExecutionException) exception).getDetails().orElse("null"));
+        assertThat(exception).isInstanceOf(QueryExecutionException.class);
+        assertThat(exception.getCause()).isInstanceOf(AxonServerNonTransientRemoteQueryHandlingException.class);
+        assertThat(exception.getMessage()).isEqualTo("myMessage");
+        assertThat(((QueryExecutionException) exception).getDetails().orElse("null")).isEqualTo("myCustomObject");
     }
 
     @Test
     void queryExecutionErrorCodeFromNonTransientException() {
         ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(new ConversionException("Fake exception"));
-        assertEquals(ErrorCode.QUERY_EXECUTION_NON_TRANSIENT_ERROR, errorCode);
+        assertThat(errorCode).isEqualTo(ErrorCode.QUERY_EXECUTION_NON_TRANSIENT_ERROR);
     }
 
     @Test
     void queryExecutionErrorCodeFromRuntimeException() {
         ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(new RuntimeException("Fake exception"));
-        assertEquals(ErrorCode.QUERY_EXECUTION_ERROR, errorCode);
+        assertThat(errorCode).isEqualTo(ErrorCode.QUERY_EXECUTION_ERROR);
     }
 
     @Test
     void commandExecutionErrorCodeFromNonTransientException() {
         ErrorCode errorCode = ErrorCode.getCommandExecutionErrorCode(new ConversionException("Fake exception"));
-        assertEquals(ErrorCode.COMMAND_EXECUTION_NON_TRANSIENT_ERROR, errorCode);
+        assertThat(errorCode).isEqualTo(ErrorCode.COMMAND_EXECUTION_NON_TRANSIENT_ERROR);
     }
 
     @Test
     void commandExecutionErrorCodeFromRuntimeException() {
         ErrorCode errorCode = ErrorCode.getCommandExecutionErrorCode(new RuntimeException("Fake exception"));
-        assertEquals(ErrorCode.COMMAND_EXECUTION_ERROR, errorCode);
+        assertThat(errorCode).isEqualTo(ErrorCode.COMMAND_EXECUTION_ERROR);
     }
 }

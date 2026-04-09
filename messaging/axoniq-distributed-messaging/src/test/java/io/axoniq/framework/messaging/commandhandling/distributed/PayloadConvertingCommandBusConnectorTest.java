@@ -34,7 +34,8 @@ import org.mockito.*;
 import java.lang.reflect.Type;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class PayloadConvertingCommandBusConnectorTest {
@@ -59,24 +60,25 @@ class PayloadConvertingCommandBusConnectorTest {
     @Test
     void constructorRequiresNonNullDelegate() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> new PayloadConvertingCommandBusConnector(
+        assertThatThrownBy(() -> new PayloadConvertingCommandBusConnector(
                 null, new DelegatingMessageConverter(mockConverter), byte[].class
-        ));
+        )).isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructorRequiresNonNullConverter() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class,
-                     () -> new PayloadConvertingCommandBusConnector(mockDelegate, null, byte[].class));
+        assertThatThrownBy(() -> new PayloadConvertingCommandBusConnector(
+                mockDelegate, null, byte[].class
+        )).isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructorRequiresNonNullTargetType() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> new PayloadConvertingCommandBusConnector(
+        assertThatThrownBy(() -> new PayloadConvertingCommandBusConnector(
                 mockDelegate, new DelegatingMessageConverter(mockConverter), null
-        ));
+        )).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -93,14 +95,14 @@ class PayloadConvertingCommandBusConnectorTest {
         CompletableFuture<CommandResultMessage> result = testSubject.dispatch(originalCommand, context);
 
         // Then
-        assertNotNull(result);
+        assertThat(result).isNotNull();
         ArgumentCaptor<CommandMessage> commandCaptor = ArgumentCaptor.forClass(CommandMessage.class);
         verify(mockDelegate).dispatch(commandCaptor.capture(), eq(context));
 
         CommandMessage capturedCommand = commandCaptor.getValue();
-        assertArrayEquals(CONVERTED_PAYLOAD, (byte[]) capturedCommand.payload());
-        assertEquals(originalCommand.type(), capturedCommand.type());
-        assertEquals(originalCommand.metadata(), capturedCommand.metadata());
+        assertThat((byte[]) capturedCommand.payload()).containsExactly(CONVERTED_PAYLOAD);
+        assertThat(capturedCommand.type()).isEqualTo(originalCommand.type());
+        assertThat(capturedCommand.metadata()).isEqualTo(originalCommand.metadata());
     }
 
     @Test
@@ -135,9 +137,9 @@ class PayloadConvertingCommandBusConnectorTest {
         verify(originalCallback).onSuccess(messageCaptor.capture());
 
         Message convertedMessage = messageCaptor.getValue();
-        assertArrayEquals(CONVERTED_PAYLOAD, (byte[]) convertedMessage.payload());
-        assertEquals(resultMessage.type(), convertedMessage.type());
-        assertEquals(resultMessage.metadata(), convertedMessage.metadata());
+        assertThat((byte[]) convertedMessage.payload()).containsExactly(CONVERTED_PAYLOAD);
+        assertThat(convertedMessage.type()).isEqualTo(resultMessage.type());
+        assertThat(convertedMessage.metadata()).isEqualTo(resultMessage.metadata());
     }
 
     @Test
@@ -216,6 +218,6 @@ class PayloadConvertingCommandBusConnectorTest {
         verify(mockDelegate).dispatch(commandCaptor.capture(), any());
 
         CommandMessage capturedCommand = commandCaptor.getValue();
-        assertEquals(originalMetadata, capturedCommand.metadata());
+        assertThat(capturedCommand.metadata()).isEqualTo(originalMetadata);
     }
 }

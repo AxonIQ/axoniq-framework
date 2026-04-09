@@ -42,7 +42,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -81,13 +82,15 @@ class TaggedEventConverterTest {
     @Test
     void throwsNullPointerExceptionForNullConverter() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> new TaggedEventConverter(null));
+        assertThatThrownBy(() -> new TaggedEventConverter(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void convertTaggedEventMessageThrowsNullPointerExceptionForNullTaggedEventMessage() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> testSubject.convertTaggedEventMessage(null));
+        assertThatThrownBy(() -> testSubject.convertTaggedEventMessage(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -103,36 +106,36 @@ class TaggedEventConverterTest {
         TaggedEvent result = testSubject.convertTaggedEventMessage(taggedEventMessage);
         // then...
         Event resultEvent = result.getEvent();
-        assertEquals(EVENT_ID, resultEvent.getIdentifier());
-        assertEquals(EVENT_TIMESTAMP, resultEvent.getTimestamp());
-        assertEquals(EVENT_NAME, resultEvent.getName());
-        assertEquals(EVENT_VERSION, resultEvent.getVersion());
+        assertThat(resultEvent.getIdentifier()).isEqualTo(EVENT_ID);
+        assertThat(resultEvent.getTimestamp()).isEqualTo(EVENT_TIMESTAMP);
+        assertThat(resultEvent.getName()).isEqualTo(EVENT_NAME);
+        assertThat(resultEvent.getVersion()).isEqualTo(EVENT_VERSION);
         verify(converter).convert(eventPayload, (Type) byte[].class);
-        assertArrayEquals(eventPayloadByteArray, resultEvent.getPayload().toByteArray());
+        assertThat(resultEvent.getPayload().toByteArray()).containsExactly(eventPayloadByteArray);
         Map<String, String> resultMetadata = resultEvent.getMetadataMap();
-        assertEquals(1, resultMetadata.size());
-        assertTrue(resultMetadata.containsKey("String"));
-        assertEquals("Lorem Ipsum", resultMetadata.get("String"));
+        assertThat(resultMetadata).hasSize(1);
+        assertThat(resultMetadata).containsKey("String");
+        assertThat(resultMetadata.get("String")).isEqualTo("Lorem Ipsum");
         List<io.axoniq.axonserver.grpc.event.dcb.Tag> tagList = result.getTagList();
-        assertEquals(3, tagList.size());
-        assertTrue(tagList.contains(
+        assertThat(tagList).hasSize(3);
+        assertThat(tagList).contains(
                 io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                        .setKey(ByteString.copyFrom("key", StandardCharsets.UTF_8))
                                                        .setValue(ByteString.copyFrom("value", StandardCharsets.UTF_8))
                                                        .build()
-        ));
-        assertTrue(tagList.contains(
+        );
+        assertThat(tagList).contains(
                 io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                        .setKey(ByteString.copyFrom("key2", StandardCharsets.UTF_8))
                                                        .setValue(ByteString.copyFrom("value2", StandardCharsets.UTF_8))
                                                        .build()
-        ));
-        assertTrue(tagList.contains(
+        );
+        assertThat(tagList).contains(
                 io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                        .setKey(ByteString.copyFrom("key3", StandardCharsets.UTF_8))
                                                        .setValue(ByteString.copyFrom("value3", StandardCharsets.UTF_8))
                                                        .build()
-        ));
+        );
     }
 
     @Test
@@ -156,21 +159,22 @@ class TaggedEventConverterTest {
                                                 .getEvent()
                                                 .getMetadataMap();
         // then...
-        assertEquals(8, result.size());
-        assertEquals("Lorem Ipsum", result.get("String"));
-        assertEquals("3.53d", result.get("Double"));
-        assertEquals("3.53f", result.get("Float"));
-        assertEquals("42L", result.get("Long"));
-        assertEquals("42", result.get("Integer"));
-        assertEquals("42", result.get("Short"));
-        assertEquals("4", result.get("Byte"));
-        assertEquals("false", result.get("Boolean"));
+        assertThat(result).hasSize(8);
+        assertThat(result.get("String")).isEqualTo("Lorem Ipsum");
+        assertThat(result.get("Double")).isEqualTo("3.53d");
+        assertThat(result.get("Float")).isEqualTo("3.53f");
+        assertThat(result.get("Long")).isEqualTo("42L");
+        assertThat(result.get("Integer")).isEqualTo("42");
+        assertThat(result.get("Short")).isEqualTo("42");
+        assertThat(result.get("Byte")).isEqualTo("4");
+        assertThat(result.get("Boolean")).isEqualTo("false");
     }
 
     @Test
     void convertEventThrowsNullPointerExceptionForNullEvent() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> testSubject.convertEvent(null));
+        assertThatThrownBy(() -> testSubject.convertEvent(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -187,12 +191,12 @@ class TaggedEventConverterTest {
         // when...
         EventMessage result = testSubject.convertEvent(testEvent);
         // then...
-        assertEquals(EVENT_ID, result.identifier());
-        assertEquals(EVENT_TYPE, result.type());
-        assertArrayEquals(eventPayloadByteArray, result.payloadAs(byte[].class));
-        assertEquals(eventPayload, result.payloadAs(TestEvent.class));
-        assertEquals(EVENT_METADATA, result.metadata());
-        assertEquals(EVENT_TIMESTAMP, result.timestamp().toEpochMilli());
+        assertThat(result.identifier()).isEqualTo(EVENT_ID);
+        assertThat(result.type()).isEqualTo(EVENT_TYPE);
+        assertThat(result.payloadAs(byte[].class)).containsExactly(eventPayloadByteArray);
+        assertThat(result.payloadAs(TestEvent.class)).isEqualTo(eventPayload);
+        assertThat(result.metadata()).isEqualTo(EVENT_METADATA);
+        assertThat(result.timestamp().toEpochMilli()).isEqualTo(EVENT_TIMESTAMP);
 
         verify(converter).convert(eventPayloadByteArray, (Type) TestEvent.class);
     }

@@ -18,13 +18,15 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.*;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for {@link DistributedQueryBusConfiguration} verifying configuration methods, default values, and fluent
@@ -41,19 +43,22 @@ class DistributedQueryBusConfigurationTest {
         DistributedQueryBusConfiguration config = DistributedQueryBusConfiguration.DEFAULT;
 
         // Then
-        assertTrue(config.preferLocalQueryHandler(),
-                   "Default configuration should prefer local query handlers");
+        assertThat(config.preferLocalQueryHandler())
+                .as("Default configuration should prefer local query handlers")
+                .isTrue();;
 
         ExecutorService executorService = config.queryExecutorService();
-        assertInstanceOf(ThreadPoolExecutor.class, executorService,
-                        "Default executor should be a ThreadPoolExecutor");
+        assertThat(executorService)
+                .as("Default executor should be a ThreadPoolExecutor")
+                .isInstanceOf(ThreadPoolExecutor.class);
 
         ThreadPoolExecutor threadPool = (ThreadPoolExecutor) executorService;
-        assertEquals(10, threadPool.getCorePoolSize(),
-                    "Default thread pool should have 10 threads");
-        assertEquals(10, threadPool.getMaximumPoolSize(),
-                    "Default thread pool should have max 10 threads");
-
+        assertThat(threadPool.getCorePoolSize())
+                .as("Default thread pool should have  10 threads")
+                .isEqualTo(10);
+        assertThat(threadPool.getMaximumPoolSize())
+                .as("Default thread pool should have max 10 threads")
+                .isEqualTo(10);
         executorService.shutdown();
     }
 
@@ -66,17 +71,21 @@ class DistributedQueryBusConfigurationTest {
         DistributedQueryBusConfiguration customConfig = config.queryThreads(42);
 
         // Then
-        assertNotSame(config, customConfig,
-                     "queryThreads() should return a new instance");
+        assertThat(customConfig)
+                .as("queryThreads() should return a new instance")
+                .isNotSameAs(config);
 
         ExecutorService executorService = customConfig.queryExecutorService();
-        assertInstanceOf(ThreadPoolExecutor.class, executorService);
+        assertThat(executorService).isInstanceOf(ThreadPoolExecutor.class);
 
         ThreadPoolExecutor threadPool = (ThreadPoolExecutor) executorService;
-        assertEquals(42, threadPool.getCorePoolSize(),
-                    "Thread pool should have 42 threads");
-        assertEquals(42, threadPool.getMaximumPoolSize(),
-                    "Thread pool should have max 42 threads");
+        assertThat(threadPool.getCorePoolSize())
+                .as("Thread pool should have 42 threads")
+                .isEqualTo(42);
+
+        assertThat(threadPool.getMaximumPoolSize())
+                .as("Thread pool should have max 42 threads")
+                .isEqualTo(42);
 
         executorService.shutdown();
     }
@@ -90,17 +99,18 @@ class DistributedQueryBusConfigurationTest {
         DistributedQueryBusConfiguration customConfig = config.queryQueueCapacity(500);
 
         // Then
-        assertNotSame(config, customConfig,
-                     "queryQueueCapacity() should return a new instance");
+        assertThat(customConfig)
+                .as("queryQueueCapacity() should return a new instance")
+                .isNotSameAs(config);
 
         ExecutorService executorService = customConfig.queryExecutorService();
-        assertInstanceOf(ThreadPoolExecutor.class, executorService);
+        assertThat(executorService).isInstanceOf(ThreadPoolExecutor.class);
 
         ThreadPoolExecutor threadPool = (ThreadPoolExecutor) executorService;
         // PriorityBlockingQueue has unbounded capacity, but initial capacity affects internal array
-        assertNotNull(threadPool.getQueue(),
-                     "Thread pool should have a queue");
-
+        assertThat(threadPool.getQueue())
+                .as("Thread pool should have a queue")
+                        .isNotNull();
         executorService.shutdown();
     }
 
@@ -114,10 +124,12 @@ class DistributedQueryBusConfigurationTest {
         DistributedQueryBusConfiguration customConfig = config.queryExecutorService(customExecutor);
 
         // Then
-        assertNotSame(config, customConfig,
-                     "queryExecutorService() should return a new instance");
-        assertSame(customExecutor, customConfig.queryExecutorService(),
-                  "Configuration should use the provided executor service");
+        assertThat(customConfig)
+                .as("queryExecutorService() should return a new instance")
+                .isNotSameAs(config);
+        assertThat(customConfig.queryExecutorService())
+                .as("Configuration should use the provided executor service")
+                .isSameAs(customExecutor);
 
         customExecutor.shutdown();
     }
@@ -129,9 +141,9 @@ class DistributedQueryBusConfigurationTest {
 
         // When / Then
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class,
-                    () -> config.queryExecutorService(null),
-                    "Setting null executor should throw NullPointerException");
+        assertThatThrownBy(() -> config.queryExecutorService(null))
+                .as("Setting null executor should throw NullPointerException")
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -144,17 +156,22 @@ class DistributedQueryBusConfigurationTest {
         DistributedQueryBusConfiguration enabledConfig = config.preferLocalQueryHandler(true);
 
         // Then
-        assertNotSame(config, disabledConfig,
-                     "preferLocalQueryHandler() should return a new instance");
-        assertNotSame(config, enabledConfig,
-                     "preferLocalQueryHandler() should return a new instance");
+        assertThat(disabledConfig)
+                .as("preferLocalQueryHandler() should return a new instance")
+                .isNotSameAs(config);
+        assertThat(enabledConfig)
+                .as("preferLocalQueryHandler() should return a new instance")
+                .isNotSameAs(config);
 
-        assertTrue(config.preferLocalQueryHandler(),
-                  "Original config should have default value (true)");
-        assertFalse(disabledConfig.preferLocalQueryHandler(),
-                   "Disabled config should have local shortcut disabled");
-        assertTrue(enabledConfig.preferLocalQueryHandler(),
-                  "Enabled config should have local shortcut enabled");
+        assertThat(config.preferLocalQueryHandler())
+                .as("Original config should have default value (true)")
+                .isTrue();
+        assertThat(disabledConfig.preferLocalQueryHandler())
+                .as("Disabled config should have local shortcut disabled")
+                .isFalse();
+        assertThat(enabledConfig.preferLocalQueryHandler())
+                .as("Enabled config should have local shortcut enabled")
+                .isTrue();
     }
 
     @Test
@@ -169,15 +186,17 @@ class DistributedQueryBusConfigurationTest {
                 .queryQueueCapacity(2000);
 
         // Then
-        assertFalse(customConfig.preferLocalQueryHandler(),
-                   "Chained config should preserve preferLocalQueryHandler setting");
+        assertThat(customConfig.preferLocalQueryHandler())
+                .as("Chained config should preserve preferLocalQueryHandler setting")
+                .isFalse();
 
         ExecutorService executorService = customConfig.queryExecutorService();
-        assertInstanceOf(ThreadPoolExecutor.class, executorService);
+        assertThat(executorService).isInstanceOf(ThreadPoolExecutor.class);
 
         ThreadPoolExecutor threadPool = (ThreadPoolExecutor) executorService;
-        assertEquals(20, threadPool.getCorePoolSize(),
-                    "Chained config should preserve thread count setting");
+        assertThat(threadPool.getCorePoolSize())
+                .as("Chained config should preserve thread count setting")
+                .isEqualTo(20);
 
         executorService.shutdown();
     }
@@ -192,21 +211,26 @@ class DistributedQueryBusConfigurationTest {
         DistributedQueryBusConfiguration modified2 = original.preferLocalQueryHandler(false);
 
         // Then
-        assertNotSame(original, modified1,
-                     "Modifying configuration should return new instance");
-        assertNotSame(original, modified2,
-                     "Modifying configuration should return new instance");
-        assertNotSame(modified1, modified2,
-                     "Each modification should return distinct instance");
+        assertThat(modified1)
+                .as("Modifying configuration should return new instance")
+                .isNotSameAs(original);
+        assertThat(modified2)
+                .as("Modifying configuration should return new instance")
+                .isNotSameAs(original);
+        assertThat(modified2)
+                .as("Each modification should return distinct instance")
+                .isNotSameAs(modified1);
 
         // Verify original is unchanged
-        assertTrue(original.preferLocalQueryHandler(),
-                  "Original config should be unchanged");
+        assertThat(original.preferLocalQueryHandler())
+                .as("Original config should be unchanged")
+                .isTrue();
 
         ExecutorService originalExecutor = original.queryExecutorService();
-        assertInstanceOf(ThreadPoolExecutor.class, originalExecutor);
-        assertEquals(10, ((ThreadPoolExecutor) originalExecutor).getCorePoolSize(),
-                    "Original config should have default thread count");
+        assertThat(originalExecutor).isInstanceOf(ThreadPoolExecutor.class);
+        assertThat(((ThreadPoolExecutor) originalExecutor).getCorePoolSize())
+                .as("Original config should have default thread count")
+                .isEqualTo(10);
 
         originalExecutor.shutdown();
         modified1.queryExecutorService().shutdown();
@@ -223,8 +247,9 @@ class DistributedQueryBusConfigurationTest {
         ExecutorService executor2 = config.queryExecutorService();
 
         // Then
-        assertNotSame(executor1, executor2,
-                     "Each call to queryExecutorService() should create a new executor");
+        assertThat(executor2)
+                .as("Each call to queryExecutorService() should create a new executor")
+                .isNotSameAs(executor1);
 
         executor1.shutdown();
         executor2.shutdown();

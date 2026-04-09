@@ -53,9 +53,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -99,15 +98,15 @@ class AxonServerCommandBusConnectorTest {
     @Test
     void constructionWithConnectionNullRefFails() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class,
-                     () -> new AxonServerCommandBusConnector(null, new AxonServerConfiguration()));
+        assertThatThrownBy(() -> new AxonServerCommandBusConnector(null, new AxonServerConfiguration()))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructionWithAxonServerConfigurationNullRefFails() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class,
-                     () -> new AxonServerCommandBusConnector(connection, null));
+        assertThatThrownBy(() -> new AxonServerCommandBusConnector(connection, null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -115,11 +114,12 @@ class AxonServerCommandBusConnectorTest {
         CommandMessage command = new GenericCommandMessage(
                 new GenericMessage(ANY_TEST_MESSAGE_ID, ANY_TEST_TYPE, "invalid-payload", new HashMap<>())
         );
-        assertThrows(IllegalArgumentException.class, () -> testSubject.dispatch(command, null));
+        assertThatThrownBy(() -> testSubject.dispatch(command, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void dispatchingCommandMessageWithValidPayloadResultsToResponse() throws ExecutionException, InterruptedException {
+    void dispatchingCommandMessageWithValidPayloadResultsToResponse() {
         // Arrange
         String expectedPayload = "expected-payload";
         CommandMessage command = createTestCommandMessage();
@@ -127,7 +127,7 @@ class AxonServerCommandBusConnectorTest {
         ArgumentCaptor<Command> commandCaptor = ArgumentCaptor.forClass(Command.class);
         when(commandChannel.sendCommand(commandCaptor.capture()))
                 .thenReturn(CompletableFuture.completedFuture(response));
-        when(converter.convert(any(), eq((Type)String.class)))
+        when(converter.convert(any(), eq((Type) String.class)))
                 .thenReturn(expectedPayload);
 
         // Act
@@ -137,12 +137,13 @@ class AxonServerCommandBusConnectorTest {
         Command dispatchedCommand = commandCaptor.getValue();
         assertThat(dispatchedCommand.getClientId()).isEqualTo(TEST_CLIENT_ID);
         assertThat(dispatchedCommand.getComponentName()).isEqualTo(TEST_COMPONENT_NAME);
-        assertDoesNotThrow(() -> result.get());
-        assertEquals(byte[].class, result.get().payloadType());
-        assertEquals(expectedPayload, result.get().payloadAs(String.class));
+        assertThat(result).isNotNull();
+        assertThat(result).isCompleted();
+        assertThat(result.join().payloadType()).isEqualTo(byte[].class);
+        assertThat(result.join().payloadAs(String.class)).isEqualTo(expectedPayload);
 
         verify(commandChannel).sendCommand(any(Command.class));
-        verify(converter).convert(any(), eq((Type)String.class));
+        verify(converter).convert(any(), eq((Type) String.class));
     }
 
     @Test
@@ -167,13 +168,13 @@ class AxonServerCommandBusConnectorTest {
         verify(commandChannel).sendCommand(commandCaptor.capture());
         Command sentCommand = commandCaptor.getValue();
 
-        assertEquals(ANY_TEST_MESSAGE_ID, sentCommand.getMessageIdentifier());
-        assertEquals(ANY_TEST_COMMAND_TYPE, sentCommand.getName());
-        assertEquals(ANY_TEST_COMMAND_TYPE, sentCommand.getPayload().getType());
-        assertEquals(ANY_TEST_REVISION, sentCommand.getPayload().getRevision());
-        assertArrayEquals(ANY_TEST_PAYLOAD, sentCommand.getPayload().getData().toByteArray());
-        assertEquals(2, sentCommand.getMetaDataCount());
-        assertTrue(sentCommand.getProcessingInstructionsList().size() >= 2); // Priority and routing key
+        assertThat(sentCommand.getMessageIdentifier()).isEqualTo(ANY_TEST_MESSAGE_ID);
+        assertThat(sentCommand.getName()).isEqualTo(ANY_TEST_COMMAND_TYPE);
+        assertThat(sentCommand.getPayload().getType()).isEqualTo(ANY_TEST_COMMAND_TYPE);
+        assertThat(sentCommand.getPayload().getRevision()).isEqualTo(ANY_TEST_REVISION);
+        assertThat(sentCommand.getPayload().getData().toByteArray()).containsExactly(ANY_TEST_PAYLOAD);
+        assertThat(sentCommand.getMetaDataCount()).isEqualTo(2);
+        assertThat(sentCommand.getProcessingInstructionsList().size()).isGreaterThanOrEqualTo(2); // Priority and routing key
     }
 
     @Test
@@ -193,8 +194,8 @@ class AxonServerCommandBusConnectorTest {
         verify(commandChannel).sendCommand(commandCaptor.capture());
         Command sentCommand = commandCaptor.getValue();
 
-        assertFalse(sentCommand.getProcessingInstructionsList().stream()
-                               .anyMatch(pi -> pi.getKey() == ProcessingKey.PRIORITY));
+        assertThat(sentCommand.getProcessingInstructionsList().stream()
+                               .noneMatch(pi -> pi.getKey() == ProcessingKey.PRIORITY)).isTrue();
     }
 
     @Test
@@ -216,7 +217,7 @@ class AxonServerCommandBusConnectorTest {
         CompletableFuture<CommandResultMessage> result = testSubject.dispatch(command, null);
 
         // Assert
-        assertTrue(result.isCompletedExceptionally());
+        assertThat(result.isCompletedExceptionally()).isTrue();
     }
 
     @Test
@@ -239,10 +240,9 @@ class AxonServerCommandBusConnectorTest {
         CompletableFuture<CommandResultMessage> result = testSubject.dispatch(command, null);
 
         // Assert
-        assertDoesNotThrow(() -> {
-            CommandResultMessage resultMessage = result.get();
-            assertNull(resultMessage);
-        });
+        assertThat(result).isCompleted();
+        CommandResultMessage resultMessage = result.join();
+        assertThat(resultMessage).isNull();
     }
 
     @Test
@@ -261,8 +261,8 @@ class AxonServerCommandBusConnectorTest {
 
     @Test
     void subscribeWithNegativeLoadFactorThrowsException() {
-        assertThrows(IllegalArgumentException.class,
-                     () -> testSubject.subscribe(ANY_TEST_COMMAND_NAME, -1));
+        assertThatThrownBy(() -> testSubject.subscribe(ANY_TEST_COMMAND_NAME, -1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -292,12 +292,12 @@ class AxonServerCommandBusConnectorTest {
         boolean result = testSubject.unsubscribe(ANY_TEST_COMMAND_NAME);
 
         // Assert
-        assertTrue(result);
+        assertThat(result).isTrue();
         verify(mockRegistration).cancel();
-        assertFalse(getSubscriptions(testSubject).containsKey(ANY_TEST_COMMAND_NAME));
+        assertThat(getSubscriptions(testSubject)).doesNotContainKey(ANY_TEST_COMMAND_NAME);
 
         // Second unsubscribe should return false
-        assertFalse(testSubject.unsubscribe(ANY_TEST_COMMAND_NAME));
+        assertThat(testSubject.unsubscribe(ANY_TEST_COMMAND_NAME)).isFalse();
     }
 
     @Test
@@ -306,7 +306,7 @@ class AxonServerCommandBusConnectorTest {
         boolean result = testSubject.unsubscribe(ANY_TEST_COMMAND_NAME);
 
         // Assert
-        assertFalse(result);
+        assertThat(result).isFalse();
     }
 
     @Test
@@ -338,10 +338,8 @@ class AxonServerCommandBusConnectorTest {
         // when...
         testSubject.shutdownDispatching();
         // then...
-        assertThrows(
-                ShutdownInProgressException.class,
-                () -> testSubject.dispatch(testCommand, null)
-        );
+        assertThatThrownBy(() -> testSubject.dispatch(testCommand, null))
+                .isInstanceOf(ShutdownInProgressException.class);
     }
 
     @Test
@@ -374,8 +372,8 @@ class AxonServerCommandBusConnectorTest {
         await("Dispatch completion").atMost(Duration.ofSeconds(1))
                                     .pollDelay(Duration.ofMillis(25))
                                     .untilAsserted(() -> {
-                                        assertTrue(handled.get());
-                                        assertTrue(dispatchingHasShutdown.isDone());
+                                        assertThat(handled.get()).isTrue();
+                                        assertThat(dispatchingHasShutdown.isDone()).isTrue();
                                     });
     }
 
@@ -393,16 +391,16 @@ class AxonServerCommandBusConnectorTest {
 
             getIncomingHandler(testSubject).handle(createTestCommandMessage(), mock());
 
-            assertNotNull(resultCallback.get(), "Command was not received");
+            assertThat(resultCallback.get()).as("Command was not received").isNotNull();
             CompletableFuture<Void> result = testSubject.disconnect();
-            assertNotNull(result);
+            assertThat(result).isNotNull();
             verify(commandChannel).prepareDisconnect();
-            assertFalse(result.isDone());
+            assertThat(result.isDone()).isFalse();
 
             disconnectCompletion.complete(null);
 
             resultCallback.get().onSuccess(new GenericCommandResultMessage(ANY_TEST_TYPE, ANY_TEST_PAYLOAD));
-            assertTrue(result.isDone());
+            assertThat(result.isDone()).isTrue();
         }
 
         @Test
@@ -412,13 +410,13 @@ class AxonServerCommandBusConnectorTest {
             when(commandChannel.prepareDisconnect()).thenReturn(disconnectCompletion);
 
             CompletableFuture<Void> result = testSubject.disconnect();
-            assertNotNull(result);
+            assertThat(result).isNotNull();
             verify(commandChannel).prepareDisconnect();
-            assertFalse(result.isDone());
+            assertThat(result.isDone()).isFalse();
 
             disconnectCompletion.complete(null);
 
-            assertTrue(result.isDone());
+            assertThat(result.isDone()).isTrue();
         }
     }
 

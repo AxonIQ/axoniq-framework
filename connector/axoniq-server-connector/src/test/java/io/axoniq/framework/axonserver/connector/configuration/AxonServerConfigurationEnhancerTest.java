@@ -40,8 +40,8 @@ import org.mockito.*;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -60,7 +60,7 @@ class AxonServerConfigurationEnhancerTest {
 
     @Test
     void orderEqualsEnhancersConstant() {
-        assertEquals(AxonServerConfigurationEnhancer.ENHANCER_ORDER, testSubject.order());
+        assertThat(testSubject.order()).isEqualTo(AxonServerConfigurationEnhancer.ENHANCER_ORDER);
     }
 
     @Test
@@ -71,17 +71,17 @@ class AxonServerConfigurationEnhancerTest {
                                                       .build();
 
         AxonServerConfiguration serverConfig = result.getComponent(AxonServerConfiguration.class);
-        assertNotNull(serverConfig);
-        assertEquals("localhost", serverConfig.getServers());
-        assertNotNull(serverConfig.getClientId());
-        assertNotNull(serverConfig.getComponentName());
-        assertTrue(serverConfig.getComponentName().contains(serverConfig.getClientId()));
-        assertNotNull(result.getComponent(AxonServerConnectionManager.class));
-        assertInstanceOf(ManagedChannelCustomizer.class, result.getComponent(ManagedChannelCustomizer.class));
-        assertInstanceOf(AxonServerEventStorageEngine.class, result.getComponent(EventStorageEngine.class));
-        assertInstanceOf(PayloadConvertingCommandBusConnector.class, result.getComponent(CommandBusConnector.class));
-        assertInstanceOf(PayloadConvertingQueryBusConnector.class, result.getComponent(QueryBusConnector.class));
-        assertInstanceOf(AxonServerSnapshotStore.class, result.getComponent(SnapshotStore.class));
+        assertThat(serverConfig).isNotNull();
+        assertThat(serverConfig.getServers()).isEqualTo("localhost");
+        assertThat(serverConfig.getClientId()).isNotNull();
+        assertThat(serverConfig.getComponentName()).isNotNull();
+        assertThat(serverConfig.getComponentName()).contains(serverConfig.getClientId());
+        assertThat(result.getComponent(AxonServerConnectionManager.class)).isNotNull();
+        assertThat(result.getComponent(ManagedChannelCustomizer.class)).isInstanceOf(ManagedChannelCustomizer.class);
+        assertThat(result.getComponent(EventStorageEngine.class)).isInstanceOf(AxonServerEventStorageEngine.class);
+        assertThat(result.getComponent(CommandBusConnector.class)).isInstanceOf(PayloadConvertingCommandBusConnector.class);
+        assertThat(result.getComponent(QueryBusConnector.class)).isInstanceOf(PayloadConvertingQueryBusConnector.class);
+        assertThat(result.getComponent(SnapshotStore.class)).isInstanceOf(AxonServerSnapshotStore.class);
     }
 
     @Test
@@ -103,7 +103,7 @@ class AxonServerConfigurationEnhancerTest {
         result.start();
 
         AxonServerConnectionManager connectionManager = result.getComponent(AxonServerConnectionManager.class);
-        assertNotNull(connectionManager);
+        assertThat(connectionManager).isNotNull();
         await().pollDelay(Duration.ofMillis(50))
                .atMost(Duration.ofMillis(500))
                .untilAsserted(() -> verify(connectionManager, atLeastOnce()).getConnection());
@@ -141,7 +141,7 @@ class AxonServerConfigurationEnhancerTest {
         result.start();
 
         AxonServerConnectionManager connectionManager = result.getComponent(AxonServerConnectionManager.class);
-        assertNotNull(connectionManager);
+        assertThat(connectionManager).isNotNull();
         await().pollDelay(Duration.ofMillis(50))
                .atMost(Duration.ofMillis(500))
                .untilAsserted(() -> verify(connectionManager, atLeastOnce()).getConnection());
@@ -159,9 +159,9 @@ class AxonServerConfigurationEnhancerTest {
                                                           .build();
 
             // then
-            assertNotNull(result.getComponent(
+            assertThat(result.getComponent(
                     EventProcessorControlService.class
-            ));
+            )).isNotNull();
         }
 
         @Test
@@ -186,7 +186,7 @@ class AxonServerConfigurationEnhancerTest {
 
             // then
             AxonServerConnectionManager connectionManager = result.getComponent(AxonServerConnectionManager.class);
-            assertNotNull(connectionManager);
+            assertThat(connectionManager).isNotNull();
             await().pollDelay(Duration.ofMillis(50))
                    .atMost(Duration.ofMillis(500))
                    .untilAsserted(() -> verify(connectionManager, atLeastOnce()).getConnection());

@@ -25,7 +25,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Collections;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the {@link ProcessingInstructionUtils}.
@@ -41,7 +41,7 @@ class ProcessingInstructionUtilsTest {
 
     @Test
     void priorityDefaultsToZero() {
-        assertEquals(0L, ProcessingInstructionUtils.priority(Collections.emptyList()));
+        assertThat(ProcessingInstructionUtils.priority(Collections.emptyList())).isZero();
     }
 
     @Test
@@ -51,13 +51,13 @@ class ProcessingInstructionUtilsTest {
                                      .setKey(ProcessingKey.PRIORITY)
                                      .setValue(TEST_META_DATA_VALUE)
                                      .build();
-        assertEquals(EXPECTED_VALUE,
-                     ProcessingInstructionUtils.priority(Collections.singletonList(testProcessingInstruction)));
+        assertThat(ProcessingInstructionUtils.priority(Collections.singletonList(testProcessingInstruction)))
+                .isEqualTo(EXPECTED_VALUE);
     }
 
     @Test
     void numberOfResultsDefaultsToZero() {
-        assertEquals(1L, ProcessingInstructionUtils.numberOfResults(Collections.emptyList()));
+        assertThat(ProcessingInstructionUtils.numberOfResults(Collections.emptyList())).isEqualTo(1L);
     }
 
     @Test
@@ -67,13 +67,13 @@ class ProcessingInstructionUtilsTest {
                                      .setKey(ProcessingKey.NR_OF_RESULTS)
                                      .setValue(TEST_META_DATA_VALUE)
                                      .build();
-        assertEquals(EXPECTED_VALUE,
-                     ProcessingInstructionUtils.numberOfResults(Collections.singletonList(testProcessingInstruction)));
+        assertThat(ProcessingInstructionUtils.numberOfResults(Collections.singletonList(testProcessingInstruction)))
+                .isEqualTo(EXPECTED_VALUE);
     }
 
     @Test
     void timeoutDefaultsToZero() {
-        assertEquals(0L, ProcessingInstructionUtils.timeout(Collections.emptyList()));
+        assertThat(ProcessingInstructionUtils.timeout(Collections.emptyList())).isZero();
     }
 
     @Test
@@ -83,7 +83,7 @@ class ProcessingInstructionUtilsTest {
                                      .setKey(ProcessingKey.TIMEOUT)
                                      .setValue(TEST_META_DATA_VALUE)
                                      .build();
-        assertEquals(EXPECTED_VALUE,
-                     ProcessingInstructionUtils.timeout(Collections.singletonList(testProcessingInstruction)));
+        assertThat(ProcessingInstructionUtils.timeout(Collections.singletonList(testProcessingInstruction)))
+                .isEqualTo(EXPECTED_VALUE);
     }
 }

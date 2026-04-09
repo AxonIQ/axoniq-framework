@@ -40,9 +40,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.axonframework.messaging.commandhandling.CommandBusTestUtils.aCommandBus;
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -74,9 +74,9 @@ class DistributedCommandBusTest {
     void publishedCommandsAreSentToConnector() {
         CompletableFuture<? extends Message> result = testSubject.dispatch(testCommand, null);
 
-        assertSame(result, connector.getDispatchedCommands().get(testCommand));
+        assertThat(result).isSameAs(connector.getDispatchedCommands().get(testCommand));
         // the connector doesn't actually dispatch commands, so we expect the CompletableFuture to remain unfinished
-        assertFalse(result.isDone());
+        assertThat(result.isDone()).isFalse();
     }
 
     @Test
