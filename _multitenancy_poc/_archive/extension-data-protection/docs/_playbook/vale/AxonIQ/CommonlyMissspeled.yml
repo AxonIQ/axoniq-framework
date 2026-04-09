@@ -1,0 +1,7 @@
+extends: substitution
+message: "'%[2]s' is unusual in this context. Did you mean '%[1]s'"
+level: warning
+ignorecase: true
+# swap maps tokens in form of bad: good
+swap:
+  poplar: popular

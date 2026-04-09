@@ -24,16 +24,16 @@
     <parent>
         <groupId>io.axoniq.framework</groupId>
         <artifactId>axoniq-framework</artifactId>
-        <version>5.1.0-SNAPSHOT</version>
+        <version>${revision}</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>axoniq-framework-parent</artifactId>
     <packaging>pom</packaging>
 
-    <name>AxonIQ Framework - Parent</name>
+    <name>Axoniq Framework - Parent</name>
     <description>
-        Module providing a parent for AxonIQ Framework Modules.
+        Module providing a parent for Axoniq Framework Modules.
     </description>
 
     <properties>

@@ -1,0 +1,91 @@
+syntax = "proto3";
+package io.axoniq.framework.extension.dataprotection.internal.messages;
+option java_multiple_files = true;
+
+/*
+ * Data format used for encrypted version of fields annotated with @PersonalData. Please the
+ * the Axon Data Protection Module Guide for detailed explanation of the encryption process.
+ */
+message EncryptedFieldData {
+
+    /*
+     * Indicates the version of the message format. In the correct library version, this
+	 * must always be the constant 1. Included to support evolution of the format in future
+     * versions of the Axon Data Protection Module.
+     */
+    int32 version = 1;
+
+	/*
+     * Random number used to determine an initialization vector for CBC mode encryption. This
+     * number is converted into an IV as follows: the 32-bit integer is converted to a sequence
+     * of 4 bytes in big-endian form. The MD5 hash is calculated on those 4 bytes. This provides
+     * a 128-bit initialization vector.
+	 */
+	fixed32 pre_iv = 2;
+
+    /*
+     * Contains the actual encrypted data. In the current version, this is always done using AES
+     * in CBC-mode with PKCS#5 padding. If the cleartext type is a byte array, encryption can take
+     * place directly. In case the cleartext type is a character string, this is first converted
+     * to bytes using UTF-8. In other cases, an application-specific serialization mechanism (e.g.
+     * XStream or Jackson) is used on the cleartext value prior to encryption.
+     */
+	bytes encrypted_value = 3;
+
+    /*
+     * Digest used to obtain reasonable certainty that the message at hand is an instance of
+     * EncryptedFieldData, rather than some cleartext bytes that happen to have the same structure.
+     * Calculated as follows: we calculate the MD5 hash of the big-endian bytes of pre_iv together
+     * with the encrypted_value bytes. The first 8 bytes of this hash are interpreted as a big-endian
+     * 64-bit integer forming the digest.
+     */
+	fixed64 digest = 4;
+
+    /*
+     * Encrypted version of the digest. Using this value, the client can verify that the key that
+     * was used to write this data is the same key that is being used to read the data. Calculated
+     * as follows: we calculate the MD5 hash of the big-endian bytes of pre_iv together
+     * with the encrypted_value bytes (same as for digest). This has the exact size of an AES block.
+     * This block is encrypted using the key (directly in ECB mode). The first 8 bytes of this block
+     * are interpreted as a 64-bit integer forming the encrypted digest.
+     */
+    fixed64 enc_digest = 5;
+
+    /*
+     * Contains an alternative cleartext value to be used when the full cleartext value can no
+     * longer be obtained from the encrypted value, because the key has been deleted. For instance, if
+     * the full cleartext value is a creditcard number, this might contain some of the digits of the
+     * number.
+     */
+	bytes partial_value = 6;
+}
+
+/*
+ * Data format used for encrypted version of fields annotated with @SerializedPersonalData. Please the
+ * the Axon Data Protection Module Guide for detailed explanation of the encryption process.
+ */
+message SerializedEncryptedFieldData {
+
+    /*
+     * Indicates the version of the message format. In the correct library version, this
+     * must always be the constant 1. Included to support evolution of the format in future
+     * versions of the Axon Data Protection Module.
+     */
+    int32 version = 1;
+
+    /*
+     * The type name as obtained from SerializedObject#getType().getName()
+     */
+    string type_name = 2;
+
+    /*
+     * The type revision as obtained from SerializedObject#getType().getRevision()
+     */
+    string type_revision = 3;
+
+    /*
+     * Encrypted version of SerializedObject#getData()
+     */
+    bytes encrypted_data = 4;
+
+}
