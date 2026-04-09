@@ -41,6 +41,14 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Axoniq Framework:  Conversion -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-data-protection</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Axoniq Framework:  Messaging -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>

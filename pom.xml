@@ -71,6 +71,8 @@
 
         <module>connector/axoniq-server-connector</module>
 
+        <module>conversion/axoniq-data-protection</module>
+
         <module>messaging/axoniq-distributed-messaging</module>
     </modules>
 

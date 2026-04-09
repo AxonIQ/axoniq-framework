@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+  ~ Version September 2025 (the "License");
+  ~ The software is available under Non-Production Free License.
+  ~ Production use requires a paid license. See the License for the
+  ~ specific language governing permissions and limitations under
+  ~ the License.
+  ~
+  ~ You may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at:
+  ~
+  ~    https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.axoniq.framework.examples</groupId>
+        <artifactId>axoniq-framework-examples</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>axoniq-framework-data-protection-examples</artifactId>
+    <packaging>pom</packaging>
+
+    <name>Axoniq Framework - Examples - Data Protection</name>
+    <description>Collection of examples used for demonstration and test purposes of `axoniq-data-protection` module.</description>
+
+    <modules>
+<!--        <module>spring-boot-java-sample</module>-->
+<!--        <module>spring-boot-kotlin-sample</module>-->
+<!--        <module>spring-boot-scala-sample</module>-->
+    </modules>
+
+    <properties>
+        <spring-boot.version>3.5.13</spring-boot.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Jackson 2 BOM first to override Spring Boot's older Jackson version -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.21.2</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-data-protection</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
