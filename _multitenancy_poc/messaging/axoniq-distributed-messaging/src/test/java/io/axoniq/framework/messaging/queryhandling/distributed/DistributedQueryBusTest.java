@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
+import org.assertj.core.api.Assertions;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -40,7 +41,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
@@ -85,9 +86,10 @@ class DistributedQueryBusTest {
         QueryBus result = testSubject.subscribe(queryName, handler);
 
         // Then
-        assertSame(testSubject, result);
-        assertTrue(connector.subscribedQueries.contains(queryName),
-                   "Connector should have been subscribed to query");
+        assertThat(result).isSameAs(testSubject);
+        assertThat(connector.subscribedQueries)
+                .as("Connector should have been subscribed to query")
+                .containsExactly(queryName);
     }
 
     @Test
@@ -108,8 +110,9 @@ class DistributedQueryBusTest {
         testSubject.query(query, null);
 
         // Then - Query should use local segment (connector not invoked for query)
-        assertEquals(0, connector.queryCount.get(),
-                     "Connector should not be used when local handler is available");
+        assertThat(connector.queryCount.get())
+                .as("Connector should not be used when local handler is available")
+                .isZero();
     }
 
     @Test
@@ -123,8 +126,9 @@ class DistributedQueryBusTest {
         testSubject.query(query, null);
 
         // Then - Should use connector
-        assertEquals(1, connector.queryCount.get(),
-                     "Connector should be used when no local handler is registered");
+        assertThat(connector.queryCount.get())
+                .as("Connector should be used when no local handler is registered")
+                        .isEqualTo(1);
     }
 
     @Test
@@ -145,8 +149,9 @@ class DistributedQueryBusTest {
         testSubject.subscriptionQuery(query, null, 10);
 
         // Then - Should use connector, not local segment
-        assertEquals(1, connector.subscriptionQueryCount.get(),
-                     "Subscription queries should always use the connector");
+        assertThat(connector.subscriptionQueryCount.get())
+                .as("Subscription queries should always use the connector")
+                .isEqualTo(1);
     }
 
     /**
@@ -221,8 +226,9 @@ class DistributedQueryBusTest {
             testSubject.query(query, null);
 
             // Then - Verify connector not used for query
-            assertEquals(0, connector.queryCount.get(),
-                         "Local shortcut should bypass connector");
+            assertThat(connector.queryCount.get())
+                    .as("Local shortcut should bypass connector when handler is registered")
+                    .isZero();
         }
 
         @Test
@@ -244,8 +250,9 @@ class DistributedQueryBusTest {
             testSubject.query(query, null);
 
             // Then - Should use connector since no local handler for this query
-            assertEquals(1, connector.queryCount.get(),
-                         "Connector should be used for unregistered queries");
+            assertThat(connector.queryCount.get())
+                    .as("Connector should be used for queries without a local handler")
+                    .isEqualTo(1);
         }
 
         @Test
@@ -275,8 +282,9 @@ class DistributedQueryBusTest {
             testSubject.query(query2, null);
 
             // Then - Both should use local segment
-            assertEquals(0, connector.queryCount.get(),
-                         "Both queries should use local shortcut");
+            assertThat(connector.queryCount.get())
+                    .as("Both queries should use local shortcut when handlers are registered")
+                    .isZero();
         }
 
         @Test
@@ -299,8 +307,9 @@ class DistributedQueryBusTest {
             testSubject.query(query, null);
 
             // Then - Connector should be used despite local handler being available
-            assertEquals(1, connector.queryCount.get(),
-                         "Connector should be used when local shortcut is disabled");
+            assertThat(connector.queryCount.get())
+                    .as("Connector should be used when local shortcut is disabled, even if handler is registered")
+                    .isEqualTo(1);
         }
     }
 }

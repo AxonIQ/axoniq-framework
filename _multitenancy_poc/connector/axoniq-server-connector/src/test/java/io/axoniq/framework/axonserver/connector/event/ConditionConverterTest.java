@@ -38,7 +38,9 @@ import org.junit.jupiter.api.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  * Test class validating the {@link ConditionConverter}.
@@ -52,7 +54,8 @@ class ConditionConverterTest {
     @Test
     void convertAppendConditionThrowsNullPointerExceptionForNullAppendCondition() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> ConditionConverter.convertAppendCondition(null));
+        assertThatThrownBy(() -> ConditionConverter.convertAppendCondition(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -76,9 +79,9 @@ class ConditionConverterTest {
         // when...
         ConsistencyCondition result = ConditionConverter.convertAppendCondition(testCondition);
         // then...
-        assertEquals(START, result.getConsistencyMarker());
+        assertThat(result.getConsistencyMarker()).isEqualTo(START);
         List<Criterion> resultCriterion = result.getCriterionList();
-        assertEquals(3, resultCriterion.size());
+        assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());
         validateCriterion(resultCriterion.get(1).getTagsAndNames());
         validateCriterion(resultCriterion.getLast().getTagsAndNames());
@@ -87,7 +90,8 @@ class ConditionConverterTest {
     @Test
     void convertSourcingConditionThrowsNullPointerExceptionForNullSourcingCondition() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> ConditionConverter.convertSourcingCondition(null));
+        assertThatThrownBy(() -> ConditionConverter.convertSourcingCondition(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -112,9 +116,9 @@ class ConditionConverterTest {
         // when...
         SourceEventsRequest result = ConditionConverter.convertSourcingCondition(testCondition);
         // then...
-        assertEquals(START, result.getFromSequence());
+        assertThat(result.getFromSequence()).isEqualTo(START);
         List<Criterion> resultCriterion = result.getCriterionList();
-        assertEquals(3, resultCriterion.size());
+        assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());
         validateCriterion(resultCriterion.get(1).getTagsAndNames());
         validateCriterion(resultCriterion.getLast().getTagsAndNames());
@@ -123,7 +127,8 @@ class ConditionConverterTest {
     @Test
     void convertStreamingConditionThrowsNullPointerExceptionForNullStreamingCondition() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> ConditionConverter.convertStreamingCondition(null));
+        assertThatThrownBy(() -> ConditionConverter.convertStreamingCondition(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -148,9 +153,9 @@ class ConditionConverterTest {
         // when...
         StreamEventsRequest result = ConditionConverter.convertStreamingCondition(testCondition);
         // then...
-        assertEquals(START, result.getFromSequence());
+        assertThat(result.getFromSequence()).isEqualTo(START);
         List<Criterion> resultCriterion = result.getCriterionList();
-        assertEquals(3, resultCriterion.size());
+        assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());
         validateCriterion(resultCriterion.get(1).getTagsAndNames());
         validateCriterion(resultCriterion.getLast().getTagsAndNames());
@@ -160,39 +165,39 @@ class ConditionConverterTest {
         if (criterion.getNameCount() == 1) {
             String name = criterion.getNameList()
                                    .getFirst();
-            assertEquals("name1OnCriterion1", name);
+            assertThat(name).isEqualTo("name1OnCriterion1");
             List<io.axoniq.axonserver.grpc.event.dcb.Tag> tags = criterion.getTagList();
-            assertEquals(2, tags.size());
-            assertTrue(tags.contains(
+            assertThat(tags).hasSize(2);
+            assertThat(tags).contains(
                     io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                            .setKey(ByteString.copyFrom("key1OnCriterion1",
                                                                                        StandardCharsets.UTF_8))
                                                            .setValue(ByteString.copyFrom("value1OnCriterion1",
                                                                                          StandardCharsets.UTF_8))
                                                            .build()
-            ));
-            assertTrue(tags.contains(
+            );
+            assertThat(tags).contains(
                     io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                            .setKey(ByteString.copyFrom("key2OnCriterion1",
                                                                                        StandardCharsets.UTF_8))
                                                            .setValue(ByteString.copyFrom("value2OnCriterion1",
                                                                                          StandardCharsets.UTF_8))
                                                            .build()
-            ));
+            );
         } else if (criterion.getNameCount() == 2) {
             List<String> names = criterion.getNameList();
-            assertTrue(names.contains("name1OnCriterion2"));
-            assertTrue(names.contains("name2OnCriterion2"));
-            assertEquals(1, criterion.getTagCount());
+            assertThat(names).contains("name1OnCriterion2");
+            assertThat(names).contains("name2OnCriterion2");
+            assertThat(criterion.getTagCount()).isEqualTo(1);
             io.axoniq.axonserver.grpc.event.dcb.Tag firstTag = criterion.getTagList().getFirst();
-            assertEquals("key1OnCriterion2", firstTag.getKey().toString(StandardCharsets.UTF_8));
-            assertEquals("value1OnCriterion2", firstTag.getValue().toString(StandardCharsets.UTF_8));
+            assertThat(firstTag.getKey().toString(StandardCharsets.UTF_8)).isEqualTo("key1OnCriterion2");
+            assertThat(firstTag.getValue().toString(StandardCharsets.UTF_8)).isEqualTo("value1OnCriterion2");
         } else if (criterion.getNameCount() == 0) {
-            assertTrue(criterion.getNameList().isEmpty());
-            assertEquals(1, criterion.getTagCount());
+            assertThat(criterion.getNameList()).isEmpty();
+            assertThat(criterion.getTagCount()).isEqualTo(1);
             io.axoniq.axonserver.grpc.event.dcb.Tag firstTag = criterion.getTagList().getFirst();
-            assertEquals("key1OnCriterion3", firstTag.getKey().toString(StandardCharsets.UTF_8));
-            assertEquals("value1OnCriterion3", firstTag.getValue().toString(StandardCharsets.UTF_8));
+            assertThat(firstTag.getKey().toString(StandardCharsets.UTF_8)).isEqualTo("key1OnCriterion3");
+            assertThat(firstTag.getValue().toString(StandardCharsets.UTF_8)).isEqualTo("value1OnCriterion3");
         } else {
             fail("This validation method only expects criterion with 0, 1, or 2 names!");
         }

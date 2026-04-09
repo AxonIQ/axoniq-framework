@@ -24,7 +24,7 @@ import org.junit.jupiter.api.*;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the {@link MetadataConverter}.
@@ -42,8 +42,8 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
 
         // Then
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
+        assertThat(result).isNotNull();
+        assertThat(result).isEmpty();
     }
 
     @Test
@@ -59,14 +59,14 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
 
         // Then
-        assertNotNull(result);
-        assertEquals(3, result.size());
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(3);
 
         source.forEach((key, value) -> {
-            assertTrue(result.containsKey(key));
+            assertThat(result).containsKey(key);
             MetaDataValue metaDataValue = result.get(key);
-            assertEquals(value, metaDataValue.getTextValue());
-            assertEquals(MetaDataValue.DataCase.TEXT_VALUE, metaDataValue.getDataCase());
+            assertThat(metaDataValue.getTextValue()).isEqualTo(value);
+            assertThat(metaDataValue.getDataCase()).isEqualTo(MetaDataValue.DataCase.TEXT_VALUE);
         });
     }
 
@@ -79,8 +79,8 @@ class MetadataConverterTest {
         Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
 
         // Then
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
+        assertThat(result).isNotNull();
+        assertThat(result).isEmpty();
     }
 
     @Test
@@ -106,11 +106,11 @@ class MetadataConverterTest {
         Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
 
         // Then
-        assertNotNull(result);
-        assertEquals(4, result.size());
-        assertEquals(textValue, result.get(textKey));
-        assertEquals(String.valueOf(doubleValue), result.get(doubleKey));
-        assertEquals(String.valueOf(numberValue), result.get(numberKey));
-        assertEquals(String.valueOf(booleanValue), result.get(booleanKey));
+        assertThat(result).isNotNull();
+        assertThat(result).hasSize(4);
+        assertThat(result.get(textKey)).isEqualTo(textValue);
+        assertThat(result.get(doubleKey)).isEqualTo(String.valueOf(doubleValue));
+        assertThat(result.get(numberKey)).isEqualTo(String.valueOf(numberValue));
+        assertThat(result.get(booleanKey)).isEqualTo(String.valueOf(booleanValue));
     }
 }

@@ -25,7 +25,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.OptionalInt;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the {@link TopologyChange}.
@@ -60,17 +60,17 @@ class TopologyChangeTest {
 
         TopologyChange testSubject = new TopologyChange(grpcBasedChange);
 
-        assertEquals(TopologyChange.Type.COMMAND_HANDLER_ADDED, testSubject.type());
-        assertEquals(TEST_CONTEXT, testSubject.context());
-        assertEquals(TEST_CLIENT_ID, testSubject.clientId());
-        assertEquals(TEST_CLIENT_STREAM_ID, testSubject.clientStreamId());
-        assertEquals(TEST_COMPONENT_NAME, testSubject.componentName());
+        assertThat(testSubject.type()).isEqualTo(TopologyChange.Type.COMMAND_HANDLER_ADDED);
+        assertThat(testSubject.context()).isEqualTo(TEST_CONTEXT);
+        assertThat(testSubject.clientId()).isEqualTo(TEST_CLIENT_ID);
+        assertThat(testSubject.clientStreamId()).isEqualTo(TEST_CLIENT_STREAM_ID);
+        assertThat(testSubject.componentName()).isEqualTo(TEST_COMPONENT_NAME);
         TopologyChange.HandlerSubscription handlerSubscription = testSubject.handler();
-        assertNotNull(handlerSubscription);
-        assertEquals(TEST_COMMAND_NAME, handlerSubscription.name());
+        assertThat(handlerSubscription).isNotNull();
+        assertThat(handlerSubscription.name()).isEqualTo(TEST_COMMAND_NAME);
         OptionalInt optionalLoadFactor = handlerSubscription.loadFactor();
-        assertTrue(optionalLoadFactor.isPresent());
-        assertEquals(TEST_LOAD_FACTOR, optionalLoadFactor.getAsInt());
+        assertThat(optionalLoadFactor).isPresent();
+        assertThat(optionalLoadFactor.getAsInt()).isEqualTo(TEST_LOAD_FACTOR);
     }
 
     @Test
@@ -91,17 +91,17 @@ class TopologyChangeTest {
 
         TopologyChange testSubject = new TopologyChange(grpcBasedChange);
 
-        assertEquals(TopologyChange.Type.COMMAND_HANDLER_REMOVED, testSubject.type());
-        assertEquals(TEST_CONTEXT, testSubject.context());
-        assertEquals(TEST_CLIENT_ID, testSubject.clientId());
-        assertEquals(TEST_CLIENT_STREAM_ID, testSubject.clientStreamId());
-        assertEquals(TEST_COMPONENT_NAME, testSubject.componentName());
+        assertThat(testSubject.type()).isEqualTo(TopologyChange.Type.COMMAND_HANDLER_REMOVED);
+        assertThat(testSubject.context()).isEqualTo(TEST_CONTEXT);
+        assertThat(testSubject.clientId()).isEqualTo(TEST_CLIENT_ID);
+        assertThat(testSubject.clientStreamId()).isEqualTo(TEST_CLIENT_STREAM_ID);
+        assertThat(testSubject.componentName()).isEqualTo(TEST_COMPONENT_NAME);
         TopologyChange.HandlerSubscription handlerSubscription = testSubject.handler();
-        assertNotNull(handlerSubscription);
-        assertEquals(TEST_COMMAND_NAME, handlerSubscription.name());
+        assertThat(handlerSubscription).isNotNull();
+        assertThat(handlerSubscription.name()).isEqualTo(TEST_COMMAND_NAME);
         OptionalInt optionalLoadFactor = handlerSubscription.loadFactor();
-        assertTrue(optionalLoadFactor.isPresent());
-        assertEquals(TEST_LOAD_FACTOR, optionalLoadFactor.getAsInt());
+        assertThat(optionalLoadFactor).isPresent();
+        assertThat(optionalLoadFactor.getAsInt()).isEqualTo(TEST_LOAD_FACTOR);
     }
 
     @Test
@@ -121,15 +121,15 @@ class TopologyChangeTest {
 
         TopologyChange testSubject = new TopologyChange(grpcBasedChange);
 
-        assertEquals(TopologyChange.Type.QUERY_HANDLER_ADDED, testSubject.type());
-        assertEquals(TEST_CONTEXT, testSubject.context());
-        assertEquals(TEST_CLIENT_ID, testSubject.clientId());
-        assertEquals(TEST_CLIENT_STREAM_ID, testSubject.clientStreamId());
-        assertEquals(TEST_COMPONENT_NAME, testSubject.componentName());
+        assertThat(testSubject.type()).isEqualTo(TopologyChange.Type.QUERY_HANDLER_ADDED);
+        assertThat(testSubject.context()).isEqualTo(TEST_CONTEXT);
+        assertThat(testSubject.clientId()).isEqualTo(TEST_CLIENT_ID);
+        assertThat(testSubject.clientStreamId()).isEqualTo(TEST_CLIENT_STREAM_ID);
+        assertThat(testSubject.componentName()).isEqualTo(TEST_COMPONENT_NAME);
         TopologyChange.HandlerSubscription handlerSubscription = testSubject.handler();
-        assertNotNull(handlerSubscription);
-        assertEquals(TEST_QUERY_NAME, handlerSubscription.name());
-        assertFalse(handlerSubscription.loadFactor().isPresent());
+        assertThat(handlerSubscription).isNotNull();
+        assertThat(handlerSubscription.name()).isEqualTo(TEST_QUERY_NAME);
+        assertThat(handlerSubscription.loadFactor().isPresent()).isFalse();
     }
 
     @Test
@@ -149,15 +149,15 @@ class TopologyChangeTest {
 
         TopologyChange testSubject = new TopologyChange(grpcBasedChange);
 
-        assertEquals(TopologyChange.Type.QUERY_HANDLER_REMOVED, testSubject.type());
-        assertEquals(TEST_CONTEXT, testSubject.context());
-        assertEquals(TEST_CLIENT_ID, testSubject.clientId());
-        assertEquals(TEST_CLIENT_STREAM_ID, testSubject.clientStreamId());
-        assertEquals(TEST_COMPONENT_NAME, testSubject.componentName());
+        assertThat(testSubject.type()).isEqualTo(TopologyChange.Type.QUERY_HANDLER_REMOVED);
+        assertThat(testSubject.context()).isEqualTo(TEST_CONTEXT);
+        assertThat(testSubject.clientId()).isEqualTo(TEST_CLIENT_ID);
+        assertThat(testSubject.clientStreamId()).isEqualTo(TEST_CLIENT_STREAM_ID);
+        assertThat(testSubject.componentName()).isEqualTo(TEST_COMPONENT_NAME);
         TopologyChange.HandlerSubscription handlerSubscription = testSubject.handler();
-        assertNotNull(handlerSubscription);
-        assertEquals(TEST_QUERY_NAME, handlerSubscription.name());
-        assertFalse(handlerSubscription.loadFactor().isPresent());
+        assertThat(handlerSubscription).isNotNull();
+        assertThat(handlerSubscription.name()).isEqualTo(TEST_QUERY_NAME);
+        assertThat(handlerSubscription.loadFactor().isPresent()).isFalse();
     }
 
     @Test
@@ -174,11 +174,11 @@ class TopologyChangeTest {
 
         TopologyChange testSubject = new TopologyChange(grpcBasedChange);
 
-        assertEquals(TopologyChange.Type.RESET, testSubject.type());
-        assertEquals(TEST_CONTEXT, testSubject.context());
-        assertEquals(TEST_CLIENT_ID, testSubject.clientId());
-        assertEquals(TEST_CLIENT_STREAM_ID, testSubject.clientStreamId());
-        assertEquals(TEST_COMPONENT_NAME, testSubject.componentName());
-        assertNull(testSubject.handler());
+        assertThat(testSubject.type()).isEqualTo(TopologyChange.Type.RESET);
+        assertThat(testSubject.context()).isEqualTo(TEST_CONTEXT);
+        assertThat(testSubject.clientId()).isEqualTo(TEST_CLIENT_ID);
+        assertThat(testSubject.clientStreamId()).isEqualTo(TEST_CLIENT_STREAM_ID);
+        assertThat(testSubject.componentName()).isEqualTo(TEST_COMPONENT_NAME);
+        assertThat(testSubject.handler()).isNull();
     }
 }

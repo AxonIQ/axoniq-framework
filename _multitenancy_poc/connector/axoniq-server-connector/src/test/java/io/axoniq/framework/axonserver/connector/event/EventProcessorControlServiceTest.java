@@ -36,7 +36,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -92,18 +92,16 @@ class EventProcessorControlServiceTest {
 
     @Test
     void cannotConstructForNullAxonServerConnectionManager() {
-        assertThrows(
-                NullPointerException.class,
+        assertThatThrownBy(
                 () -> new EventProcessorControlService(processingConfiguration, null, CONTEXT, processorSettings)
-        );
+        ).isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void cannotConstructForNullConfiguration() {
-        assertThrows(
-                NullPointerException.class,
+        assertThatThrownBy(
                 () -> new EventProcessorControlService(null, connectionManager, CONTEXT, processorSettings)
-        );
+        ).isInstanceOf(NullPointerException.class);
     }
 
     @Nested
