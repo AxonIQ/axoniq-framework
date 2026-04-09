@@ -17,7 +17,7 @@
  */
 
 /**
- * Spring Boot auto configuration for Postgres extension.
+ * Spring Boot auto configuration for Axoniq Framework.
  */
 @org.jspecify.annotations.NullMarked
 package io.axoniq.framework.springboot.autoconfig;
