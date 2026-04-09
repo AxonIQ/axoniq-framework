@@ -26,7 +26,7 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>axoniq-framework-spring-boot-autoconfigure</artifactId>
+    <artifactId>axoniq-spring-boot-autoconfigure</artifactId>
 
     <name>Axoniq Framework - Spring Boot Autoconfigure</name>
     <description>
