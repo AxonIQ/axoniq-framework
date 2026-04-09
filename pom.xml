@@ -69,6 +69,7 @@
         <module>build/parent</module>
         <module>axoniq-framework-bom</module>
 
+        <module>connector/axoniq-postgresql</module>
         <module>connector/axoniq-server-connector</module>
 
         <module>messaging/axoniq-distributed-messaging</module>
