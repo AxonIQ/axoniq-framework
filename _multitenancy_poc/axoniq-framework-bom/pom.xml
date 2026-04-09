@@ -49,6 +49,11 @@
             <!-- Axoniq Framework: Connectors -->
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-postgresql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-server-connector</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -57,6 +62,19 @@
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-distributed-messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Axoniq Framework: Spring -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-spring-boot-autoconfigure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

@@ -69,9 +69,12 @@
         <module>build/parent</module>
         <module>axoniq-framework-bom</module>
 
+        <module>connector/axoniq-postgresql</module>
         <module>connector/axoniq-server-connector</module>
 
         <module>messaging/axoniq-distributed-messaging</module>
+
+        <module>dependency-injection/spring</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>
@@ -90,8 +93,6 @@
         <name>AxonIQ B.V.</name>
         <url>https://axoniq.io</url>
     </organization>
-
-
 
     <!-- Dependencies are managed in axoniq-framework-parent -->
     <dependencyManagement />
