@@ -57,7 +57,12 @@ import org.springframework.context.annotation.Bean;
  * @see SequencedDeadLetterQueueFactory
  * @see JpaSequencedDeadLetterQueue
  */
-@AutoConfiguration(after = {JpaAutoConfiguration.class, ConverterAutoConfiguration.class})
+@AutoConfiguration(
+        afterName = {
+                "org.axonframework.extension.springboot.autoconfig.JpaAutoConfiguration",
+                "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration"
+        }
+)
 @ConditionalOnClass(EntityManagerFactory.class)
 @ConditionalOnBean(EntityManagerFactory.class)
 public class JpaDeadLetterQueueAutoConfiguration {
@@ -78,6 +83,7 @@ public class JpaDeadLetterQueueAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({EventConverter.class, Converter.class})
     public SequencedDeadLetterQueueFactory jpaDeadLetterQueueFactory(EntityManagerFactory entityManagerFactory,
                                                                      EventConverter eventConverter,
                                                                      Converter genericConverter) {

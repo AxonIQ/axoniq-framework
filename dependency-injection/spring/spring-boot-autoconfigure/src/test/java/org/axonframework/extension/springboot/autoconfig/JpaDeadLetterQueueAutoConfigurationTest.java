@@ -19,6 +19,8 @@
 package org.axonframework.extension.springboot.autoconfig;
 
 import jakarta.persistence.EntityManagerFactory;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -55,6 +57,16 @@ class JpaDeadLetterQueueAutoConfigurationTest {
         @Bean
         public EntityManagerFactory entityManagerFactory() {
             return mock();
+        }
+
+        @Bean
+        public EventConverter eventConverter() {
+            return mock(EventConverter.class);
+        }
+
+        @Bean
+        public Converter genericConverter() {
+            return mock(Converter.class);
         }
     }
 }

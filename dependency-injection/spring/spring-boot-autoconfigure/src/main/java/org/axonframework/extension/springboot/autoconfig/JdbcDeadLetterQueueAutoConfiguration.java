@@ -59,7 +59,13 @@ import javax.sql.DataSource;
  * @see SequencedDeadLetterQueueFactory
  * @see JdbcSequencedDeadLetterQueue
  */
-@AutoConfiguration(after = {JdbcAutoConfiguration.class, ConverterAutoConfiguration.class, JpaDeadLetterQueueAutoConfiguration.class})
+@AutoConfiguration(
+        afterName = {
+                "org.axonframework.extension.springboot.autoconfig.JdbcAutoConfiguration",
+                "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration",
+                "org.axonframework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration"
+        }
+)
 @ConditionalOnClass(DataSource.class)
 @ConditionalOnBean(DataSource.class)
 public class JdbcDeadLetterQueueAutoConfiguration {
@@ -95,6 +101,7 @@ public class JdbcDeadLetterQueueAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({EventConverter.class, Converter.class})
     public SequencedDeadLetterQueueFactory jdbcDeadLetterQueueFactory(DataSource dataSource,
                                                                       EventConverter eventConverter,
                                                                       Converter genericConverter,
