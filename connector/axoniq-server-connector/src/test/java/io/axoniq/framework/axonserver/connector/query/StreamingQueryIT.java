@@ -61,8 +61,8 @@ import java.util.Objects;
 import java.util.function.Function;
 
 import static java.util.Arrays.asList;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.axonframework.messaging.core.FluxUtils.streamToPublisher;
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * End-to-end tests for Streaming Query functionality. They include backwards compatibility end-to-end tests as well.
@@ -241,7 +241,8 @@ class StreamingQueryIT {
                 new MessageType(ListQuery.class), new ListQuery()
         );
 
-        assertEquals(asList("a", "b", "c", "d"), directQueryPayload(testQuery, LIST_OF_STRINGS, supportsStreaming));
+        assertThat(directQueryPayload(testQuery, LIST_OF_STRINGS, supportsStreaming))
+                .isEqualTo(asList("a", "b", "c", "d"));
     }
 
     private <R> Flux<R> streamingQueryPayloads(QueryMessage query, Class<R> cls, boolean supportsStreaming) {

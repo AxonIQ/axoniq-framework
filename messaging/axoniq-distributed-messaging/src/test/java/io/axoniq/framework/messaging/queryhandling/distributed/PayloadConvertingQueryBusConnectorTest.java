@@ -18,12 +18,12 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
-import org.axonframework.conversion.Converter;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class PayloadConvertingQueryBusConnectorTest {
@@ -49,23 +49,24 @@ class PayloadConvertingQueryBusConnectorTest {
     @Test
     void constructorRequiresNonNullDelegate() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> new PayloadConvertingQueryBusConnector(
+        assertThatThrownBy(() -> new PayloadConvertingQueryBusConnector(
                 null, new DelegatingMessageConverter(mockConverter), byte[].class
-        ));
+        )).isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructorRequiresNonNullConverter() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class,
-                     () -> new PayloadConvertingQueryBusConnector(mockDelegate, null, byte[].class));
+        assertThatThrownBy(() -> new PayloadConvertingQueryBusConnector(
+                mockDelegate, null, byte[].class
+        )).isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructorRequiresNonNullTargetType() {
         //noinspection DataFlowIssue
-        assertThrows(NullPointerException.class, () -> new PayloadConvertingQueryBusConnector(
+        assertThatThrownBy(() -> new PayloadConvertingQueryBusConnector(
                 mockDelegate, new DelegatingMessageConverter(mockConverter), null
-        ));
+        )).isInstanceOf(NullPointerException.class);
     }
 }

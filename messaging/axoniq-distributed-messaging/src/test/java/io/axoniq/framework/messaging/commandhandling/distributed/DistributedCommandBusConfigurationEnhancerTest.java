@@ -26,7 +26,7 @@ import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
@@ -50,11 +50,11 @@ class DistributedCommandBusConfigurationEnhancerTest {
                                    .build();
 
         CommandBus commandBus = config.getComponent(CommandBus.class);
-        assertInstanceOf(InterceptingCommandBus.class, commandBus);
-        assertTrue(config.hasComponent(DistributedCommandBusConfiguration.class));
+        assertThat(commandBus).isInstanceOf(InterceptingCommandBus.class);
+        assertThat(config.hasComponent(DistributedCommandBusConfiguration.class)).isTrue();
 
         // Verify that the delegate of InterceptingCommandBus is a DistributedCommandBus
-        assertInstanceOf(DistributedCommandBus.class, extractDelegate(commandBus));
+        assertThat(extractDelegate(commandBus)).isInstanceOf(DistributedCommandBus.class);
     }
 
     @Test
@@ -68,8 +68,8 @@ class DistributedCommandBusConfigurationEnhancerTest {
 
         CommandBus commandBus = config.getComponent(CommandBus.class);
         // Intercepting at all times, since we have a default CorrelationDataInterceptor.
-        assertInstanceOf(InterceptingCommandBus.class, commandBus);
-        assertFalse(config.hasComponent(DistributedCommandBusConfiguration.class));
+        assertThat(commandBus).isInstanceOf(InterceptingCommandBus.class);
+        assertThat(config.hasComponent(DistributedCommandBusConfiguration.class)).isFalse();
     }
 
     private static CommandBus extractDelegate(CommandBus commandBus) {

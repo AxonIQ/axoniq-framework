@@ -35,7 +35,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.io.IOException;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test suite implementation validating the {@link AxonServerEventStorageEngine}.
@@ -86,8 +86,8 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
         testSubject.describeTo(descriptor);
 
         Map<String, Object> describedProperties = descriptor.getDescribedProperties();
-        assertEquals(2, describedProperties.size());
-        assertTrue(describedProperties.containsKey("connection"));
-        assertTrue(describedProperties.containsKey("converter"));
+        assertThat(describedProperties).hasSize(2);
+        assertThat(describedProperties).containsKey("connection");
+        assertThat(describedProperties).containsKey("converter");
     }
 }

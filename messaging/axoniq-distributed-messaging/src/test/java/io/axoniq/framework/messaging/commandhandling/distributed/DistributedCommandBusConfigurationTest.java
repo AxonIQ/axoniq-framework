@@ -27,8 +27,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 /**
  * Test class validating the {@link DistributedCommandBusConfiguration}.
@@ -42,25 +43,27 @@ class DistributedCommandBusConfigurationTest {
     @Test
     void validLoadFactorIsAccepted() {
         testSubject = testSubject.loadFactor(1);
-        assertEquals(1, testSubject.loadFactor());
+        assertThat(testSubject.loadFactor()).isEqualTo(1);
     }
 
     @ParameterizedTest
     @ValueSource(ints = {0, -1})
     void invalidLoadFactorCausesException(int invalidLoadFactor) {
-        assertThrows(AxonConfigurationException.class, () -> testSubject.loadFactor(invalidLoadFactor));
+        assertThatThrownBy(() -> testSubject.loadFactor(invalidLoadFactor))
+                .isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void validNumberOfThreadsIsAccepted() {
         testSubject = testSubject.commandThreads(1);
-        assertEquals(1, testSubject.commandThreads());
+        assertThat(testSubject.commandThreads()).isEqualTo(1);
     }
 
     @ParameterizedTest
     @ValueSource(ints = {0, -1})
     void invalidNumberOfThreadCausesException(int invalidNumberOfThreads) {
-        assertThrows(AxonConfigurationException.class, () -> testSubject.commandThreads(invalidNumberOfThreads));
+        assertThatThrownBy(() -> testSubject.commandThreads(invalidNumberOfThreads))
+                .isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -72,6 +75,6 @@ class DistributedCommandBusConfigurationTest {
                 testSubject.executorServiceFactory()
                            .createExecutorService(mock(DistributedCommandBusConfiguration.class),
                                                   mock(BlockingQueue.class));
-        assertSame(myThreadPoolExecutor, executorService);
+        assertThat(executorService).isSameAs(myThreadPoolExecutor);
     }
 }

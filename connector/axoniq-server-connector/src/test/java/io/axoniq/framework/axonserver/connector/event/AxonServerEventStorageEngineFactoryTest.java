@@ -30,7 +30,7 @@ import java.util.Optional;
 
 import static io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngineFactory.CONTEXT_DELIMITER;
 import static io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngineFactory.ENGINE_PREFIX;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the {@link AxonServerEventStorageEngineFactory}.
@@ -55,7 +55,7 @@ class AxonServerEventStorageEngineFactoryTest {
 
     @Test
     void forTypeReturnsAxonServerEventStorageEngineClass() {
-        assertEquals(AxonServerEventStorageEngine.class, testSubject.forType());
+        assertThat(testSubject.forType()).isEqualTo(AxonServerEventStorageEngine.class);
     }
 
     @Test
@@ -69,12 +69,12 @@ class AxonServerEventStorageEngineFactoryTest {
         String testNameSix = CONTEXT_DELIMITER
                 + ENGINE_PREFIX;
 
-        assertFalse(testSubject.construct(testNameOne, configuration).isPresent());
-        assertFalse(testSubject.construct(testNameTwo, configuration).isPresent());
-        assertFalse(testSubject.construct(testNameThree, configuration).isPresent());
-        assertFalse(testSubject.construct(testNameFour, configuration).isPresent());
-        assertFalse(testSubject.construct(testNameFive, configuration).isPresent());
-        assertFalse(testSubject.construct(testNameSix, configuration).isPresent());
+        assertThat(testSubject.construct(testNameOne, configuration)).isNotPresent();
+        assertThat(testSubject.construct(testNameTwo, configuration)).isNotPresent();
+        assertThat(testSubject.construct(testNameThree, configuration)).isNotPresent();
+        assertThat(testSubject.construct(testNameFour, configuration)).isNotPresent();
+        assertThat(testSubject.construct(testNameFive, configuration)).isNotPresent();
+        assertThat(testSubject.construct(testNameSix, configuration)).isNotPresent();
     }
 
     @Test
@@ -82,8 +82,8 @@ class AxonServerEventStorageEngineFactoryTest {
         Optional<Component<AxonServerEventStorageEngine>> result =
                 testSubject.construct("storageEngine@default", configuration);
 
-        assertTrue(result.isPresent());
-        assertInstanceOf(AxonServerEventStorageEngine.class, result.get().resolve(configuration));
+        assertThat(result).isPresent();
+        assertThat(result.get().resolve(configuration)).isInstanceOf(AxonServerEventStorageEngine.class);
     }
 
     @Test
@@ -92,8 +92,8 @@ class AxonServerEventStorageEngineFactoryTest {
 
         testSubject.describeTo(descriptor);
 
-        assertEquals(2, descriptor.getDescribedProperties().size());
-        assertEquals(testSubject.forType(), descriptor.getProperty("type"));
-        assertEquals(ENGINE_PREFIX + CONTEXT_DELIMITER + "{context-name}", descriptor.getProperty("nameFormat"));
+        assertThat(descriptor.getDescribedProperties()).hasSize(2);
+        assertThat((Object) descriptor.getProperty("type")).isEqualTo(testSubject.forType());
+        assertThat((Object) descriptor.getProperty("nameFormat")).isEqualTo(ENGINE_PREFIX + CONTEXT_DELIMITER + "{context-name}");
     }
 }

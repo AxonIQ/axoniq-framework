@@ -32,7 +32,7 @@ import org.junit.jupiter.params.provider.*;
 
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
@@ -67,7 +67,7 @@ class DelegatingCommandBusConnectorTest {
         CompletableFuture<CommandResultMessage> result = wrappedConnector.dispatch(command, processingContext);
 
         // Then
-        assertSame(expectedResult, result);
+        assertThat(result).isSameAs(expectedResult);
         verify(delegate).dispatch(command, processingContext);
     }
 
@@ -84,7 +84,7 @@ class DelegatingCommandBusConnectorTest {
         CompletableFuture<CommandResultMessage> result = wrappedConnector.dispatch(command, null);
 
         // Then
-        assertSame(expectedResult, result);
+        assertThat(result).isSameAs(expectedResult);
         verify(delegate).dispatch(command, null);
     }
 
@@ -105,7 +105,7 @@ class DelegatingCommandBusConnectorTest {
         when(delegate.unsubscribe(commandName)).thenReturn(expectedResult);
 
         boolean result = wrappedConnector.unsubscribe(commandName);
-        assertEquals(expectedResult, result);
+        assertThat(result).isEqualTo(expectedResult);
         verify(delegate).unsubscribe(commandName);
     }
 

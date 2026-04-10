@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
+import org.assertj.core.api.Assertions;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.queryhandling.QueryBus;
@@ -26,7 +27,7 @@ import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
@@ -52,11 +53,11 @@ class DistributedQueryBusConfigurationEnhancerTest {
 
         // then
         QueryBus queryBus = config.getComponent(QueryBus.class);
-        assertInstanceOf(InterceptingQueryBus.class, queryBus);
-        assertTrue(config.hasComponent(DistributedQueryBusConfiguration.class));
+        assertThat(queryBus).isInstanceOf(InterceptingQueryBus.class);
+        assertThat(config.hasComponent(DistributedQueryBusConfiguration.class)).isTrue();
 
         // Verify that the delegate of InterceptingQueryBus is a DistributedQueryBus
-        assertInstanceOf(DistributedQueryBus.class, extractDelegate(queryBus));
+        assertThat(extractDelegate(queryBus)).isInstanceOf(DistributedQueryBus.class);
     }
 
     @Test
@@ -72,8 +73,8 @@ class DistributedQueryBusConfigurationEnhancerTest {
         // then
         QueryBus queryBus = config.getComponent(QueryBus.class);
         // Intercepting at all times, since we have a default CorrelationDataInterceptor.
-        assertInstanceOf(InterceptingQueryBus.class, queryBus);
-        assertFalse(config.hasComponent(DistributedQueryBusConfiguration.class));
+        assertThat(queryBus).isInstanceOf(InterceptingQueryBus.class);
+        assertThat(config.hasComponent(DistributedQueryBusConfiguration.class)).isFalse();
     }
 
     private static QueryBus extractDelegate(QueryBus queryBus) {

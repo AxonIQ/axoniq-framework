@@ -48,7 +48,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.axoniq.framework.axonserver.connector.util.AssertUtils.assertWithin;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for {@link AxonServerConnectionManager}.
@@ -92,26 +93,26 @@ class AxonServerConnectionManagerTest {
                                                                              .tagsConfiguration(testTags)
                                                                              .build();
 
-        assertNotNull(testSubject.getConnection(TEST_CONTEXT));
+        assertThat(testSubject.getConnection(TEST_CONTEXT)).isNotNull();
 
         List<ClientIdentification> clientIdentificationRequests = stubServer.getPlatformService()
                                                                             .getClientIdentificationRequests();
-        assertEquals(1, clientIdentificationRequests.size());
+        assertThat(clientIdentificationRequests).hasSize(1);
         Map<String, String> expectedTags = clientIdentificationRequests.get(0).getTagsMap();
-        assertNotNull(expectedTags);
-        assertEquals(1, expectedTags.size());
-        assertEquals("value", expectedTags.get("key"));
+        assertThat(expectedTags).isNotNull();
+        assertThat(expectedTags).hasSize(1);
+        assertThat(expectedTags.get("key")).isEqualTo("value");
 
         assertWithin(
                 1, TimeUnit.SECONDS,
-                () -> assertEquals(1, secondNode.getPlatformService().getClientIdentificationRequests().size())
+                () -> assertThat(secondNode.getPlatformService().getClientIdentificationRequests()).hasSize(1)
         );
 
         List<ClientIdentification> clients = secondNode.getPlatformService().getClientIdentificationRequests();
         Map<String, String> connectionExpectedTags = clients.get(0).getTagsMap();
-        assertNotNull(connectionExpectedTags);
-        assertEquals(1, connectionExpectedTags.size());
-        assertEquals("value", connectionExpectedTags.get("key"));
+        assertThat(connectionExpectedTags).isNotNull();
+        assertThat(connectionExpectedTags).hasSize(1);
+        assertThat(connectionExpectedTags.get("key")).isEqualTo("value");
     }
 
     @Test
@@ -139,10 +140,10 @@ class AxonServerConnectionManagerTest {
             connection.commandChannel();
             assertWithin(
                     2, TimeUnit.SECONDS,
-                    () -> assertTrue(connection.isConnectionFailed(), "Was not expecting to get a connection")
+                    () -> assertThat(connection.isConnectionFailed()).as("Was not expecting to get a connection").isTrue()
             );
         } catch (AxonServerException e) {
-            assertTrue(e.getMessage().contains("connection"));
+            assertThat(e.getMessage()).contains("connection");
         }
     }
 
@@ -154,12 +155,12 @@ class AxonServerConnectionManagerTest {
                                                                              .build();
         testSubject.start();
 
-        assertNotNull(testSubject.getConnection(testConfig.getContext()));
+        assertThat(testSubject.getConnection(testConfig.getContext())).isNotNull();
 
         assertWithin(
                 250, TimeUnit.MILLISECONDS,
                 // Retrieving the messages from the secondNode, as the stubServer forwards all messages to this instance
-                () -> assertEquals(1, secondNode.getPlatformService().getHeartbeatMessages(testConfig.getContext()).size())
+                () -> assertThat(secondNode.getPlatformService().getHeartbeatMessages(testConfig.getContext())).hasSize(1)
         );
     }
 
@@ -171,15 +172,15 @@ class AxonServerConnectionManagerTest {
                                                                              .build();
         testSubject.start();
 
-        assertNotNull(testSubject.getConnection(testConfig.getContext()));
-        assertNotNull(testSubject.getConnection("context2"));
+        assertThat(testSubject.getConnection(testConfig.getContext())).isNotNull();
+        assertThat(testSubject.getConnection("context2")).isNotNull();
 
         assertWithin(
                 250, TimeUnit.MILLISECONDS,
                 // Retrieving the messages from the secondNode, as the stubServer forwards all messages to this instance
                 () -> {
-                    assertFalse(secondNode.getPlatformService().getHeartbeatMessages(testConfig.getContext()).isEmpty());
-                    assertFalse(secondNode.getPlatformService().getHeartbeatMessages("context2").isEmpty());
+                    assertThat(secondNode.getPlatformService().getHeartbeatMessages(testConfig.getContext())).isNotEmpty();
+                    assertThat(secondNode.getPlatformService().getHeartbeatMessages("context2")).isNotEmpty();
                 }
         );
     }
@@ -192,12 +193,12 @@ class AxonServerConnectionManagerTest {
                                                                              .build();
         testSubject.start();
 
-        assertNotNull(testSubject.getConnection(testConfig.getContext()));
+        assertThat(testSubject.getConnection(testConfig.getContext())).isNotNull();
 
         assertWithin(
                 250, TimeUnit.MILLISECONDS,
                 // Retrieving the messages from the secondNode, as the stubServer forwards all messages to this instance
-                () -> assertTrue(secondNode.getPlatformService().getHeartbeatMessages().isEmpty())
+                () -> assertThat(secondNode.getPlatformService().getHeartbeatMessages()).isEmpty()
         );
     }
 
@@ -222,8 +223,8 @@ class AxonServerConnectionManagerTest {
                                            )
                                            .build();
 
-        assertNotNull(testSubject.getConnection());
-        assertTrue(interceptorCalled.get());
+        assertThat(testSubject.getConnection()).isNotNull();
+        assertThat(interceptorCalled.get()).isTrue();
     }
 
     @Test
@@ -234,10 +235,10 @@ class AxonServerConnectionManagerTest {
 
         // Creates a connection for the default context
         AxonServerConnection result = testSubject.getConnection();
-        assertWithin(250, TimeUnit.MILLISECONDS, () -> assertTrue(result.isReady()));
+        assertWithin(250, TimeUnit.MILLISECONDS, () -> assertThat(result.isReady()).isTrue());
 
-        assertTrue(testSubject.isConnected(TEST_CONTEXT));
-        assertFalse(testSubject.isConnected("unknown-context"));
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isTrue();
+        assertThat(testSubject.isConnected("unknown-context")).isFalse();
     }
 
     @Test
@@ -251,19 +252,19 @@ class AxonServerConnectionManagerTest {
         AxonServerConnection channelOne = testSubject.getConnection(TEST_CONTEXT);
         AxonServerConnection channelTwo = testSubject.getConnection("some-other-context");
         assertWithin(250, TimeUnit.MILLISECONDS, () -> {
-            assertTrue(channelOne.isReady());
-            assertTrue(channelTwo.isReady());
+            assertThat(channelOne.isReady()).isTrue();
+            assertThat(channelTwo.isReady()).isTrue();
         });
 
-        assertTrue(testSubject.isConnected(TEST_CONTEXT));
-        assertTrue(testSubject.isConnected("some-other-context"));
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isTrue();
+        assertThat(testSubject.isConnected("some-other-context")).isTrue();
 
         // Shutdown the connection manager
         testSubject.shutdown();
 
-        assertFalse(testSubject.isConnected(TEST_CONTEXT));
-        assertFalse(testSubject.isConnected("some-other-context"));
-        assertEquals(2, secondNode.getPlatformService().getNumberOfCompletedStreams());
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isFalse();
+        assertThat(testSubject.isConnected("some-other-context")).isFalse();
+        assertThat(secondNode.getPlatformService().getNumberOfCompletedStreams()).isEqualTo(2);
     }
 
     @Test
@@ -276,19 +277,19 @@ class AxonServerConnectionManagerTest {
         AxonServerConnection channelOne = testSubject.getConnection(TEST_CONTEXT);
         AxonServerConnection channelTwo = testSubject.getConnection("some-other-context");
         assertWithin(250, TimeUnit.MILLISECONDS, () -> {
-            assertTrue(channelOne.isReady());
-            assertTrue(channelTwo.isReady());
+            assertThat(channelOne.isReady()).isTrue();
+            assertThat(channelTwo.isReady()).isTrue();
         });
 
-        assertTrue(testSubject.isConnected(TEST_CONTEXT));
-        assertTrue(testSubject.isConnected("some-other-context"));
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isTrue();
+        assertThat(testSubject.isConnected("some-other-context")).isTrue();
 
         // Close all connections
         testSubject.disconnect();
 
-        assertFalse(testSubject.isConnected(TEST_CONTEXT));
-        assertFalse(testSubject.isConnected("some-other-context"));
-        assertEquals(2, secondNode.getPlatformService().getNumberOfCompletedStreams());
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isFalse();
+        assertThat(testSubject.isConnected("some-other-context")).isFalse();
+        assertThat(secondNode.getPlatformService().getNumberOfCompletedStreams()).isEqualTo(2);
     }
 
     @Test
@@ -301,19 +302,19 @@ class AxonServerConnectionManagerTest {
         AxonServerConnection channelOne = testSubject.getConnection(TEST_CONTEXT);
         AxonServerConnection channelTwo = testSubject.getConnection("some-other-context");
         assertWithin(250, TimeUnit.MILLISECONDS, () -> {
-            assertTrue(channelOne.isReady());
-            assertTrue(channelTwo.isReady());
+            assertThat(channelOne.isReady()).isTrue();
+            assertThat(channelTwo.isReady()).isTrue();
         });
 
-        assertTrue(testSubject.isConnected(TEST_CONTEXT));
-        assertTrue(testSubject.isConnected("some-other-context"));
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isTrue();
+        assertThat(testSubject.isConnected("some-other-context")).isTrue();
 
         // Will close the default connection only
         testSubject.disconnect(TEST_CONTEXT);
 
-        assertFalse(testSubject.isConnected(TEST_CONTEXT));
-        assertTrue(testSubject.isConnected("some-other-context"));
-        assertEquals(1, secondNode.getPlatformService().getNumberOfCompletedStreams());
+        assertThat(testSubject.isConnected(TEST_CONTEXT)).isFalse();
+        assertThat(testSubject.isConnected("some-other-context")).isTrue();
+        assertThat(secondNode.getPlatformService().getNumberOfCompletedStreams()).isEqualTo(1);
     }
 
     @Test
@@ -326,19 +327,19 @@ class AxonServerConnectionManagerTest {
         AxonServerConnection channelTwo = testSubject.getConnection("some-other-context");
 
         assertWithin(250, TimeUnit.MILLISECONDS, () -> {
-            assertTrue(channelOne.isReady());
-            assertTrue(channelTwo.isReady());
+            assertThat(channelOne.isReady()).isTrue();
+            assertThat(channelTwo.isReady()).isTrue();
         });
 
         Map<String, Boolean> results = testSubject.connections();
 
         Boolean testContextConnection = results.get(TEST_CONTEXT);
-        assertNotNull(testContextConnection);
-        assertTrue(testContextConnection);
+        assertThat(testContextConnection).isNotNull();
+        assertThat(testContextConnection).isTrue();
 
         Boolean someOtherContextConnection = results.get("some-other-context");
-        assertNotNull(someOtherContextConnection);
-        assertTrue(someOtherContextConnection);
+        assertThat(someOtherContextConnection).isNotNull();
+        assertThat(someOtherContextConnection).isTrue();
     }
 
     @Test
@@ -360,37 +361,42 @@ class AxonServerConnectionManagerTest {
         ReconnectConfiguration resultReconnectConfig = ReflectionUtils.getFieldValue(
                 AxonServerConnectionFactory.class.getDeclaredField("reconnectConfiguration"), connectionFactory
         );
-        assertEquals(expectedReconnectInterval, resultReconnectConfig.getReconnectInterval());
-        assertFalse(resultReconnectConfig.isForcePlatformReconnect());
+        assertThat(resultReconnectConfig.getReconnectInterval()).isEqualTo(expectedReconnectInterval);
+        assertThat(resultReconnectConfig.isForcePlatformReconnect()).isFalse();
     }
 
     @Test
     void buildWithNullAxonServerConfigurationThrowsAxonConfigurationException() {
         AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder();
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.axonServerConfiguration(null));
+        assertThatThrownBy(() -> builderTestSubject.axonServerConfiguration(null))
+                .isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNullTagsConfigurationThrowsAxonConfigurationException() {
         AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder();
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.tagsConfiguration(null));
+        assertThatThrownBy(() -> builderTestSubject.tagsConfiguration(null))
+                .isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithoutAxonServerConfigurationThrowsAxonConfigurationException() {
         AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder();
-        assertThrows(AxonConfigurationException.class, builderTestSubject::build);
+        assertThatThrownBy(builderTestSubject::build)
+                .isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNullRoutingServersThrowsAxonConfigurationException() {
         AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder();
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.routingServers(null));
+        assertThatThrownBy(() -> builderTestSubject.routingServers(null))
+                .isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyRoutingServersThrowsAxonConfigurationException() {
         AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder();
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.routingServers(""));
+        assertThatThrownBy(() -> builderTestSubject.routingServers(""))
+                .isInstanceOf(AxonConfigurationException.class);
     }
 }

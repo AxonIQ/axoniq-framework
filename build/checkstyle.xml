@@ -37,6 +37,13 @@
                              org.springframework.lang.NonNull"
             />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format"
+                      value="import\s+static\s+org\.junit\.jupiter\.api\.Assertions\..*"/>
+            <property name="message"
+                      value="Use AssertJ instead of JUnit Assertions"/>
+            <property name="ignoreComments" value="true"/>
+        </module>
     </module>
     <module name="RegexpSingleline">
         <property name="format" value="System\.out"/>
