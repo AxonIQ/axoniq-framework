@@ -32,7 +32,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.anyString;
@@ -79,15 +80,15 @@ class ProcessingContextUtilsTest {
     @Test
     void testConstructorIsPrivate() throws NoSuchMethodException {
         Constructor<ProcessingContextUtils> constructor = ProcessingContextUtils.class.getDeclaredConstructor();
-        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        assertThat(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers())).isTrue();
         constructor.setAccessible(true);
-        assertDoesNotThrow(() -> { constructor.newInstance(); });
+        assertThatCode(constructor::newInstance).doesNotThrowAnyException();
     }
 
     @Test
     void testCopyResources() {
         ProcessingContext result = ProcessingContextUtils.copyResources(parentContext, childContext);
-        assertEquals(childContext, result);
+        assertThat(result).isEqualTo(childContext);
         verify(childContext).putResource(any(), eq("testValue"));
     }
 
@@ -99,7 +100,7 @@ class ProcessingContextUtilsTest {
                 null, unitOfWorkFactory, executor, parentContext, action
         );
 
-        assertEquals("done", resultFuture.join());
+        assertThat(resultFuture.join()).isEqualTo("done");
         verify(unitOfWorkFactory).create(any(Function.class));
         verify(childContext).putResource(any(), eq("testValue"));
         // verify lifecycle hooks registration
@@ -116,7 +117,7 @@ class ProcessingContextUtilsTest {
                 "myId", unitOfWorkFactory, executor, parentContext, action
         );
 
-        assertEquals("done", resultFuture.join());
+        assertThat(resultFuture.join()).isEqualTo("done");
         verify(unitOfWorkFactory).create(anyString(), any(Function.class));
     }
 

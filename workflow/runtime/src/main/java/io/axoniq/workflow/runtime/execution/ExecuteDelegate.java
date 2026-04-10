@@ -15,7 +15,7 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.delegate;
+package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
@@ -25,7 +25,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import io.axoniq.workflow.runtime.execution.WorkflowStepResults;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;

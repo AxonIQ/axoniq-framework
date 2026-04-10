@@ -25,7 +25,7 @@ import org.mockito.*;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -56,7 +56,7 @@ class AssociationValueTest {
 
         Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
 
-        assertTrue(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isTrue();
         verify(retriever).apply(eventMessage, converter);
     }
 
@@ -69,7 +69,7 @@ class AssociationValueTest {
 
         Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
 
-        assertFalse(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isFalse();
     }
 
     @Test
@@ -80,7 +80,7 @@ class AssociationValueTest {
 
         Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
 
-        assertTrue(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isTrue();
     }
 
     @Test
@@ -93,12 +93,12 @@ class AssociationValueTest {
 
         Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
 
-        assertTrue(predicate.test(eventMessage), "Should match 'first'");
+        assertThat(predicate.test(eventMessage)).withFailMessage("Should match 'first'").isTrue();
 
         valueHolder[0] = "second";
-        assertFalse(predicate.test(eventMessage), "Should not match 'first' anymore");
+        assertThat(predicate.test(eventMessage)).withFailMessage("Should not match 'first' anymore").isFalse();
 
         when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("second");
-        assertTrue(predicate.test(eventMessage), "Should match 'second'");
+        assertThat(predicate.test(eventMessage)).withFailMessage("Should match 'second'").isTrue();
     }
 }

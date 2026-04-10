@@ -6,23 +6,22 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 class WorkflowReflectionUtilsTest {
 
     @Test
     void testConstructorIsPrivate() throws NoSuchMethodException {
         Constructor<WorkflowReflectionUtils> constructor = WorkflowReflectionUtils.class.getDeclaredConstructor();
-        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        assertThat(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers())).isTrue();
         constructor.setAccessible(true);
-        assertDoesNotThrow(() -> { constructor.newInstance(); });
+        assertThatCode(constructor::newInstance).doesNotThrowAnyException();
     }
 
     @Test
     void testCreateDefaultInstance() {
         Optional<String> instance = WorkflowReflectionUtils.createDefaultInstance(String.class);
-        assertTrue(instance.isPresent());
-        assertEquals("", instance.get());
+        assertThat(instance).contains("");
     }
 
     @Test
@@ -32,50 +31,55 @@ class WorkflowReflectionUtilsTest {
             NoDefaultConstructor(String s) {}
         }
         Optional<NoDefaultConstructor> instance = WorkflowReflectionUtils.createDefaultInstance(NoDefaultConstructor.class);
-        assertFalse(instance.isPresent());
+        assertThat(instance).isEmpty();
     }
 
     @Test
     void testRequireIsAssignableFrom() {
-        assertEquals(String.class, WorkflowReflectionUtils.requireIsAssignableFrom(CharSequence.class, String.class));
+        assertThat(WorkflowReflectionUtils.requireIsAssignableFrom(CharSequence.class, String.class)).isEqualTo(String.class);
     }
 
     @Test
     void testRequireIsAssignableFromFailure() {
-        assertThrows(IllegalArgumentException.class, () ->
-            WorkflowReflectionUtils.requireIsAssignableFrom(String.class, Integer.class));
+        assertThatThrownBy(() ->
+            WorkflowReflectionUtils.requireIsAssignableFrom(String.class, Integer.class))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testInvoke() throws NoSuchMethodException {
         Method method = String.class.getMethod("length");
         Object result = WorkflowReflectionUtils.invoke("hello", method);
-        assertEquals(5, result);
+        assertThat(result).isEqualTo(5);
     }
 
     @Test
     void testInvokeWithArgs() throws NoSuchMethodException {
         Method method = String.class.getMethod("substring", int.class, int.class);
         Object result = WorkflowReflectionUtils.invoke("hello", method, 1, 3);
-        assertEquals("el", result);
+        assertThat(result).isEqualTo("el");
     }
 
     @Test
     void testInvokeInvocationTargetException() throws NoSuchMethodException {
         Method method = TestTarget.class.getMethod("throwException");
         TestTarget target = new TestTarget();
-        RuntimeException ex = assertThrows(RuntimeException.class, () ->
-            WorkflowReflectionUtils.invoke(target, method));
-        assertEquals("test exception", ex.getCause().getMessage());
+        assertThatThrownBy(() ->
+            WorkflowReflectionUtils.invoke(target, method))
+                .isInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(RuntimeException.class)
+                .extracting(Throwable::getCause)
+                .satisfies(cause -> assertThat(cause.getMessage()).isEqualTo("test exception"));
     }
 
     @Test
     void testInvokeIllegalAccessException() throws NoSuchMethodException {
         Method method = TestTarget.class.getDeclaredMethod("privateMethod");
         TestTarget target = new TestTarget();
-        RuntimeException ex = assertThrows(RuntimeException.class, () ->
-            WorkflowReflectionUtils.invoke(target, method));
-        assertTrue(ex.getMessage().contains("Cannot access"));
+        assertThatThrownBy(() ->
+            WorkflowReflectionUtils.invoke(target, method))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Cannot access");
     }
 
     public static class TestTarget {

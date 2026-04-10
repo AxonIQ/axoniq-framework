@@ -24,7 +24,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test for {@link DefaultEventNameCustomizer}.
@@ -36,63 +36,63 @@ class DefaultEventNameCustomizerTest {
 
         @Test
         void testDefaults() {
-            assertNotNull(DefaultEventNameCustomizer.Builder.defaults());
+            assertThat(DefaultEventNameCustomizer.Builder.defaults()).isNotNull();
         }
 
         @Test
         void testBaseName() {
             var customizer = DefaultEventNameCustomizer.Builder.baseName("MyBase");
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("MyBaseCompleted", name.localName());
+            assertThat(name.localName()).isEqualTo("MyBaseCompleted");
         }
 
         @Test
         void testNamespace() {
             var customizer = DefaultEventNameCustomizer.Builder.namespace("my.ns");
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("my.ns", name.namespace());
+            assertThat(name.namespace()).isEqualTo("my.ns");
         }
 
         @Test
         void testStepCompleted() {
             var customizer = DefaultEventNameCustomizer.Builder.stepCompleted("Done");
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("StepDone", name.localName());
+            assertThat(name.localName()).isEqualTo("StepDone");
         }
 
         @Test
         void testStepStarted() {
             var customizer = DefaultEventNameCustomizer.Builder.stepStarted("Beginning");
             var name = customizer.getEventName("step", Map.of(), StepStatus.STARTED);
-            assertEquals("StepBeginning", name.localName());
+            assertThat(name.localName()).isEqualTo("StepBeginning");
         }
 
         @Test
         void testStepFailed() {
             var customizer = DefaultEventNameCustomizer.Builder.stepFailed("Broken");
             var name = customizer.getEventName("step", Map.of(), StepStatus.FAILED);
-            assertEquals("StepBroken", name.localName());
+            assertThat(name.localName()).isEqualTo("StepBroken");
         }
 
         @Test
         void testStepTimedOut() {
             var customizer = DefaultEventNameCustomizer.Builder.stepTimedOut("Late");
             var name = customizer.getEventName("step", Map.of(), StepStatus.TIMED_OUT);
-            assertEquals("StepLate", name.localName());
+            assertThat(name.localName()).isEqualTo("StepLate");
         }
 
         @Test
         void testAppendToBaseName() {
             var customizer = DefaultEventNameCustomizer.Builder.appendToBaseName(false);
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("Completed", name.localName());
+            assertThat(name.localName()).isEqualTo("Completed");
         }
 
         @Test
         void testCapitalizeSimpleName() {
             var customizer = DefaultEventNameCustomizer.Builder.capitalizeSimpleName(false);
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("stepCompleted", name.localName());
+            assertThat(name.localName()).isEqualTo("stepCompleted");
         }
 
         @Test
@@ -100,34 +100,32 @@ class DefaultEventNameCustomizerTest {
             var customizer = DefaultEventNameCustomizer.Builder.payloadCustomization(pc -> new QualifiedName("custom",
                                                                                                              "name"));
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("custom", name.namespace());
-            assertEquals("name", name.localName());
+            assertThat(name.namespace()).isEqualTo("custom");
+            assertThat(name.localName()).isEqualTo("name");
         }
 
         @Test
         void testWorkflowCompleted() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowCompleted("Finished");
-            assertEquals("StepFinished",
-                         customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName()).isEqualTo("StepFinished");
         }
 
         @Test
         void testWorkflowStarted() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowStarted("Start");
-            assertEquals("StepStart", customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName()).isEqualTo("StepStart");
         }
 
         @Test
         void testWorkflowTimedOut() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowTimedOut("Timeout");
-            assertEquals("StepTimeout",
-                         customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
         }
 
         @Test
         void testWorkflowFailed() {
             var customizer = DefaultEventNameCustomizer.Builder.defaults().workflowFailed("Fail");
-            assertEquals("StepFail", customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName()).isEqualTo("StepFail");
         }
     }
 
@@ -139,83 +137,81 @@ class DefaultEventNameCustomizerTest {
         @Test
         void testBaseName() {
             customizer.baseName("Base");
-            assertEquals("BaseCompleted", customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("BaseCompleted");
         }
 
         @Test
         void testNamespace() {
             customizer.namespace("ns");
-            assertEquals("ns", customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).namespace());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).namespace()).isEqualTo("ns");
         }
 
         @Test
         void testAppendToBaseName() {
             customizer.appendToBaseName(false);
-            assertEquals("Completed", customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("Completed");
         }
 
         @Test
         void testCapitalizeSimpleName() {
             customizer.capitalizeSimpleName(false);
-            assertEquals("stepCompleted", customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("stepCompleted");
         }
 
         @Test
         void testStepCompleted() {
             customizer.stepCompleted("Finished");
-            assertEquals("StepFinished", customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.COMPLETED).localName()).isEqualTo("StepFinished");
         }
 
         @Test
         void testStepStarted() {
             customizer.stepStarted("Start");
-            assertEquals("StepStart", customizer.getEventName("step", Map.of(), StepStatus.STARTED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.STARTED).localName()).isEqualTo("StepStart");
         }
 
         @Test
         void testStepTimedOut() {
             customizer.stepTimedOut("Timeout");
-            assertEquals("StepTimeout", customizer.getEventName("step", Map.of(), StepStatus.TIMED_OUT).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
         }
 
         @Test
         void testStepFailed() {
             customizer.stepFailed("Fail");
-            assertEquals("StepFail", customizer.getEventName("step", Map.of(), StepStatus.FAILED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.FAILED).localName()).isEqualTo("StepFail");
         }
 
         @Test
         void testWorkflowCompleted() {
             customizer.workflowCompleted("Finished");
-            assertEquals("StepFinished",
-                         customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.COMPLETED).localName()).isEqualTo("StepFinished");
         }
 
         @Test
         void testWorkflowStarted() {
             customizer.workflowStarted("Start");
-            assertEquals("StepStart", customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.STARTED).localName()).isEqualTo("StepStart");
         }
 
         @Test
         void testWorkflowTimedOut() {
             customizer.workflowTimedOut("Timeout");
-            assertEquals("StepTimeout",
-                         customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
         }
 
         @Test
         void testWorkflowFailed() {
             customizer.workflowFailed("Fail");
-            assertEquals("StepFail", customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName());
+            assertThat(customizer.getEventName("step", Map.of(), WorkflowStatus.FAILED).localName()).isEqualTo("StepFail");
         }
 
         @Test
         void testPayloadCustomization() {
             customizer.payloadCustomization(pc -> new QualifiedName("p", "c"));
             var name = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("p", name.namespace());
-            assertEquals("c", name.localName());
+            assertThat(name.namespace()).isEqualTo("p");
+            assertThat(name.localName()).isEqualTo("c");
         }
     }
 
@@ -230,8 +226,8 @@ class DefaultEventNameCustomizerTest {
 
             var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
             // Child baseName should win, Parent namespace should stay
-            assertEquals("parent.ns", name.namespace());
-            assertEquals("ChildCompleted", name.localName());
+            assertThat(name.namespace()).isEqualTo("parent.ns");
+            assertThat(name.localName()).isEqualTo("ChildCompleted");
         }
 
         @Test
@@ -242,8 +238,8 @@ class DefaultEventNameCustomizerTest {
 
             var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
             // Child is default, so Parent namespace should win
-            assertEquals("parent.ns", name.namespace());
-            assertEquals("ParentCompleted", name.localName());
+            assertThat(name.namespace()).isEqualTo("parent.ns");
+            assertThat(name.localName()).isEqualTo("ParentCompleted");
         }
 
         @Test
@@ -254,8 +250,8 @@ class DefaultEventNameCustomizerTest {
 
             var name = merged.getEventName("step", Map.of(), StepStatus.COMPLETED);
             // Parent namespace should win
-            assertEquals("parent.ns", name.namespace());
-            assertEquals("StepCompleted", name.localName());
+            assertThat(name.namespace()).isEqualTo("parent.ns");
+            assertThat(name.localName()).isEqualTo("StepCompleted");
         }
 
         @Test
@@ -266,8 +262,8 @@ class DefaultEventNameCustomizerTest {
             var merged = DefaultEventNameCustomizer.Builder.merge(parent, child);
 
             var name = merged.getEventName("step", Map.of(), WorkflowStatus.COMPLETED);
-            assertEquals("parent.ns", name.namespace());
-            assertEquals("StepChildDone", name.localName());
+            assertThat(name.namespace()).isEqualTo("parent.ns");
+            assertThat(name.localName()).isEqualTo("StepChildDone");
         }
     }
 
@@ -279,7 +275,7 @@ class DefaultEventNameCustomizerTest {
             var parent = DefaultEventNameCustomizer.Builder.namespace("my.ns");
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("my.ns", name.namespace());
+            assertThat(name.namespace()).isEqualTo("my.ns");
         }
 
         @Test
@@ -287,7 +283,7 @@ class DefaultEventNameCustomizerTest {
             var parent = DefaultEventNameCustomizer.Builder.capitalizeSimpleName(false);
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("stepCompleted", name.localName());
+            assertThat(name.localName()).isEqualTo("stepCompleted");
         }
 
         @Test
@@ -296,7 +292,7 @@ class DefaultEventNameCustomizerTest {
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
             // appendToBaseName resets to true (default), so step name is included
-            assertEquals("StepCompleted", name.localName());
+            assertThat(name.localName()).isEqualTo("StepCompleted");
         }
 
         @Test
@@ -304,7 +300,7 @@ class DefaultEventNameCustomizerTest {
             var parent = DefaultEventNameCustomizer.Builder.stepCompleted("Done");
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("StepDone", name.localName());
+            assertThat(name.localName()).isEqualTo("StepDone");
         }
 
         @Test
@@ -313,7 +309,7 @@ class DefaultEventNameCustomizerTest {
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("myStep", Map.of(), StepStatus.COMPLETED);
             // Should use the step name "myStep" instead of parent's baseName "Order"
-            assertEquals("MyStepCompleted", name.localName());
+            assertThat(name.localName()).isEqualTo("MyStepCompleted");
         }
 
         @Test
@@ -324,8 +320,8 @@ class DefaultEventNameCustomizerTest {
             var inherited = parent.forStepInheritance();
             var name = inherited.getEventName("step", Map.of(), StepStatus.COMPLETED);
             // Should use default behavior, not the custom payload function
-            assertEquals("io.axoniq.workflow", name.namespace());
-            assertEquals("StepCompleted", name.localName());
+            assertThat(name.namespace()).isEqualTo("io.axoniq.workflow");
+            assertThat(name.localName()).isEqualTo("StepCompleted");
         }
     }
 
@@ -343,10 +339,10 @@ class DefaultEventNameCustomizerTest {
             });
 
             var nameNormal = customizer.getEventName("step", Map.of(), StepStatus.COMPLETED);
-            assertEquals("StepCompleted", nameNormal.localName());
+            assertThat(nameNormal.localName()).isEqualTo("StepCompleted");
 
             var nameCustom = customizer.getEventName("step", Map.of("useCustom", true), StepStatus.COMPLETED);
-            assertEquals("CustomStepCompleted", nameCustom.localName());
+            assertThat(nameCustom.localName()).isEqualTo("CustomStepCompleted");
         }
     }
 }

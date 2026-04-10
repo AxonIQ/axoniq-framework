@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.workflow.runtime.delegate;
+package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;

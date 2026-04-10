@@ -38,7 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
@@ -147,17 +147,17 @@ class WorkflowEngineReplayTest {
         );
 
         // Initially NOT executable (replay mode)
-        assertFalse(execution.isExecutable());
+        assertThat(execution.isExecutable()).isFalse();
 
         EventMessage event = mock(EventMessage.class);
         when(event.metadata()).thenReturn(Metadata.with("none", "none"));
 
         execution.onEvent(event, pc);
-        assertFalse(execution.isExecutable());
+        assertThat(execution.isExecutable()).isFalse();
 
         // Trigger switch to executable (end of replay)
         execution.execute(i -> {
         });
-        assertTrue(execution.isExecutable());
+        assertThat(execution.isExecutable()).isTrue();
     }
 }

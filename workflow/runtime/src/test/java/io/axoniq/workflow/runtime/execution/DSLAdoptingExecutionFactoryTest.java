@@ -25,7 +25,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -35,12 +35,13 @@ class DSLAdoptingExecutionFactoryTest {
 
     @Test
     void testConstructorWithValidType() {
-        assertDoesNotThrow(() -> new DSLAdoptingExecutionFactory<>(MyDSLContext.class));
+        assertThatCode(() -> new DSLAdoptingExecutionFactory<>(MyDSLContext.class)).doesNotThrowAnyException();
     }
 
     @Test
     void testConstructorWithInvalidType() {
-        assertThrows(IllegalArgumentException.class, () -> new DSLAdoptingExecutionFactory<>(WorkflowContext.class));
+        assertThatThrownBy(() -> new DSLAdoptingExecutionFactory<>(WorkflowContext.class))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -52,7 +53,7 @@ class DSLAdoptingExecutionFactoryTest {
 
         var result = factory.create(context);
 
-        assertSame(execution, result);
+        assertThat(result).isSameAs(execution);
     }
 
     @Test
@@ -60,7 +61,8 @@ class DSLAdoptingExecutionFactoryTest {
         var factory = new DSLAdoptingExecutionFactory<>(MyDSLContext.class);
         var context = mock(WorkflowContext.class);
 
-        assertThrows(IllegalStateException.class, () -> factory.create(context));
+        assertThatThrownBy(() -> factory.create(context))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     /**

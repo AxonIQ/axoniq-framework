@@ -25,7 +25,8 @@ import org.mockito.*;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -58,7 +59,7 @@ class PayloadPropertyValueRetrieverTest {
 
         Object result = retriever.apply(eventMessage, converter);
 
-        assertEquals(expectedValue, result);
+        assertThat(result).isEqualTo(expectedValue);
         verify(eventMessage).payloadAs(any(java.lang.reflect.Type.class), any());
     }
 
@@ -74,7 +75,7 @@ class PayloadPropertyValueRetrieverTest {
 
         Object result = retriever.apply(eventMessage, converter);
 
-        assertNull(result);
+        assertThat(result).isNull();
     }
 
     @Test
@@ -84,11 +85,13 @@ class PayloadPropertyValueRetrieverTest {
 
         when(eventMessage.payloadAs(any(java.lang.reflect.Type.class), any())).thenReturn(null);
 
-        assertThrows(NullPointerException.class, () -> retriever.apply(eventMessage, converter));
+        assertThatThrownBy(() -> retriever.apply(eventMessage, converter))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void shouldThrowExceptionWhenPropertyNameIsNull() {
-        assertThrows(NullPointerException.class, () -> PayloadPropertyValueRetriever.payloadProperty(null));
+        assertThatThrownBy(() -> PayloadPropertyValueRetriever.payloadProperty(null))
+                .isInstanceOf(NullPointerException.class);
     }
 }

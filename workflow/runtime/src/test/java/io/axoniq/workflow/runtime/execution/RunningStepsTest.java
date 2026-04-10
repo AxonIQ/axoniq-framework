@@ -27,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -63,7 +63,7 @@ class RunningStepsTest {
         runningSteps.register(stepName, future);
         runningSteps.cancelAndRemove(stepName, true);
 
-        assertTrue(future.isCancelled());
+        assertThat(future.isCancelled()).isTrue();
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
         runningSteps.describeTo(descriptor);
@@ -79,10 +79,11 @@ class RunningStepsTest {
         runningSteps.register(stepName, future);
         boolean result = runningSteps.cancelWithCause(stepName, cause);
 
-        assertTrue(result);
-        assertTrue(future.isCompletedExceptionally());
-        ExecutionException ex = assertThrows(ExecutionException.class, future::get);
-        assertEquals(cause, ex.getCause());
+        assertThat(result).isTrue();
+        assertThat(future.isCompletedExceptionally()).isTrue();
+        assertThatThrownBy(future::get)
+                .isInstanceOf(ExecutionException.class)
+                .hasCause(cause);
     }
 
     @Test
@@ -93,16 +94,18 @@ class RunningStepsTest {
         runningSteps.register(stepName, future);
         boolean result = runningSteps.cancelWithCause(stepName, null);
 
-        assertTrue(result);
-        assertTrue(future.isCompletedExceptionally());
-        ExecutionException ex = assertThrows(ExecutionException.class, future::get);
-        assertInstanceOf(StepCancellationException.class, ex.getCause());
+        assertThat(result).isTrue();
+        assertThat(future.isCompletedExceptionally()).isTrue();
+        assertThatThrownBy(future::get)
+                .isInstanceOf(ExecutionException.class)
+                .extracting(Throwable::getCause)
+                .isInstanceOf(StepCancellationException.class);
     }
 
     @Test
     void testCancelWithCauseMissingStep() {
         boolean result = runningSteps.cancelWithCause("missing", null);
-        assertFalse(result);
+        assertThat(result).isFalse();
     }
 
     @Test
@@ -119,12 +122,13 @@ class RunningStepsTest {
         AtomicReference<Set<String>> cancelledSteps = new AtomicReference<>();
         runningSteps.cancelAll(cause, cancelledSteps::set);
 
-        assertEquals(Set.of(step1, step2), cancelledSteps.get());
-        assertTrue(future1.isCompletedExceptionally());
-        assertTrue(future2.isCompletedExceptionally());
+        assertThat(cancelledSteps.get()).containsExactlyInAnyOrder(step1, step2);
+        assertThat(future1.isCompletedExceptionally()).isTrue();
+        assertThat(future2.isCompletedExceptionally()).isTrue();
 
-        ExecutionException ex1 = assertThrows(ExecutionException.class, future1::get);
-        assertEquals(cause, ex1.getCause());
+        assertThatThrownBy(future1::get)
+                .isInstanceOf(ExecutionException.class)
+                .hasCause(cause);
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
         runningSteps.describeTo(descriptor);

@@ -27,33 +27,33 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class RetryPolicyTest {
 
     @Test
     void testNone() {
         RetryPolicy policy = RetryPolicy.NONE;
-        assertEquals(0, policy.maxRetries());
-        assertEquals(RetryHandler.NOOP, policy.onRetryHandler());
-        assertEquals(BackoffStrategy.NONE, policy.backoffStrategy());
+        assertThat(policy.maxRetries()).isZero();
+        assertThat(policy.onRetryHandler()).isEqualTo(RetryHandler.NOOP);
+        assertThat(policy.backoffStrategy()).isEqualTo(BackoffStrategy.NONE);
 
         RetryContext context = new RetryContext("step", 0, 0, new RuntimeException());
-        assertFalse(policy.shouldRetry(context));
+        assertThat(policy.shouldRetry(context)).isFalse();
     }
 
     @Test
     void testMaxRetriesFactory() {
         RetryPolicy policy = RetryPolicy.maxRetries(3);
-        assertEquals(3, policy.maxRetries());
-        assertEquals(RetryHandler.NOOP, policy.onRetryHandler());
-        assertEquals(BackoffStrategy.NONE, policy.backoffStrategy());
+        assertThat(policy.maxRetries()).isEqualTo(3);
+        assertThat(policy.onRetryHandler()).isEqualTo(RetryHandler.NOOP);
+        assertThat(policy.backoffStrategy()).isEqualTo(BackoffStrategy.NONE);
 
         RetryContext context = new RetryContext("step", 1, 3, new RuntimeException());
-        assertTrue(policy.shouldRetry(context));
+        assertThat(policy.shouldRetry(context)).isTrue();
 
         RetryContext contextMax = new RetryContext("step", 3, 3, new RuntimeException());
-        assertFalse(policy.shouldRetry(contextMax));
+        assertThat(policy.shouldRetry(contextMax)).isFalse();
     }
 
     @Test
@@ -62,14 +62,14 @@ class RetryPolicyTest {
         BackoffStrategy backoff = BackoffStrategy.fixed(Duration.ofSeconds(1));
 
         RetryPolicy p1 = new RetryPolicy(2, handler);
-        assertEquals(2, p1.maxRetries());
-        assertEquals(handler, p1.onRetryHandler());
-        assertEquals(BackoffStrategy.NONE, p1.backoffStrategy());
+        assertThat(p1.maxRetries()).isEqualTo(2);
+        assertThat(p1.onRetryHandler()).isEqualTo(handler);
+        assertThat(p1.backoffStrategy()).isEqualTo(BackoffStrategy.NONE);
 
         RetryPolicy p2 = new RetryPolicy(2, handler, backoff);
-        assertEquals(2, p2.maxRetries());
-        assertEquals(handler, p2.onRetryHandler());
-        assertEquals(backoff, p2.backoffStrategy());
+        assertThat(p2.maxRetries()).isEqualTo(2);
+        assertThat(p2.onRetryHandler()).isEqualTo(handler);
+        assertThat(p2.backoffStrategy()).isEqualTo(backoff);
     }
 
     @Test
@@ -78,22 +78,22 @@ class RetryPolicyTest {
 
         RetryHandler handler = context -> {};
         RetryPolicy p1 = base.onRetry(handler);
-        assertEquals(5, p1.maxRetries());
-        assertEquals(handler, p1.onRetryHandler());
+        assertThat(p1.maxRetries()).isEqualTo(5);
+        assertThat(p1.onRetryHandler()).isEqualTo(handler);
 
         BackoffStrategy backoff = BackoffStrategy.linear(Duration.ofSeconds(1));
         RetryPolicy p2 = p1.withBackoff(backoff);
-        assertEquals(backoff, p2.backoffStrategy());
-        assertEquals(handler, p2.onRetryHandler());
+        assertThat(p2.backoffStrategy()).isEqualTo(backoff);
+        assertThat(p2.onRetryHandler()).isEqualTo(handler);
 
         Predicate<RetryContext> predicate = ctx -> ctx.attempt() < 2;
         RetryPolicy p3 = p2.retryWhile(predicate);
 
         RetryContext ctx1 = new RetryContext("step", 1, 5, new RuntimeException());
-        assertTrue(p3.shouldRetry(ctx1));
+        assertThat(p3.shouldRetry(ctx1)).isTrue();
 
         RetryContext ctx2 = new RetryContext("step", 2, 5, new RuntimeException());
-        assertFalse(p3.shouldRetry(ctx2));
+        assertThat(p3.shouldRetry(ctx2)).isFalse();
     }
 
     @Test
@@ -102,13 +102,13 @@ class RetryPolicyTest {
                 .retryWhile(ctx -> ctx.error() instanceof IllegalArgumentException);
 
         RetryContext ctx1 = new RetryContext("step", 1, 5, new IllegalArgumentException());
-        assertTrue(policy.shouldRetry(ctx1));
+        assertThat(policy.shouldRetry(ctx1)).isTrue();
 
         RetryContext ctx2 = new RetryContext("step", 1, 5, new RuntimeException());
-        assertFalse(policy.shouldRetry(ctx2));
+        assertThat(policy.shouldRetry(ctx2)).isFalse();
 
         RetryContext ctx3 = new RetryContext("step", 5, 5, new IllegalArgumentException());
-        assertFalse(policy.shouldRetry(ctx3));
+        assertThat(policy.shouldRetry(ctx3)).isFalse();
     }
 
     @Test
@@ -117,9 +117,9 @@ class RetryPolicyTest {
         RetryHandler handler = ctx -> called.set(true);
 
         RetryHandler.NOOP.onRetry(new RetryContext("step", 1, 1, new RuntimeException()));
-        assertFalse(called.get());
+        assertThat(called.get()).isFalse();
 
         handler.onRetry(new RetryContext("step", 1, 1, new RuntimeException()));
-        assertTrue(called.get());
+        assertThat(called.get()).isTrue();
     }
 }

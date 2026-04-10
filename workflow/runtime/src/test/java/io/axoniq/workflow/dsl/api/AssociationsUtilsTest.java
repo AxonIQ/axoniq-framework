@@ -15,9 +15,8 @@
  *
  *
  */
-package io.axoniq.workflow.runtime.association;
+package io.axoniq.workflow.dsl.api;
 
-import io.axoniq.workflow.dsl.api.AssociationsUtils;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -29,7 +28,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -58,7 +57,7 @@ class AssociationsUtilsTest {
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
         when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
 
-        assertTrue(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isTrue();
     }
 
     @Test
@@ -72,19 +71,19 @@ class AssociationsUtilsTest {
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
         when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
 
-        assertTrue(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isTrue();
 
         Map<String, Object> partialPayload = Map.of("orderId", "123");
         EventMessage partialEventMessage = Mockito.mock(EventMessage.class);
         when(partialEventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(partialPayload);
 
-        assertFalse(predicate.test(partialEventMessage));
+        assertThat(predicate.test(partialEventMessage)).isFalse();
 
         Map<String, Object> mismatchPayload = Map.of("orderId", "123", "customerId", "wrong");
         EventMessage mismatchEventMessage = Mockito.mock(EventMessage.class);
         when(mismatchEventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(mismatchPayload);
 
-        assertFalse(predicate.test(mismatchEventMessage));
+        assertThat(predicate.test(mismatchEventMessage)).isFalse();
     }
 
     @Test
@@ -100,7 +99,7 @@ class AssociationsUtilsTest {
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
         when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
 
-        assertTrue(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isTrue();
     }
 
     @Test
@@ -113,6 +112,6 @@ class AssociationsUtilsTest {
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
         when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
 
-        assertFalse(predicate.test(eventMessage));
+        assertThat(predicate.test(eventMessage)).isFalse();
     }
 }

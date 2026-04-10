@@ -31,7 +31,8 @@ import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -67,11 +68,9 @@ class EventMessageUtilsTest {
     @Test
     void testConstructorIsPrivate() throws NoSuchMethodException {
         Constructor<EventMessageUtils> constructor = EventMessageUtils.class.getDeclaredConstructor();
-        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        assertThat(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers())).isTrue();
         constructor.setAccessible(true);
-        assertDoesNotThrow(() -> {
-            constructor.newInstance();
-        });
+        assertThatCode(constructor::newInstance).doesNotThrowAnyException();
     }
 
     @Test
@@ -83,147 +82,146 @@ class EventMessageUtilsTest {
         when(messageMismatch.metadata()).thenReturn(MetadataUtils.create("other"));
 
         var filter = EventMessageUtils.workflowIdFilter(workflowId);
-        assertTrue(filter.test(messageMatch));
-        assertFalse(filter.test(messageMismatch));
+        assertThat(filter.test(messageMatch)).isTrue();
+        assertThat(filter.test(messageMismatch)).isFalse();
     }
 
     @Test
     void testStartedWorkflow() {
         EventMessage message = EventMessageUtils.startedWorkflow(context, "myWorkflow", customizer);
-        assertTrue(message.type().toString().startsWith("myWorkflow.STARTED"));
-        assertEquals(payload, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals(WorkflowStatus.STARTED, MetadataUtils.getWorkflowStatus(message.metadata()).orElse(null));
-        assertEquals(PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL,
-                     MetadataUtils.payloadReducer(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("myWorkflow.STARTED");
+        assertThat(message.payload()).isEqualTo(payload);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.STARTED);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
     }
 
     @Test
     void testCompletedWorkflow() {
         EventMessage message = EventMessageUtils.completedWorkflow(context, "myWorkflow", customizer);
-        assertTrue(message.type().toString().startsWith("myWorkflow.COMPLETED"));
-        assertEquals(Map.of(), message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals(WorkflowStatus.COMPLETED, MetadataUtils.getWorkflowStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("myWorkflow.COMPLETED");
+        assertThat(message.payload()).isEqualTo(Map.of());
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.COMPLETED);
     }
 
     @Test
     void testFailedWorkflow() {
         Exception ex = new RuntimeException("fail");
         EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", ex, customizer);
-        assertTrue(message.type().toString().startsWith("myWorkflow.FAILED"));
-        assertEquals(ex, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals(WorkflowStatus.FAILED, MetadataUtils.getWorkflowStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("myWorkflow.FAILED");
+        assertThat(message.payload()).isEqualTo(ex);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.FAILED);
     }
 
     @Test
     void testTimeoutWorkflow() {
         Instant now = Instant.now();
         EventMessage message = EventMessageUtils.timeoutWorkflow(context, "myWorkflow", now, customizer);
-        assertTrue(message.type().toString().startsWith("myWorkflow.TIMED_OUT"));
-        assertEquals(now, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals(WorkflowStatus.TIMED_OUT, MetadataUtils.getWorkflowStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("myWorkflow.TIMED_OUT");
+        assertThat(message.payload()).isEqualTo(now);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.TIMED_OUT);
     }
 
     @Test
     void testCancelledWorkflow() {
         EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", customizer);
-        assertTrue(message.type().toString().startsWith("myWorkflow.CANCELLED"));
-        assertEquals(Map.of(), message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals(WorkflowStatus.CANCELLED, MetadataUtils.getWorkflowStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
+        assertThat(message.payload()).isEqualTo(Map.of());
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.CANCELLED);
     }
 
     @Test
     void testCancelledWorkflowWithCause() {
         Throwable cause = new RuntimeException("cancelled");
         EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", cause, customizer);
-        assertTrue(message.type().toString().startsWith("myWorkflow.CANCELLED"));
-        assertEquals(cause, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
+        assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
+        assertThat(message.payload()).isEqualTo(cause);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
     }
 
     @Test
     void testStartedStep() {
         Map<String, Object> local = Map.of("localKey", "localVal");
         EventMessage message = EventMessageUtils.startedStep(context, "step1", local, customizer);
-        assertTrue(message.type().toString().startsWith("step1.STARTED"));
-        assertEquals(local, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals("step1", MetadataUtils.getStepName(message.metadata()));
-        assertEquals(StepStatus.STARTED, MetadataUtils.getStepStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("step1.STARTED");
+        assertThat(message.payload()).isEqualTo(local);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.STARTED);
     }
 
     @Test
     void testCompletedStep() {
         Map<String, Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, "myReducer", customizer);
-        assertTrue(message.type().toString().startsWith("step1.COMPLETED"));
-        assertEquals(result, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals("step1", MetadataUtils.getStepName(message.metadata()));
-        assertEquals(StepStatus.COMPLETED, MetadataUtils.getStepStatus(message.metadata()).orElse(null));
-        assertEquals("myReducer", MetadataUtils.payloadReducer(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("step1.COMPLETED");
+        assertThat(message.payload()).isEqualTo(result);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.COMPLETED);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains("myReducer");
     }
 
     @Test
     void testCompletedStepNoReducer() {
         Map<String, Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, null, customizer);
-        assertFalse(MetadataUtils.payloadReducer(message.metadata()).isPresent());
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();
     }
 
     @Test
     void testFailStep() {
         Throwable ex = new RuntimeException("step fail");
         EventMessage message = EventMessageUtils.failStep(context, "step1", ex, customizer);
-        assertTrue(message.type().toString().startsWith("step1.FAILED"));
-        assertEquals(ex, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals("step1", MetadataUtils.getStepName(message.metadata()));
-        assertEquals(StepStatus.FAILED, MetadataUtils.getStepStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("step1.FAILED");
+        assertThat(message.payload()).isEqualTo(ex);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.FAILED);
     }
 
     @Test
     void testCancelledStep() {
         EventMessage message = EventMessageUtils.cancelledStep(context, "step1", customizer);
-        assertTrue(message.type().toString().startsWith("step1.CANCELLED"));
-        assertEquals(Map.of(), message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals("step1", MetadataUtils.getStepName(message.metadata()));
-        assertEquals(StepStatus.CANCELLED, MetadataUtils.getStepStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("step1.CANCELLED");
+        assertThat(message.payload()).isEqualTo(Map.of());
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.CANCELLED);
     }
 
     @Test
     void testCancelledStepWithCause() {
         Throwable cause = new RuntimeException("step cancelled");
         EventMessage message = EventMessageUtils.cancelledStep(context, "step1", cause, customizer);
-        assertTrue(message.type().toString().startsWith("step1.CANCELLED"));
-        assertEquals(cause, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
+        assertThat(message.type().toString()).startsWith("step1.CANCELLED");
+        assertThat(message.payload()).isEqualTo(cause);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
     }
 
     @Test
     void testRetryingStep() {
         StepRetryInfo retryInfo = mock(StepRetryInfo.class);
         EventMessage message = EventMessageUtils.retryingStep(context, "step1", retryInfo, customizer);
-        assertTrue(message.type().toString().startsWith("step1.RETRYING"));
-        assertEquals(retryInfo, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals("step1", MetadataUtils.getStepName(message.metadata()));
-        assertEquals(StepStatus.RETRYING, MetadataUtils.getStepStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("step1.RETRYING");
+        assertThat(message.payload()).isEqualTo(retryInfo);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.RETRYING);
     }
 
     @Test
     void testTimeoutStep() {
         Instant now = Instant.now();
         EventMessage message = EventMessageUtils.timeoutStep(context, "step1", now, customizer);
-        assertTrue(message.type().toString().startsWith("step1.TIMED_OUT"));
-        assertEquals(now, message.payload());
-        assertEquals(workflowId, MetadataUtils.getWorkflowId(message.metadata()));
-        assertEquals("step1", MetadataUtils.getStepName(message.metadata()));
-        assertEquals(StepStatus.TIMED_OUT, MetadataUtils.getStepStatus(message.metadata()).orElse(null));
+        assertThat(message.type().toString()).startsWith("step1.TIMED_OUT");
+        assertThat(message.payload()).isEqualTo(now);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.TIMED_OUT);
     }
 }

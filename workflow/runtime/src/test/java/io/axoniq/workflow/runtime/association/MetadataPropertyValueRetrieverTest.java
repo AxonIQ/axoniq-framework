@@ -23,7 +23,8 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -55,7 +56,7 @@ class MetadataPropertyValueRetrieverTest {
 
         Object result = retriever.apply(eventMessage, converter);
 
-        assertEquals(expectedValue, result);
+        assertThat(result).isEqualTo(expectedValue);
     }
 
     @Test
@@ -70,11 +71,12 @@ class MetadataPropertyValueRetrieverTest {
 
         Object result = retriever.apply(eventMessage, converter);
 
-        assertNull(result);
+        assertThat(result).isNull();
     }
 
     @Test
     void shouldThrowExceptionWhenPropertyNameIsNull() {
-        assertThrows(NullPointerException.class, () -> MetadataPropertyValueRetriever.metadataProperty(null));
+        assertThatThrownBy(() -> MetadataPropertyValueRetriever.metadataProperty(null))
+                .isInstanceOf(NullPointerException.class);
     }
 }

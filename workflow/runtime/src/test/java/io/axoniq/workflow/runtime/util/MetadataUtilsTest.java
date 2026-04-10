@@ -26,7 +26,7 @@ import org.junit.jupiter.api.*;
 import java.lang.reflect.Constructor;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Tests for {@link MetadataUtils}.
@@ -39,77 +39,75 @@ class MetadataUtilsTest {
     @Test
     void testConstructorIsPrivate() throws NoSuchMethodException {
         Constructor<MetadataUtils> constructor = MetadataUtils.class.getDeclaredConstructor();
-        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        assertThat(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers())).isTrue();
         constructor.setAccessible(true);
-        assertDoesNotThrow(() -> {
-            constructor.newInstance();
-        });
+        assertThatCode(constructor::newInstance).doesNotThrowAnyException();
     }
 
     @Test
     void testCreateWithWorkflowId() {
         Metadata metadata = MetadataUtils.create("wf123");
-        assertEquals("wf123", metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID));
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID)).isEqualTo("wf123");
     }
 
     @Test
     void testCreateWithStepInfo() {
         Metadata metadata = MetadataUtils.create("wf123", "step1", StepStatus.STARTED);
-        assertEquals("wf123", metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID));
-        assertEquals("step1", metadata.get(MetadataUtils.METADATA_KEY_STEP_NAME));
-        assertEquals(StepStatus.STARTED.name(), metadata.get(MetadataUtils.METADATA_KEY_TYPE));
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID)).isEqualTo("wf123");
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_STEP_NAME)).isEqualTo("step1");
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_TYPE)).isEqualTo(StepStatus.STARTED.name());
     }
 
     @Test
     void testCreateWithWorkflowStatus() {
         Metadata metadata = MetadataUtils.create("wf123", WorkflowStatus.COMPLETED);
-        assertEquals("wf123", metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID));
-        assertEquals(WorkflowStatus.COMPLETED.name(), metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_STATUS));
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID)).isEqualTo("wf123");
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_STATUS)).isEqualTo(WorkflowStatus.COMPLETED.name());
     }
 
     @Test
     void testGetWorkflowStatus() {
         Metadata metadata = MetadataUtils.create("wf123", WorkflowStatus.STARTED);
-        assertEquals(Optional.of(WorkflowStatus.STARTED), MetadataUtils.getWorkflowStatus(metadata));
+        assertThat(MetadataUtils.getWorkflowStatus(metadata)).contains(WorkflowStatus.STARTED);
 
         Metadata empty = Metadata.emptyInstance();
-        assertEquals(Optional.empty(), MetadataUtils.getWorkflowStatus(empty));
+        assertThat(MetadataUtils.getWorkflowStatus(empty)).isEmpty();
     }
 
     @Test
     void testGetStepStatus() {
         Metadata metadata = MetadataUtils.create("wf123", "step1", StepStatus.COMPLETED);
-        assertEquals(Optional.of(StepStatus.COMPLETED), MetadataUtils.getStepStatus(metadata));
+        assertThat(MetadataUtils.getStepStatus(metadata)).contains(StepStatus.COMPLETED);
 
         Metadata empty = Metadata.emptyInstance();
-        assertEquals(Optional.empty(), MetadataUtils.getStepStatus(empty));
+        assertThat(MetadataUtils.getStepStatus(empty)).isEmpty();
     }
 
     @Test
     void testPayloadReducer() {
         Metadata metadata = Metadata.with(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, "reducer1");
-        assertEquals(Optional.of("reducer1"), MetadataUtils.payloadReducer(metadata));
+        assertThat(MetadataUtils.payloadReducer(metadata)).contains("reducer1");
 
         Metadata empty = Metadata.emptyInstance();
-        assertEquals(Optional.empty(), MetadataUtils.payloadReducer(empty));
+        assertThat(MetadataUtils.payloadReducer(empty)).isEmpty();
     }
 
     @Test
     void testGetWorkflowId() {
         Metadata metadata = MetadataUtils.create("wf123");
-        assertEquals("wf123", MetadataUtils.getWorkflowId(metadata));
+        assertThat(MetadataUtils.getWorkflowId(metadata)).isEqualTo("wf123");
 
         Metadata empty = Metadata.emptyInstance();
-        assertThrows(IllegalArgumentException.class, () -> MetadataUtils.getWorkflowId(empty));
+        assertThatThrownBy(() -> MetadataUtils.getWorkflowId(empty)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testGetStepName() {
         Metadata metadata = MetadataUtils.create("wf123", "step1", StepStatus.STARTED);
-        assertEquals("step1", MetadataUtils.getStepName(metadata));
+        assertThat(MetadataUtils.getStepName(metadata)).isEqualTo("step1");
 
         Metadata metadataNoStep = MetadataUtils.create("wf123");
-        assertNull(MetadataUtils.getStepName(metadataNoStep));
+        assertThat(MetadataUtils.getStepName(metadataNoStep)).isNull();
     }
 
     @Test
@@ -120,9 +118,9 @@ class MetadataUtilsTest {
 
         var filter = MetadataUtils.workflowIdFilter("wf123");
 
-        assertTrue(filter.test(metadataMatch));
-        assertFalse(filter.test(metadataMismatch));
-        assertFalse(filter.test(empty));
+        assertThat(filter.test(metadataMatch)).isTrue();
+        assertThat(filter.test(metadataMismatch)).isFalse();
+        assertThat(filter.test(empty)).isFalse();
     }
 
     @Test
@@ -130,7 +128,7 @@ class MetadataUtilsTest {
         Metadata metadata = MetadataUtils.create("wf123");
         Metadata empty = Metadata.emptyInstance();
 
-        assertTrue(MetadataUtils.hasWorkflowId().test(metadata));
-        assertFalse(MetadataUtils.hasWorkflowId().test(empty));
+        assertThat(MetadataUtils.hasWorkflowId().test(metadata)).isTrue();
+        assertThat(MetadataUtils.hasWorkflowId().test(empty)).isFalse();
     }
 }

@@ -22,7 +22,7 @@ import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class RetryContextTest {
 
@@ -36,11 +36,11 @@ class RetryContextTest {
 
         RetryContext context = new RetryContext(stepName, attempt, maxRetries, error, delay);
 
-        assertEquals(stepName, context.stepName());
-        assertEquals(attempt, context.attempt());
-        assertEquals(maxRetries, context.maxRetries());
-        assertEquals(error, context.error());
-        assertEquals(delay, context.delay());
+        assertThat(context.stepName()).isEqualTo(stepName);
+        assertThat(context.attempt()).isEqualTo(attempt);
+        assertThat(context.maxRetries()).isEqualTo(maxRetries);
+        assertThat(context.error()).isEqualTo(error);
+        assertThat(context.delay()).isEqualTo(delay);
     }
 
     @Test
@@ -52,10 +52,10 @@ class RetryContextTest {
 
         RetryContext context = new RetryContext(stepName, attempt, maxRetries, error);
 
-        assertEquals(stepName, context.stepName());
-        assertEquals(attempt, context.attempt());
-        assertEquals(maxRetries, context.maxRetries());
-        assertEquals(error, context.error());
-        assertEquals(Duration.ZERO, context.delay());
+        assertThat(context.stepName()).isEqualTo(stepName);
+        assertThat(context.attempt()).isEqualTo(attempt);
+        assertThat(context.maxRetries()).isEqualTo(maxRetries);
+        assertThat(context.error()).isEqualTo(error);
+        assertThat(context.delay()).isEqualTo(Duration.ZERO);
     }
 }
