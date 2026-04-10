@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.deadletter;
+package io.axoniq.framework.messaging.deadletter;
 
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.messaging.core.Context;

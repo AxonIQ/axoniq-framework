@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jpa;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jpa;
 
 import org.jspecify.annotations.Nullable;
 import org.axonframework.conversion.Converter;
@@ -47,9 +47,9 @@ public interface DeadLetterJpaConverter<M extends EventMessage> {
      * {@link DeadLetterEventEntry} will be {@code null}.
      * <p>
      * In most cases a non-{@code null} {@link Context} is expected, as the
-     * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue} is typically invoked through Axon's
+     * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue} is typically invoked through Axon's
      * event handling logic, which always provides a context. A {@code null} context is only expected when the
-     * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue} is invoked directly by user code
+     * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue} is invoked directly by user code
      * outside of the framework's processing pipeline.
      *
      * @param message          The message to convert.

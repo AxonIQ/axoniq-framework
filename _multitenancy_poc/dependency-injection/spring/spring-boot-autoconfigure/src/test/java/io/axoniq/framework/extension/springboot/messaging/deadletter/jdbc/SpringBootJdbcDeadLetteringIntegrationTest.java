@@ -16,16 +16,16 @@
  *
  */
 
-package org.axonframework.extension.springboot.messaging.deadletter.jdbc;
+package io.axoniq.framework.extension.springboot.messaging.deadletter.jdbc;
 
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
-import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import org.axonframework.messaging.eventhandling.deadletter.jdbc.GenericDeadLetterTableFactory;
-import org.axonframework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.GenericDeadLetterTableFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;

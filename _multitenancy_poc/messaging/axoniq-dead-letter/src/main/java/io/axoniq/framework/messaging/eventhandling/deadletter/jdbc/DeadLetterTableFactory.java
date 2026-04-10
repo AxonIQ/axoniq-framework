@@ -16,14 +16,14 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jdbc;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * A functional interface to create a JDBC-specific {@link org.axonframework.messaging.deadletter.DeadLetter} entry
+ * A functional interface to create a JDBC-specific {@link io.axoniq.framework.messaging.deadletter.DeadLetter} entry
  * table and its indices.
  *
  * @author Steven van Beelen
@@ -34,7 +34,7 @@ public interface DeadLetterTableFactory {
 
     /**
      * Creates a {@link Statement} to use for construction of a
-     * {@link org.axonframework.messaging.deadletter.DeadLetter} entry table and its indices.
+     * {@link io.axoniq.framework.messaging.deadletter.DeadLetter} entry table and its indices.
      * <p>
      * The returned {@code Statement} typically contains several SQL statements and hence the invoker is inclined to
      * execute the {@code Statement} as a batch by invoking {@link Statement#executeBatch()}. Furthermore, it is

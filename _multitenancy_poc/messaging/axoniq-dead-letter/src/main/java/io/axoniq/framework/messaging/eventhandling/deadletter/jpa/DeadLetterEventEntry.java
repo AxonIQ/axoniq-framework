@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jpa;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jpa;
 
 import jakarta.persistence.Basic;
 import jakarta.persistence.Column;

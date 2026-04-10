@@ -16,15 +16,15 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jpa;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jpa;
 
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.deadletter.Cause;
-import org.axonframework.messaging.deadletter.DeadLetter;
-import org.axonframework.messaging.deadletter.GenericDeadLetter;
-import org.axonframework.messaging.deadletter.ThrowableCause;
+import io.axoniq.framework.messaging.deadletter.Cause;
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
+import io.axoniq.framework.messaging.deadletter.ThrowableCause;
 
 import java.time.Instant;
 import java.util.Objects;

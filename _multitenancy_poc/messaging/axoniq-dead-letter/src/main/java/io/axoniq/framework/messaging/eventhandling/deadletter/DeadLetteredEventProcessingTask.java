@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter;
+package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
@@ -25,10 +25,10 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.deadletter.DeadLetter;
-import org.axonframework.messaging.deadletter.Decisions;
-import org.axonframework.messaging.deadletter.EnqueueDecision;
-import org.axonframework.messaging.deadletter.EnqueuePolicy;
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.Decisions;
+import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
+import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
@@ -80,7 +80,7 @@ class DeadLetteredEventProcessingTask {
      * <p>
      * Each dead letter is processed in its own {@link UnitOfWork}, which provides proper transaction boundaries.
      * Returns an {@link EnqueueDecision} to
-     * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue#evict(DeadLetter, ProcessingContext) evict} the
+     * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue#evict(DeadLetter, ProcessingContext) evict} the
      * {@code letter} on successful handling. On unsuccessful event handling, the configured {@link EnqueuePolicy} is
      * used to decide what to do with the {@code letter}.
      * <p>

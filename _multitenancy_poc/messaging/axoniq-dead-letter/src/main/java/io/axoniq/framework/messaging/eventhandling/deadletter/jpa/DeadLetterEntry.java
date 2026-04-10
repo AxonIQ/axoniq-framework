@@ -16,13 +16,13 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jpa;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jpa;
 
 import jakarta.persistence.*;
 import org.axonframework.common.IdentifierFactory;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.deadletter.Cause;
+import io.axoniq.framework.messaging.deadletter.Cause;
 
 import java.time.Instant;
 import java.util.Arrays;

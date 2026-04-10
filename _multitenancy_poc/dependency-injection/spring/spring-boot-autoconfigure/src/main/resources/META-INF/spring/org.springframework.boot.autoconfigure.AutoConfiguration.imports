@@ -17,6 +17,6 @@
 #
 
 io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration
-org.axonframework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
-org.axonframework.extension.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
-org.axonframework.extension.springboot.autoconfig.DeadLetterQueueAutoConfiguration
+io.axoniq.framework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
+io.axoniq.framework.extension.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
+io.axoniq.framework.extension.springboot.autoconfig.DeadLetterQueueAutoConfiguration

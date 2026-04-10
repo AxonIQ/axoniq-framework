@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.deadletter;
+package io.axoniq.framework.messaging.deadletter;
 
 import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.core.Message;

@@ -21,6 +21,6 @@
  * Part of the Axon Messaging module. Contains classes related to dead lettering.
  */
 @NullMarked
-package org.axonframework.messaging.deadletter;
+package io.axoniq.framework.messaging.deadletter;
 
 import org.jspecify.annotations.NullMarked;
