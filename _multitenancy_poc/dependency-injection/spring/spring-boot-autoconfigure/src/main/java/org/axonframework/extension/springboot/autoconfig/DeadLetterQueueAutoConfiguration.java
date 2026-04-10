@@ -42,8 +42,11 @@ import org.springframework.context.annotation.Bean;
  * @see JdbcDeadLetterQueueAutoConfiguration
  */
 @AutoConfiguration(
-        after = {JpaDeadLetterQueueAutoConfiguration.class, JdbcDeadLetterQueueAutoConfiguration.class},
-        before = EventProcessingAutoConfiguration.class
+        afterName = {
+                "org.axonframework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration",
+                "org.axonframework.extension.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration"
+        },
+        beforeName = "org.axonframework.extension.springboot.autoconfig.EventProcessingAutoConfiguration"
 )
 @ConditionalOnBean(SequencedDeadLetterQueueFactory.class)
 @EnableConfigurationProperties(DeadLetterQueueProcessorProperties.class)

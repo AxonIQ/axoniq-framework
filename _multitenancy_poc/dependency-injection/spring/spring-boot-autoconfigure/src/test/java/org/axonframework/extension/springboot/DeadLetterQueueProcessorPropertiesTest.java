@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
@@ -133,6 +134,7 @@ class DeadLetterQueueProcessorPropertiesTest {
 
     @ContextConfiguration
     @EnableAutoConfiguration
+    @EnableConfigurationProperties(DeadLetterQueueProcessorProperties.class)
     @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
     private static class MyContext {
 

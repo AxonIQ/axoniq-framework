@@ -18,6 +18,8 @@
 
 package org.axonframework.extension.springboot.autoconfig;
 
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import org.axonframework.messaging.eventhandling.deadletter.jdbc.DeadLetterSchema;
 import org.junit.jupiter.api.*;
@@ -97,6 +99,16 @@ class JdbcDeadLetterQueueAutoConfigurationTest {
         @Bean
         public DataSource dataSource() {
             return mock(DataSource.class);
+        }
+
+        @Bean
+        public EventConverter eventConverter() {
+            return mock(EventConverter.class);
+        }
+
+        @Bean
+        public Converter genericConverter() {
+            return mock(Converter.class);
         }
     }
 }
