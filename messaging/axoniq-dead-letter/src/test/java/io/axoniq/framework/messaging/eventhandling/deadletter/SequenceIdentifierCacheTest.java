@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter;
+package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;

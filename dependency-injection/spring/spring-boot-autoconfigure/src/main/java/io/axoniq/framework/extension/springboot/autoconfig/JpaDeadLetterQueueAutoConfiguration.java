@@ -16,14 +16,14 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.extension.springboot.autoconfig;
 
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;

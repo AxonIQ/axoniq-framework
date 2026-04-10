@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jdbc;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -27,7 +27,7 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
 
 /**
  * Schema description for an {@link EventMessage} holding
- * {@link org.axonframework.messaging.deadletter.DeadLetter} entry table in JDBC.
+ * {@link io.axoniq.framework.messaging.deadletter.DeadLetter} entry table in JDBC.
  *
  * @author Steven van Beelen
  * @since 4.8.0

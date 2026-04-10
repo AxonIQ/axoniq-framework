@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jdbc;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.IdentifierFactory;
@@ -29,11 +29,11 @@ import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
-import org.axonframework.messaging.deadletter.DeadLetter;
-import org.axonframework.messaging.deadletter.GenericDeadLetter;
-import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue;
-import org.axonframework.messaging.deadletter.SequencedDeadLetterQueueTest;
-import org.axonframework.messaging.deadletter.WrongDeadLetterTypeException;
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueueTest;
+import io.axoniq.framework.messaging.deadletter.WrongDeadLetterTypeException;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;

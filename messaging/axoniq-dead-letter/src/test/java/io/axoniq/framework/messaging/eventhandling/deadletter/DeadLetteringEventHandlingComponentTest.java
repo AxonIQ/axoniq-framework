@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter;
+package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.EmptyApplicationContext;
@@ -28,12 +28,12 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.deadletter.DeadLetter;
-import org.axonframework.messaging.deadletter.Decisions;
-import org.axonframework.messaging.deadletter.EnqueuePolicy;
-import org.axonframework.messaging.deadletter.GenericDeadLetter;
-import org.axonframework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
-import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.Decisions;
+import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
+import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
+import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;

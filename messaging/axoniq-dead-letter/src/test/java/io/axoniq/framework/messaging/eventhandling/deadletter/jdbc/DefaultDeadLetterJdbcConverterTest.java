@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jdbc;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.DateTimeUtils;
@@ -26,7 +26,7 @@ import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.deadletter.Cause;
+import io.axoniq.framework.messaging.deadletter.Cause;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;

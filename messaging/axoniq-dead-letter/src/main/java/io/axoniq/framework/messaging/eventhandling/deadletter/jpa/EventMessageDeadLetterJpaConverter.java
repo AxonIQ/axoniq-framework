@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jpa;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jpa;
 
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ClassUtils;
@@ -38,7 +38,7 @@ import java.util.Map;
 
 /**
  * Converter responsible for converting to and from {@link EventMessage} implementations for storage in a
- * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue}.
+ * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue}.
  * <p>
  * Tracking tokens and aggregate data (only if legacy Aggregate approach is used: aggregate identifier, type, sequence
  * number) are stored as {@link Context} resources. This converter extracts these resources from the context during

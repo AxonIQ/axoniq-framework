@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter.jdbc;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;

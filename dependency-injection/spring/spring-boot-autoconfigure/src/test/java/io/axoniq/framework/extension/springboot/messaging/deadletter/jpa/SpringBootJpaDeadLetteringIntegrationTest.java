@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.messaging.deadletter.jpa;
+package io.axoniq.framework.extension.springboot.messaging.deadletter.jpa;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -25,17 +25,17 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
-import org.axonframework.messaging.deadletter.DeadLetter;
-import org.axonframework.messaging.deadletter.GenericDeadLetter;
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
-import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import org.axonframework.messaging.eventhandling.deadletter.jpa.DeadLetterEntry;
-import org.axonframework.messaging.eventhandling.deadletter.jpa.DeadLetterEventEntry;
-import org.axonframework.messaging.eventhandling.deadletter.jpa.EventMessageDeadLetterJpaConverter;
-import org.axonframework.messaging.eventhandling.deadletter.jpa.JpaDeadLetter;
-import org.axonframework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.DeadLetterEntry;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.DeadLetterEventEntry;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.EventMessageDeadLetterJpaConverter;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.JpaDeadLetter;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;

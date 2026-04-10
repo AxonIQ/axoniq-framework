@@ -16,12 +16,12 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.extension.springboot.autoconfig;
 
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import org.axonframework.messaging.eventhandling.deadletter.jdbc.DeadLetterSchema;
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.DeadLetterSchema;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;

@@ -16,21 +16,21 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter;
+package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.ConfigurationExtension;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.deadletter.Decisions;
-import org.axonframework.messaging.deadletter.EnqueuePolicy;
-import org.axonframework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
-import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.deadletter.Decisions;
+import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
+import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 
 import static org.axonframework.common.BuilderUtils.assertNonNull;
 import static org.axonframework.common.BuilderUtils.assertPositive;
-import static org.axonframework.messaging.deadletter.ThrowableCause.truncated;
+import static io.axoniq.framework.messaging.deadletter.ThrowableCause.truncated;
 
 /**
  * Configuration class holding all settings related to Dead Letter Queue (DLQ) functionality.
@@ -169,7 +169,7 @@ public class DeadLetterQueueConfiguration
      * are evicted using LRU policy.
      * <p>
      * Setting this to {@code 0} disables the caching wrapper entirely — the underlying
-     * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue} will be used directly.
+     * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue} will be used directly.
      * <p>
      * Defaults to {@link SequenceIdentifierCache#DEFAULT_MAX_SIZE} (1024).
      *

@@ -16,15 +16,15 @@
  *
  */
 
-package org.axonframework.messaging.deadletter;
+package io.axoniq.framework.messaging.deadletter;
 
 import org.axonframework.common.AxonException;
 
 /**
  * Exception representing that a wrong dead letter was provided to the queue. All
- * {@link org.axonframework.messaging.deadletter.DeadLetter}s supplied back to the
- * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue}, for example the
- * {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue#evict(DeadLetter,
+ * {@link io.axoniq.framework.messaging.deadletter.DeadLetter}s supplied back to the
+ * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue}, for example the
+ * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue#evict(DeadLetter,
  * org.axonframework.messaging.core.unitofwork.ProcessingContext)} method, should be the
  * original supplied by the queue in the first place.
  *

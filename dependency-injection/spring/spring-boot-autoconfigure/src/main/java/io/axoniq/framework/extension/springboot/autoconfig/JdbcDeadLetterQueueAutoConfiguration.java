@@ -16,14 +16,14 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.extension.springboot.autoconfig;
 
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
-import org.axonframework.messaging.eventhandling.deadletter.jdbc.DeadLetterSchema;
-import org.axonframework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.DeadLetterSchema;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -63,7 +63,7 @@ import javax.sql.DataSource;
         afterName = {
                 "org.axonframework.extension.springboot.autoconfig.JdbcAutoConfiguration",
                 "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration",
-                "org.axonframework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration"
+                "io.axoniq.framework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration"
         }
 )
 @ConditionalOnClass(DataSource.class)

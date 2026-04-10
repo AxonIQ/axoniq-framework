@@ -1,1 +1,1 @@
-org.axonframework.messaging.eventhandling.deadletter.DeadLetterQueueConfigurationEnhancer
+io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfigurationEnhancer

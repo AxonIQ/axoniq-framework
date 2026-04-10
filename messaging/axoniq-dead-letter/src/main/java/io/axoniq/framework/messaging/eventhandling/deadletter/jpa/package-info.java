@@ -21,6 +21,6 @@
  * Part of the Axon Messaging module. Contains classes related to JPA-specific dead lettering components.
  */
 @NullMarked
-package org.axonframework.messaging.eventhandling.deadletter.jpa;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jpa;
 
 import org.jspecify.annotations.NullMarked;

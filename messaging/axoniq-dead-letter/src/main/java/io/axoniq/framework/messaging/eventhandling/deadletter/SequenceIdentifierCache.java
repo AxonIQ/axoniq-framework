@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventhandling.deadletter;
+package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import org.axonframework.common.annotation.Internal;
 import org.slf4j.Logger;
@@ -30,7 +30,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A cache for sequence identifiers used to optimize {@link org.axonframework.messaging.deadletter.SequencedDeadLetterQueue}
+ * A cache for sequence identifiers used to optimize {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue}
  * lookups. This cache reduces the number of calls to the underlying queue by tracking which sequence identifiers
  * are known to be enqueued or not enqueued.
  * <p>

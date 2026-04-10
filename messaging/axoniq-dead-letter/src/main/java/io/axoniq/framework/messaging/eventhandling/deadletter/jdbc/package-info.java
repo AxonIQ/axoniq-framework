@@ -20,6 +20,6 @@
  * Part of the Axon Messaging module. Contains classes related to JDBC-specific dead lettering components.
  */
 @NullMarked
-package org.axonframework.messaging.eventhandling.deadletter.jdbc;
+package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 
 import org.jspecify.annotations.NullMarked;
