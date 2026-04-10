@@ -21,6 +21,7 @@ package io.axoniq.framework.axonserver.connector.event;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
+import org.assertj.core.api.Assertions;
 import org.axonframework.eventsourcing.eventstore.AggregateBasedStorageEngineTestSuite;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -37,7 +38,8 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 @Tags({
@@ -70,12 +72,9 @@ class AggregateBasedAxonServerEventStorageEngineIT extends
 
     @Test
     void sourcingFromNonGlobalSequenceTrackingTokenShouldThrowException() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> testSubject.stream(StreamingCondition.startingFrom(
-                        new GapAwareTrackingToken(5, Collections.emptySet())
-                ))
-        );
+        assertThatThrownBy(() -> testSubject.stream(StreamingCondition.startingFrom(
+                new GapAwareTrackingToken(5, Collections.emptySet())
+        ))).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Override
@@ -109,7 +108,8 @@ class AggregateBasedAxonServerEventStorageEngineIT extends
                                          processingContext(),
                                          taggedEventMessage("event-0", TEST_AGGREGATE_TAGS)).join();
 
-        assertDoesNotThrow(() -> tx.commit().get(1, TimeUnit.SECONDS));
-        assertThrows(Exception.class, () -> tx.commit().get(1, TimeUnit.SECONDS));
+        assertThatNoException().isThrownBy(() -> tx.commit().get(1, TimeUnit.SECONDS));
+        assertThatThrownBy(() -> tx.commit().get(1, TimeUnit.SECONDS))
+                .isInstanceOf(Exception.class);
     }
 }

@@ -36,19 +36,17 @@ import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransact
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
-
 import javax.sql.DataSource;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test class validating the {@link PostgresqlEventStorageEngine}.
@@ -56,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author John Hendrikx
  */
 class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<PostgresqlEventStorageEngine> {
+
     private static final EventConverter CONVERTER = new DelegatingEventConverter(new JacksonConverter());
     private static final ResourceKey<Connection> CONNECTION = ResourceKey.withLabel("connection");
 
@@ -69,9 +68,9 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
         if (postgresContainer == null) {
             entitlementManager = Mockito.mock(EnforcingEntitlementManager.class);
             postgresContainer = new PostgreSQLContainer("postgres:16.2")
-                .withDatabaseName("testdb")
-                .withUsername("test")
-                .withPassword("test");
+                    .withDatabaseName("testdb")
+                    .withUsername("test")
+                    .withPassword("test");
 
             postgresContainer.start();
         }
@@ -109,15 +108,12 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
         if (connection != null) {
             try {
                 connection.commit();
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 throw new IllegalStateException(e);
-            }
-            finally {
+            } finally {
                 try {
                     connection.close();
-                }
-                catch (SQLException e) {
+                } catch (SQLException e) {
                     throw new IllegalStateException(e);
                 }
             }
@@ -131,15 +127,12 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
         if (connection != null) {
             try {
                 connection.rollback();
-            }
-            catch (SQLException e) {
+            } catch (SQLException e) {
                 throw new IllegalStateException(e);
-            }
-            finally {
+            } finally {
                 try {
                     connection.close();
-                }
-                catch (SQLException e) {
+                } catch (SQLException e) {
                     throw new IllegalStateException(e);
                 }
             }
@@ -157,13 +150,12 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
             context.putResource(CONNECTION, connection);
 
             context.putResource(
-                JdbcTransactionalExecutorProvider.SUPPLIER_KEY,
-                () -> new ConnectionExecutor(() -> connection)
+                    JdbcTransactionalExecutorProvider.SUPPLIER_KEY,
+                    () -> new ConnectionExecutor(() -> connection)
             );
 
             return context;
-        }
-        catch (SQLException e) {
+        } catch (SQLException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -173,17 +165,17 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
         try {
             // Configure mock to throw exception when claimMessage is called
             Mockito.doThrow(new RuntimeException("Entitlement denied"))
-                    .when(entitlementManager)
-                    .claimMessage(Mockito.any(), Mockito.any(), Mockito.anyInt());
+                   .when(entitlementManager)
+                   .claimMessage(Mockito.any(), Mockito.any(), Mockito.anyInt());
 
             // Attempt to append an event should fail
             TaggedEventMessage<EventMessage> event = taggedEventMessage("event-0", TEST_CRITERIA_TAGS);
 
             assertThatThrownBy(() -> appendEvents(AppendCondition.none(), event))
-                .isInstanceOf(AssertionError.class)
-                .cause()
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("Entitlement denied");
+                    .isInstanceOf(AssertionError.class)
+                    .cause()
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessage("Entitlement denied");
 
             // Verify no events were stored
             SourcingCondition condition = SourcingCondition.conditionFor(TEST_CRITERIA);
@@ -193,11 +185,11 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
 
             // Should only have the consistency marker, no actual events
             Optional<MessageStream.Entry<EventMessage>> entry = stream.next();
-            assertTrue(entry.isPresent());
+            assertThat(entry).isPresent();
             assertMarkerEntry(entry.get());
 
             // No more entries
-            assertFalse(stream.hasNextAvailable());
+            assertThat(stream.hasNextAvailable()).isFalse();
         } finally {
             // Reset mock to avoid affecting other tests
             Mockito.reset(entitlementManager);
