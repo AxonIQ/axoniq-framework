@@ -18,9 +18,11 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.configuration.WorkflowConfigurerDefaults;
+import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
 
@@ -47,5 +49,13 @@ public class WorkflowAutoConfiguration {
     @Bean
     public ConfigurationEnhancer workflowConfigurationDefaults() {
         return new WorkflowConfigurerDefaults();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults() {
+        return new WorkflowEventProcessingRegistrationEnhancer(
+                "Workflow", null, null, true
+        );
     }
 }

@@ -136,6 +136,7 @@
                         <compilerPlugins>
                             <plugin>no-arg</plugin>
                             <plugin>all-open</plugin>
+                            <plugin>spring</plugin>
                         </compilerPlugins>
                     </configuration>
 

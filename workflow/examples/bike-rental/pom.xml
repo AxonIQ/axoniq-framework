@@ -148,8 +148,6 @@
             <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-
-
         <!--
         <dependency>
             <groupId>org.axonframework.extensions.spring</groupId>
