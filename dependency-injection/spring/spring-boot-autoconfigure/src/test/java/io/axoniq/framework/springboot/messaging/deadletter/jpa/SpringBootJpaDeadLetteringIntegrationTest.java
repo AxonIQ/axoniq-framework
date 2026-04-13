@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot.messaging.deadletter.jpa;
+package io.axoniq.framework.springboot.messaging.deadletter.jpa;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;

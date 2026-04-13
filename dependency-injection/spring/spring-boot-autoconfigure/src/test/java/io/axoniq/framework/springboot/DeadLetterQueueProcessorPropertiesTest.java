@@ -16,8 +16,9 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot;
+package io.axoniq.framework.springboot;
 
+import io.axoniq.framework.springboot.DeadLetterQueueProcessorProperties;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

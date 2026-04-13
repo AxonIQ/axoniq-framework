@@ -16,9 +16,9 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import io.axoniq.framework.extension.springboot.DeadLetterQueueProcessorProperties;
+import io.axoniq.framework.springboot.DeadLetterQueueProcessorProperties;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
@@ -43,8 +43,8 @@ import org.springframework.context.annotation.Bean;
  */
 @AutoConfiguration(
         afterName = {
-                "io.axoniq.framework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration",
-                "io.axoniq.framework.extension.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration"
+                "io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration",
+                "io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration"
         },
         beforeName = "org.axonframework.extension.springboot.autoconfig.EventProcessingAutoConfiguration"
 )

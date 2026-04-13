@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
