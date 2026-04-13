@@ -56,7 +56,7 @@ import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * A Spring Boot-idiomatic implementation of the {@link DeadLetteringEventIntegrationTest} validating the
@@ -149,7 +149,7 @@ class SpringBootJpaDeadLetteringIntegrationTest extends DeadLetteringEventIntegr
 
         Iterator<DeadLetter<? extends EventMessage>> resultIterator =
                 jpaDeadLetterQueue.deadLetterSequence(aggregateId, null).join().iterator();
-        assertFalse(resultIterator.hasNext());
+        assertThat(resultIterator.hasNext()).isFalse();
 
         IntStream.range(0, 64)
                  .boxed()
@@ -165,21 +165,21 @@ class SpringBootJpaDeadLetteringIntegrationTest extends DeadLetteringEventIntegr
         for (Map.Entry<Integer, GenericDeadLetter<EventMessage>> entry : insertedLetters.entrySet()) {
             Integer sequenceIndex = entry.getKey();
             Supplier<String> assertMessageSupplier = () -> "Failed asserting event [" + sequenceIndex + "]";
-            assertTrue(resultIterator.hasNext(), assertMessageSupplier);
+            assertThat(resultIterator.hasNext()).as(assertMessageSupplier).isTrue();
 
             GenericDeadLetter<EventMessage> expected = entry.getValue();
             DeadLetter<? extends EventMessage> result = resultIterator.next();
-            assertInstanceOf(JpaDeadLetter.class, result, assertMessageSupplier);
+            assertThat(result).as(assertMessageSupplier).isInstanceOf(JpaDeadLetter.class);
             JpaDeadLetter<? extends EventMessage> actual = (JpaDeadLetter<? extends EventMessage>) result;
 
-            assertEquals(expected.getSequenceIdentifier(), actual.getSequenceIdentifier(), assertMessageSupplier);
+            assertThat(actual.getSequenceIdentifier()).as(assertMessageSupplier).isEqualTo(expected.getSequenceIdentifier());
             // The JPA DLQ stores payloads as serialized byte[]; convert back for comparison.
             Object actualPayload = eventConverter.convert(actual.message().payload(),
                                                           expected.message().payload().getClass());
-            assertEquals(expected.message().payload(), actualPayload, assertMessageSupplier);
-            assertFalse(result.cause().isPresent(), assertMessageSupplier);
-            assertEquals(expected.diagnostics(), actual.diagnostics(), assertMessageSupplier);
-            assertEquals(sequenceIndex.longValue(), actual.getIndex(), assertMessageSupplier);
+            assertThat(actualPayload).as(assertMessageSupplier).isEqualTo(expected.message().payload());
+            assertThat(result.cause().isPresent()).as(assertMessageSupplier).isFalse();
+            assertThat(actual.diagnostics()).as(assertMessageSupplier).isEqualTo(expected.diagnostics());
+            assertThat(actual.getIndex()).as(assertMessageSupplier).isEqualTo(sequenceIndex.longValue());
         }
     }
 
