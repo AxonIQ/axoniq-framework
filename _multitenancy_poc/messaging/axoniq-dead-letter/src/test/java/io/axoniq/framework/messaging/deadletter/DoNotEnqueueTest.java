@@ -27,7 +27,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating {@link DoNotEnqueue}. Constructs a {@code DoNotEnqueue} through the constructor and
@@ -50,32 +50,32 @@ class DoNotEnqueueTest {
     void constructorDoNotEnqueueDoesNotAllowEnqueueing() {
         DoNotEnqueue<Message> testSubject = new DoNotEnqueue<>();
 
-        assertFalse(testSubject.shouldEnqueue());
-        assertFalse(testSubject.enqueueCause().isPresent());
+        assertThat(testSubject.shouldEnqueue()).isFalse();
+        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
-        assertEquals(testLetter, result);
+        assertThat(result).isEqualTo(testLetter);
     }
 
     @Test
     void decisionsDoNotEnqueueDoesNotAllowEnqueueing() {
         DoNotEnqueue<Message> testSubject = Decisions.doNotEnqueue();
 
-        assertFalse(testSubject.shouldEnqueue());
-        assertFalse(testSubject.enqueueCause().isPresent());
+        assertThat(testSubject.shouldEnqueue()).isFalse();
+        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
-        assertEquals(testLetter, result);
+        assertThat(result).isEqualTo(testLetter);
     }
 
     @Test
     void decisionsEvictDoesNotAllowEnqueueing() {
         DoNotEnqueue<Message> testSubject = Decisions.evict();
 
-        assertFalse(testSubject.shouldEnqueue());
-        assertFalse(testSubject.enqueueCause().isPresent());
+        assertThat(testSubject.shouldEnqueue()).isFalse();
+        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
-        assertEquals(testLetter, result);
+        assertThat(result).isEqualTo(testLetter);
     }
 }

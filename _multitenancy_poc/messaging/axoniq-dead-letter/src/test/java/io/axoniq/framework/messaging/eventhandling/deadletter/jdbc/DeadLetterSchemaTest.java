@@ -21,7 +21,7 @@ package io.axoniq.framework.messaging.eventhandling.deadletter.jdbc;
 import org.axonframework.common.AxonConfigurationException;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link DeadLetterSchema}.
@@ -38,21 +38,21 @@ class DeadLetterSchemaTest {
                                                   .deadLetterTable(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.deadLetterTable());
+        assertThat(result.deadLetterTable()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullDeadLetterTableThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.deadLetterTable(null));
+        assertThatThrownBy(() -> testBuilder.deadLetterTable(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyDeadLetterTableThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.deadLetterTable(""));
+        assertThatThrownBy(() -> testBuilder.deadLetterTable("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -61,21 +61,21 @@ class DeadLetterSchemaTest {
                                                   .deadLetterIdentifierColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.deadLetterIdentifierColumn());
+        assertThat(result.deadLetterIdentifierColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullDeadLetterIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.deadLetterIdentifierColumn(null));
+        assertThatThrownBy(() -> testBuilder.deadLetterIdentifierColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyDeadLetterIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.deadLetterIdentifierColumn(""));
+        assertThatThrownBy(() -> testBuilder.deadLetterIdentifierColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -84,21 +84,21 @@ class DeadLetterSchemaTest {
                                                   .processingGroupColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.processingGroupColumn());
+        assertThat(result.processingGroupColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullProcessingGroupColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.processingGroupColumn(null));
+        assertThatThrownBy(() -> testBuilder.processingGroupColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyProcessingGroupColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.processingGroupColumn(""));
+        assertThatThrownBy(() -> testBuilder.processingGroupColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -107,21 +107,21 @@ class DeadLetterSchemaTest {
                                                   .sequenceIdentifierColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.sequenceIdentifierColumn());
+        assertThat(result.sequenceIdentifierColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullSequenceIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.sequenceIdentifierColumn(null));
+        assertThatThrownBy(() -> testBuilder.sequenceIdentifierColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptySequenceIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.sequenceIdentifierColumn(""));
+        assertThatThrownBy(() -> testBuilder.sequenceIdentifierColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -130,21 +130,21 @@ class DeadLetterSchemaTest {
                                                   .sequenceIndexColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.sequenceIndexColumn());
+        assertThat(result.sequenceIndexColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullSequenceIndexColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.sequenceIndexColumn(null));
+        assertThatThrownBy(() -> testBuilder.sequenceIndexColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptySequenceIndexColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.sequenceIndexColumn(""));
+        assertThatThrownBy(() -> testBuilder.sequenceIndexColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -153,21 +153,21 @@ class DeadLetterSchemaTest {
                                                   .eventTypeColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.eventTypeColumn());
+        assertThat(result.eventTypeColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullEventTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.eventTypeColumn(null));
+        assertThatThrownBy(() -> testBuilder.eventTypeColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyEventTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.eventTypeColumn(""));
+        assertThatThrownBy(() -> testBuilder.eventTypeColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -176,21 +176,21 @@ class DeadLetterSchemaTest {
                                                   .eventIdentifierColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.eventIdentifierColumn());
+        assertThat(result.eventIdentifierColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullEventIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.eventIdentifierColumn(null));
+        assertThatThrownBy(() -> testBuilder.eventIdentifierColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyEventIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.eventIdentifierColumn(""));
+        assertThatThrownBy(() -> testBuilder.eventIdentifierColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -199,21 +199,21 @@ class DeadLetterSchemaTest {
                                                   .typeColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.typeColumn());
+        assertThat(result.typeColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.typeColumn(null));
+        assertThatThrownBy(() -> testBuilder.typeColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.typeColumn(""));
+        assertThatThrownBy(() -> testBuilder.typeColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -222,21 +222,21 @@ class DeadLetterSchemaTest {
                                                   .timestampColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.timestampColumn());
+        assertThat(result.timestampColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullTimeStampColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.timestampColumn(null));
+        assertThatThrownBy(() -> testBuilder.timestampColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyTimeStampColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.timestampColumn(""));
+        assertThatThrownBy(() -> testBuilder.timestampColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -245,21 +245,21 @@ class DeadLetterSchemaTest {
                                                   .payloadColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.payloadColumn());
+        assertThat(result.payloadColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullPayloadColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.payloadColumn(null));
+        assertThatThrownBy(() -> testBuilder.payloadColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyPayloadColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.payloadColumn(""));
+        assertThatThrownBy(() -> testBuilder.payloadColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -268,21 +268,21 @@ class DeadLetterSchemaTest {
                                                   .metadataColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.metadataColumn());
+        assertThat(result.metadataColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullMetadataColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.metadataColumn(null));
+        assertThatThrownBy(() -> testBuilder.metadataColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyMetadataColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.metadataColumn(""));
+        assertThatThrownBy(() -> testBuilder.metadataColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -291,21 +291,21 @@ class DeadLetterSchemaTest {
                                                   .aggregateTypeColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.aggregateTypeColumn());
+        assertThat(result.aggregateTypeColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullAggregateTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.aggregateTypeColumn(null));
+        assertThatThrownBy(() -> testBuilder.aggregateTypeColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyAggregateTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.aggregateTypeColumn(""));
+        assertThatThrownBy(() -> testBuilder.aggregateTypeColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -314,21 +314,21 @@ class DeadLetterSchemaTest {
                                                   .aggregateIdentifierColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.aggregateIdentifierColumn());
+        assertThat(result.aggregateIdentifierColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullAggregateIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.aggregateIdentifierColumn(null));
+        assertThatThrownBy(() -> testBuilder.aggregateIdentifierColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyAggregateIdentifierColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.aggregateIdentifierColumn(""));
+        assertThatThrownBy(() -> testBuilder.aggregateIdentifierColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -337,21 +337,21 @@ class DeadLetterSchemaTest {
                                                   .sequenceNumberColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.sequenceNumberColumn());
+        assertThat(result.sequenceNumberColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullSequenceNumberColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.sequenceNumberColumn(null));
+        assertThatThrownBy(() -> testBuilder.sequenceNumberColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptySequenceNumberColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.sequenceNumberColumn(""));
+        assertThatThrownBy(() -> testBuilder.sequenceNumberColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -360,21 +360,21 @@ class DeadLetterSchemaTest {
                                                   .tokenTypeColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.tokenTypeColumn());
+        assertThat(result.tokenTypeColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullTokenTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.tokenTypeColumn(null));
+        assertThatThrownBy(() -> testBuilder.tokenTypeColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyTokenTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.tokenTypeColumn(""));
+        assertThatThrownBy(() -> testBuilder.tokenTypeColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -383,21 +383,21 @@ class DeadLetterSchemaTest {
                                                   .tokenColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.tokenColumn());
+        assertThat(result.tokenColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullTokenColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.tokenColumn(null));
+        assertThatThrownBy(() -> testBuilder.tokenColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyTokenColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.tokenColumn(""));
+        assertThatThrownBy(() -> testBuilder.tokenColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -406,21 +406,21 @@ class DeadLetterSchemaTest {
                                                   .enqueuedAtColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.enqueuedAtColumn());
+        assertThat(result.enqueuedAtColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullEnqueuedAtColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.enqueuedAtColumn(null));
+        assertThatThrownBy(() -> testBuilder.enqueuedAtColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyEnqueuedAtColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.enqueuedAtColumn(""));
+        assertThatThrownBy(() -> testBuilder.enqueuedAtColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -429,21 +429,21 @@ class DeadLetterSchemaTest {
                                                   .lastTouchedColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.lastTouchedColumn());
+        assertThat(result.lastTouchedColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullLastTouchedColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.lastTouchedColumn(null));
+        assertThatThrownBy(() -> testBuilder.lastTouchedColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyLastTouchedColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.lastTouchedColumn(""));
+        assertThatThrownBy(() -> testBuilder.lastTouchedColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -452,21 +452,21 @@ class DeadLetterSchemaTest {
                                                   .processingStartedColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.processingStartedColumn());
+        assertThat(result.processingStartedColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullProcessingStartedColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.processingStartedColumn(null));
+        assertThatThrownBy(() -> testBuilder.processingStartedColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyProcessingStartedColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.processingStartedColumn(""));
+        assertThatThrownBy(() -> testBuilder.processingStartedColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -475,21 +475,21 @@ class DeadLetterSchemaTest {
                                                   .causeTypeColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.causeTypeColumn());
+        assertThat(result.causeTypeColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullCauseTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.causeTypeColumn(null));
+        assertThatThrownBy(() -> testBuilder.causeTypeColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyCauseTypeColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.causeTypeColumn(""));
+        assertThatThrownBy(() -> testBuilder.causeTypeColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -498,21 +498,21 @@ class DeadLetterSchemaTest {
                                                   .causeMessageColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.causeMessageColumn());
+        assertThat(result.causeMessageColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullCauseMessageColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.causeMessageColumn(null));
+        assertThatThrownBy(() -> testBuilder.causeMessageColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyCauseMessageColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.causeMessageColumn(""));
+        assertThatThrownBy(() -> testBuilder.causeMessageColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -521,20 +521,20 @@ class DeadLetterSchemaTest {
                                                   .diagnosticsColumn(TEST_COLUMN_NAME)
                                                   .build();
 
-        assertEquals(TEST_COLUMN_NAME, result.diagnosticsColumn());
+        assertThat(result.diagnosticsColumn()).isEqualTo(TEST_COLUMN_NAME);
     }
 
     @Test
     void buildWithNullDiagnosticsColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.diagnosticsColumn(null));
+        assertThatThrownBy(() -> testBuilder.diagnosticsColumn(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyDiagnosticsColumnThrowsAxonConfigurationException() {
         DeadLetterSchema.Builder testBuilder = DeadLetterSchema.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.diagnosticsColumn(""));
+        assertThatThrownBy(() -> testBuilder.diagnosticsColumn("")).isInstanceOf(AxonConfigurationException.class);
     }
 }

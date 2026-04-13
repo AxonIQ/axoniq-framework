@@ -27,7 +27,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating {@link Ignore}.  Constructs an {@code Ignore} through the constructor and {@link Decisions}
@@ -50,21 +50,21 @@ class IgnoreTest {
     void constructorIgnoreAllowsEnqueueing() {
         Ignore<Message> testSubject = new Ignore<>();
 
-        assertTrue(testSubject.shouldEnqueue());
-        assertFalse(testSubject.enqueueCause().isPresent());
+        assertThat(testSubject.shouldEnqueue()).isTrue();
+        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
-        assertEquals(testLetter, result);
+        assertThat(result).isEqualTo(testLetter);
     }
 
     @Test
     void decisionsIgnoreAllowsEnqueueing() {
         Ignore<Message> testSubject = Decisions.ignore();
 
-        assertTrue(testSubject.shouldEnqueue());
-        assertFalse(testSubject.enqueueCause().isPresent());
+        assertThat(testSubject.shouldEnqueue()).isTrue();
+        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
-        assertEquals(testLetter, result);
+        assertThat(result).isEqualTo(testLetter);
     }
 }

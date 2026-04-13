@@ -52,8 +52,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -99,9 +98,9 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then
             assertSuccessfulStream(result);
-            assertTrue(delegate.wasHandled());
+            assertThat(delegate.wasHandled()).isTrue();
             assertThat(delegate.handledEvent()).isEqualTo(testEvent);
-            assertFalse(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isFalse();
         }
 
         @Test
@@ -121,7 +120,7 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then - delegate should NOT be called because sequence is already dead-lettered
             assertSuccessfulStream(result);
-            assertFalse(delegate.wasHandled());
+            assertThat(delegate.wasHandled()).isFalse();
             assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isEqualTo(2);
         }
 
@@ -141,8 +140,8 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then
             assertSuccessfulStream(result);
-            assertTrue(delegate.wasHandled());
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(delegate.wasHandled()).isTrue();
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
             assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isEqualTo(1);
         }
 
@@ -164,8 +163,8 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then
             assertSuccessfulStream(result);
-            assertTrue(delegate.wasHandled());
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(delegate.wasHandled()).isTrue();
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
         }
 
         @Test
@@ -186,8 +185,8 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then
             assertSuccessfulStream(result);
-            assertTrue(delegate.wasHandled());
-            assertFalse(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(delegate.wasHandled()).isTrue();
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isFalse();
         }
 
         @Test
@@ -253,7 +252,7 @@ class DeadLetteringEventHandlingComponentTest {
 
             EventMessage testEvent = EventTestUtils.asEventMessage("test-payload");
             queue.enqueue(TEST_SEQUENCE_ID, new GenericDeadLetter<>(TEST_SEQUENCE_ID, testEvent), null).join();
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
 
             ResetContext resetContext = new GenericResetContext(new MessageType(String.class), "reset-payload");
             ProcessingContext context = new StubProcessingContext();
@@ -263,7 +262,7 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then
             assertSuccessfulStream(result);
-            assertFalse(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isFalse();
             assertThat(queue.size(null).join()).isEqualTo(0L);
         }
 
@@ -276,7 +275,7 @@ class DeadLetteringEventHandlingComponentTest {
 
             EventMessage testEvent = EventTestUtils.asEventMessage("test-payload");
             queue.enqueue(TEST_SEQUENCE_ID, new GenericDeadLetter<>(TEST_SEQUENCE_ID, testEvent), null).join();
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
 
             ResetContext resetContext = new GenericResetContext(new MessageType(String.class), "reset-payload");
             ProcessingContext context = new StubProcessingContext();
@@ -286,7 +285,7 @@ class DeadLetteringEventHandlingComponentTest {
 
             // then - queue should NOT be cleared
             assertSuccessfulStream(result);
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
             assertThat(queue.size(null).join()).isEqualTo(1L);
         }
     }
@@ -300,7 +299,7 @@ class DeadLetteringEventHandlingComponentTest {
             boolean result = testSubject.processAny().join();
 
             // then
-            assertFalse(result);
+            assertThat(result).isFalse();
         }
 
         @Test
@@ -310,15 +309,15 @@ class DeadLetteringEventHandlingComponentTest {
 
             EventMessage testEvent = EventTestUtils.asEventMessage("test-payload");
             queue.enqueue(TEST_SEQUENCE_ID, new GenericDeadLetter<>(TEST_SEQUENCE_ID, testEvent), null).join();
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
 
             // when
             boolean result = testSubject.processAny().join();
 
             // then
-            assertTrue(result);
-            assertFalse(queue.contains(TEST_SEQUENCE_ID, null).join());
-            assertTrue(delegate.wasHandled());
+            assertThat(result).isTrue();
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isFalse();
+            assertThat(delegate.wasHandled()).isTrue();
         }
 
         @Test
@@ -354,9 +353,9 @@ class DeadLetteringEventHandlingComponentTest {
             ).join();
 
             // then
-            assertTrue(result);
-            assertFalse(queue.contains(TEST_SEQUENCE_ID, null).join());
-            assertTrue(queue.contains(otherSequenceId, null).join()); // other sequence not processed
+            assertThat(result).isTrue();
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isFalse();
+            assertThat(queue.contains(otherSequenceId, null).join()).isTrue(); // other sequence not processed
         }
 
         @Test
@@ -375,8 +374,8 @@ class DeadLetteringEventHandlingComponentTest {
             boolean result = testSubject.processAny().join();
 
             // then - letter should be requeued (still in queue)
-            assertFalse(result);
-            assertTrue(queue.contains(TEST_SEQUENCE_ID, null).join());
+            assertThat(result).isFalse();
+            assertThat(queue.contains(TEST_SEQUENCE_ID, null).join()).isTrue();
             assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isEqualTo(1);
         }
     }
@@ -641,7 +640,7 @@ class DeadLetteringEventHandlingComponentTest {
                 boolean result = testSubject.processAny().join();
 
                 // then - letter should be evicted despite failure
-                assertTrue(result);
+                assertThat(result).isTrue();
                 assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isZero();
             }
 
@@ -666,7 +665,7 @@ class DeadLetteringEventHandlingComponentTest {
                 boolean result = testSubject.processAny().join();
 
                 // then - letter should be evicted despite failure
-                assertTrue(result);
+                assertThat(result).isTrue();
                 assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isZero();
             }
 
@@ -691,7 +690,7 @@ class DeadLetteringEventHandlingComponentTest {
                 boolean result = testSubject.processAny().join();
 
                 // then - letter should remain in queue with updated cause
-                assertFalse(result);
+                assertThat(result).isFalse();
                 DeadLetter<? extends EventMessage> deadLetter = getFirstDeadLetter(TEST_SEQUENCE_ID);
                 assertThat(deadLetter.message().payload()).isEqualTo("test-payload");
                 assertThat(deadLetter.cause()).hasValueSatisfying(
@@ -717,7 +716,7 @@ class DeadLetteringEventHandlingComponentTest {
                 boolean result = testSubject.processAny().join();
 
                 // then - letter should be evicted on success
-                assertTrue(result);
+                assertThat(result).isTrue();
                 assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isZero();
             }
         }
@@ -757,9 +756,9 @@ class DeadLetteringEventHandlingComponentTest {
                 boolean result3 = testSubject.processAny().join();
 
                 // then - first two should requeue (return false), third should evict (return true)
-                assertFalse(result1);
-                assertFalse(result2);
-                assertTrue(result3);
+                assertThat(result1).isFalse();
+                assertThat(result2).isFalse();
+                assertThat(result3).isTrue();
                 assertThat(queue.sequenceSize(TEST_SEQUENCE_ID, null).join()).isZero();
             }
 
@@ -794,8 +793,8 @@ class DeadLetteringEventHandlingComponentTest {
                 boolean result2 = testSubject.processAny().join();
 
                 // then - both should requeue, letter still in queue with same payload
-                assertFalse(result1);
-                assertFalse(result2);
+                assertThat(result1).isFalse();
+                assertThat(result2).isFalse();
                 assertThat(retryCount.get()).isEqualTo(2);
                 DeadLetter<? extends EventMessage> deadLetter = getFirstDeadLetter(TEST_SEQUENCE_ID);
                 assertThat(deadLetter.message().payload()).isEqualTo("test-payload");
@@ -909,13 +908,13 @@ class DeadLetteringEventHandlingComponentTest {
     }
 
     private static void assertSuccessfulStream(MessageStream.Empty<Message> result) {
-        assertTrue(result.error().isEmpty());
+        assertThat(result.error()).isEmpty();
     }
 
     private static void assertFailedStreamWithError(MessageStream.Empty<Message> result,
                                                     Class<? extends Throwable> expectedType,
                                                     String expectedMessage) {
-        assertTrue(result.error().isPresent());
+        assertThat(result.error()).isPresent();
         Throwable error = result.error().get();
         assertThat(error).isInstanceOf(expectedType);
         assertThat(error.getMessage()).contains(expectedMessage);

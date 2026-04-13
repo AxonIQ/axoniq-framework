@@ -28,7 +28,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link GenericDeadLetter}.
@@ -47,11 +47,11 @@ class GenericDeadLetterTest {
 
         DeadLetter<EventMessage> testSubject = new GenericDeadLetter<>(SEQUENCE_IDENTIFIER, MESSAGE);
 
-        assertEquals(MESSAGE, testSubject.message());
-        assertFalse(testSubject.cause().isPresent());
-        assertEquals(expectedTime, testSubject.enqueuedAt());
-        assertEquals(expectedTime, testSubject.lastTouched());
-        assertTrue(testSubject.diagnostics().isEmpty());
+        assertThat(testSubject.message()).isEqualTo(MESSAGE);
+        assertThat(testSubject.cause().isPresent()).isFalse();
+        assertThat(testSubject.enqueuedAt()).isEqualTo(expectedTime);
+        assertThat(testSubject.lastTouched()).isEqualTo(expectedTime);
+        assertThat(testSubject.diagnostics().isEmpty()).isTrue();
     }
 
     @Test
@@ -64,13 +64,13 @@ class GenericDeadLetterTest {
         DeadLetter<EventMessage> testSubject =
                 new GenericDeadLetter<>(SEQUENCE_IDENTIFIER, MESSAGE, testThrowable);
 
-        assertEquals(MESSAGE, testSubject.message());
+        assertThat(testSubject.message()).isEqualTo(MESSAGE);
         Optional<Cause> resultCause = testSubject.cause();
-        assertTrue(resultCause.isPresent());
-        assertEquals(expectedCause, resultCause.get());
-        assertEquals(expectedTime, testSubject.enqueuedAt());
-        assertEquals(expectedTime, testSubject.lastTouched());
-        assertTrue(testSubject.diagnostics().isEmpty());
+        assertThat(resultCause.isPresent()).isTrue();
+        assertThat(resultCause.get()).isEqualTo(expectedCause);
+        assertThat(testSubject.enqueuedAt()).isEqualTo(expectedTime);
+        assertThat(testSubject.lastTouched()).isEqualTo(expectedTime);
+        assertThat(testSubject.diagnostics().isEmpty()).isTrue();
     }
 
     @Test
@@ -85,13 +85,13 @@ class GenericDeadLetterTest {
                 expectedDiagnostics
         );
 
-        assertEquals(MESSAGE, testSubject.message());
+        assertThat(testSubject.message()).isEqualTo(MESSAGE);
         Optional<Cause> resultCause = testSubject.cause();
-        assertTrue(resultCause.isPresent());
-        assertEquals(expectedCause, resultCause.get());
-        assertEquals(expectedEnqueuedAt, testSubject.enqueuedAt());
-        assertEquals(expectedLastTouched, testSubject.lastTouched());
-        assertEquals(expectedDiagnostics, testSubject.diagnostics());
+        assertThat(resultCause.isPresent()).isTrue();
+        assertThat(resultCause.get()).isEqualTo(expectedCause);
+        assertThat(testSubject.enqueuedAt()).isEqualTo(expectedEnqueuedAt);
+        assertThat(testSubject.lastTouched()).isEqualTo(expectedLastTouched);
+        assertThat(testSubject.diagnostics()).isEqualTo(expectedDiagnostics);
     }
 
     @Test
@@ -102,12 +102,12 @@ class GenericDeadLetterTest {
         GenericDeadLetter.clock = Clock.fixed(expectedLastTouched, ZoneId.systemDefault());
         DeadLetter<EventMessage> result = testSubject.markTouched();
 
-        assertEquals(testSubject.message(), result.message());
+        assertThat(result.message()).isEqualTo(testSubject.message());
         Optional<Cause> resultCause = result.cause();
-        assertFalse(resultCause.isPresent());
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(expectedLastTouched, result.lastTouched());
-        assertEquals(testSubject.diagnostics(), result.diagnostics());
+        assertThat(resultCause.isPresent()).isFalse();
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(expectedLastTouched);
+        assertThat(result.diagnostics()).isEqualTo(testSubject.diagnostics());
     }
 
     @Test
@@ -122,13 +122,13 @@ class GenericDeadLetterTest {
 
         DeadLetter<EventMessage> result = testSubject.withCause(testThrowable);
 
-        assertEquals(testSubject.message(), result.message());
+        assertThat(result.message()).isEqualTo(testSubject.message());
         Optional<Cause> resultCause = result.cause();
-        assertTrue(resultCause.isPresent());
-        assertEquals(expectedCause, resultCause.get());
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(testSubject.lastTouched(), result.lastTouched());
-        assertEquals(testSubject.diagnostics(), result.diagnostics());
+        assertThat(resultCause.isPresent()).isTrue();
+        assertThat(resultCause.get()).isEqualTo(expectedCause);
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
+        assertThat(result.diagnostics()).isEqualTo(testSubject.diagnostics());
     }
 
     @Test
@@ -145,13 +145,13 @@ class GenericDeadLetterTest {
 
         DeadLetter<EventMessage> result = testSubject.withCause(testThrowable);
 
-        assertEquals(testSubject.message(), result.message());
+        assertThat(result.message()).isEqualTo(testSubject.message());
         Optional<Cause> resultCause = result.cause();
-        assertTrue(resultCause.isPresent());
-        assertEquals(expectedCause, resultCause.get());
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(testSubject.lastTouched(), result.lastTouched());
-        assertEquals(testSubject.diagnostics(), result.diagnostics());
+        assertThat(resultCause.isPresent()).isTrue();
+        assertThat(resultCause.get()).isEqualTo(expectedCause);
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
+        assertThat(result.diagnostics()).isEqualTo(testSubject.diagnostics());
     }
 
     @Test
@@ -163,11 +163,11 @@ class GenericDeadLetterTest {
 
         DeadLetter<EventMessage> result = testSubject.withCause(null);
 
-        assertEquals(testSubject.message(), result.message());
-        assertFalse(result.cause().isPresent());
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(testSubject.lastTouched(), result.lastTouched());
-        assertEquals(testSubject.diagnostics(), result.diagnostics());
+        assertThat(result.message()).isEqualTo(testSubject.message());
+        assertThat(result.cause().isPresent()).isFalse();
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
+        assertThat(result.diagnostics()).isEqualTo(testSubject.diagnostics());
     }
 
     @Test
@@ -183,13 +183,13 @@ class GenericDeadLetterTest {
 
         DeadLetter<EventMessage> result = testSubject.withCause(null);
 
-        assertEquals(testSubject.message(), result.message());
+        assertThat(result.message()).isEqualTo(testSubject.message());
         Optional<Cause> resultCause = result.cause();
-        assertTrue(resultCause.isPresent());
-        assertEquals(resultCause.get(), expectedCause);
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(testSubject.lastTouched(), result.lastTouched());
-        assertEquals(testSubject.diagnostics(), result.diagnostics());
+        assertThat(resultCause.isPresent()).isTrue();
+        assertThat(expectedCause).isEqualTo(resultCause.get());
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
+        assertThat(result.diagnostics()).isEqualTo(testSubject.diagnostics());
     }
 
     @Test
@@ -207,12 +207,12 @@ class GenericDeadLetterTest {
 
         DeadLetter<EventMessage> result = testSubject.withDiagnostics(expectedDiagnostics);
 
-        assertEquals(testSubject.message(), result.message());
+        assertThat(result.message()).isEqualTo(testSubject.message());
         Optional<Cause> resultCause = result.cause();
-        assertFalse(resultCause.isPresent());
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(testSubject.lastTouched(), result.lastTouched());
-        assertEquals(expectedDiagnostics, result.diagnostics());
+        assertThat(resultCause.isPresent()).isFalse();
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
+        assertThat(result.diagnostics()).isEqualTo(expectedDiagnostics);
     }
 
     @Test
@@ -231,11 +231,11 @@ class GenericDeadLetterTest {
         DeadLetter<EventMessage> result =
                 testSubject.withDiagnostics(original -> original.and("new-key", "new-value"));
 
-        assertEquals(testSubject.message(), result.message());
+        assertThat(result.message()).isEqualTo(testSubject.message());
         Optional<Cause> resultCause = result.cause();
-        assertFalse(resultCause.isPresent());
-        assertEquals(testSubject.enqueuedAt(), result.enqueuedAt());
-        assertEquals(testSubject.lastTouched(), result.lastTouched());
-        assertEquals(expectedDiagnostics, result.diagnostics());
+        assertThat(resultCause.isPresent()).isFalse();
+        assertThat(result.enqueuedAt()).isEqualTo(testSubject.enqueuedAt());
+        assertThat(result.lastTouched()).isEqualTo(testSubject.lastTouched());
+        assertThat(result.diagnostics()).isEqualTo(expectedDiagnostics);
     }
 }

@@ -74,7 +74,7 @@ import java.util.function.Consumer;
 import static org.awaitility.Awaitility.await;
 import static org.axonframework.common.util.AssertUtils.assertWithin;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Integration test validating the combination of a {@link StreamingEventProcessor} containing a
@@ -292,24 +292,23 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 2);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 2).isTrue();
             });
 
-            assertTrue(eventHandler.initialHandlingWasSuccessful("success"));
-            assertTrue(eventHandler.initialHandlingWasUnsuccessful("failure"));
+            assertThat(eventHandler.initialHandlingWasSuccessful("success")).isTrue();
+            assertThat(eventHandler.initialHandlingWasUnsuccessful("failure")).isTrue();
 
-            assertTrue(deadLetterQueue.contains("failure", null).join());
-            assertFalse(deadLetterQueue.contains("success", null).join());
+            assertThat(deadLetterQueue.contains("failure", null).join()).isTrue();
+            assertThat(deadLetterQueue.contains("success", null).join()).isFalse();
 
             Iterator<DeadLetter<? extends EventMessage>> sequence =
                     deadLetterQueue.deadLetterSequence("failure", null).join().iterator();
-            assertTrue(sequence.hasNext());
-            assertEquals(failedEvent.payload(),
-                         sequence.next().message().payloadAs(DeadLetterableEvent.class));
-            assertFalse(sequence.hasNext());
+            assertThat(sequence.hasNext()).isTrue();
+            assertThat(sequence.next().message().payloadAs(DeadLetterableEvent.class)).isEqualTo(failedEvent.payload());
+            assertThat(sequence.hasNext()).isFalse();
         }
 
         @Test
@@ -334,32 +333,28 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 6);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
             });
 
-            assertTrue(eventHandler.initialHandlingWasSuccessful(aggregateId));
-            assertEquals(expectedSuccessfulHandlingCount,
-                         eventHandler.successfulInitialHandlingCount(aggregateId));
-            assertTrue(eventHandler.initialHandlingWasUnsuccessful(aggregateId));
-            assertEquals(1, eventHandler.unsuccessfulInitialHandlingCount(aggregateId));
+            assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.successfulInitialHandlingCount(aggregateId)).isEqualTo(expectedSuccessfulHandlingCount);
+            assertThat(eventHandler.initialHandlingWasUnsuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(1);
 
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
             assertWithin(2, TimeUnit.SECONDS, () -> {
                 Iterator<DeadLetter<? extends EventMessage>> sequence =
                         deadLetterQueue.deadLetterSequence(aggregateId, null).join().iterator();
-                assertTrue(sequence.hasNext());
-                assertEquals(firstDeadLetter,
-                             sequence.next().message().payloadAs(DeadLetterableEvent.class));
-                assertTrue(sequence.hasNext());
-                assertEquals(secondDeadLetter,
-                             sequence.next().message().payloadAs(DeadLetterableEvent.class));
-                assertTrue(sequence.hasNext());
-                assertEquals(thirdDeadLetter,
-                             sequence.next().message().payloadAs(DeadLetterableEvent.class));
-                assertFalse(sequence.hasNext());
+                assertThat(sequence.hasNext()).isTrue();
+                assertThat(sequence.next().message().payloadAs(DeadLetterableEvent.class)).isEqualTo(firstDeadLetter);
+                assertThat(sequence.hasNext()).isTrue();
+                assertThat(sequence.next().message().payloadAs(DeadLetterableEvent.class)).isEqualTo(secondDeadLetter);
+                assertThat(sequence.hasNext()).isTrue();
+                assertThat(sequence.next().message().payloadAs(DeadLetterableEvent.class)).isEqualTo(thirdDeadLetter);
+                assertThat(sequence.hasNext()).isFalse();
             });
         }
     }
@@ -389,39 +384,35 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 6);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
             });
 
-            assertTrue(eventHandler.initialHandlingWasSuccessful(aggregateId));
-            assertEquals(expectedSuccessfulInitialHandlingCount,
-                         eventHandler.successfulInitialHandlingCount(aggregateId));
-            assertTrue(eventHandler.initialHandlingWasUnsuccessful(aggregateId));
-            assertEquals(expectedUnsuccessfulInitialHandlingCount,
-                         eventHandler.unsuccessfulInitialHandlingCount(aggregateId));
+            assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.successfulInitialHandlingCount(aggregateId)).isEqualTo(expectedSuccessfulInitialHandlingCount);
+            assertThat(eventHandler.initialHandlingWasUnsuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(expectedUnsuccessfulInitialHandlingCount);
 
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             // when
             deadLetteringComponent.process(deadLetter -> true).join();
 
             // then
             assertWithin(1, TimeUnit.SECONDS,
-                         () -> assertTrue(eventHandler.evaluationWasSuccessful(aggregateId)));
-            assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(
-                    expectedSuccessfulEvaluationCount,
+                         () -> assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isTrue());
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(
                     eventHandler.successfulEvaluationCount(aggregateId)
-            ));
+            ).isEqualTo(expectedSuccessfulEvaluationCount));
             assertWithin(1, TimeUnit.SECONDS,
-                         () -> assertFalse(eventHandler.evaluationWasUnsuccessful(aggregateId)));
-            assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(
-                    expectedUnsuccessfulEvaluationCount,
+                         () -> assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isFalse());
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(
                     eventHandler.unsuccessfulEvaluationCount(aggregateId)
-            ));
+            ).isEqualTo(expectedUnsuccessfulEvaluationCount));
 
-            assertWithin(1, TimeUnit.SECONDS, () -> assertFalse(deadLetterQueue.contains(aggregateId, null).join()));
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(deadLetterQueue.contains(aggregateId, null).join()).isFalse());
         }
 
         @Test
@@ -447,40 +438,36 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(2, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 6);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
             });
 
-            assertTrue(eventHandler.initialHandlingWasSuccessful(aggregateId));
-            assertEquals(expectedSuccessfulInitialHandlingCount,
-                         eventHandler.successfulInitialHandlingCount(aggregateId));
-            assertTrue(eventHandler.initialHandlingWasUnsuccessful(aggregateId));
-            assertEquals(expectedUnsuccessfulInitialHandlingCount,
-                         eventHandler.unsuccessfulInitialHandlingCount(aggregateId));
+            assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.successfulInitialHandlingCount(aggregateId)).isEqualTo(expectedSuccessfulInitialHandlingCount);
+            assertThat(eventHandler.initialHandlingWasUnsuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(expectedUnsuccessfulInitialHandlingCount);
 
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             // when
             deadLetteringComponent.process(deadLetter -> true).join();
 
             // then
             assertWithin(1, TimeUnit.SECONDS,
-                         () -> assertTrue(eventHandler.evaluationWasSuccessful(aggregateId)));
-            assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(
-                    expectedSuccessfulEvaluationCount,
+                         () -> assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isTrue());
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(
                     eventHandler.successfulEvaluationCount(aggregateId)
-            ));
+            ).isEqualTo(expectedSuccessfulEvaluationCount));
             assertWithin(1, TimeUnit.SECONDS,
-                         () -> assertTrue(eventHandler.evaluationWasUnsuccessful(aggregateId)));
-            assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(
-                    expectedUnsuccessfulEvaluationCount,
+                         () -> assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isTrue());
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(
                     eventHandler.unsuccessfulEvaluationCount(aggregateId)
-            ));
+            ).isEqualTo(expectedUnsuccessfulEvaluationCount));
 
             // As evaluation fails, the sequenceId should still exist
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
         }
 
         @Test
@@ -500,23 +487,23 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 6);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
             });
 
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             // During initial event handling, the DeadLetter should NOT be in the ProcessingContext
-            assertEquals(0, eventHandler.deadLetterInContextCount(aggregateId));
+            assertThat(eventHandler.deadLetterInContextCount(aggregateId)).isEqualTo(0);
 
             // when
             deadLetteringComponent.process(deadLetter -> true).join();
 
             // then — all 3 dead-lettered events should have had the DeadLetter available in the ProcessingContext
             assertWithin(1, TimeUnit.SECONDS,
-                         () -> assertEquals(3, eventHandler.deadLetterInContextCount(aggregateId)));
+                         () -> assertThat(eventHandler.deadLetterInContextCount(aggregateId)).isEqualTo(3));
         }
 
         @Test
@@ -538,16 +525,16 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 6);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
             });
 
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             // During initial event handling, no TrackingToken should be found in the context via DeadLetter
-            assertEquals(0, eventHandler.tokenInContextOnRetryCount(aggregateId));
+            assertThat(eventHandler.tokenInContextOnRetryCount(aggregateId)).isEqualTo(0);
 
             // when — retry dead-lettered events; DeadLetteredEventProcessingTask merges context resources back
             deadLetteringComponent.process(deadLetter -> true).join();
@@ -555,7 +542,7 @@ public abstract class DeadLetteringEventIntegrationTest {
             // then — all 3 retried events should have had a TrackingToken available in the ProcessingContext,
             // proving that the context captured during streaming was preserved through the DLQ round-trip
             assertWithin(1, TimeUnit.SECONDS,
-                         () -> assertEquals(3, eventHandler.tokenInContextOnRetryCount(aggregateId)));
+                         () -> assertThat(eventHandler.tokenInContextOnRetryCount(aggregateId)).isEqualTo(3));
         }
     }
 
@@ -592,36 +579,32 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(2, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertTrue(status.getCurrentPosition().orElse(-1) >= 6);
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
             });
 
-            assertTrue(eventHandler.initialHandlingWasSuccessful(aggregateId));
-            assertEquals(expectedSuccessfulInitialHandlingCount,
-                         eventHandler.successfulInitialHandlingCount(aggregateId));
-            assertTrue(eventHandler.initialHandlingWasUnsuccessful(aggregateId));
-            assertEquals(expectedUnsuccessfulInitialHandlingCount,
-                         eventHandler.unsuccessfulInitialHandlingCount(aggregateId));
+            assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.successfulInitialHandlingCount(aggregateId)).isEqualTo(expectedSuccessfulInitialHandlingCount);
+            assertThat(eventHandler.initialHandlingWasUnsuccessful(aggregateId)).isTrue();
+            assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(expectedUnsuccessfulInitialHandlingCount);
 
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             assertWithin(2, TimeUnit.SECONDS,
-                         () -> assertTrue(eventHandler.evaluationWasSuccessful(aggregateId)));
-            assertWithin(500, TimeUnit.MILLISECONDS, () -> assertEquals(
-                    expectedSuccessfulEvaluationCount,
+                         () -> assertThat(eventHandler.evaluationWasSuccessful(aggregateId)).isTrue());
+            assertWithin(500, TimeUnit.MILLISECONDS, () -> assertThat(
                     eventHandler.successfulEvaluationCount(aggregateId)
-            ));
+            ).isEqualTo(expectedSuccessfulEvaluationCount));
             assertWithin(500, TimeUnit.MILLISECONDS,
-                         () -> assertTrue(eventHandler.evaluationWasUnsuccessful(aggregateId)));
-            assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(
-                    expectedUnsuccessfulEvaluationCount,
+                         () -> assertThat(eventHandler.evaluationWasUnsuccessful(aggregateId)).isTrue());
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(
                     eventHandler.unsuccessfulEvaluationCount(aggregateId)
-            ));
+            ).isEqualTo(expectedUnsuccessfulEvaluationCount));
 
             // As evaluation fails, the sequenceId should still exist
-            assertTrue(deadLetterQueue.contains(aggregateId, null).join());
+            assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
         }
 
         @Test
@@ -660,10 +643,10 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(15, TimeUnit.SECONDS, () -> {
-                assertEquals(1, streamingProcessor.processingStatus().size());
+                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
                 var status = streamingProcessor.processingStatus().get(0);
-                assertNotNull(status);
-                assertEquals(totalNumberOfEvents, status.getCurrentPosition().orElse(-1));
+                assertThat(status).isNotNull();
+                assertThat(status.getCurrentPosition().orElse(-1)).isEqualTo(totalNumberOfEvents);
             });
 
             for (String aggregateId : aggregateIds) {
@@ -674,36 +657,34 @@ public abstract class DeadLetteringEventIntegrationTest {
                 // Validate first try event handling...
                 // Successful...
                 assertWithin(500, TimeUnit.MILLISECONDS,
-                             () -> assertTrue(eventHandler.initialHandlingWasSuccessful(aggregateId)));
-                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertEquals(
-                        immediateSuccessesPerAggregate,
+                             () -> assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue());
+                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertThat(
                         eventHandler.successfulInitialHandlingCount(aggregateId)
-                ));
+                ).isEqualTo(immediateSuccessesPerAggregate));
                 // Unsuccessful...
-                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertTrue(
+                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertThat(
                         eventHandler.initialHandlingWasUnsuccessful(aggregateId)
-                ));
-                assertEquals(1, eventHandler.unsuccessfulInitialHandlingCount(aggregateId));
+                ).isTrue());
+                assertThat(eventHandler.unsuccessfulInitialHandlingCount(aggregateId)).isEqualTo(1);
 
                 // Validate evaluation event handling...
                 // Successful...
-                assertWithin(15, TimeUnit.SECONDS, () -> assertTrue(
+                assertWithin(15, TimeUnit.SECONDS, () -> assertThat(
                         eventHandler.evaluationWasSuccessful(aggregateId)
-                ));
-                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertEquals(
-                        expectedSuccessfulEvaluationCount,
+                ).isTrue());
+                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertThat(
                         eventHandler.successfulEvaluationCount(aggregateId)
-                ));
+                ).isEqualTo(expectedSuccessfulEvaluationCount));
                 // Unsuccessful...
-                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertTrue(
+                assertWithin(500, TimeUnit.MILLISECONDS, () -> assertThat(
                         eventHandler.evaluationWasUnsuccessful(aggregateId)
-                ));
-                assertTrue(eventHandler.unsuccessfulEvaluationCount(aggregateId)
-                                   >= persistentFailingPerAggregate);
+                ).isTrue());
+                assertThat(eventHandler.unsuccessfulEvaluationCount(aggregateId))
+                        .isGreaterThanOrEqualTo(persistentFailingPerAggregate);
 
                 // Overall...
-                assertEquals(expectedOverallSuccessfulHandlingCount,
-                             eventHandler.overallSuccessfulHandlingCount(aggregateId));
+                assertThat(eventHandler.overallSuccessfulHandlingCount(aggregateId))
+                        .isEqualTo(expectedOverallSuccessfulHandlingCount);
 
                 validatedAggregateIds.add(aggregateId);
             }
@@ -755,9 +736,9 @@ public abstract class DeadLetteringEventIntegrationTest {
                    .until(() -> deadLetterQueue.amountOfSequences(null).join() == 1);
 
             DeadLetter<?> deadLetter = deadLetterQueue.deadLetters(null).join().iterator().next().iterator().next();
-            assertTrue(deadLetter.cause().isPresent());
+            assertThat(deadLetter.cause().isPresent()).isTrue();
             String causeType = deadLetter.cause().get().type();
-            assertEquals(ReferenceException.class.getName(), causeType);
+            assertThat(causeType).isEqualTo(ReferenceException.class.getName());
         }
 
         @Test
@@ -781,11 +762,11 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             DeadLetter<?> deadLetter = deadLetterQueue.deadLetters(null).join().iterator().next().iterator().next();
             Optional<Cause> optionalCause = deadLetter.cause();
-            assertTrue(optionalCause.isPresent());
+            assertThat(optionalCause.isPresent()).isTrue();
             String resultMessage = optionalCause.get().message();
-            assertNotEquals(testCauseMessage, resultMessage);
-            assertFalse(resultMessage.contains(truncatedText));
-            assertTrue(resultMessage.contains(BLOB_OF_TEXT.substring(0, 10)));
+            assertThat(resultMessage).isNotEqualTo(testCauseMessage);
+            assertThat(resultMessage).doesNotContain(truncatedText);
+            assertThat(resultMessage).contains(BLOB_OF_TEXT.substring(0, 10));
         }
     }
 
