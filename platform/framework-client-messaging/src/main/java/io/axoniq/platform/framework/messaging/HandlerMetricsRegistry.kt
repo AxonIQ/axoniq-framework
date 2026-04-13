@@ -32,8 +32,8 @@ import io.axoniq.platform.framework.api.metrics.Metric
 import io.axoniq.platform.framework.api.metrics.MetricTargetType
 import io.axoniq.platform.framework.api.metrics.StatisticReport
 import io.axoniq.platform.framework.client.AxoniqConsoleRSocketClient
-import io.axoniq.platform.framework.client.ClientSettingsObserver
-import io.axoniq.platform.framework.client.ClientSettingsService
+import io.axoniq.platform.framework.client.PlatformClientConnectionObserver
+import io.axoniq.platform.framework.client.PlatformClientConnectionService
 import io.axoniq.platform.framework.computeIfAbsentWithRetry
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.Timer
@@ -45,9 +45,9 @@ import java.util.concurrent.TimeUnit
 
 class HandlerMetricsRegistry(
         private val axoniqConsoleRSocketClient: AxoniqConsoleRSocketClient,
-        private val clientSettingsService: ClientSettingsService,
+        private val platformClientConnectionService: PlatformClientConnectionService,
         private val properties: AxoniqPlatformConfiguration
-) : ClientSettingsObserver {
+) : PlatformClientConnectionObserver {
     private val logger = KotlinLogging.logger { }
     private var reportTask: ScheduledFuture<*>? = null
     private val meterRegistry = SimpleMeterRegistry()
@@ -63,10 +63,10 @@ class HandlerMetricsRegistry(
     )
 
     init {
-        clientSettingsService.subscribeToSettings(this)
+        platformClientConnectionService.subscribeToSettings(this)
     }
 
-    override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+    override fun onConnected(clientStatus: ClientStatus, settings: ClientSettingsV2) {
         if (!clientStatus.enabled || reportTask != null) {
             return
         }

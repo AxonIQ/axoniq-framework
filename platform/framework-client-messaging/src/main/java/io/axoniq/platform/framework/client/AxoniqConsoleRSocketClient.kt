@@ -51,7 +51,7 @@ import kotlin.math.pow
  *
  * Establishing a connection works as follows:
  * - The client will send a setup payload to the server, containing the authentication information
- * - The client will retrieve the settings from the server, and update the [ClientSettingsService] with the new settings
+ * - The client will retrieve the settings from the server, and update the [PlatformClientConnectionService] with the new settings
  * - The client will start sending heartbeats to the server, and will check if it receives heartbeats from the server
  *
  * The server is in control of these settings. Of course, the user can manipulate these as well themselves.
@@ -63,7 +63,7 @@ class AxoniqConsoleRSocketClient(
         private val setupPayloadCreator: SetupPayloadCreator,
         private val registrar: RSocketHandlerRegistrar,
         private val encodingStrategy: RSocketPayloadEncodingStrategy,
-        private val clientSettingsService: ClientSettingsService,
+        private val platformClientConnectionService: PlatformClientConnectionService,
         private val instanceName: String,
 ) {
     private val environmentId: String = properties.environmentId
@@ -93,18 +93,18 @@ class AxoniqConsoleRSocketClient(
     private var suppressConnectMessage = false
 
     init {
-        clientSettingsService.subscribeToSettings(heartbeatOrchestrator)
+        platformClientConnectionService.subscribeToSettings(heartbeatOrchestrator)
 
         // Server can send updated settings if necessary
         registrar.registerHandlerWithPayload(Routes.Management.SETTINGS, ClientSettingsV2::class.java) {
-            clientSettingsService.updateSettings(it)
+            platformClientConnectionService.onConnected(it)
         }
 
         // Server sends client status updates
         registrar.registerHandlerWithPayload(Routes.Management.STATUS, ClientStatusUpdate::class.java) {
             logger.debug("Received status update from Axoniq Platform. New status: {}", it.newStatus)
             status = it.newStatus
-            clientSettingsService.updateClientStatus(status)
+            platformClientConnectionService.updateClientStatus(status)
         }
 
         // Server can send log requests
@@ -172,7 +172,7 @@ class AxoniqConsoleRSocketClient(
                 .flatMap { socket ->
                     rsocket = socket
                     retrieveSettings().map { settings ->
-                        clientSettingsService.updateSettings(settings)
+                        platformClientConnectionService.onConnected(settings)
                         if (!suppressConnectMessage) {
                             logger.info("Connection to Axoniq Platform set up successfully! This instance's name: $instanceName, settings: $settings")
                             suppressConnectMessage = true
@@ -181,7 +181,10 @@ class AxoniqConsoleRSocketClient(
                         socket
                     }
                 }
-                .doOnError { disposeCurrentConnection() }
+                .doOnError { e ->
+                    disposeCurrentConnection()
+                    platformClientConnectionService.notifyUnreachable(classifyConnectionError(e))
+                }
                 .doFinally { synchronized(connectionLock) { pendingConnection = null } }
                 .cache()
     }
@@ -296,7 +299,7 @@ class AxoniqConsoleRSocketClient(
         if (currentRSocket != null) {
             rsocket = null
             currentRSocket.dispose()
-            clientSettingsService.clearSettings()
+            platformClientConnectionService.clearSettings()
         }
     }
 
@@ -310,7 +313,7 @@ class AxoniqConsoleRSocketClient(
         private const val BACKOFF_FACTOR = 2.0
     }
 
-    private inner class HeartbeatOrchestrator : ClientSettingsObserver {
+    private inner class HeartbeatOrchestrator : PlatformClientConnectionObserver {
         private var heartbeatSendTask: ScheduledFuture<*>? = null
         private var heartbeatCheckTask: ScheduledFuture<*>? = null
         private var lastReceivedHeartbeat = Instant.now()
@@ -323,7 +326,7 @@ class AxoniqConsoleRSocketClient(
             }
         }
 
-        override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+        override fun onConnected(clientStatus: ClientStatus, settings: ClientSettingsV2) {
             this.heartbeatSendTask?.cancel(true)
             this.heartbeatCheckTask?.cancel(true)
             lastReceivedHeartbeat = Instant.now()
@@ -363,6 +366,19 @@ class AxoniqConsoleRSocketClient(
                         logger.debug("Heartbeat successfully sent to Axoniq Platform")
                     }
                     ?: Mono.empty()
+        }
+    }
+
+    private fun classifyConnectionError(e: Throwable): PlatformClientConnectionObserver.UnreachableReason {
+        return when {
+            e.message?.contains("invalid authentication", ignoreCase = true) == true ->
+                PlatformClientConnectionObserver.UnreachableReason.INVALID_AUTHENTICATION
+            e.message?.contains("Access Denied", ignoreCase = true) == true ->
+                PlatformClientConnectionObserver.UnreachableReason.INVALID_AUTHENTICATION
+            e is java.net.ConnectException || e.cause is java.net.ConnectException ->
+                PlatformClientConnectionObserver.UnreachableReason.NO_CONNECTION
+            else ->
+                PlatformClientConnectionObserver.UnreachableReason.OTHER
         }
     }
 

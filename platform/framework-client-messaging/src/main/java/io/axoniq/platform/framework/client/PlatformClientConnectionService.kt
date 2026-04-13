@@ -22,10 +22,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Service that holds the client settings. See [ClientSettingsObserver] for more information.
+ * Service that holds the client settings. See [PlatformClientConnectionObserver] for more information.
  */
-class ClientSettingsService {
-    private val observers = CopyOnWriteArrayList<ClientSettingsObserver>()
+class PlatformClientConnectionService {
+    private val observers = CopyOnWriteArrayList<PlatformClientConnectionObserver>()
     private var clientStatus: ClientStatus = ClientStatus.PENDING
     private var settings: ClientSettingsV2? = null
     private val logger = KotlinLogging.logger { }
@@ -34,15 +34,15 @@ class ClientSettingsService {
         logger.debug { "Clearing client settings" }
         if (settings != null) {
             settings = null
-            observers.forEach { it.onDisconnected() }
         }
+        observers.forEach { it.onDisconnected() }
     }
 
-    fun subscribeToSettings(observer: ClientSettingsObserver) {
+    fun subscribeToSettings(observer: PlatformClientConnectionObserver) {
         logger.debug { "Subscribing to client settings $observer" }
         this.observers.add(observer)
         if (settings != null) {
-            observer.onConnectionUpdate(clientStatus, settings!!)
+            observer.onConnected(clientStatus, settings!!)
         }
     }
 
@@ -50,14 +50,19 @@ class ClientSettingsService {
         logger.debug { "Client status changed to $clientStatus" }
         this.clientStatus = clientStatus
         if (settings != null) {
-            observers.forEach { it.onConnectionUpdate(clientStatus, settings!!) }
+            observers.forEach { it.onConnected(clientStatus, settings!!) }
         }
     }
 
-    fun updateSettings(settings: ClientSettingsV2) {
+    fun notifyUnreachable(reason: PlatformClientConnectionObserver.UnreachableReason) {
+        logger.debug { "Notifying observers of unreachable: $reason" }
+        observers.forEach { it.onUnreachable(reason) }
+    }
+
+    fun onConnected(settings: ClientSettingsV2) {
         clearSettings()
         logger.debug { "Client settings changed to $settings" }
         this.settings = settings
-        observers.forEach { it.onConnectionUpdate(clientStatus, settings) }
+        observers.forEach { it.onConnected(clientStatus, settings) }
     }
 }
