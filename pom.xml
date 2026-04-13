@@ -76,6 +76,7 @@
         <module>messaging/axoniq-dead-letter</module>
 
         <module>dependency-injection/spring</module>
+        <module>integrationtests</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>
@@ -163,6 +164,7 @@
                 <extensions>true</extensions>
                 <configuration>
                     <publishingServerId>central</publishingServerId>
+                    <excludeArtifacts>axoniq-integrationtests</excludeArtifacts>
                 </configuration>
             </plugin>
 
@@ -215,7 +217,7 @@
                         <configuration>
                             <doclint>none</doclint>
                             <legacyMode>true</legacyMode>
-                            <skippedModules>axon-integrationtests</skippedModules>
+                            <skippedModules>axon-integrationtests,axoniq-integrationtests</skippedModules>
                             <!-- These parameters are in preparation for resolution of this issue: -->
                             <!-- https://bugs.openjdk.java.net/browse/JDK-8068562 -->
                             <tags>
