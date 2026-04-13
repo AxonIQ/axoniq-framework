@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.test.utils;
 
-import io.axoniq.workflow.dsl.Payload;
+import io.axoniq.workflow.dsl.api.Payload;
 import jakarta.annotation.Nonnull;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;

@@ -34,6 +34,7 @@
     </properties>
 
     <artifactId>axon-workflow-example-bike-rental</artifactId>
+    <name>Axon Extension - Workflow - Example Bike Rental</name>
 
     <dependencyManagement>
         <dependencies>

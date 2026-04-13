@@ -17,19 +17,21 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
-import io.axoniq.workflow.dsl.Payload;
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.PayloadReducer;
-import io.axoniq.workflow.runtime.api.PrimitiveCommands;
-import io.axoniq.workflow.runtime.api.RetryPolicy;
-import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.association.EqualsComparison;
-import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
+import io.axoniq.workflow.dsl.api.AssociationsUtils;
+import io.axoniq.workflow.dsl.api.Payload;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.association.EqualsComparison;
+import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
@@ -44,9 +46,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.*;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.dsl.api.Payload.payload;
+import static io.axoniq.workflow.runtime.api.payload.PayloadReducer.*;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Simple workflow DSL providing synchronous versions of step primitives.
@@ -582,7 +584,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * Terminates the entire workflow with an error, publishing a failure event and cancelling all running steps.
      *
      * @param cause the exception that caused the failure
-     * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
+     * @throws WorkflowFailedException always, after the failure event is published
      */
     public void fail(Throwable cause) {
         terminate(TerminateCommand.fail(cause, defaults()));
@@ -593,7 +595,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param cause               the exception that caused the failure
      * @param eventNameCustomizer customizer for the published failure event name
-     * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
+     * @throws WorkflowFailedException always, after the failure event is published
      */
     public void fail(Throwable cause, EventNameCustomizer eventNameCustomizer) {
         terminate(TerminateCommand.fail(cause, eventNameCustomizer));
@@ -653,7 +655,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with a {@link io.axoniq.workflow.runtime.api.StepCancellationException}.
+     * exceptionally with a {@link StepCancellationException}.
      *
      * @param stepName the name of the step to cancel
      */
@@ -663,7 +665,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with the given cause, wrapped in a {@link io.axoniq.workflow.runtime.api.StepCancellationException}
+     * exceptionally with the given cause, wrapped in a {@link StepCancellationException}
      * if it isn't one already.
      *
      * @param stepName the name of the step to cancel
@@ -675,14 +677,14 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with a {@link io.axoniq.workflow.runtime.api.StepCancellationException} carrying the given reason.
+     * exceptionally with a {@link StepCancellationException} carrying the given reason.
      *
      * @param stepName the name of the step to cancel
      * @param reason   descriptive reason for the step cancellation
      */
     public void cancelStep(String stepName, String reason) {
         terminate(TerminateCommand.cancelledStep(stepName,
-                                                 new io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                                                 new StepCancellationException(reason),
                                                  defaults()));
     }
 

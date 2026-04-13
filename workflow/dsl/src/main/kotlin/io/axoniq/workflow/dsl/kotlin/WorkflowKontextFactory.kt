@@ -17,9 +17,8 @@
  */
 package io.axoniq.workflow.dsl.kotlin
 
-import io.axoniq.workflow.runtime.api.EventNameCustomizer
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
 /**

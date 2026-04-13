@@ -17,9 +17,9 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils.MethodWithWorkflowAttributes;
+import io.axoniq.workflow.configuration.AutoDetectionUtils.MethodWithWorkflowAttributes;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.engine.configuration.AutoDetectionUtils.workflowMethods;
+import static io.axoniq.workflow.configuration.AutoDetectionUtils.workflowMethods;
 
 /**
  * Helper utilities for workflow definition lookup.

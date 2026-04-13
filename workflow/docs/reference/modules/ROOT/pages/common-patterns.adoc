@@ -274,7 +274,8 @@ Use `metadataProperty("workflowId")` to associate the completion event with the 
 [source,java]
 .Parent workflow — launches a child and waits for it to finish
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced",
+@Workflow(idProperty = "orderId",
+          startOnEvent = "OrderPlaced",
           workflowNamespace = "io.myapp")
 public void execute(SimpleWorkflowContext ctx) {
 

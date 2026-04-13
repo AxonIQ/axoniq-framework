@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +31,8 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProce
 import java.util.List;
 import java.util.Map;
 
-import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.*;
+import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.workflowBeanDefinitions;
+import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.workflowContextFactoryBeans;
 
 /**
  * Workflow definition lookup looking for beans with {@link @Workflow} annotated methods.

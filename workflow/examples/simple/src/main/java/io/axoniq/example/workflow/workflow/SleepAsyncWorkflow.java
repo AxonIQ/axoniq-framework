@@ -18,7 +18,8 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,11 +27,11 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Demonstrates {@link SimpleWorkflowContext#sleepAsync} — a non-blocking sleep composed
- * with an execute step via {@link io.axoniq.workflow.runtime.api.WorkflowContext#anyMatch}.
+ * with an execute step via {@link WorkflowContext#anyMatch}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
