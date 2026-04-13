@@ -16,24 +16,30 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.student;
 
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.deadletter.SequencedDeadLetterProcessor;
-import org.axonframework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
@@ -52,7 +58,7 @@ import static org.awaitility.Awaitility.await;
  * </ul>
  *
  * @author Mateusz Nowak
- * @since 5.0.0
+ * @since 5.1.0
  */
 class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
 
@@ -77,7 +83,8 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
                 .eventHandlingComponents(c -> c
                         .declarative("component0", cfg -> components[0])
                         .declarative("component1", cfg -> components[1]))
-                .customized((cfg, c) -> c.extend(DeadLetterQueueConfiguration.class, () -> new DeadLetterQueueConfiguration().enabled()));
+                .customized((cfg, c) -> c.extend(DeadLetterQueueConfiguration.class,
+                                                 () -> new DeadLetterQueueConfiguration().enabled()));
 
         return configurer.messaging(
                 messaging -> messaging.eventProcessing(
@@ -271,24 +278,27 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
     private SequencedDeadLetterQueue<EventMessage> getDlq(int componentIndex) {
         var componentName = "component" + componentIndex;
         var dlqName = "DeadLetterQueue[EventHandlingComponent[" + PROCESSOR_NAME + "][" + componentName + "]]";
-        return startedConfiguration.getModuleConfiguration(PROCESSOR_NAME)
-                                   .flatMap(m -> m.getOptionalComponent(
-                                           SequencedDeadLetterQueue.class, dlqName
-                                   ))
-                                   .orElseThrow(() -> new IllegalStateException(
-                                           "DLQ not found for component " + componentIndex));
+        return moduleConfiguration().flatMap(m -> m.getOptionalComponent(
+                                          SequencedDeadLetterQueue.class, dlqName
+                                  ))
+                                  .orElseThrow(() -> new IllegalStateException(
+                                          "DLQ not found for component " + componentIndex));
     }
 
     @SuppressWarnings("unchecked")
     private SequencedDeadLetterProcessor<EventMessage> getDeadLetterProcessor(int componentIndex) {
         var componentName = "component" + componentIndex;
-        return startedConfiguration.getModuleConfiguration(PROCESSOR_NAME)
-                                   .flatMap(m -> m.getOptionalComponent(
-                                           SequencedDeadLetterProcessor.class,
-                                           "EventHandlingComponent[" + PROCESSOR_NAME + "][" + componentName + "]"
-                                   ))
-                                   .orElseThrow(() -> new IllegalStateException(
-                                           "DeadLetterProcessor not found for component " + componentIndex));
+        return moduleConfiguration().flatMap(m -> m.getOptionalComponent(
+                                   SequencedDeadLetterProcessor.class,
+                                   "EventHandlingComponent[" + PROCESSOR_NAME + "][" + componentName + "]"
+                           ))
+                           .orElseThrow(() -> new IllegalStateException(
+                                   "DeadLetterProcessor not found for component " + componentIndex));
+    }
+
+    private Optional<Configuration> moduleConfiguration() {
+        return startedConfiguration.getModuleConfiguration("EventProcessor[" + PROCESSOR_NAME + "]")
+                                   .or(() -> startedConfiguration.getModuleConfiguration(PROCESSOR_NAME));
     }
 
     private void processDeadLetters(int componentIndex) {
@@ -299,7 +309,7 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
 
     /**
      * A test {@link org.axonframework.messaging.eventhandling.EventHandlingComponent} that records handled events and
-     * can be configured to fail for specific student IDs.
+     * can be configured to fail on specific student IDs.
      */
     private static class FailingRecordingEventHandlingComponent extends SimpleEventHandlingComponent {
 
