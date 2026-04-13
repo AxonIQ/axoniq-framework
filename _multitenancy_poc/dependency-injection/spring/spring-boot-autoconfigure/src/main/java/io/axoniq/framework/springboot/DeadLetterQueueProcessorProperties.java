@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot;
+package io.axoniq.framework.springboot;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

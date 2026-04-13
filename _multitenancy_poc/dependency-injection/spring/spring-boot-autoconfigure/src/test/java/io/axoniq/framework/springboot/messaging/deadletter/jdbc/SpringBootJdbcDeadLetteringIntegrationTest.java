@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot.messaging.deadletter.jdbc;
+package io.axoniq.framework.springboot.messaging.deadletter.jdbc;
 
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;

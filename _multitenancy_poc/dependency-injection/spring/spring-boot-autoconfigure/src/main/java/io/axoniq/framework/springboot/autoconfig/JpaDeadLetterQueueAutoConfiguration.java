@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.Converter;

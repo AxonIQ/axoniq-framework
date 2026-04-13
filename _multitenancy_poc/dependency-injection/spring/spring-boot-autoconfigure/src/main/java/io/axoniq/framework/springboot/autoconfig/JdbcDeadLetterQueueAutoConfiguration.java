@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -63,7 +63,7 @@ import javax.sql.DataSource;
         afterName = {
                 "org.axonframework.extension.springboot.autoconfig.JdbcAutoConfiguration",
                 "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration",
-                "io.axoniq.framework.extension.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration"
+                "io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration"
         }
 )
 @ConditionalOnClass(DataSource.class)
