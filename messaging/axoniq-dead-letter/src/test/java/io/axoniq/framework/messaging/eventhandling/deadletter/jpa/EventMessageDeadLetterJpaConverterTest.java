@@ -42,8 +42,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Objects;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Tests for {@link EventMessageDeadLetterJpaConverter}.
@@ -141,85 +140,77 @@ class EventMessageDeadLetterJpaConverterTest {
     }
 
     private void assertCorrectlyRestored(EventMessage expected, EventMessage actual) {
-        assertEquals(expected.identifier(), actual.identifier());
-        assertEquals(expected.timestamp(), actual.timestamp());
-        assertEquals(expected.type(), actual.type());
-        assertEquals(expected.metadata(), actual.metadata());
+        assertThat(actual.identifier()).isEqualTo(expected.identifier());
+        assertThat(actual.timestamp()).isEqualTo(expected.timestamp());
+        assertThat(actual.type()).isEqualTo(expected.type());
+        assertThat(actual.metadata()).isEqualTo(expected.metadata());
 
         // Payload is stored as raw bytes; deserialize to compare with the original
         Object deserializedPayload = eventConverter.convertPayload(actual, expected.payloadType());
-        assertEquals(expected.payload(), deserializedPayload);
+        assertThat(deserializedPayload).isEqualTo(expected.payload());
 
         // In AF5, all restored messages are GenericEventMessage
-        assertInstanceOf(GenericEventMessage.class, actual);
+        assertThat(actual).isInstanceOf(GenericEventMessage.class);
     }
 
     private void assertContextRestored(Context originalContext, Context restoredContext) {
         // Check tracking token restoration
         if (originalContext.containsResource(TrackingToken.RESOURCE_KEY)) {
-            assertTrue(restoredContext.containsResource(TrackingToken.RESOURCE_KEY));
-            assertEquals(
-                    originalContext.getResource(TrackingToken.RESOURCE_KEY),
-                    restoredContext.getResource(TrackingToken.RESOURCE_KEY)
-            );
+            assertThat(restoredContext.containsResource(TrackingToken.RESOURCE_KEY)).isTrue();
+            assertThat(restoredContext.getResource(TrackingToken.RESOURCE_KEY))
+                    .isEqualTo(originalContext.getResource(TrackingToken.RESOURCE_KEY));
         }
 
         // Check domain info restoration
         if (originalContext.containsResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)) {
-            assertTrue(restoredContext.containsResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY));
-            assertEquals(
-                    originalContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY),
-                    restoredContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)
-            );
+            assertThat(restoredContext.containsResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isTrue();
+            assertThat(restoredContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY))
+                    .isEqualTo(originalContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY));
         }
         if (originalContext.containsResource(LegacyResources.AGGREGATE_TYPE_KEY)) {
-            assertTrue(restoredContext.containsResource(LegacyResources.AGGREGATE_TYPE_KEY));
-            assertEquals(
-                    originalContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY),
-                    restoredContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY)
-            );
+            assertThat(restoredContext.containsResource(LegacyResources.AGGREGATE_TYPE_KEY)).isTrue();
+            assertThat(restoredContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY))
+                    .isEqualTo(originalContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY));
         }
         if (originalContext.containsResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)) {
-            assertTrue(restoredContext.containsResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY));
-            assertEquals(
-                    originalContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY),
-                    restoredContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)
-            );
+            assertThat(restoredContext.containsResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isTrue();
+            assertThat(restoredContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY))
+                    .isEqualTo(originalContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY));
         }
     }
 
     private void assertCorrectlyMapped(EventMessage eventMessage, Context context, DeadLetterEventEntry entry) {
-        assertEquals(eventMessage.identifier(), entry.getIdentifier());
-        assertEquals(eventMessage.timestamp().toString(), entry.getTimestamp());
-        assertEquals(eventMessage.type().toString(), entry.getType());
+        assertThat(entry.getIdentifier()).isEqualTo(eventMessage.identifier());
+        assertThat(entry.getTimestamp()).isEqualTo(eventMessage.timestamp().toString());
+        assertThat(entry.getType()).isEqualTo(eventMessage.type().toString());
 
         // Check tracking token storage from context
         if (context.containsResource(TrackingToken.RESOURCE_KEY)) {
-            assertNotNull(entry.getToken());
-            assertNotNull(entry.getTokenType());
+            assertThat(entry.getToken()).isNotNull();
+            assertThat(entry.getTokenType()).isNotNull();
             TrackingToken expectedToken = context.getResource(TrackingToken.RESOURCE_KEY);
-            assertEquals(expectedToken.getClass().getName(), entry.getTokenType());
+            assertThat(entry.getTokenType()).isEqualTo(expectedToken.getClass().getName());
         } else {
-            assertNull(entry.getToken());
-            assertNull(entry.getTokenType());
+            assertThat(entry.getToken()).isNull();
+            assertThat(entry.getTokenType()).isNull();
         }
 
         // Check domain info storage from context
         if (context.containsResource(LegacyResources.AGGREGATE_TYPE_KEY)) {
-            assertEquals(context.getResource(LegacyResources.AGGREGATE_TYPE_KEY), entry.getAggregateType());
+            assertThat(entry.getAggregateType()).isEqualTo(context.getResource(LegacyResources.AGGREGATE_TYPE_KEY));
         } else {
-            assertNull(entry.getAggregateType());
+            assertThat(entry.getAggregateType()).isNull();
         }
         if (context.containsResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)) {
-            assertEquals(context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY), entry.getAggregateIdentifier());
+            assertThat(entry.getAggregateIdentifier()).isEqualTo(context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY));
         } else {
-            assertNull(entry.getAggregateIdentifier());
+            assertThat(entry.getAggregateIdentifier()).isNull();
         }
         if (context.containsResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)) {
-            assertEquals(context.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY),
-                         entry.getAggregateSequenceNumber());
+            assertThat(entry.getAggregateSequenceNumber())
+                    .isEqualTo(context.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY));
         } else {
-            assertNull(entry.getAggregateSequenceNumber());
+            assertThat(entry.getAggregateSequenceNumber()).isNull();
         }
     }
 
@@ -297,8 +288,8 @@ class EventMessageDeadLetterJpaConverterTest {
             MessageStream.Entry<EventMessage> acEntry = converter.convert(exEntry, eventConverter, genericConverter);
 
             // then
-            assertEquals(byte[].class, acEntry.message().payloadType());
-            assertEquals(event, acEntry.message().payloadAs(ConverterTestEvent.class));
+            assertThat(acEntry.message().payloadType()).isEqualTo(byte[].class);
+            assertThat(acEntry.message().payloadAs(ConverterTestEvent.class)).isEqualTo(event);
         }
     }
 

@@ -55,8 +55,7 @@ import java.util.Iterator;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<EventMessage> {
 
@@ -147,13 +146,13 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
 
     @Override
     protected void assertMessage(EventMessage expected, EventMessage actual) {
-        assertEquals(expected.identifier(), actual.identifier());
-        assertEquals(expected.type(), actual.type());
-        assertEquals(expected.metadata(), actual.metadata());
+        assertThat(actual.identifier()).isEqualTo(expected.identifier());
+        assertThat(actual.type()).isEqualTo(expected.type());
+        assertThat(actual.metadata()).isEqualTo(expected.metadata());
 
         // Payload is stored as raw bytes; deserialize to compare with the original
         Object deserializedPayload = eventConverter.convertPayload(actual, expected.payloadType());
-        assertEquals(expected.payload(), deserializedPayload);
+        assertThat(deserializedPayload).isEqualTo(expected.payload());
     }
 
     @Override
@@ -215,40 +214,40 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
     void buildWithNegativeMaxQueuesThrowsAxonConfigurationException() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builderTestSubject = JpaSequencedDeadLetterQueue.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequences(-1));
+        assertThatThrownBy(() -> builderTestSubject.maxSequences(-1)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithZeroMaxQueuesThrowsAxonConfigurationException() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builderTestSubject = JpaSequencedDeadLetterQueue.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequences(0));
+        assertThatThrownBy(() -> builderTestSubject.maxSequences(0)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNegativeMaxQueueSizeThrowsAxonConfigurationException() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builderTestSubject = JpaSequencedDeadLetterQueue.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequenceSize(-1));
+        assertThatThrownBy(() -> builderTestSubject.maxSequenceSize(-1)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithZeroMaxQueueSizeThrowsAxonConfigurationException() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builderTestSubject = JpaSequencedDeadLetterQueue.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequenceSize(0));
+        assertThatThrownBy(() -> builderTestSubject.maxSequenceSize(0)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void canNotSetNegativeQueryPageSize() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builder = JpaSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> builder.queryPageSize(-1));
+        assertThatThrownBy(() -> builder.queryPageSize(-1)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void canNotSetZeroQueryPageSize() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builder = JpaSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> builder.queryPageSize(0));
+        assertThatThrownBy(() -> builder.queryPageSize(0)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -285,30 +284,30 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
     void cannotRequeueGenericDeadLetter() {
         SequencedDeadLetterQueue<EventMessage> queue = buildTestSubject();
         DeadLetter<EventMessage> letter = generateInitialLetter();
-        CompletionException exception =
-                assertThrows(CompletionException.class, () -> queue.requeue(letter, d -> d, null).join());
-        assertThat(exception.getCause()).isInstanceOf(WrongDeadLetterTypeException.class);
+        assertThatThrownBy(() -> queue.requeue(letter, d -> d, null).join())
+                .isInstanceOf(CompletionException.class)
+                .cause().isInstanceOf(WrongDeadLetterTypeException.class);
     }
 
     @Test
     void cannotEvictGenericDeadLetter() {
         SequencedDeadLetterQueue<EventMessage> queue = buildTestSubject();
         DeadLetter<EventMessage> letter = generateInitialLetter();
-        CompletionException exception =
-                assertThrows(CompletionException.class, () -> queue.evict(letter, null).join());
-        assertThat(exception.getCause()).isInstanceOf(WrongDeadLetterTypeException.class);
+        assertThatThrownBy(() -> queue.evict(letter, null).join())
+                .isInstanceOf(CompletionException.class)
+                .cause().isInstanceOf(WrongDeadLetterTypeException.class);
     }
 
     @Test
     void canNotSetProcessingGroupToEmpty() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builder = JpaSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> builder.processingGroup(""));
+        assertThatThrownBy(() -> builder.processingGroup("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void canNotSetProcessingGroupToNull() {
         JpaSequencedDeadLetterQueue.Builder<EventMessage> builder = JpaSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> builder.processingGroup(null));
+        assertThatThrownBy(() -> builder.processingGroup(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -319,7 +318,7 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
                 .transactionalExecutorProvider(new JpaTransactionalExecutorProvider(emf))
                 .eventConverter(new DelegatingEventConverter(jacksonConverter))
                 .genericConverter(jacksonConverter);
-        assertThrows(AxonConfigurationException.class, builder::build);
+        assertThatThrownBy(builder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -331,11 +330,11 @@ class JpaSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Event
                 .eventConverter(new DelegatingEventConverter(jacksonConverter))
                 .genericConverter(jacksonConverter);
 
-        assertThrows(AxonConfigurationException.class, builder::build);
+        assertThatThrownBy(builder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void canNotSetNullConverter() {
-        assertThrows(AxonConfigurationException.class, () -> JpaSequencedDeadLetterQueue.builder().converter(null));
+        assertThatThrownBy(() -> JpaSequencedDeadLetterQueue.builder().converter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 }

@@ -20,7 +20,7 @@ package io.axoniq.framework.messaging.deadletter;
 
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating {@link ThrowableCause}.
@@ -60,8 +60,8 @@ class ThrowableCauseTest {
 
         ThrowableCause testSubject = new ThrowableCause(testThrowable);
 
-        assertEquals(testThrowable.getClass().getName(), testSubject.type());
-        assertEquals(testThrowable.getMessage(), testSubject.message());
+        assertThat(testSubject.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(testSubject.message()).isEqualTo(testThrowable.getMessage());
     }
 
     @Test
@@ -71,8 +71,8 @@ class ThrowableCauseTest {
 
         ThrowableCause testSubject = new ThrowableCause(testType, testMessage);
 
-        assertEquals(testType, testSubject.type());
-        assertEquals(testMessage, testSubject.message());
+        assertThat(testSubject.type()).isEqualTo(testType);
+        assertThat(testSubject.message()).isEqualTo(testMessage);
     }
 
     @Test
@@ -81,8 +81,8 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.asCause(testThrowable);
 
-        assertEquals(testThrowable.getClass().getName(), result.type());
-        assertEquals(testThrowable.getMessage(), result.message());
+        assertThat(result.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(result.message()).isEqualTo(testThrowable.getMessage());
     }
 
     @Test
@@ -91,7 +91,7 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.asCause(testCause);
 
-        assertEquals(testCause, result);
+        assertThat(result).isEqualTo(testCause);
     }
 
     @Test
@@ -100,8 +100,8 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.truncated(testThrowable);
 
-        assertEquals(testThrowable.getClass().getName(), result.type());
-        assertEquals(testThrowable.getMessage(), result.message());
+        assertThat(result.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(result.message()).isEqualTo(testThrowable.getMessage());
     }
 
     @Test
@@ -110,8 +110,8 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.truncated(testThrowable);
 
-        assertEquals(testThrowable.getClass().getName(), result.type());
-        assertNull(result.message());
+        assertThat(result.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(result.message()).isNull();
     }
 
     @Test
@@ -121,9 +121,9 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.truncated(testThrowable);
 
-        assertEquals(testThrowable.getClass().getName(), result.type());
-        assertNotEquals(testThrowable.getMessage(), result.getMessage());
-        assertFalse(result.getMessage().contains(textThatShouldBeTruncated));
+        assertThat(result.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(result.getMessage()).isNotEqualTo(testThrowable.getMessage());
+        assertThat(result.getMessage()).doesNotContain(textThatShouldBeTruncated);
     }
 
     @Test
@@ -133,8 +133,8 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.truncated(testThrowable, testMessage.length());
 
-        assertEquals(testThrowable.getClass().getName(), result.type());
-        assertEquals(testThrowable.getMessage(), result.message());
+        assertThat(result.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(result.message()).isEqualTo(testThrowable.getMessage());
     }
 
     @Test
@@ -145,9 +145,9 @@ class ThrowableCauseTest {
 
         ThrowableCause result = ThrowableCause.truncated(testThrowable, testMessageSize);
 
-        assertEquals(testThrowable.getClass().getName(), result.type());
-        assertNotEquals(testThrowable.getMessage(), result.getMessage());
-        assertFalse(result.getMessage().contains(textThatShouldBeTruncated));
-        assertTrue(result.getMessage().contains(textThatShouldBeTruncated.substring(0, testMessageSize)));
+        assertThat(result.type()).isEqualTo(testThrowable.getClass().getName());
+        assertThat(result.getMessage()).isNotEqualTo(testThrowable.getMessage());
+        assertThat(result.getMessage()).doesNotContain(textThatShouldBeTruncated);
+        assertThat(result.getMessage()).contains(textThatShouldBeTruncated.substring(0, testMessageSize));
     }
 }

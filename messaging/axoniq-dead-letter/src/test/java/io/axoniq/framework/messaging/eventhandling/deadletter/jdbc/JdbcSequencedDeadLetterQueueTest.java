@@ -52,7 +52,7 @@ import static org.axonframework.common.DateTimeUtils.parseInstant;
 import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 import static org.axonframework.common.jdbc.JdbcUtils.closeQuietly;
 import static org.axonframework.common.jdbc.JdbcUtils.executeUpdates;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -195,22 +195,22 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
     protected void assertLetter(DeadLetter<? extends EventMessage> expected,
                                 DeadLetter<? extends EventMessage> actual) {
         assertMessage(expected.message(), actual.message());
-        assertEquals(expected.cause(), actual.cause());
-        assertEquals(formatExpected(expected.enqueuedAt()), actual.enqueuedAt());
-        assertEquals(formatExpected(expected.lastTouched()), actual.lastTouched());
-        assertEquals(expected.diagnostics(), actual.diagnostics());
+        assertThat(actual.cause()).isEqualTo(expected.cause());
+        assertThat(actual.enqueuedAt()).isEqualTo(formatExpected(expected.enqueuedAt()));
+        assertThat(actual.lastTouched()).isEqualTo(formatExpected(expected.lastTouched()));
+        assertThat(actual.diagnostics()).isEqualTo(expected.diagnostics());
         assertContext(expected.context(), actual.context());
     }
 
     @Override
     protected void assertMessage(EventMessage expected, EventMessage actual) {
-        assertEquals(expected.identifier(), actual.identifier());
-        assertEquals(expected.type(), actual.type());
-        assertEquals(expected.metadata(), actual.metadata());
+        assertThat(actual.identifier()).isEqualTo(expected.identifier());
+        assertThat(actual.type()).isEqualTo(expected.type());
+        assertThat(actual.metadata()).isEqualTo(expected.metadata());
 
         // Payload is stored as raw bytes; deserialize to compare with the original
         Object deserializedPayload = eventConverter.convertPayload(actual, expected.payloadType());
-        assertEquals(expected.payload(), deserializedPayload);
+        assertThat(deserializedPayload).isEqualTo(expected.payload());
     }
 
     /**
@@ -225,104 +225,104 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
     @Test
     void invokingEvictWithNonJdbcDeadLetterThrowsWrongDeadLetterTypeException() {
         DeadLetter<EventMessage> testLetter = generateInitialLetter();
-        assertThrows(WrongDeadLetterTypeException.class, () -> joinAndUnwrap(jdbcDeadLetterQueue.evict(testLetter, null)));
+        assertThatThrownBy(() -> joinAndUnwrap(jdbcDeadLetterQueue.evict(testLetter, null))).isInstanceOf(WrongDeadLetterTypeException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullProcessingGroupThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.processingGroup(null));
+        assertThatThrownBy(() -> testBuilder.processingGroup(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithEmptyProcessingGroupThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.processingGroup(""));
+        assertThatThrownBy(() -> testBuilder.processingGroup("")).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullTransactionalExecutorProviderThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.transactionalExecutorProvider(null));
+        assertThatThrownBy(() -> testBuilder.transactionalExecutorProvider(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullSchemaThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.schema(null));
+        assertThatThrownBy(() -> testBuilder.schema(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullStatementFactoryThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.statementFactory(null));
+        assertThatThrownBy(() -> testBuilder.statementFactory(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullConverterThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.converter(null));
+        assertThatThrownBy(() -> testBuilder.converter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullEventConverterThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.eventConverter(null));
+        assertThatThrownBy(() -> testBuilder.eventConverter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("DataFlowIssue")
     @Test
     void buildWithNullGenericConverterThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.genericConverter(null));
+        assertThatThrownBy(() -> testBuilder.genericConverter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithZeroMaxSequencesThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.maxSequences(0));
+        assertThatThrownBy(() -> testBuilder.maxSequences(0)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNegativeMaxSequencesThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.maxSequences(-1));
+        assertThatThrownBy(() -> testBuilder.maxSequences(-1)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithZeroMaxSequenceSizeThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.maxSequenceSize(0));
+        assertThatThrownBy(() -> testBuilder.maxSequenceSize(0)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNegativeMaxSequenceSizeThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.maxSequenceSize(-1));
+        assertThatThrownBy(() -> testBuilder.maxSequenceSize(-1)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNullClaimDurationThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.claimDuration(null));
+        assertThatThrownBy(() -> testBuilder.claimDuration(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithZeroPageSizeThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.pageSize(0));
+        assertThatThrownBy(() -> testBuilder.pageSize(0)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNegativePageSizeThrowsAxonConfigurationException() {
         JdbcSequencedDeadLetterQueue.Builder<EventMessage> testBuilder = JdbcSequencedDeadLetterQueue.builder();
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.pageSize(-1));
+        assertThatThrownBy(() -> testBuilder.pageSize(-1)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -334,7 +334,7 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
                                             .statementFactory(mock(DeadLetterStatementFactory.class))
                                             .converter(mock(DeadLetterJdbcConverter.class));
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -346,7 +346,7 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
                                             .statementFactory(mock(DeadLetterStatementFactory.class))
                                             .converter(mock(DeadLetterJdbcConverter.class));
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -359,7 +359,7 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
                                             .converter(mock(DeadLetterJdbcConverter.class))
                                             .eventConverter(eventConverter);
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -372,7 +372,7 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
                                             .converter(mock(DeadLetterJdbcConverter.class))
                                             .genericConverter(jacksonConverter);
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -385,7 +385,7 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
                                             .statementFactory(mock(DeadLetterStatementFactory.class))
                                             .eventConverter(eventConverter);
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -398,6 +398,6 @@ class JdbcSequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<Even
                                             .statementFactory(mock(DeadLetterStatementFactory.class))
                                             .genericConverter(jacksonConverter);
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 }

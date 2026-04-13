@@ -41,7 +41,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -87,15 +87,15 @@ class DefaultDeadLetterJdbcConverterTest {
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
             EventMessage resultMessage = result.message();
-            assertInstanceOf(GenericEventMessage.class, resultMessage);
+            assertThat(resultMessage).isInstanceOf(GenericEventMessage.class);
 
             Context context = result.context();
-            assertNotNull(context);
+            assertThat(context).isNotNull();
             TrackingToken restoredToken = context.getResource(TrackingToken.RESOURCE_KEY);
-            assertEquals(TRACKING_TOKEN, restoredToken);
-            assertEquals(AGGREGATE_ID, context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY));
-            assertEquals(AGGREGATE_TYPE, context.getResource(LegacyResources.AGGREGATE_TYPE_KEY));
-            assertEquals(SEQ_NO, context.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY));
+            assertThat(restoredToken).isEqualTo(TRACKING_TOKEN);
+            assertThat(context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isEqualTo(AGGREGATE_ID);
+            assertThat(context.getResource(LegacyResources.AGGREGATE_TYPE_KEY)).isEqualTo(AGGREGATE_TYPE);
+            assertThat(context.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isEqualTo(SEQ_NO);
         }
 
         @Test
@@ -104,13 +104,13 @@ class DefaultDeadLetterJdbcConverterTest {
 
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
-            assertInstanceOf(GenericEventMessage.class, result.message());
+            assertThat(result.message()).isInstanceOf(GenericEventMessage.class);
 
             Context context = result.context();
-            assertNotNull(context);
+            assertThat(context).isNotNull();
             TrackingToken restoredToken = context.getResource(TrackingToken.RESOURCE_KEY);
-            assertEquals(TRACKING_TOKEN, restoredToken);
-            assertNull(context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY));
+            assertThat(restoredToken).isEqualTo(TRACKING_TOKEN);
+            assertThat(context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isNull();
         }
 
         @Test
@@ -119,14 +119,14 @@ class DefaultDeadLetterJdbcConverterTest {
 
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
-            assertInstanceOf(GenericEventMessage.class, result.message());
+            assertThat(result.message()).isInstanceOf(GenericEventMessage.class);
 
             Context context = result.context();
-            assertNotNull(context);
-            assertNull(context.getResource(TrackingToken.RESOURCE_KEY));
-            assertEquals(AGGREGATE_ID, context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY));
-            assertEquals(AGGREGATE_TYPE, context.getResource(LegacyResources.AGGREGATE_TYPE_KEY));
-            assertEquals(SEQ_NO, context.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY));
+            assertThat(context).isNotNull();
+            assertThat(context.getResource(TrackingToken.RESOURCE_KEY)).isNull();
+            assertThat(context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isEqualTo(AGGREGATE_ID);
+            assertThat(context.getResource(LegacyResources.AGGREGATE_TYPE_KEY)).isEqualTo(AGGREGATE_TYPE);
+            assertThat(context.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isEqualTo(SEQ_NO);
         }
 
         @Test
@@ -135,7 +135,7 @@ class DefaultDeadLetterJdbcConverterTest {
 
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
-            assertInstanceOf(GenericEventMessage.class, result.message());
+            assertThat(result.message()).isInstanceOf(GenericEventMessage.class);
         }
 
         @Test
@@ -144,9 +144,9 @@ class DefaultDeadLetterJdbcConverterTest {
 
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
-            assertInstanceOf(GenericEventMessage.class, result.message());
-            assertEquals(byte[].class, result.message().payloadType());
-            assertEquals("some-payload", result.message().payloadAs(String.class));
+            assertThat(result.message()).isInstanceOf(GenericEventMessage.class);
+            assertThat(result.message().payloadType()).isEqualTo(byte[].class);
+            assertThat(result.message().payloadAs(String.class)).isEqualTo("some-payload");
         }
 
         @Test
@@ -156,10 +156,10 @@ class DefaultDeadLetterJdbcConverterTest {
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
             Optional<Cause> optionalCause = result.cause();
-            assertTrue(optionalCause.isPresent());
+            assertThat(optionalCause.isPresent()).isTrue();
             Cause resultCause = optionalCause.get();
-            assertEquals(CAUSE_TYPE, resultCause.type());
-            assertEquals(CAUSE_MESSAGE, resultCause.message());
+            assertThat(resultCause.type()).isEqualTo(CAUSE_TYPE);
+            assertThat(resultCause.message()).isEqualTo(CAUSE_MESSAGE);
         }
 
         @Test
@@ -168,7 +168,7 @@ class DefaultDeadLetterJdbcConverterTest {
 
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
-            assertFalse(result.cause().isPresent());
+            assertThat(result.cause().isPresent()).isFalse();
         }
     }
 
@@ -228,21 +228,21 @@ class DefaultDeadLetterJdbcConverterTest {
         void buildWithNullSchemaThrowsAxonConfigurationException() {
             DefaultDeadLetterJdbcConverter.Builder<?> testBuilder = DefaultDeadLetterJdbcConverter.builder();
 
-            assertThrows(AxonConfigurationException.class, () -> testBuilder.schema(null));
+            assertThatThrownBy(() -> testBuilder.schema(null)).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
         void buildWithNullGenericConverterThrowsAxonConfigurationException() {
             DefaultDeadLetterJdbcConverter.Builder<?> testBuilder = DefaultDeadLetterJdbcConverter.builder();
 
-            assertThrows(AxonConfigurationException.class, () -> testBuilder.genericConverter(null));
+            assertThatThrownBy(() -> testBuilder.genericConverter(null)).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
         void buildWithNullEventConverterThrowsAxonConfigurationException() {
             DefaultDeadLetterJdbcConverter.Builder<?> testBuilder = DefaultDeadLetterJdbcConverter.builder();
 
-            assertThrows(AxonConfigurationException.class, () -> testBuilder.eventConverter(null));
+            assertThatThrownBy(() -> testBuilder.eventConverter(null)).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
@@ -251,7 +251,7 @@ class DefaultDeadLetterJdbcConverterTest {
                     DefaultDeadLetterJdbcConverter.builder()
                                                   .eventConverter(eventConverter);
 
-            assertThrows(AxonConfigurationException.class, testBuilder::build);
+            assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
@@ -260,7 +260,7 @@ class DefaultDeadLetterJdbcConverterTest {
                     DefaultDeadLetterJdbcConverter.builder()
                                                   .genericConverter(genericConverter);
 
-            assertThrows(AxonConfigurationException.class, testBuilder::build);
+            assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
         }
     }
 }

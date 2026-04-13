@@ -37,7 +37,7 @@ import java.util.stream.StreamSupport;
 
 import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 import static org.axonframework.common.jdbc.JdbcUtils.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link PagingJdbcIterable}.
@@ -111,8 +111,8 @@ class PagingJdbcIterableTest {
         List<String> result = StreamSupport.stream(testSubject.spliterator(), false)
                                            .toList();
 
-        assertEquals(1, result.size());
-        assertEquals(testId, result.get(0));
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get(0)).isEqualTo(testId);
     }
 
     @Test
@@ -125,13 +125,13 @@ class PagingJdbcIterableTest {
         List<String> result = StreamSupport.stream(testSubject.spliterator(), false)
                                            .toList();
 
-        assertEquals(expectedIds.size(), result.size());
-        expectedIds.forEach(resultId -> assertTrue(result.contains(resultId)));
+        assertThat(result.size()).isEqualTo(expectedIds.size());
+        expectedIds.forEach(resultId -> assertThat(result.contains(resultId)).isTrue());
     }
 
     @Test
     void throwsExceptionWhenNoItemPresent() {
-        assertThrows(NoSuchElementException.class, testSubject.iterator()::next);
+        assertThatThrownBy(testSubject.iterator()::next).isInstanceOf(NoSuchElementException.class);
     }
 
     private void addEntryAt(String id, long index) {

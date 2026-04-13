@@ -23,7 +23,7 @@ import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link DefaultDeadLetterStatementFactory}.
@@ -36,21 +36,21 @@ class DefaultDeadLetterStatementFactoryTest {
     void buildWithNullSchemaThrowsAxonConfigurationException() {
         DefaultDeadLetterStatementFactory.Builder<?> testBuilder = DefaultDeadLetterStatementFactory.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.schema(null));
+        assertThatThrownBy(() -> testBuilder.schema(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNullGenericConverterThrowsAxonConfigurationException() {
         DefaultDeadLetterStatementFactory.Builder<?> testBuilder = DefaultDeadLetterStatementFactory.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.genericConverter(null));
+        assertThatThrownBy(() -> testBuilder.genericConverter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
     void buildWithNullEventConverterThrowsAxonConfigurationException() {
         DefaultDeadLetterStatementFactory.Builder<?> testBuilder = DefaultDeadLetterStatementFactory.builder();
 
-        assertThrows(AxonConfigurationException.class, () -> testBuilder.eventConverter(null));
+        assertThatThrownBy(() -> testBuilder.eventConverter(null)).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -60,7 +60,7 @@ class DefaultDeadLetterStatementFactoryTest {
                 DefaultDeadLetterStatementFactory.builder()
                                                  .eventConverter(new DelegatingEventConverter(jacksonConverter));
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 
     @Test
@@ -69,6 +69,6 @@ class DefaultDeadLetterStatementFactoryTest {
                 DefaultDeadLetterStatementFactory.builder()
                                                  .genericConverter(new JacksonConverter());
 
-        assertThrows(AxonConfigurationException.class, testBuilder::build);
+        assertThatThrownBy(testBuilder::build).isInstanceOf(AxonConfigurationException.class);
     }
 }

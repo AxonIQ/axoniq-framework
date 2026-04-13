@@ -32,8 +32,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link InMemorySequencedDeadLetterQueue}.
@@ -108,7 +107,7 @@ class InMemorySequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<
         @Test
         void buildDefaultQueue() {
             // when / then
-            assertDoesNotThrow(() -> InMemorySequencedDeadLetterQueue.defaultQueue());
+            assertThatCode(() -> InMemorySequencedDeadLetterQueue.defaultQueue()).doesNotThrowAnyException();
         }
 
         @Test
@@ -118,7 +117,7 @@ class InMemorySequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<
                     InMemorySequencedDeadLetterQueue.builder();
 
             // when / then
-            assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequences(-1));
+            assertThatThrownBy(() -> builderTestSubject.maxSequences(-1)).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
@@ -128,7 +127,7 @@ class InMemorySequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<
                     InMemorySequencedDeadLetterQueue.builder();
 
             // when / then
-            assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequences(0));
+            assertThatThrownBy(() -> builderTestSubject.maxSequences(0)).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
@@ -138,7 +137,7 @@ class InMemorySequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<
                     InMemorySequencedDeadLetterQueue.builder();
 
             // when / then
-            assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequenceSize(-1));
+            assertThatThrownBy(() -> builderTestSubject.maxSequenceSize(-1)).isInstanceOf(AxonConfigurationException.class);
         }
 
         @Test
@@ -148,7 +147,7 @@ class InMemorySequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<
                     InMemorySequencedDeadLetterQueue.builder();
 
             // when / then
-            assertThrows(AxonConfigurationException.class, () -> builderTestSubject.maxSequenceSize(0));
+            assertThatThrownBy(() -> builderTestSubject.maxSequenceSize(0)).isInstanceOf(AxonConfigurationException.class);
         }
     }
 }

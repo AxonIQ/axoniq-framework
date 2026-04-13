@@ -33,7 +33,7 @@ import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Method;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link DeadLetterParameterResolverFactory} and
@@ -79,14 +79,14 @@ class DeadLetterParameterResolverFactoryTest {
 
         @Test
         void ignoredForNonDeadLetterParameterMethod() {
-            assertNull(testSubject.createInstance(nonDeadLetterParameterMethod,
+            assertThat(testSubject.createInstance(nonDeadLetterParameterMethod,
                                                   nonDeadLetterParameterMethod.getParameters(),
-                                                  0));
+                                                  0)).isNull();
         }
 
         @Test
         void createsResolverForDeadLetterParameterContainingMethod() {
-            assertNotNull(testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0));
+            assertThat(testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0)).isNotNull();
         }
 
         @Test
@@ -97,7 +97,7 @@ class DeadLetterParameterResolverFactoryTest {
                                                     0);
 
             // then
-            assertNull(result);
+            assertThat(result).isNull();
         }
 
         @Test
@@ -108,7 +108,7 @@ class DeadLetterParameterResolverFactoryTest {
                                                     1);
 
             // then
-            assertNotNull(result);
+            assertThat(result).isNotNull();
         }
     }
 
@@ -128,9 +128,9 @@ class DeadLetterParameterResolverFactoryTest {
                     testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0);
 
             // when / then
-            assertTrue(resolver.matches(StubProcessingContext.forMessage(testCommand)));
-            assertTrue(resolver.matches(StubProcessingContext.forMessage(testEvent)));
-            assertTrue(resolver.matches(StubProcessingContext.forMessage(testQuery)));
+            assertThat(resolver.matches(StubProcessingContext.forMessage(testCommand))).isTrue();
+            assertThat(resolver.matches(StubProcessingContext.forMessage(testEvent))).isTrue();
+            assertThat(resolver.matches(StubProcessingContext.forMessage(testQuery))).isTrue();
         }
     }
 
@@ -154,7 +154,7 @@ class DeadLetterParameterResolverFactoryTest {
             var result = resolver.resolveParameterValue(context).join();
 
             // then
-            assertEquals(expected, result);
+            assertThat(result).isEqualTo(expected);
         }
 
         @Test
@@ -170,7 +170,7 @@ class DeadLetterParameterResolverFactoryTest {
             var result = resolver.resolveParameterValue(context).join();
 
             // then
-            assertNull(result);
+            assertThat(result).isNull();
         }
 
         @Test
@@ -187,13 +187,13 @@ class DeadLetterParameterResolverFactoryTest {
                     testSubject.createInstance(eventWithDeadLetterMethod,
                                                eventWithDeadLetterMethod.getParameters(),
                                                1);
-            assertNotNull(resolver);
+            assertThat(resolver).isNotNull();
 
             // when
             var result = resolver.resolveParameterValue(context).join();
 
             // then
-            assertEquals(expected, result);
+            assertThat(result).isEqualTo(expected);
         }
     }
 }

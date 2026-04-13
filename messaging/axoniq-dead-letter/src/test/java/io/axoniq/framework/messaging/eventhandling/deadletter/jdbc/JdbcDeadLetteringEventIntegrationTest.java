@@ -50,7 +50,7 @@ import javax.sql.DataSource;
 import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 import static org.axonframework.common.jdbc.JdbcUtils.executeUpdate;
 import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMessage;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * An implementation of the {@link DeadLetteringEventIntegrationTest} validating the
@@ -146,7 +146,7 @@ class JdbcDeadLetteringEventIntegrationTest extends DeadLetteringEventIntegratio
         Iterator<DeadLetter<? extends EventMessage>> resultIterator =
                 joinAndUnwrap(jdbcDeadLetterQueue.deadLetterSequence(aggregateId, null))
                         .iterator();
-        assertFalse(resultIterator.hasNext());
+        assertThat(resultIterator.hasNext()).isFalse();
 
         IntStream.range(0, 64)
                  .boxed()
@@ -162,20 +162,18 @@ class JdbcDeadLetteringEventIntegrationTest extends DeadLetteringEventIntegratio
         for (Map.Entry<Integer, GenericDeadLetter<EventMessage>> entry : insertedLetters.entrySet()) {
             Integer sequenceIndex = entry.getKey();
             Supplier<String> assertMessageSupplier = () -> "Failed asserting event [" + sequenceIndex + "]";
-            assertTrue(resultIterator.hasNext(), assertMessageSupplier);
+            assertThat(resultIterator.hasNext()).as(assertMessageSupplier).isTrue();
 
             GenericDeadLetter<EventMessage> expected = entry.getValue();
             DeadLetter<? extends EventMessage> result = resultIterator.next();
-            assertTrue(result instanceof JdbcDeadLetter);
+            assertThat(result).isInstanceOf(JdbcDeadLetter.class);
             JdbcDeadLetter<? extends EventMessage> actual = ((JdbcDeadLetter<? extends EventMessage>) result);
 
-            assertEquals(expected.getSequenceIdentifier(), actual.getSequenceIdentifier(), assertMessageSupplier);
-            assertEquals(expected.message().payload(),
-                         actual.message().payloadAs(Integer.class),
-                         assertMessageSupplier);
-            assertFalse(result.cause().isPresent(), assertMessageSupplier);
-            assertEquals(expected.diagnostics(), actual.diagnostics(), assertMessageSupplier);
-            assertEquals(sequenceIndex.longValue(), actual.getSequenceIndex(), assertMessageSupplier);
+            assertThat(actual.getSequenceIdentifier()).as(assertMessageSupplier).isEqualTo(expected.getSequenceIdentifier());
+            assertThat(actual.message().payloadAs(Integer.class)).as(assertMessageSupplier).isEqualTo(expected.message().payload());
+            assertThat(result.cause().isPresent()).as(assertMessageSupplier).isFalse();
+            assertThat(actual.diagnostics()).as(assertMessageSupplier).isEqualTo(expected.diagnostics());
+            assertThat(actual.getSequenceIndex()).as(assertMessageSupplier).isEqualTo(sequenceIndex.longValue());
         }
     }
 

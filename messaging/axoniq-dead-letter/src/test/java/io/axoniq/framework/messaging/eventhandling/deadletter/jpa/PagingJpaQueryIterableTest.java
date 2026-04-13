@@ -37,8 +37,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 
 class PagingJpaQueryIterableTest {
 
@@ -70,8 +69,8 @@ class PagingJpaQueryIterableTest {
                 TestJpaEntry::getId);
 
         List<String> result = StreamSupport.stream(iterable.spliterator(), false).collect(Collectors.toList());
-        assertEquals(1, result.size());
-        assertEquals("1", result.get(0));
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get(0)).isEqualTo("1");
     }
 
     @Test
@@ -88,9 +87,9 @@ class PagingJpaQueryIterableTest {
                 TestJpaEntry::getId);
 
         List<String> result = StreamSupport.stream(iterable.spliterator(), false).collect(Collectors.toList());
-        assertEquals(wantedIds.size(), result.size());
+        assertThat(result.size()).isEqualTo(wantedIds.size());
         wantedIds.forEach(id -> {
-            assertTrue(result.contains(id));
+            assertThat(result.contains(id)).isTrue();
         });
     }
 
@@ -102,7 +101,7 @@ class PagingJpaQueryIterableTest {
                 em -> em.createQuery("select t from TestJpaEntry t", TestJpaEntry.class),
                 TestJpaEntry::getId);
         Iterator<String> iterator = iterable.iterator();
-        assertThrows(NoSuchElementException.class, iterator::next);
+        assertThatThrownBy(iterator::next).isInstanceOf(NoSuchElementException.class);
     }
 
     @Nested
