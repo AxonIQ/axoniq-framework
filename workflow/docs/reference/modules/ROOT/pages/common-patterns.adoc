@@ -233,10 +233,6 @@ if (failureCount < 3) {                                                  // <1>
 <.> Reset the counter on success.
 <.> Increment the counter on failure — persisted durably in the workflow payload.
 
-== Retry with backoff [.badge]#coming soon#
-
-For retry policies, backoff strategies, and examples, see xref:understanding-steps.adoc#retries[Retries] in Understanding Steps.
-
 == Scheduled / delayed steps [.badge]#coming soon#
 
 [NOTE]
@@ -278,7 +274,8 @@ Use `metadataProperty("workflowId")` to associate the completion event with the 
 [source,java]
 .Parent workflow — launches a child and waits for it to finish
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced",
+@Workflow(idProperty = "orderId",
+          startOnEvent = "OrderPlaced",
           workflowNamespace = "io.myapp")
 public void execute(SimpleWorkflowContext ctx) {
 

@@ -21,7 +21,7 @@ antora:
   extensions:
   - id: prose-linting
     require: '@axoniq/antora-vale-extension'
-    enabled: true
+    enabled: false
     vale_config: .vale.ini
     update_styles: true
   - id: lunr

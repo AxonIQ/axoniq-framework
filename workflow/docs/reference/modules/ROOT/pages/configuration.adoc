@@ -10,7 +10,8 @@ The `@Workflow` annotation is the simplest way to define a workflow:
 
 [source,java]
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced",
+@Workflow(idProperty = "orderId",
+          startOnEvent = "OrderPlaced",
           workflowNamespace = "io.myapp.orders")
 public void execute(SimpleWorkflowContext ctx) { /* ... */ }
 ----
@@ -253,8 +254,7 @@ When a workflow is triggered by an incoming event, Axon Framework's `Correlation
 This works because the workflow engine propagates the `ProcessingContext` from the triggering event through the entire workflow execution.
 Resources attached to the `ProcessingContext` — including correlation data — are copied to child contexts at each step boundary via `ProcessingContextUtils.copyResources()`.
 
-To use this, register a `CorrelationDataProvider` in your Axon configuration.
-For example, to propagate a `traceId` from incoming events to all workflow events:
+NOTE: Axon Framework automatically registers a `MessageOriginProvider` by default, so `correlationId` and `causationId` are propagated out of the box. The example below shows how to register it explicitly or add custom providers.
 
 [source,java]
 ----
@@ -265,7 +265,7 @@ configurer.eventProcessing(ep -> ep
 ----
 <.> `MessageOriginProvider` is a built-in provider that copies the `correlationId` and `causationId` from the incoming message metadata to all outgoing messages published within the same processing context.
 
-You can also create a custom provider to propagate specific metadata fields:
+You can also create a custom provider to propagate additional metadata fields:
 
 [source,java]
 ----

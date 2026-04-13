@@ -76,6 +76,7 @@
 .et-dot.timedout   { background: #e8710a; }
 .et-dot.failed     { background: #d93025; }
 .et-dot.cancelled  { background: #9334e6; }
+.et-dot.retrying   { background: #f9ab00; }
 .et-dot.external   { background: #e8710a; border: 2px solid #e8710a; background: #fff; }
 
 .et-name { color: #24292f; font-weight: 500; }
@@ -129,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function parseLine(line) {
     line = line.trim();
     if (!line) return null;
-    var m = line.match(/^(\d+)\s+(started|completed|timedout|failed|cancelled|external)\s+(\S+)\s*(.*)?$/);
+    var m = line.match(/^(\d+)\s+(started|completed|timedout|failed|cancelled|retrying|external)\s+(\S+)\s*(.*)?$/);
     if (!m) return null;
     return { step: parseInt(m[1]), status: m[2], name: m[3], payload: m[4] || '' };
   }
@@ -175,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Build legend
     var legendMap = {
       started: 'STARTED', completed: 'COMPLETED', timedout: 'TIMED_OUT',
-      failed: 'FAILED', cancelled: 'CANCELLED', external: 'EXTERNAL'
+      failed: 'FAILED', cancelled: 'CANCELLED', retrying: 'RETRYING', external: 'EXTERNAL'
     };
     var legend = document.createElement('div');
     legend.className = 'et-legend';

@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.runtime.api.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

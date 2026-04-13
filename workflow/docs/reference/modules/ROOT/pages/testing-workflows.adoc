@@ -137,16 +137,9 @@ void shouldFulfillOrderEndToEnd() {
 <.> Asserts the workflow completed successfully — not failed, cancelled, or timed out.
 <.> Verifies all six steps executed in the correct order.
 
-== What's next
+== Related topics
 
-Congratulations!
-You've built and tested a complete order fulfillment workflow using the Axon Workflow Engine.
-
-Your workflow handles stock reservation, payment processing, event-based waiting with association filtering, durable state management, and parallel execution — all in a single, readable method.
-
-To dive deeper into specific topics:
-
-* *xref:understanding-steps.adoc[Understanding Steps]* — timeouts, error handling, payload reducers, event naming
-* *xref:workflow-lifecycle.adoc[Workflow Lifecycle]* — fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
-* *xref:common-patterns.adoc[Common Patterns]* — saga, fan-out/fan-in, retry, and more
-* *xref:configuration.adoc[Configuration]* — declarative setup, custom contexts, event naming customization
+* xref:understanding-steps.adoc[Understanding Steps] — timeouts, error handling, payload reducers, event naming
+* xref:workflow-lifecycle.adoc[Workflow Lifecycle] — fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
+* xref:common-patterns.adoc[Common Patterns] — saga, fan-out/fan-in, retry, and more
+* xref:configuration.adoc[Configuration] — declarative setup, custom contexts, event naming customization

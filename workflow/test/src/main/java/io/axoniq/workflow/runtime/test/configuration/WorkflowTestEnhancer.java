@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.runtime.test.configuration;
 
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults;
+import io.axoniq.workflow.configuration.WorkflowConfigurerDefaults;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;

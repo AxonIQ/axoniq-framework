@@ -17,7 +17,7 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowConfigurerDefaults;
+import io.axoniq.workflow.configuration.WorkflowConfigurerDefaults;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;

@@ -18,7 +18,7 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

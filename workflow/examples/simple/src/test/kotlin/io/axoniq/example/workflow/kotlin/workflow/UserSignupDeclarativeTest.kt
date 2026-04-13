@@ -19,15 +19,15 @@ package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
-import io.axoniq.workflow.runtime.engine.execution.EventConditions
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistory
-import io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
+import io.axoniq.workflow.history.api.WorkflowHistory
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus
+import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace
+import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions.assertThat
@@ -38,6 +38,11 @@ import java.util.concurrent.TimeUnit
 import java.util.function.Function
 import java.util.function.Predicate
 
+/**
+ * User signup test using the declarative workflow API kotlin DSL.
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
     { WorkflowKontextFactory() }

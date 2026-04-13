@@ -17,11 +17,12 @@
  */
 package io.axoniq.example.workflow.workflow;
 
+import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.junit.jupiter.api.*;
 
@@ -29,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.engine.impl.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
+import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -60,7 +61,7 @@ class WorkflowExecutionTerminationCleanupTest extends AbstractDeclarativeTestBas
         if ("complete".equals(action)) {
             ctx.setPayload("step1", Map.of("status", "done"));
         } else if ("fail".equals(action)) {
-            throw new RuntimeException("Intentional failure");
+            throw new WorkflowFailedException("Intentional workflow failure");
         } else if ("timeout".equals(action)) {
             // FIXME -> Support workflow timeout, currently not in MVP.
         } else if ("cancel".equals(action)) {

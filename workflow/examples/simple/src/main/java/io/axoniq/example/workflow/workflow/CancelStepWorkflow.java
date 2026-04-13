@@ -26,7 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Example workflow that launches three parallel steps, cancels one by name, then completes normally. Used to verify

@@ -17,8 +17,8 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 

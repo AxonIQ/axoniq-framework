@@ -18,14 +18,14 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
+import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.dsl.api.AssociationsUtils;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.PrimitiveCommands;
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
-import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -33,6 +33,8 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -40,12 +42,11 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static io.axoniq.example.workflow.workflow.WaitForCombineResultIntegrationTest.WaitForCombineWorkflowContext;
+import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
-import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
+import static io.axoniq.workflow.runtime.api.payload.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -54,7 +55,7 @@ import static org.awaitility.Awaitility.await;
  * Integration test for COMBINE result reducer for WaitFor primitive.
  */
 class WaitForCombineResultIntegrationTest
-        extends AbstractDeclarativeTestBase<WaitForCombineWorkflowContext> {
+        extends AbstractDeclarativeTestBase<WaitForCombineResultIntegrationTest.WaitForCombineWorkflowContext> {
 
     public WaitForCombineResultIntegrationTest() {
         super(WaitForCombineWorkflowContext.class, c -> new WaitForCombineWorkflowContextFactory());
@@ -98,12 +99,14 @@ class WaitForCombineResultIntegrationTest
 
     public static class WaitForCombineWorkflow {
 
+        static final Logger logger = LoggerFactory.getLogger(WaitForCombineWorkflow.class);
+
         public void execute(WaitForCombineWorkflowContext ctx) {
             // Using the new overload of awaitEvent with COMBINE
-            ctx.awaitEvent("waitStep",
-                           RegistrationReceivedEvent.class,
-                           associate(payloadProperty("status"), equalsTo("arrived")),
-                           Duration.ofSeconds(5)
+            var event = ctx.awaitEvent("waitStep",
+                                       RegistrationReceivedEvent.class,
+                                       associate(payloadProperty("status"), equalsTo("arrived")),
+                                       Duration.ofSeconds(5)
             );
         }
     }
