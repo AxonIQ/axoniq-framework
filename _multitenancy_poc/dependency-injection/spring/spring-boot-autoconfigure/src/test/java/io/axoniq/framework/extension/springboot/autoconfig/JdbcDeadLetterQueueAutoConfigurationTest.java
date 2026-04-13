@@ -34,9 +34,7 @@ import org.springframework.test.context.ContextConfiguration;
 
 import javax.sql.DataSource;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class JdbcDeadLetterQueueAutoConfigurationTest {
@@ -59,8 +57,8 @@ class JdbcDeadLetterQueueAutoConfigurationTest {
     void defaultDeadLetterSchemaIsPresent() {
         testContext.run(context -> {
             DeadLetterSchema schema = context.getBean(DeadLetterSchema.class);
-            assertNotNull(schema);
-            assertEquals("DeadLetterEntry", schema.deadLetterTable());
+            assertThat(schema).isNotNull();
+            assertThat(schema.deadLetterTable()).isEqualTo("DeadLetterEntry");
         });
     }
 
@@ -73,8 +71,8 @@ class JdbcDeadLetterQueueAutoConfigurationTest {
         testContext.withBean(DeadLetterSchema.class, () -> customSchema)
                    .run(context -> {
                        DeadLetterSchema schema = context.getBean(DeadLetterSchema.class);
-                       assertNotNull(schema);
-                       assertEquals(expectedDeadLetterTable, schema.deadLetterTable());
+                       assertThat(schema).isNotNull();
+                       assertThat(schema.deadLetterTable()).isEqualTo(expectedDeadLetterTable);
                    });
     }
 
