@@ -45,7 +45,7 @@ import org.junit.jupiter.api.*;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests whether stateful command handling components can process commands that target multiple entities at the same
@@ -159,8 +159,8 @@ class MultiEntityCommandHandlingComponentIT extends AbstractCommandHandlingStude
 
             eventAppender.append(new StudentEnrolledEvent(command.studentId(), command.courseId()));
 
-            assertTrue(student.getCoursesEnrolled().contains(command.courseId()));
-            assertTrue(course.getStudentsEnrolled().contains(command.studentId()));
+            assertThat(student.getCoursesEnrolled()).contains(command.courseId());
+            assertThat(course.getStudentsEnrolled()).contains(command.studentId());
         }
 
         @SuppressWarnings("unused")
@@ -200,16 +200,16 @@ class MultiEntityCommandHandlingComponentIT extends AbstractCommandHandlingStude
         uow.executeWithResult(context -> context.component(StateManager.class)
                                                 .repository(Student.class, String.class)
                                                 .load(id, context)
-                                                .thenAccept(student -> assertTrue(student.entity()
-                                                                                         .getCoursesEnrolled()
-                                                                                         .contains(courseId)))
+                                                .thenAccept(student -> assertThat(student.entity()
+                                                                                         .getCoursesEnrolled())
+                                                                                         .contains(courseId))
                                                 .thenCompose(v -> context.component(StateManager.class)
                                                                          .repository(Course.class,
                                                                                      String.class)
                                                                          .load(courseId, context))
-                                                .thenAccept(course -> assertTrue(course.entity()
-                                                                                       .getStudentsEnrolled()
-                                                                                       .contains(id))))
+                                                .thenAccept(course -> assertThat(course.entity()
+                                                                                       .getStudentsEnrolled())
+                                                                                       .contains(id)))
            .join();
     }
 }

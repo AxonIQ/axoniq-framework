@@ -44,7 +44,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests validating command sequencing behavior to prevent optimistic locking failures and deadlocks. These
@@ -122,8 +122,9 @@ class CommandSequencingIT extends AbstractCommandHandlingStudentIT {
         startGate.countDown();
 
         // Wait for all enrollments to complete
-        assertTrue(completionGate.await(10, TimeUnit.SECONDS),
-                   "All enrollments should complete within 10 seconds");
+        assertThat(completionGate.await(10, TimeUnit.SECONDS))
+                .as("All enrollments should complete within 10 seconds")
+                .isTrue();
 
         // Verify no exceptions occurred
         if (!exceptions.isEmpty()) {
@@ -137,8 +138,9 @@ class CommandSequencingIT extends AbstractCommandHandlingStudentIT {
         }
 
         // Verify all enrollments succeeded
-        assertEquals(numberOfStudents, successfulEnrollments.get(),
-                     "All " + numberOfStudents + " enrollments should succeed");
+        assertThat(successfulEnrollments.get())
+                .as("All %d enrollments should succeed", numberOfStudents)
+                .isEqualTo(numberOfStudents);
 
         // Verify Course entity has exactly 10 enrolled students
         verifyCourseHasEnrolledStudents(courseId, numberOfStudents);
@@ -155,9 +157,9 @@ class CommandSequencingIT extends AbstractCommandHandlingStudentIT {
                                                                 .repository(Course.class, String.class)
                                                                 .load(courseId, context))
                            .join().entity();
-        assertEquals(expectedCount,
-                     course.getStudentsEnrolled().size(),
-                     "Course should have " + expectedCount + " enrolled students");
+        assertThat(course.getStudentsEnrolled())
+                .as("Course should have %d enrolled students", expectedCount)
+                .hasSize(expectedCount);
     }
 
     @Override

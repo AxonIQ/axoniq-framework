@@ -42,7 +42,7 @@ import org.junit.jupiter.api.*;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the injection of a compound entity based on a compound id that loads events of two tags.
@@ -130,7 +130,7 @@ class CompoundEntityIdentifierCommandHandlingComponentIT extends AbstractCommand
         // Can assign mentor to mentee
         String result = sendCommand(new AssignMentorCommand(student1, student2), String.class);
 
-        assertEquals("successful", result);
+        assertThat(result).isEqualTo("successful");
 
         // But not a second time
         assertThatThrownBy(() -> sendCommand(new AssignMentorCommand(student1, student3)))

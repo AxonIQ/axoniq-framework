@@ -56,7 +56,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating whether the provided message priority for {@link CommandMessage#priority() commands} is
@@ -192,16 +192,18 @@ class MessagePriorityIntegrationTest {
         });
         dispatcher.start();
 
-        assertTrue(finishedGate.await(2, TimeUnit.SECONDS),
-                   () -> "Failed with [" + finishedGate.getCount() + "] unprocessed command(s).");
+        assertThat(finishedGate.await(2, TimeUnit.SECONDS))
+                .as("Failed with [%d] unprocessed command(s).", finishedGate.getCount())
+                .isTrue();
 
-        assertEquals(numberOfCommands, handlingOrder.size());
+        assertThat(handlingOrder).hasSize(numberOfCommands);
         for (int i = 0; i < handlingOrder.size(); i++) {
             Handled handled = handlingOrder.poll();
             if (i >= priorityThreshold) {
-                assertFalse(handled.priority,
-                            "A priority command was handled at index [" + i + "], "
-                                    + "while it is at least expected to come before [" + priorityThreshold + "].");
+                assertThat(handled.priority)
+                        .as("A priority command was handled at index [%d], "
+                                    + "while it is at least expected to come before [%d].", i, priorityThreshold)
+                        .isFalse();
             }
         }
 

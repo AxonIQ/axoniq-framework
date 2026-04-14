@@ -52,7 +52,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the declarative {@link PooledStreamingEventProcessor} used as an automation (a kind of Saga)
@@ -126,12 +126,12 @@ public class EventProcessingDeclarativeEventSourcedPooledStreamingIT extends Abs
 
     protected void verifyNotificationSentTo(String studentId) {
         UnitOfWork uow = unitOfWorkFactory.create();
-        assertTrue(uow.executeWithResult(
+        assertThat(uow.executeWithResult(
                 context -> context.component(StateManager.class)
                                   .repository(StudentCoursesAutomationState.class, String.class)
                                   .load(studentId, context)
                                   .thenApply(student -> student.entity().notified())
-        ).join());
+        ).join()).isTrue();
     }
 
     @Override
