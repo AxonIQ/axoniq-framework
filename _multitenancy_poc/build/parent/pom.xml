@@ -185,6 +185,13 @@
                 <version>${axon-framework.version}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.axonframework</groupId>
+                <artifactId>axon-integrationtests</artifactId>
+                <version>${axon-framework.version}</version>
+                <type>test-jar</type>
+                <scope>test</scope>
+            </dependency>
 
             <dependency>
                 <groupId>org.axonframework</groupId>
