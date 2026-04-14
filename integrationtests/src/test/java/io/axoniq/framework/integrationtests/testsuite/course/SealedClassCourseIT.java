@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.course;
+package io.axoniq.framework.integrationtests.testsuite.course;
 
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
