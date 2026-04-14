@@ -16,9 +16,10 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;

@@ -16,11 +16,13 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
 import org.axonframework.eventsourcing.EventSourcedEntityFactory;
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.AbstractAxonServerIT;
+import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
 import org.axonframework.integrationtests.testsuite.student.commands.AssignMentorCommand;
 import org.axonframework.integrationtests.testsuite.student.common.StudentMentorModelIdentifier;
 import org.axonframework.integrationtests.testsuite.student.events.MentorAssignedToStudentEvent;
@@ -48,9 +50,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author Mitchell Herrijgers
  */
 class CompoundEntityIdentifierCommandHandlingComponentIT extends AbstractCommandHandlingStudentIT {
-    private final String student1 = createId("student-1");
-    private final String student2 = createId("student-2");
-    private final String student3 = createId("student-3");
+    private final String student1 = AbstractAxonServerIT.createId("student-1");
+    private final String student2 = AbstractAxonServerIT.createId("student-2");
+    private final String student3 = AbstractAxonServerIT.createId("student-3");
 
     @Override
     protected EventSourcingConfigurer testSuiteConfigurer(EventSourcingConfigurer configurer) {

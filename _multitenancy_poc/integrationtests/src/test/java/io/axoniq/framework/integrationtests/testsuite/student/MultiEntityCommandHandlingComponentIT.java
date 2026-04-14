@@ -16,8 +16,10 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
+import org.axonframework.integrationtests.testsuite.AbstractAxonServerIT;
+import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
 import org.axonframework.integrationtests.testsuite.student.commands.AssignMentorCommand;
 import org.axonframework.integrationtests.testsuite.student.commands.EnrollStudentToCourseCommand;
 import org.axonframework.integrationtests.testsuite.student.events.MentorAssignedToStudentEvent;
@@ -52,13 +54,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author Mitchell Herrijgers
  */
 class MultiEntityCommandHandlingComponentIT extends AbstractCommandHandlingStudentIT {
-    private final String student1 = createId("student-1");
-    private final String student2 = createId("student-2");
-    private final String student3 = createId("student-3");
-    private final String student4 = createId("student-4");
-    private final String student5 = createId("student-5");
-    private final String course1 = createId("course-1");
-    private final String course2 = createId("course-2");
+    private final String student1 = AbstractAxonServerIT.createId("student-1");
+    private final String student2 = AbstractAxonServerIT.createId("student-2");
+    private final String student3 = AbstractAxonServerIT.createId("student-3");
+    private final String student4 = AbstractAxonServerIT.createId("student-4");
+    private final String student5 = AbstractAxonServerIT.createId("student-5");
+    private final String course1 = AbstractAxonServerIT.createId("course-1");
+    private final String course2 = AbstractAxonServerIT.createId("course-2");
 
     @Test
     void canCombineModelsInAnnotatedCommandHandlerViaStateManagerParameter() {

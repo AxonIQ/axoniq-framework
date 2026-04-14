@@ -16,8 +16,10 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
+import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
+import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.integrationtests.testsuite.student.commands.EnrollStudentToCourseCommand;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -50,7 +52,7 @@ class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
                 new org.axonframework.messaging.core.QualifiedName(EnrollStudentToCourseCommand.class),
                 c -> (command, context) -> {
                     actualCommandMessage.set(command);
-                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
         startApp();
@@ -73,6 +75,6 @@ class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
         assertThatCode(() -> message.payloadAs(String.class))
                 .doesNotThrowAnyException();
         assertThat(message.payloadAs(String.class))
-                .isEqualTo(SUCCESSFUL_COMMAND_RESULT.payload());
+                .isEqualTo(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT.payload());
     }
 }

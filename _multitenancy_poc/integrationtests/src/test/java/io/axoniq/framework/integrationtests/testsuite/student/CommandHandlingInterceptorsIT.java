@@ -16,9 +16,11 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
 
+import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
+import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.integrationtests.testsuite.student.commands.ChangeStudentNameCommand;
 import org.axonframework.integrationtests.testsuite.student.events.StudentNameChangedEvent;
 import org.axonframework.integrationtests.testsuite.student.state.Student;
@@ -80,7 +82,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     StateManager state = context.component(StateManager.class);
                     Student student = state.loadEntity(Student.class, payload.id(), context).join();
                     eventAppender.append(new StudentNameChangedEvent(student.getId(), payload.name()));
-                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
 
@@ -113,7 +115,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     StateManager state = context.component(StateManager.class);
                     Student student = state.loadEntity(Student.class, payload.id(), context).join();
                     eventAppender.append(new StudentNameChangedEvent(student.getId(), payload.name()));
-                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
 
@@ -158,7 +160,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     StateManager state = context.component(StateManager.class);
                     Student student = state.loadEntity(Student.class, payload.id(), context).join();
                     eventAppender.append(new StudentNameChangedEvent(student.getId(), payload.name()));
-                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
 
@@ -191,7 +193,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     StateManager state = context.component(StateManager.class);
                     Student student = state.loadEntity(Student.class, payload.id(), context).join();
                     eventAppender.append(new StudentNameChangedEvent(student.getId(), payload.name()));
-                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
 
@@ -234,7 +236,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     StateManager state = context.component(StateManager.class);
                     Student student = state.loadEntity(Student.class, payload.id(), context).join();
                     eventAppender.append(new StudentNameChangedEvent(student.getId(), payload.name()));
-                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
 
@@ -280,7 +282,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     // Return a result with some metadata
                     return MessageStream.just(
                             new GenericCommandResultMessage(
-                                    SUCCESSFUL_COMMAND_RESULT.type(),
+                                    AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT.type(),
                                     "Command handled successfully"
                             )
                     ).cast();
@@ -334,7 +336,7 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     // Return a result
                     return MessageStream.just(
                             new GenericCommandResultMessage(
-                                    SUCCESSFUL_COMMAND_RESULT.type(),
+                                    AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT.type(),
                                     "Command dispatched and handled successfully"
                             )
                     ).cast();
