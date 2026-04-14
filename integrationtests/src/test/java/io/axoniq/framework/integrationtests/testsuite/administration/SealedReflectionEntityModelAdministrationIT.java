@@ -16,10 +16,11 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.administration;
+package io.axoniq.framework.integrationtests.testsuite.administration;
 
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.administration.AbstractAdministrationIT;
 import org.axonframework.integrationtests.testsuite.administration.common.PersonIdentifier;
 import org.axonframework.integrationtests.testsuite.administration.state.immutable.SealedPerson;
 import org.axonframework.modelling.entity.EntityMetamodel;
