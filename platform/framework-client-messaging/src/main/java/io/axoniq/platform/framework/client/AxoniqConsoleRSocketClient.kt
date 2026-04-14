@@ -390,13 +390,12 @@ class AxoniqConsoleRSocketClient(
                 }
                 .onErrorMap {
                     if (it.message?.contains("Access Denied") == true) {
+                        logger.error("Was unable to connect to Axoniq Platform due to invalid authentication! Make sure the access token is correct.")
                         IllegalStateException("Was unable to connect to Axoniq Platform due to invalid authentication! Make sure the access token is correct.")
                     } else {
+                        logger.error("Could not connect to Axoniq Platform due to connection error: ${it.message}", it)
                         it
                     }
-                }
-                .doOnError {
-                    logger.error("Could not connect to Axoniq Platform", it)
                 }
     }
 
