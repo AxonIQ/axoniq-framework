@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.administration;
+package io.axoniq.framework.integrationtests.testsuite.administration;
 
 import org.axonframework.integrationtests.testsuite.administration.commands.AssignTaskCommand;
 import org.axonframework.integrationtests.testsuite.administration.commands.ChangeEmailAddress;

@@ -16,12 +16,13 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.administration;
+package io.axoniq.framework.integrationtests.testsuite.administration;
 
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.EventSourcedEntityFactory;
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.administration.AbstractAdministrationIT;
 import org.axonframework.integrationtests.testsuite.administration.commands.AssignTaskCommand;
 import org.axonframework.integrationtests.testsuite.administration.commands.ChangeEmailAddress;
 import org.axonframework.integrationtests.testsuite.administration.commands.CompleteTaskCommand;
