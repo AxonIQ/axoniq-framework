@@ -13,10 +13,4 @@
 #
 #    https://www.axoniq.io/legal/terms-of-service
 #
-#
-#
-
-io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.DeadLetterQueueAutoConfiguration
+io.axoniq.framework.messaging.deadletter.DeadLetterParameterResolverFactory

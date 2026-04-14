@@ -1,0 +1,199 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package io.axoniq.framework.messaging.deadletter;
+
+import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.GenericCommandMessage;
+import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.annotation.ParameterResolver;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventTestUtils;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.QueryMessage;
+import org.junit.jupiter.api.*;
+
+import java.lang.reflect.Method;
+
+import static org.assertj.core.api.Assertions.*;
+
+/**
+ * Test class validating the {@link DeadLetterParameterResolverFactory} and
+ * {@code DeadLetterParameterResolverFactory.DeadLetterParameterResolver}.
+ *
+ * @author Steven van Beelen
+ * @author Mateusz Nowak
+ */
+class DeadLetterParameterResolverFactoryTest {
+
+    private DeadLetterParameterResolverFactory testSubject;
+
+    private Method nonDeadLetterParameterMethod;
+    private Method deadLetterMethod;
+    private Method eventWithDeadLetterMethod;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        testSubject = new DeadLetterParameterResolverFactory();
+
+        nonDeadLetterParameterMethod = getClass().getMethod("nonDeadLetterParameterMethod", Object.class);
+        deadLetterMethod = getClass().getMethod("someDeadLetterMethod", DeadLetter.class);
+        eventWithDeadLetterMethod = getClass().getMethod("eventWithDeadLetterMethod", String.class, DeadLetter.class);
+    }
+
+    @SuppressWarnings({"unused", "WeakerAccess"})
+    public void nonDeadLetterParameterMethod(Object event) {
+        // Used in setUp()
+    }
+
+    @SuppressWarnings({"unused", "WeakerAccess"})
+    public void someDeadLetterMethod(DeadLetter<?> deadLetter) {
+        // Used in setUp()
+    }
+
+    @SuppressWarnings({"unused", "WeakerAccess"})
+    public void eventWithDeadLetterMethod(String event, DeadLetter<EventMessage> deadLetter) {
+        // Used in setUp()
+    }
+
+    @Nested
+    class CreateInstance {
+
+        @Test
+        void ignoredForNonDeadLetterParameterMethod() {
+            assertThat(testSubject.createInstance(nonDeadLetterParameterMethod,
+                                                  nonDeadLetterParameterMethod.getParameters(),
+                                                  0)).isNull();
+        }
+
+        @Test
+        void createsResolverForDeadLetterParameterContainingMethod() {
+            assertThat(testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0)).isNotNull();
+        }
+
+        @Test
+        void ignoredForEventParameterInMethodWithDeadLetter() {
+            // given / when
+            var result = testSubject.createInstance(eventWithDeadLetterMethod,
+                                                    eventWithDeadLetterMethod.getParameters(),
+                                                    0);
+
+            // then
+            assertThat(result).isNull();
+        }
+
+        @Test
+        void createsResolverForDeadLetterAsSecondParameter() {
+            // given / when
+            var result = testSubject.createInstance(eventWithDeadLetterMethod,
+                                                    eventWithDeadLetterMethod.getParameters(),
+                                                    1);
+
+            // then
+            assertThat(result).isNotNull();
+        }
+    }
+
+    @Nested
+    class Matches {
+
+        @Test
+        void resolverMatchesForAnyMessageType() {
+            // given
+            CommandMessage testCommand =
+                    new GenericCommandMessage(new MessageType("command"), "some-command");
+            EventMessage testEvent = EventTestUtils.asEventMessage("some-command");
+            QueryMessage testQuery =
+                    new GenericQueryMessage(new MessageType("query"), "some-query");
+
+            ParameterResolver<DeadLetter<?>> resolver =
+                    testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0);
+
+            // when / then
+            assertThat(resolver.matches(StubProcessingContext.forMessage(testCommand))).isTrue();
+            assertThat(resolver.matches(StubProcessingContext.forMessage(testEvent))).isTrue();
+            assertThat(resolver.matches(StubProcessingContext.forMessage(testQuery))).isTrue();
+        }
+    }
+
+    @Nested
+    class ResolveParameterValue {
+
+        @Test
+        void resolvesDeadLetterFromProcessingContextResources() {
+            // given
+            EventMessage testMessage = EventTestUtils.asEventMessage("some-event");
+            DeadLetter<EventMessage> expected = new GenericDeadLetter<>(
+                    "sequenceId", testMessage, new RuntimeException("some-cause")
+            );
+            ProcessingContext context = StubProcessingContext.forMessage(testMessage)
+                    .withResource(DeadLetter.RESOURCE_KEY, expected);
+
+            ParameterResolver<DeadLetter<?>> resolver =
+                    testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0);
+
+            // when
+            var result = resolver.resolveParameterValue(context).join();
+
+            // then
+            assertThat(result).isEqualTo(expected);
+        }
+
+        @Test
+        void resolvesNullWhenNoDeadLetterIsPresentInTheContext() {
+            // given
+            Message testMessage = EventTestUtils.asEventMessage("some-event");
+            ProcessingContext context = StubProcessingContext.forMessage(testMessage);
+
+            ParameterResolver<DeadLetter<?>> resolver =
+                    testSubject.createInstance(deadLetterMethod, deadLetterMethod.getParameters(), 0);
+
+            // when
+            var result = resolver.resolveParameterValue(context).join();
+
+            // then
+            assertThat(result).isNull();
+        }
+
+        @Test
+        void resolvesDeadLetterAsSecondParameterFromProcessingContext() {
+            // given
+            EventMessage testMessage = EventTestUtils.asEventMessage("some-event");
+            DeadLetter<EventMessage> expected = new GenericDeadLetter<>(
+                    "sequenceId", testMessage, new RuntimeException("some-cause")
+            );
+            ProcessingContext context = StubProcessingContext.forMessage(testMessage)
+                    .withResource(DeadLetter.RESOURCE_KEY, expected);
+
+            ParameterResolver<DeadLetter<?>> resolver =
+                    testSubject.createInstance(eventWithDeadLetterMethod,
+                                               eventWithDeadLetterMethod.getParameters(),
+                                               1);
+            assertThat(resolver).isNotNull();
+
+            // when
+            var result = resolver.resolveParameterValue(context).join();
+
+            // then
+            assertThat(result).isEqualTo(expected);
+        }
+    }
+}
