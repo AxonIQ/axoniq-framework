@@ -139,7 +139,7 @@ public class DistributedCommandBus implements CommandBus {
                     } else {
                         handleError(commandMessage, callback, e);
                     }
-                } catch (Throwable ex) {
+                } catch (Exception ex) {
                     logger.error("Error handling response of command [{}]", commandMessage.type(), ex);
                     handleError(commandMessage, callback, ex);
                 }

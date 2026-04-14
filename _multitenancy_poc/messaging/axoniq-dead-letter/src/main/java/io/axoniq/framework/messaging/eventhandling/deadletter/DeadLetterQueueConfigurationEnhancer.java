@@ -254,6 +254,7 @@ public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhanc
 
         @Override
         public void registerShutdownHandlers(LifecycleRegistry registry) {
+            // unused
         }
 
         @Override
@@ -293,6 +294,7 @@ public class DeadLetterQueueConfigurationEnhancer implements ConfigurationEnhanc
 
         @Override
         public void registerShutdownHandlers(LifecycleRegistry registry) {
+            // unused
         }
 
         @Override

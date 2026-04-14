@@ -107,7 +107,7 @@ public class TaggedEventConverter implements DescribableComponent {
     private static List<io.axoniq.axonserver.grpc.event.dcb.Tag> convertTags(Set<Tag> tags) {
         return tags.stream()
                    .map(TaggedEventConverter::convertTag)
-                   .collect(Collectors.toList());
+                   .toList();
     }
 
     private static io.axoniq.axonserver.grpc.event.dcb.Tag convertTag(Tag tag) {

@@ -107,7 +107,7 @@ class InMemorySequencedDeadLetterQueueTest extends SequencedDeadLetterQueueTest<
         @Test
         void buildDefaultQueue() {
             // when / then
-            assertThatCode(() -> InMemorySequencedDeadLetterQueue.defaultQueue()).doesNotThrowAnyException();
+            assertThatCode(InMemorySequencedDeadLetterQueue::defaultQueue).doesNotThrowAnyException();
         }
 
         @Test

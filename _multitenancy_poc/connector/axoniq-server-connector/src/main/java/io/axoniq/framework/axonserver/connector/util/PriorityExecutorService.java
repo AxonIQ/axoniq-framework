@@ -148,7 +148,7 @@ public class PriorityExecutorService implements ExecutorService {
 
     @Override
     public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) throws InterruptedException {
-        return delegate.invokeAll(tasks.stream().map(this::createPriorityCallable).collect(Collectors.toList()));
+        return delegate.invokeAll(tasks.stream().map(this::createPriorityCallable).toList());
     }
 
     @Override
@@ -156,7 +156,7 @@ public class PriorityExecutorService implements ExecutorService {
                                          long timeout, TimeUnit unit)
             throws InterruptedException {
         return delegate.invokeAll(
-                tasks.stream().map(this::createPriorityCallable).collect(Collectors.toList()),
+                tasks.stream().map(this::createPriorityCallable).toList(),
                 timeout,
                 unit
         );
@@ -166,7 +166,7 @@ public class PriorityExecutorService implements ExecutorService {
     public <T> T invokeAny(Collection<? extends Callable<T>> tasks)
             throws InterruptedException, ExecutionException {
         return delegate.invokeAny(
-                tasks.stream().map(this::createPriorityCallable).collect(Collectors.toList())
+                tasks.stream().map(this::createPriorityCallable).toList()
         );
     }
 
@@ -175,7 +175,7 @@ public class PriorityExecutorService implements ExecutorService {
                            TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
         return delegate.invokeAny(
-                tasks.stream().map(this::createPriorityCallable).collect(Collectors.toList()),
+                tasks.stream().map(this::createPriorityCallable).toList(),
                 timeout,
                 unit
         );
