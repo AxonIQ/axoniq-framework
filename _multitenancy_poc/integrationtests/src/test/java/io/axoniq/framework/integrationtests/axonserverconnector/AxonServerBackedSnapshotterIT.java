@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.integrationtests.axonserverconnector;
+package io.axoniq.framework.integrationtests.axonserverconnector;
 
 import org.axonframework.axonserver.connector.AxonServerConfiguration;
 import org.axonframework.axonserver.connector.AxonServerConnectionManager;
@@ -38,7 +38,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 public class AxonServerBackedSnapshotterIT extends StoreBackedSnapshotterTestSuite {
 
-    @SuppressWarnings("resource")
     @Container
     private static final AxonServerContainer CONTAINER = new AxonServerContainer()
         .withDevMode(true)
