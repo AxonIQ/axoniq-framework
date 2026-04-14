@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.integrationtests.axonserverconnector;
+package io.axoniq.framework.integrationtests.axonserverconnector;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.grpc.ManagedChannelBuilder;
