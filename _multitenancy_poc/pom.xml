@@ -33,13 +33,20 @@
 
     <properties>
         <revision>5.1.0-SNAPSHOT</revision>
+
+        <!-- Global Axoniq version properties -->
         <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
+        <axoniq-entitlement-manager.version>1.0.0-RC2</axoniq-entitlement-manager.version>
+        <axonserver-connector-java.version>2026.0.0</axonserver-connector-java.version>
 
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <maven-enforcer.allow-spring-dependencies>false</maven-enforcer.allow-spring-dependencies>
+
         <sonar.coverage.jacoco.xmlReportPaths>
             ${project.basedir}/coverage-report/target/site/jacoco-aggregate/jacoco.xml,
             ${project.basedir}/../coverage-report/target/site/jacoco-aggregate/jacoco.xml
@@ -125,7 +132,6 @@
                 <executions>
                     <execution>
                         <id>enforce-java</id>
-                        <phase>deploy</phase>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -138,6 +144,28 @@
                                     <version>3.9</version>
                                 </requireMavenVersion>
                             </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>enforce-banned-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${maven-enforcer.allow-spring-dependencies}</skip>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>org.springframework</exclude>
+                                        <exclude>org.springframework.boot</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <!-- allow any spring dependency with test scope -->
+                                        <include>org.springframework:*:*:*:test</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
                         </configuration>
                     </execution>
                 </executions>

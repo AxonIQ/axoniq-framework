@@ -53,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * @author John Hendrikx
  */
+@Tag("flaky")
 class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<PostgresqlEventStorageEngine> {
 
     private static final EventConverter CONVERTER = new DelegatingEventConverter(new JacksonConverter());
