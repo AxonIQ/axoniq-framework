@@ -55,7 +55,7 @@ final class EventProcessorInfoUtils {
                                                                 .values()
                                                                 .stream()
                                                                 .map(EventProcessorInfoUtils::buildSegmentStatus)
-                                                                .collect(toList());
+                                                                .toList();
 
         return EventProcessorInfo.newBuilder()
                                  .setProcessorName(streamingProcessor.name())

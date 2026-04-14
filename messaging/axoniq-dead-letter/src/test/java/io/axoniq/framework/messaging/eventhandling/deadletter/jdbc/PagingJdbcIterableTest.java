@@ -111,8 +111,8 @@ class PagingJdbcIterableTest {
         List<String> result = StreamSupport.stream(testSubject.spliterator(), false)
                                            .toList();
 
-        assertThat(result.size()).isEqualTo(1);
-        assertThat(result.get(0)).isEqualTo(testId);
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst()).isEqualTo(testId);
     }
 
     @Test
@@ -125,8 +125,8 @@ class PagingJdbcIterableTest {
         List<String> result = StreamSupport.stream(testSubject.spliterator(), false)
                                            .toList();
 
-        assertThat(result.size()).isEqualTo(expectedIds.size());
-        expectedIds.forEach(resultId -> assertThat(result.contains(resultId)).isTrue());
+        assertThat(result).hasSameSizeAs(expectedIds);
+        expectedIds.forEach(resultId -> assertThat(result).contains(resultId));
     }
 
     @Test

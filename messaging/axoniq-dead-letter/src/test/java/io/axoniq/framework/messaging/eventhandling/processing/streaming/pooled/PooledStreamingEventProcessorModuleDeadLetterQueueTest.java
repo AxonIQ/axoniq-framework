@@ -342,10 +342,11 @@ class PooledStreamingEventProcessorModuleDeadLetterQueueTest {
             assertThat(dlq2).isPresent();
 
             // and - custom factory was used for each component
-            assertThat(createdQueues).hasSize(3);
-            assertThat(createdQueues).containsKey(dlqName(processorName, "component0"));
-            assertThat(createdQueues).containsKey(dlqName(processorName, "component1"));
-            assertThat(createdQueues).containsKey(dlqName(processorName, "component2"));
+            assertThat(createdQueues)
+                    .hasSize(3)
+                    .containsKey(dlqName(processorName, "component0"))
+                    .containsKey(dlqName(processorName, "component1"))
+                    .containsKey(dlqName(processorName, "component2"));
         }
 
         @Test
@@ -654,9 +655,9 @@ class PooledStreamingEventProcessorModuleDeadLetterQueueTest {
         return "EventProcessor[" + processorName + "]";
     }
 
-    private @NonNull static Function<EventHandlingComponentsConfigurer.RequiredComponentPhase, EventHandlingComponentsConfigurer.CompletePhase> singleTestEventHandlingComponent() {
+    private static @NonNull Function<EventHandlingComponentsConfigurer.RequiredComponentPhase, EventHandlingComponentsConfigurer.CompletePhase> singleTestEventHandlingComponent() {
         var eventHandlingComponent = SimpleEventHandlingComponent.create("test");
         eventHandlingComponent.subscribe(new QualifiedName(String.class), (event, context) -> MessageStream.empty());
-        return (components) -> components.declarative("eventHandlingComponent", cfg -> eventHandlingComponent);
+        return components -> components.declarative("eventHandlingComponent", cfg -> eventHandlingComponent);
     }
 }
