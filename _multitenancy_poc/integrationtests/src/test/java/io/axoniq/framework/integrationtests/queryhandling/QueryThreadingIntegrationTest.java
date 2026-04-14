@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
 
 @Testcontainers
 class QueryThreadingIntegrationTest {
@@ -337,25 +336,25 @@ class QueryThreadingIntegrationTest {
                });
 
         // We should still have the queries not done, it's waiting on the secondary one.
-        assertFalse(query1.hasNextAvailable());
-        assertFalse(query2.hasNextAvailable());
-        assertFalse(query3.hasNextAvailable());
-        assertFalse(query4.hasNextAvailable());
-        assertFalse(query5.hasNextAvailable());
-        assertFalse(query6.hasNextAvailable());
+        assertThat(query1.hasNextAvailable()).isFalse();
+        assertThat(query2.hasNextAvailable()).isFalse();
+        assertThat(query3.hasNextAvailable()).isFalse();
+        assertThat(query4.hasNextAvailable()).isFalse();
+        assertThat(query5.hasNextAvailable()).isFalse();
+        assertThat(query6.hasNextAvailable()).isFalse();
 
         // unblock the query, it should now process all queries
         secondaryQueryBlock.countDown();
 
         await().atMost(5, TimeUnit.SECONDS)
                .untilAsserted(() -> {
-                   assertEquals(0, waitingQueries.get());
-                   assertTrue(query1.hasNextAvailable());
-                   assertTrue(query2.hasNextAvailable());
-                   assertTrue(query3.hasNextAvailable());
-                   assertTrue(query4.hasNextAvailable());
-                   assertTrue(query5.hasNextAvailable());
-                   assertTrue(query6.hasNextAvailable());
+                   assertThat(waitingQueries.get()).isZero();
+                   assertThat(query1.hasNextAvailable()).isTrue();
+                   assertThat(query2.hasNextAvailable()).isTrue();
+                   assertThat(query3.hasNextAvailable()).isTrue();
+                   assertThat(query4.hasNextAvailable()).isTrue();
+                   assertThat(query5.hasNextAvailable()).isTrue();
+                   assertThat(query6.hasNextAvailable()).isTrue();
                });
     }
 

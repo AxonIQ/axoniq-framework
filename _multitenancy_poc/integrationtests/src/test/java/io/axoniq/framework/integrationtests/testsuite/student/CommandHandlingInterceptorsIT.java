@@ -43,7 +43,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Integration tests for command dispatch and handler interception.
@@ -71,10 +70,12 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     handlerInvocations.incrementAndGet();
 
                     // Verify that dispatch interception added metadata to the command
-                    assertTrue(command.metadata().containsKey("dispatch1"),
-                               "Expected dispatch1 interceptor to add metadata to command");
-                    assertTrue(command.metadata().containsKey("dispatch2"),
-                               "Expected dispatch2 interceptor to add metadata to command");
+                    assertThat(command.metadata())
+                            .as("Expected dispatch1 interceptor to add metadata to command")
+                            .containsKey("dispatch1");
+                    assertThat(command.metadata())
+                            .as("Expected dispatch2 interceptor to add metadata to command")
+                            .containsKey("dispatch2");
 
                     EventAppender eventAppender = EventAppender.forContext(context);
                     ChangeStudentNameCommand payload =
@@ -149,10 +150,12 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     handlerInvocations.incrementAndGet();
 
                     // Verify that handler interception added metadata to the command
-                    assertTrue(command.metadata().containsKey("handler1"),
-                               "Expected handler1 interceptor to add metadata to command");
-                    assertTrue(command.metadata().containsKey("handler2"),
-                               "Expected handler2 interceptor to add metadata to command");
+                    assertThat(command.metadata())
+                            .as("Expected handler1 interceptor to add metadata to command")
+                            .containsKey("handler1");
+                    assertThat(command.metadata())
+                            .as("Expected handler2 interceptor to add metadata to command")
+                            .containsKey("handler2");
 
                     EventAppender eventAppender = EventAppender.forContext(context);
                     ChangeStudentNameCommand payload =
@@ -225,10 +228,12 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
                     handlerInvocations.incrementAndGet();
 
                     // Verify that both interception added metadata to the command
-                    assertTrue(command.metadata().containsKey("dispatch"),
-                               "Expected dispatch interceptor to add metadata to command");
-                    assertTrue(command.metadata().containsKey("handler"),
-                               "Expected handler interceptor to add metadata to command");
+                    assertThat(command.metadata())
+                            .as("Expected dispatch interceptor to add metadata to command")
+                            .containsKey("dispatch");
+                    assertThat(command.metadata())
+                            .as("Expected handler interceptor to add metadata to command")
+                            .containsKey("handler");
 
                     EventAppender eventAppender = EventAppender.forContext(context);
                     ChangeStudentNameCommand payload =
@@ -298,9 +303,10 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
 
         // then
         assertThat(interceptorInvocations.get()).isEqualTo(1);
-        assertTrue(result.metadata().containsKey("intercepted"),
-                   "Expected interceptor to add 'intercepted' metadata to response");
-        assertEquals("true", result.metadata().get("intercepted"));
+        assertThat(result.metadata())
+                .as("Expected interceptor to add 'intercepted' metadata to response")
+                .containsKey("intercepted");
+        assertThat(result.metadata().get("intercepted")).isEqualTo("true");
     }
 
     @Test
@@ -352,9 +358,10 @@ class CommandHandlingInterceptorsIT extends AbstractCommandHandlingStudentIT {
 
         // then
         assertThat(interceptorInvocations.get()).isEqualTo(1);
-        assertTrue(result.metadata().containsKey("dispatchIntercepted"),
-                   "Expected dispatch interceptor to add 'dispatchIntercepted' metadata to response");
-        assertEquals("true", result.metadata().get("dispatchIntercepted"));
+        assertThat(result.metadata())
+                .as("Expected dispatch interceptor to add 'dispatchIntercepted' metadata to response")
+                .containsKey("dispatchIntercepted");
+        assertThat(result.metadata().get("dispatchIntercepted")).isEqualTo("true");
     }
 
     /**

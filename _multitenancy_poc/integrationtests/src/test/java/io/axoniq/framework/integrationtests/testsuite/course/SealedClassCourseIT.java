@@ -32,7 +32,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.StateManager;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class SealedClassCourseIT extends AbstractAxonServerIT {
 
@@ -71,14 +71,14 @@ class SealedClassCourseIT extends AbstractAxonServerIT {
 
         // assert
         UnitOfWork uow = unitOfWorkFactory.create();
-        assertTrue(uow.executeWithResult(ctx -> ctx.component(StateManager.class)
+        assertThat(uow.executeWithResult(ctx -> ctx.component(StateManager.class)
                                                    .repository(SealedClassCourseCommandHandlers.CourseState.class,
                                                                String.class)
                                                    .load(courseId, ctx)
                                                    .thenApply(cs ->
                                                                       cs.entity() instanceof PublishedCourse)
                       )
-                      .join(), "Expected state to be instance of PublishedCourse");
+                      .join()).as("Expected state to be instance of PublishedCourse").isTrue();
     }
 
     private void sendCommand(Object command) {

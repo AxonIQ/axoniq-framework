@@ -50,7 +50,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating the annotated {@link PooledStreamingEventProcessor}
@@ -138,11 +138,11 @@ public class EventProcessingAnnotatedEventSourcedPooledStreamingIT extends Abstr
 
     protected void verifyNotificationSentTo(String studentId) {
         UnitOfWork uow = unitOfWorkFactory.create();
-        assertTrue(uow.executeWithResult(context -> context.component(StateManager.class)
+        assertThat(uow.executeWithResult(context -> context.component(StateManager.class)
             .repository(StudentCoursesAutomationState.class, String.class)
             .load(studentId, context)
             .thenApply(student -> student.entity().notified())).join()
-        );
+        ).isTrue();
     }
 
     @Override

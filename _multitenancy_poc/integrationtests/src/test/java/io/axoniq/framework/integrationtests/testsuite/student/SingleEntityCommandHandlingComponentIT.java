@@ -32,7 +32,7 @@ import org.axonframework.modelling.StateManager;
 import org.axonframework.modelling.annotation.InjectEntity;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests whether stateful command handling components can process commands with a single entity.
@@ -56,7 +56,7 @@ class SingleEntityCommandHandlingComponentIT extends AbstractCommandHandlingStud
                     Student student = state.loadEntity(Student.class, payload.id(), context).join();
                     eventAppender.append(new StudentNameChangedEvent(student.getId(), payload.name()));
                     // Entity through magic of repository automatically updated
-                    assertEquals(student.getName(), payload.name());
+                    assertThat(student.getName()).isEqualTo(payload.name());
                     return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
@@ -99,7 +99,7 @@ class SingleEntityCommandHandlingComponentIT extends AbstractCommandHandlingStud
             // Change name through event
             eventAppender.append(new StudentNameChangedEvent(student.getId(), command.name()));
             // Entity through magic of repository automatically updated
-            assertEquals(student.getName(), command.name());
+            assertThat(student.getName()).isEqualTo(command.name());
         }
     }
 
@@ -108,8 +108,8 @@ class SingleEntityCommandHandlingComponentIT extends AbstractCommandHandlingStud
         uow.executeWithResult(context -> context.component(StateManager.class)
                                                 .repository(Student.class, String.class)
                                                 .load(id, context)
-                                                .thenAccept(student -> assertEquals(name,
-                                                                                    student.entity().getName())))
+                                                .thenAccept(student -> assertThat(student.entity().getName())
+                                                                                    .isEqualTo(name)))
            .join();
     }
 }
