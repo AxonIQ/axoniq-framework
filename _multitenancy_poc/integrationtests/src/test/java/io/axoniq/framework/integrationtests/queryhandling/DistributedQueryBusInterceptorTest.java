@@ -16,13 +16,14 @@
  *
  */
 
-package org.axonframework.integrationtests.queryhandling;
+package io.axoniq.framework.integrationtests.queryhandling;
 
 import org.axonframework.axonserver.connector.AxonServerConfiguration;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.integrationtests.queryhandling.AbstractQueryInterceptorTestSuite;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus;
 import org.axonframework.messaging.queryhandling.QueryBus;
+import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus;
 import org.axonframework.test.server.AxonServerContainer;
 import org.axonframework.test.server.AxonServerContainerUtils;
 import org.junit.jupiter.api.*;
@@ -56,11 +57,11 @@ public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptor
 
         // Mainly needed to create DBC context now:
         AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
-                container.getHttpPort(),
-                "default",
-                AxonServerContainerUtils.DCB_CONTEXT);
+                                                           container.getHttpPort(),
+                                                           "default",
+                                                           AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
-                container.getHttpPort());
+                    container.getHttpPort());
     }
 
     private static AxonServerConfiguration testContainerAxonServerConfiguration() {
@@ -79,10 +80,10 @@ public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptor
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
         return MessagingConfigurer.create()
-                .componentRegistry(cr -> cr.registerComponent(
-                        AxonServerConfiguration.class,
-                        c -> testContainerAxonServerConfiguration()
-                ));
+                                  .componentRegistry(cr -> cr.registerComponent(
+                                          AxonServerConfiguration.class,
+                                          c -> testContainerAxonServerConfiguration()
+                                  ));
     }
 
     @BeforeEach

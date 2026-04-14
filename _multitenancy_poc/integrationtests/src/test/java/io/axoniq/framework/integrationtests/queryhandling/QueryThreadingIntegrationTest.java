@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.integrationtests.queryhandling;
+package io.axoniq.framework.integrationtests.queryhandling;
 
 import io.grpc.ManagedChannelBuilder;
 import org.axonframework.axonserver.connector.AxonServerConfiguration;
