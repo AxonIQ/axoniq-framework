@@ -22,25 +22,24 @@ import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import io.axoniq.platform.framework.api.ClientStatus
 import io.axoniq.platform.framework.eventprocessor.ProcessorReportCreator
 import io.github.oshai.kotlinlogging.KotlinLogging
-import reactor.core.Disposable
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 class ServerProcessorReporter(
         private val client: AxoniqConsoleRSocketClient,
         private val processorReportCreator: ProcessorReportCreator,
-        private val clientSettingsService: ClientSettingsService,
+        private val platformClientConnectionService: PlatformClientConnectionService,
         private val properties: AxoniqPlatformConfiguration
-) : ClientSettingsObserver {
+) : PlatformClientConnectionObserver {
     private var reportTask: ScheduledFuture<*>? = null
     private val logger = KotlinLogging.logger { }
     private val executor = properties.reportingTaskExecutor
 
     init {
-        clientSettingsService.subscribeToSettings(this)
+        platformClientConnectionService.subscribeToSettings(this)
     }
 
-    override fun onConnectionUpdate(clientStatus: ClientStatus, settings: ClientSettingsV2) {
+    override fun onConnected(clientStatus: ClientStatus, settings: ClientSettingsV2) {
         if (!clientStatus.enabled || reportTask != null) {
             return
         }

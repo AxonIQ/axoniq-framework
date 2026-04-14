@@ -60,7 +60,7 @@
         <kotlin.version>2.2.20</kotlin.version>
         <dokka.version>2.0.0</dokka.version>
 
-        <axon.version>5.1.0-RC2</axon.version>
+        <axon.version>5.1.0-SNAPSHOT</axon.version>
         <spring-boot.version>3.5.7</spring-boot.version>
 
 
@@ -233,6 +233,19 @@
             </plugin>
         </plugins>
     </build>
+
+    <repositories>
+        <repository>
+            <id>central-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <scm>
         <connection>scm:git:git://github.com/AxonIQ/platform-framework-client.git</connection>

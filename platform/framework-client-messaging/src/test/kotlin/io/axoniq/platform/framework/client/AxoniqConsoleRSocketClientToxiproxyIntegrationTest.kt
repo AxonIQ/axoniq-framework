@@ -223,7 +223,7 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
                 setupPayloadCreator = setupPayloadCreator,
                 registrar = RSocketHandlerRegistrar(encodingStrategy),
                 encodingStrategy = encodingStrategy,
-                clientSettingsService = ClientSettingsService(),
+                platformClientConnectionService = PlatformClientConnectionService(),
                 instanceName = "test-instance"
         )
     }

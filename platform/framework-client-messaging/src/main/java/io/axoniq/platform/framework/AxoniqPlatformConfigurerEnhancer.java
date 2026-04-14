@@ -24,7 +24,7 @@ import io.axoniq.platform.framework.application.BusType;
 import io.axoniq.platform.framework.application.MeasuringExecutorServiceDecorator;
 import io.axoniq.platform.framework.application.RSocketThreadDumpResponder;
 import io.axoniq.platform.framework.client.AxoniqConsoleRSocketClient;
-import io.axoniq.platform.framework.client.ClientSettingsService;
+import io.axoniq.platform.framework.client.PlatformClientConnectionService;
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.platform.framework.client.ServerProcessorReporter;
 import io.axoniq.platform.framework.client.SetupPayloadCreator;
@@ -74,8 +74,8 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
         }
         registry
                 .registerComponent(ComponentDefinition
-                                           .ofType(ClientSettingsService.class)
-                                           .withBuilder(c -> new ClientSettingsService()))
+                                           .ofType(PlatformClientConnectionService.class)
+                                           .withBuilder(c -> new PlatformClientConnectionService()))
                 .registerComponent(ComponentDefinition
                                            .ofType(ProcessorMetricsRegistry.class)
                                            .withBuilder(c -> new ProcessorMetricsRegistry()))
@@ -117,7 +117,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                    c.getComponent(SetupPayloadCreator.class),
                                                    c.getComponent(RSocketHandlerRegistrar.class),
                                                    c.getComponent(RSocketPayloadEncodingStrategy.class),
-                                                   c.getComponent(ClientSettingsService.class),
+                                                   c.getComponent(PlatformClientConnectionService.class),
                                                    determineInstanceName(c)))
 
                                            .onStart(Phase.EXTERNAL_CONNECTIONS, AxoniqConsoleRSocketClient::start))
@@ -126,7 +126,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                            .withBuilder(c -> new ServerProcessorReporter(
                                                    c.getComponent(AxoniqConsoleRSocketClient.class),
                                                    c.getComponent(ProcessorReportCreator.class),
-                                                   c.getComponent(ClientSettingsService.class),
+                                                   c.getComponent(PlatformClientConnectionService.class),
                                                    c.getComponent(AxoniqPlatformConfiguration.class)))
                                            // The start handler will allow for eager creation
                                            .onStart(Phase.EXTERNAL_CONNECTIONS, c -> {
@@ -136,7 +136,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                            .withBuilder(c -> new ApplicationMetricReporter(
                                                    c.getComponent(AxoniqConsoleRSocketClient.class),
                                                    c.getComponent(ApplicationReportCreator.class),
-                                                   c.getComponent(ClientSettingsService.class),
+                                                   c.getComponent(PlatformClientConnectionService.class),
                                                    c.getComponent(AxoniqPlatformConfiguration.class)))
                                            // The start handler will allow for eager creation
                                            .onStart(Phase.EXTERNAL_CONNECTIONS, c -> {
@@ -145,7 +145,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                            .ofType(HandlerMetricsRegistry.class)
                                            .withBuilder(c -> new HandlerMetricsRegistry(
                                                    c.getComponent(AxoniqConsoleRSocketClient.class),
-                                                   c.getComponent(ClientSettingsService.class),
+                                                   c.getComponent(PlatformClientConnectionService.class),
                                                    c.getComponent(AxoniqPlatformConfiguration.class))))
                 .registerComponent(ComponentDefinition
                                            .ofType(ApplicationThreadDumpProvider.class)
@@ -195,10 +195,10 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                                               Objects.requireNonNull(original);
                                                               ReflectionKt.setPropertyValue(delegate, "queryExecutorServiceFactory", (ExecutorServiceFactory<DistributedQueryBusConfiguration>) (configuration, queue) -> {
                                                                   var built = original.createExecutorService(configuration, queue);
-                                                                  return new MeasuringExecutorServiceDecorator(
-                                                                          BusType.QUERY,
-                                                                          built,
-                                                                          cc.getComponent(ApplicationMetricRegistry.class));
+                                                                      return new MeasuringExecutorServiceDecorator(
+                                                                              BusType.QUERY,
+                                                                              built,
+                                                                              cc.getComponent(ApplicationMetricRegistry.class));
                                                               });
                                                           } catch (Exception e) {
                                                               logger.error("Failed to instruct DistributedQueryBusConfiguration, e)");

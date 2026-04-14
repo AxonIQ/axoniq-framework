@@ -18,6 +18,7 @@ package io.axoniq.platform.framework.client
 
 import io.axoniq.platform.framework.AxoniqPlatformConfiguration
 import io.axoniq.platform.framework.api.ClientSettingsV2
+import io.axoniq.platform.framework.api.ClientStatus
 import io.axoniq.platform.framework.api.CommandBusInformation
 import io.axoniq.platform.framework.api.EventStoreInformation
 import io.axoniq.platform.framework.api.ModuleVersion
@@ -30,8 +31,10 @@ import io.mockk.mockk
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
 class AxoniqConsoleRSocketClientIntegrationTest {
@@ -73,6 +76,38 @@ class AxoniqConsoleRSocketClientIntegrationTest {
     }
 
     @Test
+    fun `notifies observers of INVALID_AUTHENTICATION when setup is rejected`() {
+        mockServer.rejectSetup = true
+        val settingsService = PlatformClientConnectionService()
+        val observer = TestObserver()
+        settingsService.subscribeToSettings(observer)
+
+        client = buildClient(platformClientConnectionService = settingsService)
+        client.start()
+
+        await().atMost(5, TimeUnit.SECONDS).until { observer.unreachableReasons.isNotEmpty() }
+        assertTrue(observer.unreachableReasons.all {
+            it == PlatformClientConnectionObserver.UnreachableReason.INVALID_AUTHENTICATION
+        })
+    }
+
+    @Test
+    fun `notifies observers of NO_CONNECTION when server is unreachable`() {
+        val settingsService = PlatformClientConnectionService()
+        val observer = TestObserver()
+        settingsService.subscribeToSettings(observer)
+
+        // Point to a port where nothing is listening
+        client = buildClient(platformClientConnectionService = settingsService, port = 1)
+        client.start()
+
+        await().atMost(5, TimeUnit.SECONDS).until { observer.unreachableReasons.isNotEmpty() }
+        assertTrue(observer.unreachableReasons.all {
+            it == PlatformClientConnectionObserver.UnreachableReason.NO_CONNECTION
+        })
+    }
+
+    @Test
     fun `reconnects after server closes connection`() {
         client = buildClient()
         client.start()
@@ -110,14 +145,17 @@ class AxoniqConsoleRSocketClientIntegrationTest {
 
     // ---- helpers ----
 
-    private fun buildClient(): AxoniqConsoleRSocketClient {
+    private fun buildClient(
+            platformClientConnectionService: PlatformClientConnectionService = PlatformClientConnectionService(),
+            port: Int = mockServer.port,
+    ): AxoniqConsoleRSocketClient {
         val encodingStrategy = CborJackson2EncodingStrategy()
         val setupPayloadCreator = mockk<SetupPayloadCreator>()
         every { setupPayloadCreator.createReport() } returns minimalSetupPayload()
 
         val config = AxoniqPlatformConfiguration("test-env", "test-token", "test-app")
                 .host("localhost")
-                .port(mockServer.port)
+                .port(port)
                 .secure(false)
 
         return AxoniqConsoleRSocketClient(
@@ -125,7 +163,7 @@ class AxoniqConsoleRSocketClientIntegrationTest {
                 setupPayloadCreator = setupPayloadCreator,
                 registrar = RSocketHandlerRegistrar(encodingStrategy),
                 encodingStrategy = encodingStrategy,
-                clientSettingsService = ClientSettingsService(),
+                platformClientConnectionService = platformClientConnectionService,
                 instanceName = "test-instance"
         )
     }
@@ -147,4 +185,14 @@ class AxoniqConsoleRSocketClientIntegrationTest {
             versions = Versions(frameworkVersion = "test", moduleVersions = emptyList<ModuleVersion>()),
             upcasters = emptyList(),
     )
+
+    private class TestObserver : PlatformClientConnectionObserver {
+        val unreachableReasons = CopyOnWriteArrayList<PlatformClientConnectionObserver.UnreachableReason>()
+
+        override fun onConnected(clientStatus: ClientStatus, settings: ClientSettingsV2) {}
+        override fun onDisconnected() {}
+        override fun onUnreachable(reason: PlatformClientConnectionObserver.UnreachableReason) {
+            unreachableReasons.add(reason)
+        }
+    }
 }
