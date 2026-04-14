@@ -36,3 +36,6 @@ docs/_playbook/build
 
 # just - console helper
 .justfile
+
+# flattened maven pom
+.flattened-pom.xml
