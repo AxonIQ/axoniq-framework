@@ -16,9 +16,10 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
 import org.axonframework.common.Registration;
+import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
