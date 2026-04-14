@@ -16,10 +16,11 @@
  *
  */
 
-package org.axonframework.integrationtests.queryhandling;
+package io.axoniq.framework.integrationtests.queryhandling;
 
 import org.axonframework.axonserver.connector.AxonServerConfiguration;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.integrationtests.queryhandling.AbstractSubscriptionQueryTestSuite;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -47,8 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * An {@link AbstractSubscriptionQueryTestSuite} implementation validating the
- * {@link DistributedQueryBus}.
+ * An {@link AbstractSubscriptionQueryTestSuite} implementation validating the {@link DistributedQueryBus}.
  *
  * @author Mateusz Nowak
  * @author Milan Savic
@@ -128,7 +128,8 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
         // emit query updates
         QueryUpdateEmitter emitter = emitterRef.get();
         emitter.emit(queryUpdateInlinePayloadConversion,
-                     AbstractSubscriptionQueryTestSuite::equalsTestQueryPayload, update1Payload);
+                     AbstractSubscriptionQueryTestSuite::equalsTestQueryPayload,
+                     update1Payload);
         emitter.emit(queryUpdateInlinePayloadConversion,
                      AbstractSubscriptionQueryTestSuite::equalsTestQueryPayload,
                      update2Payload);
