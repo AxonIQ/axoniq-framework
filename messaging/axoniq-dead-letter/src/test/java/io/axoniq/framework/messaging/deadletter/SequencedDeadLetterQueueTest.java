@@ -1,0 +1,1136 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package io.axoniq.framework.messaging.deadletter;
+
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventTestUtils;
+import org.junit.jupiter.api.*;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.Deque;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
+
+/**
+ * Abstract class providing a generic test suite every {@link SequencedDeadLetterQueue} implementation should comply
+ * with.
+ * <p>
+ * Note that this test suite does not use an actual {@link ProcessingContext} instance. Instead, it relies on {@code null} or
+ * {@link StubProcessingContext} to satisfy the API contract without involving real lifecycle management. Integration
+ * tests are expected to validate the {@link SequencedDeadLetterQueue} with an actual {@link ProcessingContext},
+ * typically within a started Event Processor.
+ *
+ * @param <M> The {@link DeadLetter} implementation enqueued by this test class.
+ * @author Steven van Beelen
+ * @author Mateusz Nowak
+ * @since 5.0.0
+ */
+public abstract class SequencedDeadLetterQueueTest<M extends Message> {
+
+    private SequencedDeadLetterQueue<M> testSubject;
+
+    @BeforeEach
+    void setUp() {
+        // Reset clock to current time to avoid timestamp issues from previous tests
+        setClock(Clock.systemDefaultZone());
+        testSubject = buildTestSubject();
+    }
+
+    /**
+     * Constructs the {@link SequencedDeadLetterQueue} implementation under test.
+     *
+     * @return A {@link SequencedDeadLetterQueue} implementation under test.
+     */
+    protected abstract SequencedDeadLetterQueue<M> buildTestSubject();
+
+    /**
+     * Return the configured maximum amount of sequences for the {@link #buildTestSubject() test subject}.
+     *
+     * @return The configured maximum amount of sequences for the {@link #buildTestSubject() test subject}.
+     */
+    protected abstract long maxSequences();
+
+    /**
+     * Return the configured maximum size of a sequence for the {@link #buildTestSubject() test subject}.
+     *
+     * @return The configured maximum size of a sequence for the {@link #buildTestSubject() test subject}.
+     */
+    protected abstract long maxSequenceSize();
+
+    /**
+     * Convenience method to enqueue a generated dead letter with the processing context derived from
+     * {@link DeadLetter#context()}.
+     *
+     * @param sequenceId The identifier of the sequence to enqueue to.
+     * @param letter     The dead letter to enqueue.
+     */
+    private void enqueue(Object sequenceId, DeadLetter<? extends M> letter) {
+        joinAndUnwrap(testSubject.enqueue(sequenceId, letter, toProcessingContext(letter.context())));
+    }
+
+    /**
+     * Converts a {@link Context} to a {@link ProcessingContext} using {@link StubProcessingContext#fromContext(Context)},
+     * or returns {@code null} if the given context is {@code null} or empty.
+     *
+     * @param context the {@link Context} to convert
+     * @return the resulting {@link ProcessingContext}
+     */
+    protected ProcessingContext toProcessingContext(Context context) {
+        return context != null && !context.resources().isEmpty()
+                ? StubProcessingContext.fromContext(context)
+                : null;
+    }
+
+    @Nested
+    class WhenEnqueueing {
+
+        @Test
+        void enqueueAddsDeadLetter() {
+            // given
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+
+            // when
+            enqueue(testId, letter);
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isTrue();
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isTrue();
+            assertLetter(letter, resultLetters.next());
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+
+        @Test
+        void enqueueThrowsDeadLetterQueueOverflowExceptionWhenMaxSequencesIsReached() {
+            // given
+            long maxSequences = maxSequences();
+            assertThat(maxSequences > 0).isTrue();
+            for (int i = 0; i < maxSequences; i++) {
+                enqueue(generateId(), generateInitialLetter());
+            }
+
+            // when / then
+            Object oneSequenceToMany = generateId();
+            var letter = generateInitialLetter();
+            assertThatThrownBy(() -> joinAndUnwrap(testSubject.enqueue(oneSequenceToMany,
+                                                                       letter,
+                                                                       toProcessingContext(letter.context()))))
+                    .isInstanceOf(DeadLetterQueueOverflowException.class);
+        }
+
+        @Test
+        void enqueueThrowsDeadLetterQueueOverflowExceptionWhenMaxSequenceSizeIsReached() {
+            // given
+            Object testId = generateId();
+            long maxSequenceSize = maxSequenceSize();
+            assertThat(maxSequenceSize > 0).isTrue();
+            for (int i = 0; i < maxSequenceSize; i++) {
+                enqueue(testId, generateInitialLetter());
+            }
+
+            // when / then
+            var letter = generateInitialLetter();
+            assertThatThrownBy(() -> joinAndUnwrap(testSubject.enqueue(testId,
+                                                                       letter,
+                                                                       toProcessingContext(letter.context()))))
+                    .isInstanceOf(DeadLetterQueueOverflowException.class);
+        }
+    }
+
+    @Nested
+    class WhenEnqueueingIfPresent {
+
+        @Test
+        void enqueueIfPresentThrowsDeadLetterQueueOverflowExceptionForFullQueue() {
+            // given
+            Object testId = generateId();
+            long maxSequenceSize = maxSequenceSize();
+            assertThat(maxSequenceSize > 0).isTrue();
+            for (int i = 0; i < maxSequenceSize; i++) {
+                enqueue(testId, generateInitialLetter());
+            }
+
+            // when / then
+            var followUp = generateFollowUpLetter();
+            assertThatThrownBy(
+                    () -> joinAndUnwrap(testSubject.enqueueIfPresent(testId, () -> followUp, toProcessingContext(followUp.context())))
+            ).isInstanceOf(DeadLetterQueueOverflowException.class);
+        }
+
+        @Test
+        void enqueueIfPresentDoesNotEnqueueForEmptyQueue() {
+            // given
+            Object testId = generateId();
+
+            // when
+            var followUp = generateFollowUpLetter();
+            boolean result = joinAndUnwrap(testSubject.enqueueIfPresent(testId,
+                                                                         () -> followUp,
+                                                                         toProcessingContext(followUp.context())));
+
+            // then
+            assertThat(result).isFalse();
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isFalse();
+        }
+
+        @Test
+        void enqueueIfPresentDoesNotEnqueueForNonExistentSequenceIdentifier() {
+            // given
+            Object testFirstId = generateId();
+            enqueue(testFirstId, generateInitialLetter());
+            Object testSecondId = generateId();
+
+            // when
+            var followUp = generateFollowUpLetter();
+            boolean result = joinAndUnwrap(testSubject.enqueueIfPresent(testSecondId,
+                                                                         () -> followUp,
+                                                                         toProcessingContext(followUp.context())));
+
+            // then
+            assertThat(result).isFalse();
+            assertThat(joinAndUnwrap(testSubject.contains(testFirstId, null))).isTrue();
+            assertThat(joinAndUnwrap(testSubject.contains(testSecondId, null))).isFalse();
+        }
+
+        @Test
+        void enqueueIfPresentEnqueuesForExistingSequenceIdentifier() {
+            // given
+            Object testId = generateId();
+            var firstLetter = generateInitialLetter();
+            var secondLetter = generateFollowUpLetter();
+
+            // when
+            enqueue(testId, firstLetter);
+            joinAndUnwrap(testSubject.enqueueIfPresent(testId,
+                                                       () -> secondLetter,
+                                                       toProcessingContext(secondLetter.context())));
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isTrue();
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isTrue();
+            assertLetter(firstLetter, resultLetters.next());
+            assertThat(resultLetters.hasNext()).isTrue();
+            assertLetter(secondLetter, resultLetters.next());
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+    }
+
+    @Nested
+    class WhenEvicting {
+
+        @Test
+        void evictDoesNotChangeTheQueueForNonExistentSequenceIdentifier() {
+            // given
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            // when
+            joinAndUnwrap(testSubject.evict(mapToQueueImplementation(generateInitialLetter()), null));
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isTrue();
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isTrue();
+            assertLetter(letter, resultLetters.next());
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+
+        @Test
+        void evictDoesNotChangeTheQueueForNonExistentLetterIdentifier() {
+            // given
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            // when
+            joinAndUnwrap(testSubject.evict(mapToQueueImplementation(generateInitialLetter()), null));
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isTrue();
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isTrue();
+            assertLetter(letter, resultLetters.next());
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+
+        @Test
+        void evictRemovesLetterFromQueue() {
+            // given
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+            DeadLetter<? extends M> resultLetter = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator().next();
+
+            // when
+            joinAndUnwrap(testSubject.evict(resultLetter, null));
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isFalse();
+            assertThat(joinAndUnwrap(testSubject.deadLetters(null)).iterator().hasNext()).isFalse();
+        }
+    }
+
+    @Nested
+    class WhenRequeueing {
+
+        @Test
+        void requeueThrowsNoSuchDeadLetterExceptionForNonExistentSequenceIdentifier() {
+            // given
+            var testLetter = generateInitialLetter();
+
+            // when / then
+            assertThatThrownBy(() -> joinAndUnwrap(testSubject.requeue(mapToQueueImplementation(testLetter), l -> l, null)))
+                    .isInstanceOf(NoSuchDeadLetterException.class);
+        }
+
+        @Test
+        void requeueThrowsNoSuchDeadLetterExceptionForNonExistentLetterIdentifier() {
+            // given
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            var otherLetter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            // when / then
+            assertThatThrownBy(() -> joinAndUnwrap(testSubject.requeue(mapToQueueImplementation(otherLetter), l -> l, null)))
+                    .isInstanceOf(NoSuchDeadLetterException.class);
+        }
+
+        @Test
+        void requeueReentersLetterToQueueWithUpdatedLastTouchedAndCause() {
+            // given
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            Throwable testCause = generateThrowable();
+            enqueue(testId, letter);
+            DeadLetter<? extends M> resultLetter = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator().next();
+            DeadLetter<M> expectedLetter = generateRequeuedLetter(letter, testCause);
+
+            // when
+            joinAndUnwrap(testSubject.requeue(resultLetter, l -> l.withCause(testCause), null));
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isTrue();
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isTrue();
+            DeadLetter<? extends M> requeuedLetter = resultLetters.next();
+            assertLetter(expectedLetter, requeuedLetter);
+            assertContext(letter.context(), requeuedLetter.context());
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+    }
+
+    @Nested
+    class WhenQuerying {
+
+        @Test
+        void containsReturnsTrueForContainedLetter() {
+            // given
+            Object testId = generateId();
+            Object otherTestId = generateId();
+
+            // when / then
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isFalse();
+            enqueue(testId, generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.contains(testId, null))).isTrue();
+            assertThat(joinAndUnwrap(testSubject.contains(otherTestId, null))).isFalse();
+        }
+
+        @Test
+        void deadLetterSequenceReturnsEnqueuedLettersMatchingGivenSequenceIdentifier() {
+            // given
+            Object testId = generateId();
+            var expected = generateInitialLetter();
+
+            // when / then
+            Iterator<DeadLetter<? extends M>> resultIterator = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultIterator.hasNext()).isFalse();
+
+            enqueue(testId, expected);
+
+            resultIterator = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultIterator.hasNext()).isTrue();
+            assertLetter(expected, resultIterator.next());
+            assertThat(resultIterator.hasNext()).isFalse();
+        }
+
+        @Test
+        void deadLetterSequenceReturnsMatchingEnqueuedLettersInInsertOrder() {
+            // given
+            Object testId = generateId();
+            LinkedHashMap<Integer, DeadLetter<M>> enqueuedLetters = new LinkedHashMap<>();
+            var initial = generateInitialLetter();
+            enqueue(testId, initial);
+            enqueuedLetters.put(0, initial);
+
+            IntStream.range(1, Long.valueOf(maxSequenceSize()).intValue())
+                     .forEach(i -> {
+                         var followUp = generateFollowUpLetter();
+                         enqueue(testId, followUp);
+                         enqueuedLetters.put(i, followUp);
+                     });
+
+            // when
+            Iterator<DeadLetter<? extends M>> resultIterator = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+
+            // then
+            for (Map.Entry<Integer, DeadLetter<M>> entry : enqueuedLetters.entrySet()) {
+                assertThat(resultIterator.hasNext()).isTrue();
+                assertLetter(entry.getValue(), resultIterator.next());
+            }
+        }
+
+        @Test
+        void deadLettersReturnsAllEnqueuedDeadLetters() {
+            // given
+            Object thisTestId = generateId();
+            Object thatTestId = generateId();
+
+            var thisFirstExpected = generateInitialLetter();
+            var thisSecondExpected = generateInitialLetter();
+            var thatFirstExpected = generateInitialLetter();
+            var thatSecondExpected = generateInitialLetter();
+
+            enqueue(thisTestId, thisFirstExpected);
+            enqueue(thatTestId, thatFirstExpected);
+            enqueue(thisTestId, thisSecondExpected);
+            enqueue(thatTestId, thatSecondExpected);
+
+            // when
+            Iterator<Iterable<DeadLetter<? extends M>>> result = joinAndUnwrap(testSubject.deadLetters(null)).iterator();
+
+            // then
+            int count = 0;
+            while (result.hasNext()) {
+                Iterable<DeadLetter<? extends M>> sequenceIterator = result.next();
+                Iterator<DeadLetter<? extends M>> resultLetters = sequenceIterator.iterator();
+                while (resultLetters.hasNext()) {
+                    count += 1;
+                    DeadLetter<? extends M> resultLetter = resultLetters.next();
+                    if (letterMatches(thisFirstExpected).test(resultLetter)) {
+                        assertLetter(thisFirstExpected, resultLetter);
+                        assertThat(resultLetters.hasNext()).isTrue();
+                        assertLetter(thisSecondExpected, resultLetters.next());
+                        assertThat(resultLetters.hasNext()).isFalse();
+                    } else {
+                        assertLetter(thatFirstExpected, resultLetter);
+                        assertThat(resultLetters.hasNext()).isTrue();
+                        assertLetter(thatSecondExpected, resultLetters.next());
+                        assertThat(resultLetters.hasNext()).isFalse();
+                    }
+                }
+            }
+            assertThat(count).isEqualTo(2);
+        }
+
+        @Test
+        void isFullReturnsTrueAfterMaximumAmountOfSequencesIsReached() {
+            // given
+            assertThat(joinAndUnwrap(testSubject.isFull(generateId(), null))).isFalse();
+            long maxSequences = maxSequences();
+            assertThat(maxSequences > 0).isTrue();
+            for (int i = 0; i < maxSequences; i++) {
+                enqueue(generateId(), generateInitialLetter());
+            }
+
+            // when / then
+            assertThat(joinAndUnwrap(testSubject.isFull(generateId(), null))).isTrue();
+        }
+
+        @Test
+        void isFullReturnsTrueAfterMaximumSequenceSizeIsReached() {
+            // given
+            Object testId = generateId();
+            assertThat(joinAndUnwrap(testSubject.isFull(testId, null))).isFalse();
+            long maxSequenceSize = maxSequenceSize();
+            assertThat(maxSequenceSize > 0).isTrue();
+            for (int i = 0; i < maxSequenceSize; i++) {
+                enqueue(testId, generateInitialLetter());
+            }
+
+            // when / then
+            assertThat(joinAndUnwrap(testSubject.isFull(testId, null))).isTrue();
+        }
+
+        @Test
+        void sizeReturnsOverallNumberOfContainedDeadLetters() {
+            // given / when / then
+            assertThat(joinAndUnwrap(testSubject.size(null))).isEqualTo(0);
+
+            Object testId = generateId();
+            enqueue(testId, generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.size(null))).isEqualTo(1);
+            enqueue(testId, generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.size(null))).isEqualTo(2);
+
+            enqueue(generateId(), generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.size(null))).isEqualTo(3);
+        }
+
+        @Test
+        void sequenceSizeForSequenceIdentifierReturnsTheNumberOfContainedLettersForGivenSequenceIdentifier() {
+            // given / when / then
+            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isEqualTo(0);
+
+            Object testId = generateId();
+            enqueue(testId, generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.sequenceSize(testId, null))).isEqualTo(1);
+            enqueue(testId, generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.sequenceSize(testId, null))).isEqualTo(2);
+
+            enqueue(generateId(), generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.sequenceSize(testId, null))).isEqualTo(2);
+        }
+
+        @Test
+        void amountOfSequencesReturnsTheNumberOfUniqueSequences() {
+            // given / when / then
+            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(0);
+
+            enqueue(generateId(), generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(1);
+
+            enqueue(generateId(), generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(2);
+
+            Object testId = generateId();
+            enqueue(testId, generateInitialLetter());
+            enqueue(testId, generateInitialLetter());
+            enqueue(testId, generateInitialLetter());
+            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(3);
+        }
+    }
+
+    @Nested
+    class WhenProcessing {
+
+        @Test
+        void processInvocationReturnsFalseIfThereAreNoLetters() {
+            // given
+            AtomicBoolean taskInvoked = new AtomicBoolean(false);
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                taskInvoked.set(true);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+
+            // then
+            assertThat(result).isFalse();
+            assertThat(taskInvoked.get()).isFalse();
+        }
+
+        @Test
+        void processInvocationReturnsTrueAndEvictsTheLetter() {
+            // given
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+
+            // then
+            assertThat(result).isTrue();
+            assertLetter(letter, resultLetter.get());
+
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+
+        @Test
+        void processInvocationAllowsInlinePayloadConversion() {
+            Assumptions.assumeFalse(testSubject instanceof InMemorySequencedDeadLetterQueue<M>,
+                                    "InMemorySequencedDeadLetterQueue does not support inline payload conversion");
+            // given
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+
+            // then
+            assertThat(result).isTrue();
+            DeadLetter<? extends M> actualResultLetter = resultLetter.get();
+            assertLetter(letter, actualResultLetter);
+
+            // the acual payload is serialized to byte during deadlettering
+            assertThat(actualResultLetter.message().payloadType()).isEqualTo(byte[].class);
+            assertThat(actualResultLetter.message().payload()).isNotEqualTo(letter.message().payload());
+            // since the converter is attached, we can inline convert back to the expected payload
+            assertThat(actualResultLetter.message().payloadAs(letter.message().payloadType()))
+                    .isEqualTo(letter.message().payload());
+
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId,
+                                                                                                           null)).iterator();
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+
+        @Test
+        void processInvocationReturnsFalseAndRequeuesTheLetter() {
+            // given
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            Throwable testThrowable = generateThrowable();
+            Metadata testDiagnostics = Metadata.with("custom-key", "custom-value");
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.requeue(testThrowable, l -> testDiagnostics));
+            };
+
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            Instant expectedLastTouched = setAndGetTime();
+            DeadLetter<M> expectedRequeuedLetter =
+                    generateRequeuedLetter(letter, expectedLastTouched, testThrowable, testDiagnostics);
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+
+            // then
+            assertThat(result).isFalse();
+            assertLetter(letter, resultLetter.get());
+
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isTrue();
+            DeadLetter<? extends M> requeuedLetter = resultLetters.next();
+            assertLetter(expectedRequeuedLetter, requeuedLetter);
+            assertContext(letter.context(), requeuedLetter.context());
+            assertThat(resultLetters.hasNext()).isFalse();
+        }
+
+        @Test
+        void processInvocationInvokesProcessingTaskInLastTouchedOrderOfLetters() {
+            // given
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testThisId = generateId();
+            var testThisLetter = generateInitialLetter();
+            enqueue(testThisId, testThisLetter);
+
+            setAndGetTime(Instant.now().plus(5, ChronoUnit.SECONDS));
+            Object testThatId = generateId();
+            var testThatLetter = generateInitialLetter();
+            enqueue(testThatId, testThatLetter);
+
+            // when / then
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+            assertThat(result).isTrue();
+            assertLetter(testThisLetter, resultLetter.get());
+
+            result = joinAndUnwrap(testSubject.process(testTask, null));
+            assertThat(result).isTrue();
+            assertLetter(testThatLetter, resultLetter.get());
+        }
+
+        @SuppressWarnings("ConstantConditions")
+        @Test
+        void processInvocationHandlesAllLettersInSequence() {
+            // given
+            AtomicReference<Deque<DeadLetter<? extends M>>> resultLetters = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                Deque<DeadLetter<? extends M>> sequence = resultLetters.get();
+                if (sequence == null) {
+                    sequence = new LinkedList<>();
+                }
+                sequence.addLast(letter);
+                resultLetters.set(sequence);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testId = generateId();
+            var firstTestLetter = generateInitialLetter();
+            enqueue(testId, firstTestLetter);
+            setAndGetTime(Instant.now());
+            var secondTestLetter = generateFollowUpLetter();
+            joinAndUnwrap(testSubject.enqueueIfPresent(testId,
+                                                       () -> secondTestLetter,
+                                                       toProcessingContext(secondTestLetter.context())));
+            setAndGetTime(Instant.now());
+            var thirdTestLetter = generateFollowUpLetter();
+            joinAndUnwrap(testSubject.enqueueIfPresent(testId,
+                                                       () -> thirdTestLetter,
+                                                       toProcessingContext(thirdTestLetter.context())));
+
+            // Advance time so the extra sequence has a later timestamp and won't be processed first
+            setAndGetTime(Instant.now().plus(1, ChronoUnit.HOURS));
+            enqueue(generateId(), generateInitialLetter());
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+
+            // then
+            assertThat(result).isTrue();
+            Deque<DeadLetter<? extends M>> resultSequence = resultLetters.get();
+
+            assertLetter(firstTestLetter, resultSequence.pollFirst());
+            assertLetter(secondTestLetter, resultSequence.pollFirst());
+            assertLetter(thirdTestLetter, resultSequence.pollFirst());
+        }
+
+        @Test
+        void processHandlesMassiveAmountOfLettersInSequence() {
+            // given
+            AtomicReference<Deque<DeadLetter<? extends M>>> resultLetters = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                Deque<DeadLetter<? extends M>> sequence = resultLetters.get();
+                if (sequence == null) {
+                    sequence = new LinkedList<>();
+                }
+                sequence.addLast(letter);
+                resultLetters.set(sequence);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testId = generateId();
+            var firstTestLetter = generateInitialLetter();
+            enqueue(testId, firstTestLetter);
+
+            List<DeadLetter<M>> expectedOrderList = new LinkedList<>();
+            long loopSize = maxSequences() - 5;
+            for (int i = 0; i < loopSize; i++) {
+                var deadLetter = generateFollowUpLetter();
+                expectedOrderList.add(deadLetter);
+                joinAndUnwrap(testSubject.enqueueIfPresent(testId,
+                                                           () -> deadLetter,
+                                                           toProcessingContext(deadLetter.context())));
+            }
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(testTask, null));
+
+            // then
+            assertThat(result).isTrue();
+            Deque<DeadLetter<? extends M>> resultSequence = resultLetters.get();
+
+            DeadLetter<? extends M> resultLetter = resultSequence.pollFirst();
+            assertThat(resultLetter).isNotNull();
+            assertLetter(firstTestLetter, resultLetter);
+
+            for (int i = 0; i < loopSize; i++) {
+                resultLetter = resultSequence.pollFirst();
+                assertThat(resultLetter).isNotNull();
+                assertLetter(expectedOrderList.get(i), resultLetter);
+            }
+        }
+
+        @Test
+        void processInvocationReturnsFalseIfAllLetterSequencesAreClaimed() throws InterruptedException {
+            // given
+            CountDownLatch isBlocking = new CountDownLatch(1);
+            CountDownLatch hasProcessed = new CountDownLatch(1);
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            AtomicBoolean invoked = new AtomicBoolean(false);
+
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> blockingTask = letter -> {
+                try {
+                    isBlocking.countDown();
+                    //noinspection ResultOfMethodCallIgnored
+                    hasProcessed.await(50, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> nonBlockingTask = letter -> {
+                invoked.set(true);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testId = generateId();
+            var letter = generateInitialLetter();
+            enqueue(testId, letter);
+
+            // when
+            Thread blockingProcess = new Thread(() -> joinAndUnwrap(testSubject.process(blockingTask, null)));
+            blockingProcess.start();
+            assertThat(isBlocking.await(100, TimeUnit.MILLISECONDS)).isTrue();
+
+            boolean result = joinAndUnwrap(testSubject.process(nonBlockingTask, null));
+
+            // then
+            assertThat(result).isFalse();
+            assertThat(invoked.get()).isFalse();
+
+            hasProcessed.countDown();
+            blockingProcess.join();
+            assertLetter(letter, resultLetter.get());
+        }
+    }
+
+    @Nested
+    class WhenProcessingWithFilter {
+
+        @Test
+        void processWithLetterPredicateReturnsFalseIfThereAreNoMatchingLetters() {
+            // given
+            AtomicBoolean releasedLetter = new AtomicBoolean(false);
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                releasedLetter.set(true);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            enqueue(generateId(), generateInitialLetter());
+            enqueue(generateId(), generateInitialLetter());
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(letter -> false, testTask, null));
+
+            // then
+            assertThat(result).isFalse();
+            assertThat(releasedLetter.get()).isFalse();
+        }
+
+        @Test
+        void processWithNoMatchingSequencesReturnsFalseAndPreservesLetters() {
+            // given
+            AtomicInteger taskInvocations = new AtomicInteger(0);
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                taskInvocations.incrementAndGet();
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object idOne = generateId();
+            Object idTwo = generateId();
+            enqueue(idOne, generateInitialLetter());
+            enqueue(idTwo, generateInitialLetter());
+
+            // when
+            // Filter rejects all letters - no sequences match
+            boolean result = joinAndUnwrap(testSubject.process(letter -> false, testTask, null));
+
+            // then
+            assertThat(result).isFalse();
+            assertThat(taskInvocations.get()).isEqualTo(0);
+            // Verify letters are still in the queue (not evicted)
+            assertThat(joinAndUnwrap(testSubject.contains(idOne, null))).isTrue();
+            assertThat(joinAndUnwrap(testSubject.contains(idTwo, null))).isTrue();
+            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(2);
+        }
+
+        @Test
+        void processWithLetterPredicateInvokesProcessingTaskWithMatchingLetter() {
+            // given
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testThisId = generateId();
+            var testThisLetter = generateInitialLetter();
+            enqueue(testThisId, testThisLetter);
+
+            Object testThatId = generateId();
+            var testThatLetter = generateInitialLetter();
+            enqueue(testThatId, testThatLetter);
+
+            // when / then
+            boolean result = joinAndUnwrap(testSubject.process(letterMatches(testThisLetter), testTask, null));
+            assertThat(result).isTrue();
+            assertLetter(testThisLetter, resultLetter.get());
+
+            result = joinAndUnwrap(testSubject.process(letterMatches(testThatLetter), testTask, null));
+            assertThat(result).isTrue();
+            assertLetter(testThatLetter, resultLetter.get());
+        }
+
+        @Test
+        void processWithLetterPredicateReturnsTrueAndEvictsTheLetter() {
+            // given
+            AtomicReference<DeadLetter<? extends M>> resultLetter = new AtomicReference<>();
+            Function<DeadLetter<? extends M>, CompletableFuture<EnqueueDecision<M>>> testTask = letter -> {
+                resultLetter.set(letter);
+                return CompletableFuture.completedFuture(Decisions.evict());
+            };
+
+            Object testId = generateId();
+            Object nonMatchingId = generateId();
+            var testLetter = generateInitialLetter();
+            enqueue(testId, testLetter);
+            enqueue(nonMatchingId, generateInitialLetter());
+
+            // when
+            boolean result = joinAndUnwrap(testSubject.process(
+                    letterMatches(testLetter),
+                    testTask,
+                    null
+            ));
+
+            // then
+            assertThat(result).isTrue();
+            assertLetter(testLetter, resultLetter.get());
+
+            Iterator<DeadLetter<? extends M>> resultLetters = joinAndUnwrap(testSubject.deadLetterSequence(testId, null)).iterator();
+            assertThat(resultLetters.hasNext()).isFalse();
+            assertThat(joinAndUnwrap(testSubject.deadLetters(null)).iterator().hasNext()).isTrue();
+        }
+    }
+
+    @Nested
+    class WhenClearing {
+
+        @Test
+        void clearInvocationRemovesAllEntries() {
+            // given
+            Object idOne = generateId();
+            Object idTwo = generateId();
+            Object idThree = generateId();
+
+            enqueue(idOne, generateInitialLetter());
+            enqueue(idTwo, generateInitialLetter());
+            enqueue(idThree, generateInitialLetter());
+
+            assertThat(joinAndUnwrap(testSubject.contains(idOne, null))).isTrue();
+            assertThat(joinAndUnwrap(testSubject.contains(idTwo, null))).isTrue();
+            assertThat(joinAndUnwrap(testSubject.contains(idThree, null))).isTrue();
+
+            // when
+            joinAndUnwrap(testSubject.clear(null));
+
+            // then
+            assertThat(joinAndUnwrap(testSubject.contains(idOne, null))).isFalse();
+            assertThat(joinAndUnwrap(testSubject.contains(idTwo, null))).isFalse();
+            assertThat(joinAndUnwrap(testSubject.contains(idThree, null))).isFalse();
+        }
+    }
+
+    // Helper methods
+
+    private Predicate<DeadLetter<? extends M>> letterMatches(DeadLetter<? extends M> expected) {
+        return actual -> expected.message().identifier().equals(actual.message().identifier());
+    }
+
+    /**
+     * Generate a unique {@link Object} based on {@link UUID#randomUUID()}.
+     *
+     * @return A unique {@link Object}, based on {@link UUID#randomUUID()}.
+     */
+    protected static Object generateId() {
+        return UUID.randomUUID().toString();
+    }
+
+    /**
+     * Generate a unique {@link EventMessage} to serves as the {@link DeadLetter#message()} contents.
+     *
+     * @return A unique {@link EventMessage} to serves as the {@link DeadLetter#message()} contents.
+     */
+    protected static EventMessage generateEvent() {
+        return EventTestUtils.asEventMessage("Then this happened..." + UUID.randomUUID());
+    }
+
+    /**
+     * Generate a unique {@link Throwable} by using {@link #generateId()} in the cause description.
+     *
+     * @return A unique {@link Throwable} by using {@link #generateId()} in the cause description.
+     */
+    protected static Throwable generateThrowable() {
+        return new RuntimeException("Because..." + generateId());
+    }
+
+    /**
+     * Generate an initial {@link DeadLetter} for testing. The letter may carry {@link Context} resources
+     * (e.g. tracking token, aggregate info) needed by the queue implementation during enqueueing.
+     *
+     * @return A {@link DeadLetter} with the initial dead letter, including any context resources.
+     */
+    protected abstract DeadLetter<M> generateInitialLetter();
+
+    /**
+     * Generate a follow-up {@link DeadLetter} for testing. The letter may carry {@link Context} resources
+     * (e.g. tracking token, aggregate info) needed by the queue implementation during enqueueing.
+     *
+     * @return A {@link DeadLetter} with the follow-up dead letter, including any context resources.
+     */
+    protected abstract DeadLetter<M> generateFollowUpLetter();
+
+    /**
+     * Generates a {@link DeadLetter} implementation specific to the {@link SequencedDeadLetterQueue} tested, using
+     * the provided {@link DeadLetter}.
+     * <p>
+     * By default, simply returns the letter as-is. Subclasses backed by a database should override this to wrap
+     * the letter in the queue-specific implementation (e.g. {@code JpaDeadLetter}, {@code JdbcDeadLetter}).
+     *
+     * @param letter The dead letter to map.
+     * @return The converted dead letter.
+     */
+    protected DeadLetter<M> mapToQueueImplementation(DeadLetter<M> letter) {
+        return letter;
+    }
+
+    /**
+     * Generate a {@link DeadLetter} implementation expected by the test subject based on the given {@code original}
+     * that's requeued.
+     *
+     * @param original     The original {@link DeadLetter} to base the requeued dead letter on.
+     * @param requeueCause The cause for requeueing the {@code original}.
+     * @return A {@link DeadLetter} implementation expected by the test subject based on the given {@code original}.
+     */
+    protected DeadLetter<M> generateRequeuedLetter(DeadLetter<M> original, Throwable requeueCause) {
+        Instant lastTouched = setAndGetTime();
+        return generateRequeuedLetter(original, lastTouched, requeueCause, Metadata.emptyInstance());
+    }
+
+    /**
+     * Generate a {@link DeadLetter} implementation expected by the test subject based on the given {@code original}
+     * that's requeued.
+     *
+     * @param original     The original {@link DeadLetter} to base the requeued dead letter on.
+     * @param lastTouched  The {@link DeadLetter#lastTouched()} of the generated {@link DeadLetter} implementation.
+     * @param requeueCause The cause for requeueing the {@code original}.
+     * @param diagnostics  The diagnostics {@link Metadata} added to the requeued letter.
+     * @return A {@link DeadLetter} implementation expected by the test subject based on the given {@code original}.
+     */
+    protected DeadLetter<M> generateRequeuedLetter(DeadLetter<M> original,
+                                                   Instant lastTouched,
+                                                   Throwable requeueCause,
+                                                   Metadata diagnostics) {
+        setAndGetTime(lastTouched);
+        return original.withCause(requeueCause)
+                       .withDiagnostics(diagnostics)
+                       .markTouched();
+    }
+
+    /**
+     * Set the current time for testing to {@link Instant#now()} and return this {@code Instant}.
+     *
+     * @return {@link Instant#now()}, the current time for the invoker of this method.
+     */
+    protected Instant setAndGetTime() {
+        return setAndGetTime(Instant.now());
+    }
+
+    /**
+     * Set the current time for testing to given {@code time} and return this {@code Instant}.
+     *
+     * @param time The time to test under.
+     * @return The given {@code time}.
+     */
+    protected Instant setAndGetTime(Instant time) {
+        setClock(Clock.fixed(time, ZoneId.systemDefault()));
+        return time;
+    }
+
+    /**
+     * Set the {@link Clock} used by this test.
+     *
+     * @param clock The clock to use during testing.
+     */
+    protected abstract void setClock(Clock clock);
+
+    /**
+     * Assert whether the {@code expected} {@link DeadLetter} matches the {@code actual} {@code DeadLetter}.
+     *
+     * @param expected The expected format of the {@link DeadLetter}.
+     * @param actual   The actual format of the {@link DeadLetter}.
+     */
+    protected void assertLetter(DeadLetter<? extends M> expected, DeadLetter<? extends M> actual) {
+        assertMessage(expected.message(), actual.message());
+        assertThat(actual.cause()).isEqualTo(expected.cause());
+        assertThat(actual.enqueuedAt()).isEqualTo(expected.enqueuedAt());
+        assertThat(actual.lastTouched()).isEqualTo(expected.lastTouched());
+        assertThat(actual.diagnostics()).isEqualTo(expected.diagnostics());
+        assertContext(expected.context(), actual.context());
+    }
+
+    /**
+     * Assert whether the {@code expected} {@link Message} matches the {@code actual} {@code Message}.
+     * <p>
+     * By default this compares identifier, type, metadata, and payload directly.
+     * Subclasses may override this to handle implementations where the payload requires deserialization before
+     * comparison (e.g. when payloads are stored as raw bytes).
+     *
+     * @param expected The expected message.
+     * @param actual   The actual message.
+     */
+    protected void assertMessage(M expected, M actual) {
+        assertThat(actual.identifier()).isEqualTo(expected.identifier());
+        assertThat(actual.type()).isEqualTo(expected.type());
+        assertThat(actual.metadata()).isEqualTo(expected.metadata());
+        assertThat(actual.payload()).isEqualTo(expected.payload());
+    }
+
+    /**
+     * Assert whether the {@code expected} {@link Context} matches the {@code actual} {@code Context} by comparing
+     * their resources.
+     * <p>
+     * Subclasses may override this to provide implementation-specific context comparison.
+     *
+     * @param expected The expected context.
+     * @param actual   The actual context.
+     */
+    protected void assertContext(Context expected, Context actual) {
+        if (expected == null && actual == null) {
+            return;
+        }
+        assertThat(expected).as("Expected context was null but actual was not").isNotNull();
+        assertThat(actual).as("Actual context was null but expected was not").isNotNull();
+        assertThat(actual.resources()).isEqualTo(expected.resources());
+    }
+}

@@ -73,6 +73,7 @@
         <module>connector/axoniq-server-connector</module>
 
         <module>messaging/axoniq-distributed-messaging</module>
+        <module>messaging/axoniq-dead-letter</module>
 
         <module>dependency-injection/spring</module>
     </modules>
