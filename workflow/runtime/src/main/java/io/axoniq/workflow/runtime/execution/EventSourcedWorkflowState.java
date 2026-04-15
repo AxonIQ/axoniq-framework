@@ -152,8 +152,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                  processingContext));
                     break;
                 case FAILED:
+                    Throwable error = eventMessage.payloadAs(Throwable.class,
+                                                             processingContext.component(Converter.class));
                     addStep(WorkflowStep.failed(stepName,
-                                                (Throwable) eventPayload,
+                                                error,
                                                 eventMessage.timestamp(),
                                                 processingContext));
                     break;
