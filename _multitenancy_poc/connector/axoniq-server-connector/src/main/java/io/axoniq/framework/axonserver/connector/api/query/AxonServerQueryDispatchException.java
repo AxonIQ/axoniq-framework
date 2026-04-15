@@ -19,7 +19,6 @@
 package io.axoniq.framework.axonserver.connector.api.query;
 
 import io.axoniq.axonserver.grpc.ErrorMessage;
-import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import org.axonframework.common.AxonException;
 
 import java.io.Serial;

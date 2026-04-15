@@ -177,7 +177,7 @@ class SpringBootJpaDeadLetteringIntegrationTest extends DeadLetteringEventIntegr
             Object actualPayload = eventConverter.convert(actual.message().payload(),
                                                           expected.message().payload().getClass());
             assertThat(actualPayload).as(assertMessageSupplier).isEqualTo(expected.message().payload());
-            assertThat(result.cause().isPresent()).as(assertMessageSupplier).isFalse();
+            assertThat(result.cause()).as(assertMessageSupplier).isEmpty();
             assertThat(actual.diagnostics()).as(assertMessageSupplier).isEqualTo(expected.diagnostics());
             assertThat(actual.getIndex()).as(assertMessageSupplier).isEqualTo(sequenceIndex.longValue());
         }

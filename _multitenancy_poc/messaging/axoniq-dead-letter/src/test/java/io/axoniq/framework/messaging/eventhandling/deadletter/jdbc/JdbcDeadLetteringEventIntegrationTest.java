@@ -171,7 +171,7 @@ class JdbcDeadLetteringEventIntegrationTest extends DeadLetteringEventIntegratio
 
             assertThat(actual.getSequenceIdentifier()).as(assertMessageSupplier).isEqualTo(expected.getSequenceIdentifier());
             assertThat(actual.message().payloadAs(Integer.class)).as(assertMessageSupplier).isEqualTo(expected.message().payload());
-            assertThat(result.cause().isPresent()).as(assertMessageSupplier).isFalse();
+            assertThat(result.cause()).as(assertMessageSupplier).isEmpty();
             assertThat(actual.diagnostics()).as(assertMessageSupplier).isEqualTo(expected.diagnostics());
             assertThat(actual.getSequenceIndex()).as(assertMessageSupplier).isEqualTo(sequenceIndex.longValue());
         }
