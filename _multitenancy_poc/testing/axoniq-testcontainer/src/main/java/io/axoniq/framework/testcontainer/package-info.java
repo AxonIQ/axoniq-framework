@@ -18,9 +18,9 @@
 
 
 /**
- * Part of the Axon Test module. Contains classes related to test container logic of Axon Server.
+ * Part of the Axoniq Test module. Contains classes related to testcontainer logic of Axon Server.
  */
 @NullMarked
-package org.axonframework.test.server;
+package io.axoniq.framework.testcontainer;
 
 import org.jspecify.annotations.NullMarked;
