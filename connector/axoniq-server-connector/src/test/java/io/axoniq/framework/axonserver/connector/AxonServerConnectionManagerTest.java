@@ -99,9 +99,10 @@ class AxonServerConnectionManagerTest {
                                                                             .getClientIdentificationRequests();
         assertThat(clientIdentificationRequests).hasSize(1);
         Map<String, String> expectedTags = clientIdentificationRequests.get(0).getTagsMap();
-        assertThat(expectedTags).isNotNull();
-        assertThat(expectedTags).hasSize(1);
-        assertThat(expectedTags.get("key")).isEqualTo("value");
+        assertThat(expectedTags)
+                .isNotNull()
+                .hasSize(1);
+        assertThat(expectedTags).containsEntry("key", "value");
 
         assertWithin(
                 1, TimeUnit.SECONDS,
@@ -109,10 +110,11 @@ class AxonServerConnectionManagerTest {
         );
 
         List<ClientIdentification> clients = secondNode.getPlatformService().getClientIdentificationRequests();
-        Map<String, String> connectionExpectedTags = clients.get(0).getTagsMap();
-        assertThat(connectionExpectedTags).isNotNull();
-        assertThat(connectionExpectedTags).hasSize(1);
-        assertThat(connectionExpectedTags.get("key")).isEqualTo("value");
+        Map<String, String> connectionExpectedTags = clients.getFirst().getTagsMap();
+        assertThat(connectionExpectedTags)
+                .isNotNull()
+                .hasSize(1);
+        assertThat(connectionExpectedTags).containsEntry("key", "value");
     }
 
     @Test
@@ -334,12 +336,14 @@ class AxonServerConnectionManagerTest {
         Map<String, Boolean> results = testSubject.connections();
 
         Boolean testContextConnection = results.get(TEST_CONTEXT);
-        assertThat(testContextConnection).isNotNull();
-        assertThat(testContextConnection).isTrue();
+        assertThat(testContextConnection)
+                .isNotNull()
+                .isTrue();
 
         Boolean someOtherContextConnection = results.get("some-other-context");
-        assertThat(someOtherContextConnection).isNotNull();
-        assertThat(someOtherContextConnection).isTrue();
+        assertThat(someOtherContextConnection)
+                .isNotNull()
+                .isTrue();
     }
 
     @Test

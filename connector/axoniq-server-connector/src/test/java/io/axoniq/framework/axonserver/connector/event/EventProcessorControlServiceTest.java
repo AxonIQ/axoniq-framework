@@ -205,9 +205,9 @@ class EventProcessorControlServiceTest {
         when(unitOfWorkFactory.create()).thenReturn(unitOfWork);
 
         Configuration moduleConfig = mock(Configuration.class);
-        when(moduleConfig.getOptionalComponent(eq(TokenStore.class), eq("TokenStore[" + processorName + "]")))
+        when(moduleConfig.getOptionalComponent(TokenStore.class, "TokenStore[" + processorName + "]"))
                 .thenReturn(Optional.of(tokenStore));
-        when(moduleConfig.getOptionalComponent(eq(UnitOfWorkFactory.class), eq("UnitOfWorkFactory[" + processorName + "]")))
+        when(moduleConfig.getOptionalComponent(UnitOfWorkFactory.class, "UnitOfWorkFactory[" + processorName + "]"))
                 .thenReturn(Optional.of(unitOfWorkFactory));
         when(processingConfiguration.getModuleConfiguration(processorName)).thenReturn(Optional.of(moduleConfig));
     }

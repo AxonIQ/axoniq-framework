@@ -76,6 +76,7 @@ public class DummyMessagePlatformServer {
         try {
             server.shutdownNow().awaitTermination();
         } catch (InterruptedException ignore) {
+            // fall through
         } finally {
             subscriptions.clear();
         }
@@ -147,10 +148,10 @@ public class DummyMessagePlatformServer {
                             subscriptions.remove(commandToUnsubscribe, responseObserver);
                             unsubscribedCommands.add(commandToUnsubscribe);
                             break;
-                        case FLOW_CONTROL:
-                        case COMMAND_RESPONSE:
-                        case REQUEST_NOT_SET:
-                        case ACK:
+                        case FLOW_CONTROL,
+                             COMMAND_RESPONSE,
+                             REQUEST_NOT_SET,
+                             ACK:
                             break;
                     }
                     String instructionId = commandProviderOutbound.getInstructionId();
@@ -161,12 +162,12 @@ public class DummyMessagePlatformServer {
 
                 @Override
                 public void onError(Throwable throwable) {
-
+                    // unused
                 }
 
                 @Override
                 public void onCompleted() {
-
+                    // unused
                 }
             };
         }

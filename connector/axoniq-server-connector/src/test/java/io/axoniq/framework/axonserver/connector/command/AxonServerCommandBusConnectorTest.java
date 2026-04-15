@@ -49,7 +49,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -137,8 +136,9 @@ class AxonServerCommandBusConnectorTest {
         Command dispatchedCommand = commandCaptor.getValue();
         assertThat(dispatchedCommand.getClientId()).isEqualTo(TEST_CLIENT_ID);
         assertThat(dispatchedCommand.getComponentName()).isEqualTo(TEST_COMPONENT_NAME);
-        assertThat(result).isNotNull();
-        assertThat(result).isCompleted();
+        assertThat(result)
+                .isNotNull()
+                .isCompleted();
         assertThat(result.join().payloadType()).isEqualTo(byte[].class);
         assertThat(result.join().payloadAs(String.class)).isEqualTo(expectedPayload);
 
@@ -174,7 +174,7 @@ class AxonServerCommandBusConnectorTest {
         assertThat(sentCommand.getPayload().getRevision()).isEqualTo(ANY_TEST_REVISION);
         assertThat(sentCommand.getPayload().getData().toByteArray()).containsExactly(ANY_TEST_PAYLOAD);
         assertThat(sentCommand.getMetaDataCount()).isEqualTo(2);
-        assertThat(sentCommand.getProcessingInstructionsList().size()).isGreaterThanOrEqualTo(2); // Priority and routing key
+        assertThat(sentCommand.getProcessingInstructionsList()).hasSizeGreaterThanOrEqualTo(2); // Priority and routing key
     }
 
     @Test
