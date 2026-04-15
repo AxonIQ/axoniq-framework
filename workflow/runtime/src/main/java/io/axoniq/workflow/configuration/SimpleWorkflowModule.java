@@ -326,9 +326,24 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                     @Override
                                     public WorkflowDefinition<C> workflowDefinition() {
                                         return workflowContext -> {
+                                            Class<?>[] parameterTypes = method.getParameterTypes();
+                                            Object[] args = new Object[parameterTypes.length];
+                                            for (int i = 0; i < parameterTypes.length; i++) {
+                                                if (WorkflowContext.class.isAssignableFrom(parameterTypes[i])) {
+                                                    args[i] = workflowContext;
+                                                } else if (parameterTypes[i].isInstance(instance)) {
+                                                    args[i] = instance;
+                                                } else {
+                                                    Object wrap = AutoDetectionUtils.wrapIfPossible(parameterTypes[i],
+                                                                                                    workflowContext);
+                                                    if (wrap != null) {
+                                                        args[i] = wrap;
+                                                    }
+                                                }
+                                            }
                                             WorkflowReflectionUtils.invoke(instance,
                                                                            method,
-                                                                           workflowContext);
+                                                                           args);
                                         };
                                     }
 
