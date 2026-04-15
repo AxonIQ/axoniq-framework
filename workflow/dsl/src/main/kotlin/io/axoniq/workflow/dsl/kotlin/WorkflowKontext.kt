@@ -23,7 +23,12 @@ import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
 /**
- * Kotlin Workflow Context.
+ * Kotlin Workflow Context used for workflow definition via DSL.
+ *
+ * @param workflowId unique identifier of the workflow instance.
+ * @param initialPayload initial payload of the workflow.
+ * @param processingContext processing context of the message.
+ * @param workflowConfiguration workflow configuration.
  * @since 1.0.0
  * @author Simon Zambrovski
  */
@@ -39,11 +44,22 @@ class WorkflowKontext(
     workflowConfiguration
 ) {
 
+    /**
+     * Executes the block with the workflow context.
+     *
+     * @param block block to be executed.
+     */
     fun runWorkflow(block: Kontext.() -> Unit) {
         Kontext(this).apply(block)
     }
 
     companion object {
+        /**
+         * Creates a workflow definition from the block.
+         *
+         * @param block block to be executed.
+         * @return workflow definition.
+         */
         @JvmStatic
         fun from(block: Kontext.() -> Unit): WorkflowDefinition<WorkflowKontext> {
             return WorkflowDefinition { it.runWorkflow(block) }
