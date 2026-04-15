@@ -74,8 +74,8 @@ public class GrpcMessageSizeInterceptor implements ClientInterceptor {
             @Override
             public void sendMessage(REQ message) {
 
-                if (message instanceof MessageLite) {
-                    int messageLength = ((MessageLite) message).getSerializedSize();
+                if (message instanceof MessageLite messageLite) {
+                    int messageLength = messageLite.getSerializedSize();
                     if (logger.isDebugEnabled()) {
                         logger.debug("Sending outbound gRPC message {} with size {}", messageLength, message.getClass().getName());
                     }

@@ -18,7 +18,6 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.assertj.core.api.Assertions;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;

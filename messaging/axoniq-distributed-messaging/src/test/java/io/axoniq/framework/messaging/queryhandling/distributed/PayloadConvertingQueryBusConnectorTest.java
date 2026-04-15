@@ -19,7 +19,6 @@
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
 import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.junit.jupiter.api.*;
 
@@ -29,21 +28,14 @@ import static org.mockito.Mockito.*;
 class PayloadConvertingQueryBusConnectorTest {
 
     private static final String ORIGINAL_PAYLOAD = "original";
-    private static final byte[] CONVERTED_PAYLOAD = ORIGINAL_PAYLOAD.getBytes();
-    private static final MessageType QUERY_TYPE = new MessageType("TestQuery");
-    private static final MessageType RESPONSE_TYPE = new MessageType("TestResponse");
 
     private QueryBusConnector mockDelegate;
     private Converter mockConverter;
-    private PayloadConvertingQueryBusConnector testSubject;
 
     @BeforeEach
     void setUp() {
         mockDelegate = mock(QueryBusConnector.class);
         mockConverter = mock(Converter.class);
-        testSubject = new PayloadConvertingQueryBusConnector(
-                mockDelegate, new DelegatingMessageConverter(mockConverter), byte[].class
-        );
     }
 
     @Test

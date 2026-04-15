@@ -52,7 +52,7 @@ class ShouldEnqueueTest {
         ShouldEnqueue<Message> testSubject = new ShouldEnqueue<>();
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -63,7 +63,7 @@ class ShouldEnqueueTest {
         ShouldEnqueue<Message> testSubject = Decisions.enqueue();
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -77,8 +77,9 @@ class ShouldEnqueueTest {
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
         Optional<Throwable> resultCause = testSubject.enqueueCause();
-        assertThat(resultCause.isPresent()).isTrue();
-        assertThat(resultCause.get()).isEqualTo(testCause);
+        assertThat(resultCause)
+                .isPresent()
+                .hasValue(testCause);
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -92,8 +93,9 @@ class ShouldEnqueueTest {
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
         Optional<Throwable> resultCause = testSubject.enqueueCause();
-        assertThat(resultCause.isPresent()).isTrue();
-        assertThat(resultCause.get()).isEqualTo(testCause);
+        assertThat(resultCause)
+                .isPresent()
+                .hasValue(testCause);
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -107,8 +109,9 @@ class ShouldEnqueueTest {
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
         Optional<Throwable> resultCause = testSubject.enqueueCause();
-        assertThat(resultCause.isPresent()).isTrue();
-        assertThat(resultCause.get()).isEqualTo(testCause);
+        assertThat(resultCause)
+                .isPresent()
+                .hasValue(testCause);
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -123,8 +126,9 @@ class ShouldEnqueueTest {
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
         Optional<Throwable> resultCause = testSubject.enqueueCause();
-        assertThat(resultCause.isPresent()).isTrue();
-        assertThat(resultCause.get()).isEqualTo(testCause);
+        assertThat(resultCause)
+                .isPresent()
+                .hasValue(testCause);
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result.message()).isEqualTo(testLetter.message());
@@ -143,8 +147,9 @@ class ShouldEnqueueTest {
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
         Optional<Throwable> resultCause = testSubject.enqueueCause();
-        assertThat(resultCause.isPresent()).isTrue();
-        assertThat(resultCause.get()).isEqualTo(testCause);
+        assertThat(resultCause)
+                .isPresent()
+                .hasValue(testCause);
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result.message()).isEqualTo(testLetter.message());
