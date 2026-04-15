@@ -51,7 +51,7 @@ class DoNotEnqueueTest {
         DoNotEnqueue<Message> testSubject = new DoNotEnqueue<>();
 
         assertThat(testSubject.shouldEnqueue()).isFalse();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -62,7 +62,7 @@ class DoNotEnqueueTest {
         DoNotEnqueue<Message> testSubject = Decisions.doNotEnqueue();
 
         assertThat(testSubject.shouldEnqueue()).isFalse();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -73,7 +73,7 @@ class DoNotEnqueueTest {
         DoNotEnqueue<Message> testSubject = Decisions.evict();
 
         assertThat(testSubject.shouldEnqueue()).isFalse();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);

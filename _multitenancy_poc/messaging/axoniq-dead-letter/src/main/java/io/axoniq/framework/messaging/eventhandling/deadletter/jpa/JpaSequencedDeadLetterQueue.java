@@ -645,8 +645,8 @@ public class JpaSequencedDeadLetterQueue<M extends EventMessage> implements Sequ
      * Converts the given sequence identifier to a String.
      */
     private String toStringSequenceIdentifier(Object sequenceIdentifier) {
-        if (sequenceIdentifier instanceof String) {
-            return (String) sequenceIdentifier;
+        if (sequenceIdentifier instanceof String identifier) {
+            return identifier;
         }
         return Integer.toString(sequenceIdentifier.hashCode());
     }

@@ -42,8 +42,9 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).isEmpty();
+        assertThat(result)
+                .isNotNull()
+                .isEmpty();
     }
 
     @Test
@@ -59,8 +60,9 @@ class MetadataConverterTest {
         Map<String, MetaDataValue> result = MetadataConverter.convertGrpcToMetadataValues(source);
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).hasSize(3);
+        assertThat(result)
+                .isNotNull()
+                .hasSize(3);
 
         source.forEach((key, value) -> {
             assertThat(result).containsKey(key);
@@ -79,8 +81,9 @@ class MetadataConverterTest {
         Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).isEmpty();
+        assertThat(result)
+                .isNotNull()
+                .isEmpty();
     }
 
     @Test
@@ -106,11 +109,13 @@ class MetadataConverterTest {
         Map<String, String> result = MetadataConverter.convertMetadataValuesToGrpc(source);
 
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result).hasSize(4);
-        assertThat(result.get(textKey)).isEqualTo(textValue);
-        assertThat(result.get(doubleKey)).isEqualTo(String.valueOf(doubleValue));
-        assertThat(result.get(numberKey)).isEqualTo(String.valueOf(numberValue));
-        assertThat(result.get(booleanKey)).isEqualTo(String.valueOf(booleanValue));
+        assertThat(result)
+                .isNotNull()
+                .hasSize(4);
+        assertThat(result)
+                .containsEntry(textKey, textValue)
+                .containsEntry(doubleKey,String.valueOf(doubleValue))
+                .containsEntry(numberKey,String.valueOf(numberValue))
+                .containsEntry(booleanKey, String.valueOf(booleanValue));
     }
 }

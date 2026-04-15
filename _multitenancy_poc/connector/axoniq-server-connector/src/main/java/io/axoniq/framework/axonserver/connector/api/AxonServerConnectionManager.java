@@ -361,7 +361,7 @@ public class AxonServerConnectionManager implements ConnectionManager {
                                                .setGrpcPort(DEFAULT_GRPC_PORT)
                                                .build();
                          })
-                         .collect(Collectors.toList());
+                         .toList();
         }
 
         /**

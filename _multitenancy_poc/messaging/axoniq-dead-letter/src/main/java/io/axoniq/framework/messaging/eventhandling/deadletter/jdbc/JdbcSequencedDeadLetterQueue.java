@@ -675,8 +675,8 @@ public class JdbcSequencedDeadLetterQueue<E extends EventMessage> implements Seq
      * @return The given {@code sequenceIdentifier} as a {@link String}.
      */
     private String toStringSequenceIdentifier(Object sequenceIdentifier) {
-        return sequenceIdentifier instanceof String
-                ? (String) sequenceIdentifier
+        return (sequenceIdentifier instanceof String identifier)
+                ? identifier
                 : Integer.toString(sequenceIdentifier.hashCode());
     }
 

@@ -51,7 +51,7 @@ class IgnoreTest {
         Ignore<Message> testSubject = new Ignore<>();
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);
@@ -62,7 +62,7 @@ class IgnoreTest {
         Ignore<Message> testSubject = Decisions.ignore();
 
         assertThat(testSubject.shouldEnqueue()).isTrue();
-        assertThat(testSubject.enqueueCause().isPresent()).isFalse();
+        assertThat(testSubject.enqueueCause()).isEmpty();
 
         DeadLetter<? extends Message> result = testSubject.withDiagnostics(testLetter);
         assertThat(result).isEqualTo(testLetter);

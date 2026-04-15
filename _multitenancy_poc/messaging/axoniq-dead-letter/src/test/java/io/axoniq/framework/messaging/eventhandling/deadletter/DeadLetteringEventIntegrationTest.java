@@ -292,10 +292,10 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 2).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(2);
             });
 
             assertThat(eventHandler.initialHandlingWasSuccessful("success")).isTrue();
@@ -333,10 +333,10 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(6);
             });
 
             assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
@@ -384,10 +384,10 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(6);
             });
 
             assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
@@ -438,10 +438,10 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(2, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(6);
             });
 
             assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
@@ -487,16 +487,16 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(6);
             });
 
             assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             // During initial event handling, the DeadLetter should NOT be in the ProcessingContext
-            assertThat(eventHandler.deadLetterInContextCount(aggregateId)).isEqualTo(0);
+            assertThat(eventHandler.deadLetterInContextCount(aggregateId)).isZero();
 
             // when
             deadLetteringComponent.process(deadLetter -> true).join();
@@ -525,16 +525,16 @@ public abstract class DeadLetteringEventIntegrationTest {
             startProcessingEvent();
 
             assertWithin(1, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(6);
             });
 
             assertThat(deadLetterQueue.contains(aggregateId, null).join()).isTrue();
 
             // During initial event handling, no TrackingToken should be found in the context via DeadLetter
-            assertThat(eventHandler.tokenInContextOnRetryCount(aggregateId)).isEqualTo(0);
+            assertThat(eventHandler.tokenInContextOnRetryCount(aggregateId)).isZero();
 
             // when — retry dead-lettered events; DeadLetteredEventProcessingTask merges context resources back
             deadLetteringComponent.process(deadLetter -> true).join();
@@ -579,10 +579,10 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(2, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
-                assertThat(status.getCurrentPosition().orElse(-1) >= 6).isTrue();
+                assertThat(status.getCurrentPosition().orElse(-1)).isGreaterThanOrEqualTo(6);
             });
 
             assertThat(eventHandler.initialHandlingWasSuccessful(aggregateId)).isTrue();
@@ -643,7 +643,7 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             // then
             assertWithin(15, TimeUnit.SECONDS, () -> {
-                assertThat(streamingProcessor.processingStatus().size()).isEqualTo(1);
+                assertThat(streamingProcessor.processingStatus()).hasSize(1);
                 var status = streamingProcessor.processingStatus().get(0);
                 assertThat(status).isNotNull();
                 assertThat(status.getCurrentPosition().orElse(-1)).isEqualTo(totalNumberOfEvents);
@@ -736,8 +736,8 @@ public abstract class DeadLetteringEventIntegrationTest {
                    .until(() -> deadLetterQueue.amountOfSequences(null).join() == 1);
 
             DeadLetter<?> deadLetter = deadLetterQueue.deadLetters(null).join().iterator().next().iterator().next();
-            assertThat(deadLetter.cause().isPresent()).isTrue();
-            String causeType = deadLetter.cause().get().type();
+            assertThat(deadLetter.cause()).isPresent();
+            String causeType = deadLetter.cause().orElseThrow().type();
             assertThat(causeType).isEqualTo(ReferenceException.class.getName());
         }
 
@@ -762,11 +762,12 @@ public abstract class DeadLetteringEventIntegrationTest {
 
             DeadLetter<?> deadLetter = deadLetterQueue.deadLetters(null).join().iterator().next().iterator().next();
             Optional<Cause> optionalCause = deadLetter.cause();
-            assertThat(optionalCause.isPresent()).isTrue();
+            assertThat(optionalCause).isPresent();
             String resultMessage = optionalCause.get().message();
-            assertThat(resultMessage).isNotEqualTo(testCauseMessage);
-            assertThat(resultMessage).doesNotContain(truncatedText);
-            assertThat(resultMessage).contains(BLOB_OF_TEXT.substring(0, 10));
+            assertThat(resultMessage)
+                    .isNotEqualTo(testCauseMessage)
+                    .doesNotContain(truncatedText)
+                    .contains(BLOB_OF_TEXT.substring(0, 10));
         }
     }
 

@@ -18,7 +18,6 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.*;
 
 import java.util.concurrent.ExecutorService;
@@ -45,7 +44,7 @@ class DistributedQueryBusConfigurationTest {
         // Then
         assertThat(config.preferLocalQueryHandler())
                 .as("Default configuration should prefer local query handlers")
-                .isTrue();;
+                .isTrue();
 
         ExecutorService executorService = config.queryExecutorService();
         assertThat(executorService)
@@ -216,8 +215,7 @@ class DistributedQueryBusConfigurationTest {
                 .isNotSameAs(original);
         assertThat(modified2)
                 .as("Modifying configuration should return new instance")
-                .isNotSameAs(original);
-        assertThat(modified2)
+                .isNotSameAs(original)
                 .as("Each modification should return distinct instance")
                 .isNotSameAs(modified1);
 

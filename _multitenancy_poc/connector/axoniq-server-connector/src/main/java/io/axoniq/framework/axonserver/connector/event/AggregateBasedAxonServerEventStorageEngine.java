@@ -155,7 +155,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
             }
 
             private Throwable translateConflictException(Throwable e) {
-                Predicate<Throwable> isConflictException = (ex) -> ex instanceof StatusRuntimeException sre
+                Predicate<Throwable> isConflictException = ex -> ex instanceof StatusRuntimeException sre
                         && Objects.equals(sre.getStatus().getCode(), Status.OUT_OF_RANGE.getCode());
                 return AggregateBasedEventStorageEngineUtils
                         .translateConflictException(consistencyMarker, e, isConflictException);
@@ -231,7 +231,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     private static ConsistencyMarker combineAggregateMarkers(Stream<AggregateSource> resultStream) {
         return resultStream.map(AggregateSource::markerReference)
                            .map(AtomicReference::get)
-                           .map(marker -> (ConsistencyMarker) marker)
+                           .map(ConsistencyMarker.class::cast)
                            .reduce(ConsistencyMarker::upperBound)
                            .orElseThrow();
     }

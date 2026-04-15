@@ -28,7 +28,7 @@ import io.axoniq.framework.axonserver.connector.api.query.AxonServerRemoteQueryH
  * @author John Hendrikx
  * @since 5.1.0
  */
-class ExceptionFactory {
+final class ExceptionFactory {
 
     /**
      * Converts the {@code throwable} to the relevant AxonException
@@ -156,5 +156,9 @@ class ExceptionFactory {
                     new AxonServerException(errorCode.errorCode(), errorMessage)
                 );
         };
+    }
+
+    private ExceptionFactory() {
+        // do not instantiate
     }
 }
