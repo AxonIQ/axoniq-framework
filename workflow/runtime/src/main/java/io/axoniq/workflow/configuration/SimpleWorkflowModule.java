@@ -329,13 +329,13 @@ class SimpleWorkflowModule<C extends WorkflowContext> extends BaseModule<SimpleW
                                             Class<?>[] parameterTypes = method.getParameterTypes();
                                             Object[] args = new Object[parameterTypes.length];
                                             for (int i = 0; i < parameterTypes.length; i++) {
-                                                if (WorkflowContext.class.isAssignableFrom(parameterTypes[i])) {
+                                                Class<?> paramType = parameterTypes[i];
+                                                if (paramType.isInstance(workflowContext)) {
                                                     args[i] = workflowContext;
-                                                } else if (parameterTypes[i].isInstance(instance)) {
+                                                } else if (paramType.isInstance(instance)) {
                                                     args[i] = instance;
                                                 } else {
-                                                    Object wrap = AutoDetectionUtils.wrapIfPossible(parameterTypes[i],
-                                                                                                    workflowContext);
+                                                    Object wrap = AutoDetectionUtils.wrapIfPossible(paramType, workflowContext);
                                                     if (wrap != null) {
                                                         args[i] = wrap;
                                                     }

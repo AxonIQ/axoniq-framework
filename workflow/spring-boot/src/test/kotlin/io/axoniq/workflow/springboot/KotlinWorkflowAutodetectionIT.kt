@@ -19,26 +19,25 @@ package io.axoniq.workflow.springboot
 
 import io.axoniq.workflow.dsl.kotlin.Kontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
-import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.api.annotation.Workflow
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry
+import org.assertj.core.api.Assertions.assertThat
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine
 import org.axonframework.messaging.core.QualifiedName
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.mock
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.EnableMBeanExport
+import org.springframework.context.annotation.Import
 import org.springframework.jmx.support.RegistrationPolicy
 import org.springframework.test.context.ContextConfiguration
-import org.assertj.core.api.Assertions.assertThat
-
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition
-import org.mockito.Mockito.mock
 
 @SpringBootTest(
     classes = [KotlinWorkflowAutodetectionIT.TestConfig::class],
@@ -61,7 +60,8 @@ class KotlinWorkflowAutodetectionIT {
         val conf = configurations.first()
         assertThat(conf.configuration().workflowName()).isEqualTo("KotlinWorkflow")
 
-        (conf.configuration().workflowDefinition() as WorkflowDefinition<WorkflowKontext>).accept(mock(WorkflowKontext::class.java))
+        (conf.configuration()
+            .workflowDefinition() as WorkflowDefinition<WorkflowKontext>).accept(mock(WorkflowKontext::class.java))
         assertThat(kotlinWorkflow.executed).isTrue()
     }
 
@@ -71,9 +71,7 @@ class KotlinWorkflowAutodetectionIT {
     class TestConfig {
 
         @Bean
-        fun kotlinWorkflow(): KotlinWorkflow {
-            return KotlinWorkflow()
-        }
+        fun kotlinWorkflow() = KotlinWorkflow()
 
         @Bean
         fun tokenStore(): TokenStore {
@@ -88,7 +86,7 @@ class KotlinWorkflowAutodetectionIT {
 
 }
 
-open class KotlinWorkflow {
+class KotlinWorkflow {
     var executed = false
 
     @Workflow(

@@ -54,6 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
 import static io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus.*;
@@ -98,9 +99,13 @@ public class AutoDetectionUtils {
     public static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
             @Nonnull Class<?> type,
             @Nonnull Class<C> workflowContextType) {
-        var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(type));
-        return methodCandidates
-                .stream()
+        Stream<Method> methodStream;
+        try {
+            methodStream = StreamSupport.stream(ReflectionUtils.methodsOf(type).spliterator(), false);
+        } catch (Exception e) {
+            methodStream = Arrays.stream(type.getMethods());
+        }
+        return methodStream
                 .filter(hasContextParameter(workflowContextType)) // FIXME using parameter resolver
                 .map(AutoDetectionUtils.annotatedMethods(Workflow.class))
                 .filter(Objects::nonNull);
@@ -275,10 +280,12 @@ public class AutoDetectionUtils {
     static Predicate<Method> hasContextParameter(@Nonnull Class<?> expectedType) {
         return m -> {
             var parameterTypes = m.getParameterTypes();
-            return Arrays.stream(parameterTypes).anyMatch(type ->
-                                                                  expectedType.isAssignableFrom(type) || canWrap(type,
-                                                                                                                expectedType)
-            );
+            for (var type : parameterTypes) {
+                if (WorkflowContext.class.isAssignableFrom(type) || isWrapper(type)) {
+                    return true;
+                }
+            }
+            return false;
         };
     }
 
@@ -291,20 +298,18 @@ public class AutoDetectionUtils {
      */
     static boolean canWrap(@Nonnull Class<?> type, @Nonnull Class<?> expectedType) {
         try {
-            type.getConstructor(expectedType);
-            return true;
-        } catch (NoSuchMethodException e) {
-            // also try any WorkflowContext
-            if (WorkflowContext.class.isAssignableFrom(expectedType)) {
-                try {
-                    type.getConstructor(WorkflowContext.class);
-                    return true;
-                } catch (NoSuchMethodException ex) {
-                    // ignore
+            for (var constructor : type.getConstructors()) {
+                if (constructor.getParameterCount() == 1) {
+                    var parameterType = constructor.getParameterTypes()[0];
+                    if (WorkflowContext.class.isAssignableFrom(parameterType)) {
+                        return true;
+                    }
                 }
             }
+        } catch (NoClassDefFoundError e) {
             return false;
         }
+        return false;
     }
 
     /**
@@ -315,7 +320,10 @@ public class AutoDetectionUtils {
      * @return wrapped context or null.
      */
     @Nullable
-    public static Object wrapIfPossible(@Nonnull Class<?> type, @Nonnull WorkflowContext context) {
+    public static Object wrapIfPossible(@Nonnull Class<?> type, @Nullable WorkflowContext context) {
+        if (context == null) {
+            return null;
+        }
         try {
             var constructor = type.getConstructor(context.getClass());
             return constructor.newInstance(context);
@@ -385,16 +393,25 @@ public class AutoDetectionUtils {
         var parameterTypes = method.getParameterTypes();
         return Stream.of(parameterTypes)
                      .filter(type -> WorkflowContext.class.isAssignableFrom(type) || isWrapper(type))
-                     .findFirst()
                      .map(p -> {
                          if (WorkflowContext.class.isAssignableFrom(p)) {
                              //noinspection unchecked
                              return (Class<? extends WorkflowContext>) p;
                          } else {
-                             // it is a wrapper, so we return WorkflowContext.class as a placeholder or try to find a better one
-                             return WorkflowContext.class;
+                             // it is a wrapper, so we find the type it wraps
+                             Class<?> wrapped = WorkflowContext.class;
+                             for (var constructor : p.getConstructors()) {
+                                 if (constructor.getParameterCount() == 1 && WorkflowContext.class.isAssignableFrom(
+                                         constructor.getParameterTypes()[0])) {
+                                     wrapped = constructor.getParameterTypes()[0];
+                                     break;
+                                 }
+                             }
+                             //noinspection unchecked
+                             return (Class<? extends WorkflowContext>) wrapped;
                          }
                      })
+                     .findFirst()
                      .orElseThrow(
                              () -> new IllegalArgumentException(
                                      "Method must have at least one parameter of type assignable to WorkflowContext")
@@ -402,8 +419,12 @@ public class AutoDetectionUtils {
     }
 
     static boolean isWrapper(@Nonnull Class<?> type) {
-        return Arrays.stream(type.getConstructors())
-                     .anyMatch(c -> c.getParameterCount() == 1 && WorkflowContext.class.isAssignableFrom(c.getParameterTypes()[0]));
+        try {
+            return Arrays.stream(type.getConstructors())
+                         .anyMatch(c -> c.getParameterCount() == 1 && WorkflowContext.class.isAssignableFrom(c.getParameterTypes()[0]));
+        } catch (NoClassDefFoundError e) {
+            return false;
+        }
     }
 
     /**

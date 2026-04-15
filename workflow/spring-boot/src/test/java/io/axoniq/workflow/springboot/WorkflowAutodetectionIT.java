@@ -20,6 +20,8 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
@@ -38,6 +40,7 @@ import org.springframework.jmx.support.RegistrationPolicy;
 import org.springframework.test.context.ContextConfiguration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
 
 /**
  * Integration test for workflow autodetection.
@@ -70,7 +73,9 @@ public class WorkflowAutodetectionIT {
                                                      null))).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
-        conf.configuration().workflowDefinition().accept(null);
+        var ctx = mock(WorkflowContext.class);
+        //noinspection unchecked,rawtypes
+        ((WorkflowDefinition) conf.configuration().workflowDefinition()).accept(ctx);
 
         assertThat(testWorkflow.executed).isTrue();
     }
