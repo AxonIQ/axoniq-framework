@@ -22,7 +22,7 @@
 
     <groupId>io.axoniq.platform</groupId>
     <artifactId>framework-client-parent</artifactId>
-    <version>2.0.4-SNAPSHOT</version>
+    <version>2.0.4</version>
 
     <modules>
         <module>framework-client-api</module>
@@ -60,7 +60,7 @@
         <kotlin.version>2.2.20</kotlin.version>
         <dokka.version>2.1.0</dokka.version>
 
-        <axon.version>5.1.0-SNAPSHOT</axon.version>
+        <axon.version>5.0.4</axon.version>
         <jackson.version>3.1.0</jackson.version>
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spring-boot.version>3.5.7</spring-boot.version>
