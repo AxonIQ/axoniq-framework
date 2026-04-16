@@ -16,11 +16,11 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.extension.springboot.util.GrpcServerStub;
-import org.axonframework.extension.springboot.util.TcpUtils;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;

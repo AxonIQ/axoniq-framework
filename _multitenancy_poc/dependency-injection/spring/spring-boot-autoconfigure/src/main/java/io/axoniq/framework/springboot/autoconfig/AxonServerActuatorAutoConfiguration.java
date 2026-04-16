@@ -16,11 +16,11 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.extension.springboot.actuator.axonserver.AxonServerHealthIndicator;
-import org.axonframework.extension.springboot.actuator.axonserver.AxonServerStatusAggregator;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.springboot.actuator.axonserver.AxonServerHealthIndicator;
+import io.axoniq.framework.springboot.actuator.axonserver.AxonServerStatusAggregator;
 import org.springframework.boot.actuate.health.SimpleStatusAggregator;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;

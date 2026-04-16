@@ -16,9 +16,9 @@
  *
  */
 
-package org.axonframework.extension.springboot.service.connection;
+package io.axoniq.framework.springboot.service.connection;
 
-import org.axonframework.test.server.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.springframework.boot.testcontainers.service.connection.ContainerConnectionDetailsFactory;
 import org.springframework.boot.testcontainers.service.connection.ContainerConnectionSource;
 

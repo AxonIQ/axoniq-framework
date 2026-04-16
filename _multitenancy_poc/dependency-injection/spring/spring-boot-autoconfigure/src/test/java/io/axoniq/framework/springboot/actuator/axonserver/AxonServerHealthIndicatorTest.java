@@ -16,11 +16,10 @@
  *
  */
 
-package org.axonframework.extension.springboot.actuator.axonserver;
+package io.axoniq.framework.springboot.actuator.axonserver;
 
-import org.axonframework.extension.springboot.actuator.HealthStatus;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.extension.springboot.actuator.axonserver.AxonServerHealthIndicator;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.springboot.actuator.HealthStatus;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.Status;

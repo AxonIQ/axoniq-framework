@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.util;
+package io.axoniq.framework.springboot.util;
 
 import io.grpc.Server;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;

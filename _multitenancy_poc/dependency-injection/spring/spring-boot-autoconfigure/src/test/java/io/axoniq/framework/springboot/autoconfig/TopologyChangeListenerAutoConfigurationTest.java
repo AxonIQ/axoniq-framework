@@ -16,15 +16,15 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.control.ControlChannel;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.TopologyChangeListener;
-import org.axonframework.extension.springboot.util.GrpcServerStub;
-import org.axonframework.extension.springboot.util.TcpUtils;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.configuration.TopologyChangeListener;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -36,8 +36,7 @@ import org.springframework.test.context.ContextConfiguration;
 import static org.mockito.Mockito.*;
 
 /**
- * Autoconfiguration test class validating registration of the
- * {@link org.axonframework.axonserver.connector.TopologyChangeListener} with the
+ * Autoconfiguration test class validating registration of the {@link TopologyChangeListener} with the
  * {@link io.axoniq.axonserver.connector.control.ControlChannel} for the default
  * {@link AxonServerConfiguration#getContext() context}.
  *

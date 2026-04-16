@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.util;
+package io.axoniq.framework.springboot.util;
 
 import io.axoniq.axonserver.grpc.control.ClientIdentification;
 import io.axoniq.axonserver.grpc.control.NodeInfo;
@@ -30,7 +30,8 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 
-import static org.axonframework.extension.springboot.util.GrpcServerStub.DEFAULT_HOST;
+import static io.axoniq.framework.springboot.util.GrpcServerStub.DEFAULT_HOST;
+
 
 /**
  * Stub {@link io.axoniq.axonserver.grpc.control.PlatformServiceGrpc.PlatformServiceImplBase} implementation used to

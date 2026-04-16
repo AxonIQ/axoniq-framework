@@ -18,9 +18,9 @@
 
 
 /**
- * Part of the Axon Extension module. Contains classes related to Axon Server's actuator support.
+ * Part of the Axoniq Framework's Spring Boot module. Contains classes related to Axon Server's actuator support.
  */
 @NullMarked
-package org.axonframework.extension.springboot.actuator.axonserver;
+package io.axoniq.framework.springboot.actuator.axonserver;
 
 import org.jspecify.annotations.NullMarked;

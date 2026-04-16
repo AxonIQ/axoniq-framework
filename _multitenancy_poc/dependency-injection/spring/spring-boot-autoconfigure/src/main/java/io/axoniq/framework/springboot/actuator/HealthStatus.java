@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.actuator;
+package io.axoniq.framework.springboot.actuator;
 
 import org.springframework.boot.actuate.health.Status;
 

@@ -16,13 +16,13 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import org.axonframework.extension.springboot.actuator.axonserver.AxonServerHealthIndicator;
-import org.axonframework.extension.springboot.actuator.axonserver.AxonServerStatusAggregator;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.extension.springboot.util.GrpcServerStub;
-import org.axonframework.extension.springboot.util.TcpUtils;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.springboot.actuator.axonserver.AxonServerHealthIndicator;
+import io.axoniq.framework.springboot.actuator.axonserver.AxonServerStatusAggregator;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.health.SimpleStatusAggregator;
