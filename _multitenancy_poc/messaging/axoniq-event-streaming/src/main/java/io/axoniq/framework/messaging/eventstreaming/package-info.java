@@ -18,7 +18,7 @@
 
 
 /**
- * Part of the Axon Messaging module. Contains classes related to command distribution.
+ * Part of the Axoniq Messaging folder. Contains classes related to event streaming.
  */
 @NullMarked
 package io.axoniq.framework.messaging.eventstreaming;
