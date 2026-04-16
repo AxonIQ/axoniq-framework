@@ -16,10 +16,8 @@
  *
  */
 
-package org.axonframework.messaging.eventstreaming;
+package io.axoniq.framework.messaging.eventstreaming;
 
-import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
@@ -27,6 +25,10 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
@@ -38,7 +40,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class MultiStreamableEventSourceTest {
@@ -66,9 +69,9 @@ class MultiStreamableEventSourceTest {
                 StreamingCondition.startingFrom(null), null
         );
 
-        assertTrue(stream.hasNextAvailable());
+        assertThat(stream.hasNextAvailable()).isTrue();
         MessageStream.Entry<EventMessage> entry = stream.next().orElseThrow();
-        assertEquals(publishedEvent.payload(), entry.message().payload());
+        assertThat(entry.message().payload()).isEqualTo(publishedEvent.payload());
 
         stream.close();
     }
@@ -85,15 +88,16 @@ class MultiStreamableEventSourceTest {
                 StreamingCondition.startingFrom(null), null
         );
 
-        assertTrue(stream.hasNextAvailable());
+        assertThat(stream.hasNextAvailable()).isTrue();
 
         List<String> payloads = new ArrayList<>();
         stream.next().ifPresent(e -> payloads.add((String) e.message().payload()));
         stream.next().ifPresent(e -> payloads.add((String) e.message().payload()));
 
-        assertEquals(2, payloads.size());
-        assertTrue(payloads.contains("Event1"));
-        assertTrue(payloads.contains("Event2"));
+        assertThat(payloads)
+                .hasSize(2)
+                .contains("Event1")
+                .contains("Event2");
 
         stream.close();
     }
@@ -116,8 +120,8 @@ class MultiStreamableEventSourceTest {
         MessageStream.Entry<EventMessage> first = stream.next().orElseThrow();
         MessageStream.Entry<EventMessage> second = stream.next().orElseThrow();
 
-        assertEquals("Event1", first.message().payload());
-        assertEquals("Event2", second.message().payload());
+        assertThat(first.message().payload()).isEqualTo("Event1");
+        assertThat(second.message().payload()).isEqualTo("Event2");
 
         stream.close();
     }
@@ -144,7 +148,7 @@ class MultiStreamableEventSourceTest {
         MessageStream.Entry<EventMessage> first = stream.next().orElseThrow();
 
         // EventB should come first due to custom comparator
-        assertEquals("EventB", first.message().payload());
+        assertThat(first.message().payload()).isEqualTo("EventB");
 
         stream.close();
     }
@@ -159,13 +163,13 @@ class MultiStreamableEventSourceTest {
         );
 
         MessageStream.Entry<EventMessage> peeked = stream.peek().orElseThrow();
-        assertEquals("Event1", peeked.message().payload());
+        assertThat(peeked.message().payload()).isEqualTo("Event1");
 
         // Message should still be available
-        assertTrue(stream.hasNextAvailable());
+        assertThat(stream.hasNextAvailable()).isTrue();
 
         MessageStream.Entry<EventMessage> consumed = stream.next().orElseThrow();
-        assertEquals("Event1", consumed.message().payload());
+        assertThat(consumed.message().payload()).isEqualTo("Event1");
 
         stream.close();
     }
@@ -174,11 +178,11 @@ class MultiStreamableEventSourceTest {
     void firstTokenReturnsMultiSourceToken() {
         TrackingToken token = testSubject.firstToken(null).join();
 
-        assertInstanceOf(MultiSourceTrackingToken.class, token);
+        assertThat(token).isInstanceOf(MultiSourceTrackingToken.class);
         MultiSourceTrackingToken multiToken = (MultiSourceTrackingToken) token;
 
-        assertNotNull(multiToken.getTokenForStream("sourceA"));
-        assertNotNull(multiToken.getTokenForStream("sourceB"));
+        assertThat(multiToken.getTokenForStream("sourceA")).isNotNull();
+        assertThat(multiToken.getTokenForStream("sourceB")).isNotNull();
     }
 
     @Test
@@ -188,11 +192,11 @@ class MultiStreamableEventSourceTest {
 
         TrackingToken token = testSubject.latestToken(null).join();
 
-        assertInstanceOf(MultiSourceTrackingToken.class, token);
+        assertThat(token).isInstanceOf(MultiSourceTrackingToken.class);
         MultiSourceTrackingToken multiToken = (MultiSourceTrackingToken) token;
 
-        assertNotNull(multiToken.getTokenForStream("sourceA"));
-        assertNotNull(multiToken.getTokenForStream("sourceB"));
+        assertThat(multiToken.getTokenForStream("sourceA")).isNotNull();
+        assertThat(multiToken.getTokenForStream("sourceB")).isNotNull();
     }
 
     @Test
@@ -203,11 +207,11 @@ class MultiStreamableEventSourceTest {
 
         TrackingToken token = testSubject.tokenAt(now, null).join();
 
-        assertInstanceOf(MultiSourceTrackingToken.class, token);
+        assertThat(token).isInstanceOf(MultiSourceTrackingToken.class);
         MultiSourceTrackingToken multiToken = (MultiSourceTrackingToken) token;
 
-        assertNotNull(multiToken.getTokenForStream("sourceA"));
-        assertNotNull(multiToken.getTokenForStream("sourceB"));
+        assertThat(multiToken.getTokenForStream("sourceA")).isNotNull();
+        assertThat(multiToken.getTokenForStream("sourceB")).isNotNull();
     }
 
     @Test
@@ -219,8 +223,8 @@ class MultiStreamableEventSourceTest {
                 StreamingCondition.startingFrom(null), null
         );
 
-        assertTrue(stream.hasNextAvailable());
-        assertNotNull(stream.next().orElse(null));
+        assertThat(stream.hasNextAvailable()).isTrue();
+        assertThat(stream.next()).isPresent();
 
         stream.close();
     }
@@ -244,9 +248,9 @@ class MultiStreamableEventSourceTest {
         );
 
         // Should see Event3
-        assertTrue(stream.hasNextAvailable());
+        assertThat(stream.hasNextAvailable()).isTrue();
         MessageStream.Entry<EventMessage> entry = stream.next().orElseThrow();
-        assertEquals("Event3", entry.message().payload());
+        assertThat(entry.message().payload()).isEqualTo("Event3");
 
         stream.close();
     }
@@ -255,9 +259,8 @@ class MultiStreamableEventSourceTest {
     void openWithIncompatibleTokenThrowsException() {
         GlobalSequenceTrackingToken incompatibleToken = new GlobalSequenceTrackingToken(0);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                testSubject.open(StreamingCondition.startingFrom(incompatibleToken), null)
-        );
+        assertThatThrownBy(() -> testSubject.open(StreamingCondition.startingFrom(incompatibleToken), null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -272,13 +275,13 @@ class MultiStreamableEventSourceTest {
         MessageStream.Entry<EventMessage> entry1 = stream.next().orElseThrow();
         TrackingToken token1 = TrackingToken.fromContext(entry1).orElseThrow();
 
-        assertInstanceOf(MultiSourceTrackingToken.class, token1);
+        assertThat(token1).isInstanceOf(MultiSourceTrackingToken.class);
 
         MessageStream.Entry<EventMessage> entry2 = stream.next().orElseThrow();
         TrackingToken token2 = TrackingToken.fromContext(entry2).orElseThrow();
 
-        assertInstanceOf(MultiSourceTrackingToken.class, token2);
-        assertNotEquals(token1, token2);
+        assertThat(token2).isInstanceOf(MultiSourceTrackingToken.class);
+        assertThat(token1).isNotEqualTo(token2);
 
         stream.close();
     }
@@ -294,7 +297,7 @@ class MultiStreamableEventSourceTest {
         stream.next();
 
         // Close source streams to complete them
-        assertFalse(stream.isCompleted());
+        assertThat(stream.isCompleted()).isFalse();
 
         stream.close();
     }
@@ -312,18 +315,17 @@ class MultiStreamableEventSourceTest {
         eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event1"));
         eventSourceA.runOnAvailableCallback();
 
-        assertTrue(callbackInvoked.get());
+        assertThat(callbackInvoked.get()).isTrue();
 
         stream.close();
     }
 
     @Test
     void builderRejectsNonUniqueSourceIds() {
-        assertThrows(Exception.class, () ->
-                MultiStreamableEventSource.combining("source", eventSourceA)
-                                          .and("source", eventSourceB)
-                                          .comparingTimestamps()
-        );
+        assertThatThrownBy(() -> MultiStreamableEventSource.combining("source", eventSourceA)
+                                                             .and("source", eventSourceB)
+                                                             .comparingTimestamps()
+        ).isInstanceOf(Exception.class);
     }
 
     @Test
@@ -333,7 +335,7 @@ class MultiStreamableEventSourceTest {
         StreamableEventSource source1 = new AsyncInMemoryStreamableEventSource() {
             @Override
             public @NonNull MessageStream<EventMessage> open(@NonNull StreamingCondition condition,
-                                                    @Nullable ProcessingContext context) {
+                                                             @Nullable ProcessingContext context) {
                 if (streamOpened.compareAndSet(false, true)) {
                     return super.open(condition, context).onClose(() -> streamClosed.set(true));
                 }
@@ -343,7 +345,7 @@ class MultiStreamableEventSourceTest {
         StreamableEventSource source2 = new AsyncInMemoryStreamableEventSource() {
             @Override
             public @NonNull MessageStream<EventMessage> open(@NonNull StreamingCondition condition,
-                                                    @Nullable ProcessingContext context) {
+                                                             @Nullable ProcessingContext context) {
                 if (streamOpened.compareAndSet(false, true)) {
                     return super.open(condition, context).onClose(() -> streamClosed.set(true));
                 }
@@ -362,12 +364,11 @@ class MultiStreamableEventSourceTest {
         MultiSourceTrackingToken token = new MultiSourceTrackingToken(tokenMap);
 
         // Opening should throw when source2 fails
-        assertThrows(RuntimeException.class, () ->
-                testSubject.open(StreamingCondition.startingFrom(token), null)
-        );
+        assertThatThrownBy(() -> testSubject.open(StreamingCondition.startingFrom(token), null))
+                .isInstanceOf(RuntimeException.class);
 
         // Verify that source1's stream was closed due to the failure
-        assertTrue(streamClosed.get(), "Stream from source1 should be closed when source2 fails to open");
+        assertThat(streamClosed.get()).as("Stream from source1 should be closed when source2 fails to open").isTrue();
     }
 
     @Test
@@ -376,8 +377,8 @@ class MultiStreamableEventSourceTest {
                 StreamingCondition.startingFrom(null), null
         );
 
-        assertFalse(stream.hasNextAvailable());
-        assertTrue(stream.next().isEmpty());
+        assertThat(stream.hasNextAvailable()).isFalse();
+        assertThat(stream.next()).isEmpty();
 
         stream.close();
     }
@@ -394,8 +395,8 @@ class MultiStreamableEventSourceTest {
                 StreamingCondition.startingFrom(null), null
         );
 
-        assertNotNull(stream1.next().orElse(null));
-        assertNotNull(stream2.next().orElse(null));
+        assertThat(stream1.next()).isPresent();
+        assertThat(stream2.next()).isPresent();
 
         stream1.close();
         stream2.close();
@@ -417,10 +418,11 @@ class MultiStreamableEventSourceTest {
                     .comparingTimestamps();
 
             // then
-            assertNotNull(result);
-            assertEquals(2, result.sources().size());
-            assertEquals(source1, result.sources().get("source1"));
-            assertEquals(source2, result.sources().get("source2"));
+            assertThat(result).isNotNull();
+            assertThat(result.sources())
+                    .hasSize(2)
+                    .containsEntry("source1", source1)
+                    .containsEntry("source2", source2);
         }
 
         @Test
@@ -436,9 +438,10 @@ class MultiStreamableEventSourceTest {
                     .comparingUsing(comparator);
 
             // then
-            assertNotNull(result);
-            assertEquals(1, result.sources().size());
-            assertEquals(source1, result.sources().get("source1"));
+            assertThat(result).isNotNull();
+            assertThat(result.sources())
+                    .hasSize(1)
+                    .containsEntry("source1", source1);
         }
 
         @Test
@@ -452,9 +455,10 @@ class MultiStreamableEventSourceTest {
                     .comparingTimestamps();
 
             // then
-            assertNotNull(result);
-            assertEquals(1, result.sources().size());
-            assertEquals(source1, result.sources().get("source1"));
+            assertThat(result).isNotNull();
+            assertThat(result.sources())
+                    .hasSize(1)
+                    .containsEntry("source1", source1);
         }
 
         @Test
@@ -472,11 +476,12 @@ class MultiStreamableEventSourceTest {
                     .comparingTimestamps();
 
             // then
-            assertNotNull(result);
-            assertEquals(3, result.sources().size());
-            assertEquals(source1, result.sources().get("source1"));
-            assertEquals(source2, result.sources().get("source2"));
-            assertEquals(source3, result.sources().get("source3"));
+            assertThat(result).isNotNull();
+            assertThat(result.sources())
+                    .hasSize(3)
+                    .containsEntry("source1", source1)
+                    .containsEntry("source2", source2)
+                    .containsEntry("source3", source3);
         }
 
         @Test
@@ -486,30 +491,24 @@ class MultiStreamableEventSourceTest {
             StreamableEventSource source2 = mock(StreamableEventSource.class);
 
             // when/then
-            assertThrows(IllegalArgumentException.class, () ->
-                    MultiStreamableEventSource
-                            .combining("source1", source1)
-                            .and("source1", source2) // duplicate name
-                            .comparingTimestamps()
-            );
+            assertThatThrownBy(() -> MultiStreamableEventSource.combining("source1", source1)
+                                                               .and("source1", source2) // duplicate name
+                                                               .comparingTimestamps()
+            ).isInstanceOf(IllegalArgumentException.class);
         }
 
         @Test
         void combiningRejectsNullSourceName() {
             // when/then
-            //noinspection DataFlowIssue
-            assertThrows(NullPointerException.class, () ->
-                    MultiStreamableEventSource.combining(null, mock(StreamableEventSource.class))
-            );
+            assertThatThrownBy(() -> MultiStreamableEventSource.combining(null, mock(StreamableEventSource.class))
+            ).isInstanceOf(NullPointerException.class);
         }
 
         @Test
         void combiningRejectsNullSource() {
             // when/then
-            //noinspection DataFlowIssue
-            assertThrows(NullPointerException.class, () ->
-                    MultiStreamableEventSource.combining("source1", null)
-            );
+            assertThatThrownBy(() -> MultiStreamableEventSource.combining("source1", null))
+                    .isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -518,12 +517,10 @@ class MultiStreamableEventSourceTest {
             StreamableEventSource source1 = mock(StreamableEventSource.class);
 
             // when/then
-            //noinspection DataFlowIssue
-            assertThrows(NullPointerException.class, () ->
-                    MultiStreamableEventSource
-                            .combining("source1", source1)
-                            .and(null, mock(StreamableEventSource.class))
-            );
+            assertThatThrownBy(() -> MultiStreamableEventSource
+                    .combining("source1", source1)
+                    .and(null, mock(StreamableEventSource.class))
+            ).isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -532,12 +529,10 @@ class MultiStreamableEventSourceTest {
             StreamableEventSource source1 = mock(StreamableEventSource.class);
 
             // when/then
-            //noinspection DataFlowIssue
-            assertThrows(NullPointerException.class, () ->
-                    MultiStreamableEventSource
-                            .combining("source1", source1)
-                            .and("source2", null)
-            );
+            assertThatThrownBy(() -> MultiStreamableEventSource
+                    .combining("source1", source1)
+                    .and("source2", null)
+            ).isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -546,12 +541,10 @@ class MultiStreamableEventSourceTest {
             StreamableEventSource source1 = mock(StreamableEventSource.class);
 
             // when/then
-            //noinspection DataFlowIssue
-            assertThrows(NullPointerException.class, () ->
-                    MultiStreamableEventSource
-                            .combining("source1", source1)
-                            .comparingUsing(null)
-            );
+            assertThatThrownBy(() -> MultiStreamableEventSource
+                    .combining("source1", source1)
+                    .comparingUsing(null)
+            ).isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -563,9 +556,8 @@ class MultiStreamableEventSourceTest {
                     .comparingTimestamps();
 
             // when/then
-            assertThrows(UnsupportedOperationException.class, () ->
-                    result.sources().put("newSource", mock(StreamableEventSource.class))
-            );
+            assertThatThrownBy(() -> result.sources().put("newSource", mock(StreamableEventSource.class)))
+                    .isInstanceOf(UnsupportedOperationException.class);
         }
     }
 }

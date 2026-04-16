@@ -16,8 +16,10 @@
  *
  */
 
-package org.axonframework.messaging.eventstreaming;
+package io.axoniq.framework.messaging.eventstreaming;
 
+import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.Assert;
 import org.axonframework.messaging.core.Context;
@@ -66,7 +68,7 @@ public class MultiStreamableEventSource implements StreamableEventSource {
      * {@code eventComparator} to determine the source of an event and apply custom ordering logic, such as giving
      * precedence to events from a specific source.
      */
-    public final Context.ResourceKey<String> SOURCE_ID_RESOURCE = Context.ResourceKey.withLabel("SourceId");
+    public static final Context.ResourceKey<String> SOURCE_ID_RESOURCE = Context.ResourceKey.withLabel("SourceId");
 
     /**
      * Constructs a MultiStreamableEventSource from the collected sources and comparator.

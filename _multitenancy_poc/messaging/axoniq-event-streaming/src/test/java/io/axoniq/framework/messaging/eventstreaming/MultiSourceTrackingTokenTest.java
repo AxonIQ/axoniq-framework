@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventstreaming;
+package io.axoniq.framework.messaging.eventstreaming;
 
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -27,7 +27,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.OptionalLong;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -50,17 +51,18 @@ class MultiSourceTrackingTokenTest {
 
     @Test
     void incompatibleToken() {
-        assertThrows(IllegalArgumentException.class, () -> testSubject.covers(new GlobalSequenceTrackingToken(0)));
+        assertThatThrownBy(() -> testSubject.covers(new GlobalSequenceTrackingToken(0)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void trackingTokenIsImmutable() {
         MultiSourceTrackingToken newToken = testSubject.advancedTo("token1", new GlobalSequenceTrackingToken(1));
 
-        assertEquals(new GlobalSequenceTrackingToken(0), testSubject.getTokenForStream("token1"));
-        assertEquals(new GlobalSequenceTrackingToken(0), testSubject.getTokenForStream("token2"));
-        assertEquals(new GlobalSequenceTrackingToken(1), newToken.getTokenForStream("token1"));
-        assertEquals(new GlobalSequenceTrackingToken(0), newToken.getTokenForStream("token2"));
+        assertThat(testSubject.getTokenForStream("token1")).isEqualTo(new GlobalSequenceTrackingToken(0));
+        assertThat(testSubject.getTokenForStream("token2")).isEqualTo(new GlobalSequenceTrackingToken(0));
+        assertThat(newToken.getTokenForStream("token1")).isEqualTo(new GlobalSequenceTrackingToken(1));
+        assertThat(newToken.getTokenForStream("token2")).isEqualTo(new GlobalSequenceTrackingToken(0));
     }
 
     @Test
@@ -76,7 +78,7 @@ class MultiSourceTrackingTokenTest {
         MultiSourceTrackingToken newMultiToken =
                 (MultiSourceTrackingToken) testSubject.lowerBound(new MultiSourceTrackingToken(newTokens));
 
-        assertEquals(new MultiSourceTrackingToken(expectedTokens), newMultiToken);
+        assertThat(newMultiToken).isEqualTo(new MultiSourceTrackingToken(expectedTokens));
     }
 
     @Test
@@ -98,7 +100,7 @@ class MultiSourceTrackingTokenTest {
         MultiSourceTrackingToken result =
                 (MultiSourceTrackingToken) testSubject.lowerBound(new MultiSourceTrackingToken(otherTokens));
 
-        assertEquals(new MultiSourceTrackingToken(expectedTokens), result);
+        assertThat(result).isEqualTo(new MultiSourceTrackingToken(expectedTokens));
     }
 
     @Test
@@ -120,7 +122,7 @@ class MultiSourceTrackingTokenTest {
         MultiSourceTrackingToken result =
                 (MultiSourceTrackingToken) testSubject.lowerBound(new MultiSourceTrackingToken(otherTokens));
 
-        assertEquals(new MultiSourceTrackingToken(expectedTokens), result);
+        assertThat(result).isEqualTo(new MultiSourceTrackingToken(expectedTokens));
     }
 
     @Test
@@ -129,8 +131,8 @@ class MultiSourceTrackingTokenTest {
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
         newTokens.put("token3", new GlobalSequenceTrackingToken(2));
 
-        assertThrows(IllegalArgumentException.class,
-                     () -> testSubject.lowerBound(new MultiSourceTrackingToken(newTokens)));
+        assertThatThrownBy(() -> testSubject.lowerBound(new MultiSourceTrackingToken(newTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -138,8 +140,8 @@ class MultiSourceTrackingTokenTest {
         Map<String, TrackingToken> newTokens = new HashMap<>();
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
 
-        assertThrows(IllegalArgumentException.class,
-                     () -> testSubject.lowerBound(new MultiSourceTrackingToken(newTokens)));
+        assertThatThrownBy(() -> testSubject.lowerBound(new MultiSourceTrackingToken(newTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -148,7 +150,7 @@ class MultiSourceTrackingTokenTest {
         when(trackingToken.position()).thenReturn(OptionalLong.empty());
         testSubject = new MultiSourceTrackingToken(Collections.singletonMap("key", trackingToken));
 
-        assertFalse(testSubject.position().isPresent());
+        assertThat(testSubject.position()).isEmpty();
     }
 
     @Test
@@ -160,7 +162,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken newMultiToken = testSubject.upperBound(new MultiSourceTrackingToken(newTokens));
 
-        assertEquals(new MultiSourceTrackingToken(newTokens), newMultiToken);
+        assertThat(newMultiToken).isEqualTo(new MultiSourceTrackingToken(newTokens));
     }
 
     @Test
@@ -177,7 +179,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken result = testSubject.upperBound(new MultiSourceTrackingToken(otherTokens));
 
-        assertEquals(new MultiSourceTrackingToken(otherTokens), result);
+        assertThat(result).isEqualTo(new MultiSourceTrackingToken(otherTokens));
     }
 
     @Test
@@ -199,7 +201,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken result = testSubject.upperBound(new MultiSourceTrackingToken(otherTokens));
 
-        assertEquals(new MultiSourceTrackingToken(expectedTokens), result);
+        assertThat(result).isEqualTo(new MultiSourceTrackingToken(expectedTokens));
     }
 
     @Test
@@ -208,8 +210,8 @@ class MultiSourceTrackingTokenTest {
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
         newTokens.put("token3", new GlobalSequenceTrackingToken(2));
 
-        assertThrows(IllegalArgumentException.class,
-                     () -> testSubject.upperBound(new MultiSourceTrackingToken(newTokens)));
+        assertThatThrownBy(() -> testSubject.upperBound(new MultiSourceTrackingToken(newTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -217,8 +219,8 @@ class MultiSourceTrackingTokenTest {
         Map<String, TrackingToken> newTokens = new HashMap<>();
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
 
-        assertThrows(IllegalArgumentException.class,
-                     () -> testSubject.upperBound(new MultiSourceTrackingToken(newTokens)));
+        assertThatThrownBy(() -> testSubject.upperBound(new MultiSourceTrackingToken(newTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -227,7 +229,7 @@ class MultiSourceTrackingTokenTest {
         newTokens.put("token1", new GlobalSequenceTrackingToken(0));
         newTokens.put("token2", new GlobalSequenceTrackingToken(0));
 
-        assertTrue(testSubject.covers(new MultiSourceTrackingToken(newTokens)));
+        assertThat(testSubject.covers(new MultiSourceTrackingToken(newTokens))).isTrue();
     }
 
     @Test
@@ -236,7 +238,7 @@ class MultiSourceTrackingTokenTest {
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
         newTokens.put("token2", new GlobalSequenceTrackingToken(0));
 
-        assertFalse(testSubject.covers(new MultiSourceTrackingToken(newTokens)));
+        assertThat(testSubject.covers(new MultiSourceTrackingToken(newTokens))).isFalse();
     }
 
     @Test
@@ -246,9 +248,9 @@ class MultiSourceTrackingTokenTest {
         newTokens.put("token2", null);
         MultiSourceTrackingToken tokenWithNullConstituent = new MultiSourceTrackingToken(newTokens);
 
-        assertTrue(tokenWithNullConstituent.covers(tokenWithNullConstituent));
-        assertTrue(testSubject.covers(tokenWithNullConstituent));
-        assertFalse(tokenWithNullConstituent.covers(testSubject));
+        assertThat(tokenWithNullConstituent.covers(tokenWithNullConstituent)).isTrue();
+        assertThat(testSubject.covers(tokenWithNullConstituent)).isTrue();
+        assertThat(tokenWithNullConstituent.covers(testSubject)).isFalse();
     }
 
 
@@ -258,7 +260,8 @@ class MultiSourceTrackingTokenTest {
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
         newTokens.put("token3", new GlobalSequenceTrackingToken(2));
 
-        assertThrows(IllegalArgumentException.class, () -> testSubject.covers(new MultiSourceTrackingToken(newTokens)));
+        assertThatThrownBy(() -> testSubject.covers(new MultiSourceTrackingToken(newTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -266,7 +269,8 @@ class MultiSourceTrackingTokenTest {
         Map<String, TrackingToken> newTokens = new HashMap<>();
         newTokens.put("token1", new GlobalSequenceTrackingToken(1));
 
-        assertThrows(IllegalArgumentException.class, () -> testSubject.covers(new MultiSourceTrackingToken(newTokens)));
+        assertThatThrownBy(() -> testSubject.covers(new MultiSourceTrackingToken(newTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
 
@@ -274,20 +278,21 @@ class MultiSourceTrackingTokenTest {
     void advancedTo() {
         MultiSourceTrackingToken result = testSubject.advancedTo("token1", new GlobalSequenceTrackingToken(4));
 
-        assertEquals(new GlobalSequenceTrackingToken(4), result.getTokenForStream("token1"));
+        assertThat(result.getTokenForStream("token1")).isEqualTo(new GlobalSequenceTrackingToken(4));
         //other token remains unchanged
-        assertEquals(new GlobalSequenceTrackingToken(0), result.getTokenForStream("token2"));
+        assertThat(result.getTokenForStream("token2")).isEqualTo(new GlobalSequenceTrackingToken(0));
     }
 
     @Test
     void getTokenForStream() {
-        assertEquals(new GlobalSequenceTrackingToken(0), testSubject.getTokenForStream("token1"));
+        assertThat(testSubject.getTokenForStream("token1"))
+                .isEqualTo(new GlobalSequenceTrackingToken(0));
     }
 
     @Test
     void hasPosition() {
-        assertTrue(testSubject.position().isPresent());
-        assertEquals(0L, testSubject.position().getAsLong());
+        assertThat(testSubject.position()).isPresent();
+        assertThat(testSubject.position().getAsLong()).isZero();
     }
 
     @Test
@@ -298,7 +303,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken newMultiToken = new MultiSourceTrackingToken(tokenMap);
 
-        assertEquals(10, newMultiToken.position().orElse(-1));
+        assertThat(newMultiToken.position().orElse(-1)).isEqualTo(10);
     }
 
     @Test
@@ -309,7 +314,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken newMultiToken = new MultiSourceTrackingToken(tokenMap);
 
-        assertEquals(10, newMultiToken.position().orElse(-1));
+        assertThat(newMultiToken.position().orElse(-1)).isEqualTo(10);
     }
 
     @Test
@@ -320,7 +325,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken newMultiToken = new MultiSourceTrackingToken(tokenMap);
 
-        assertEquals(newMultiToken, testSubject);
+        assertThat(testSubject).isEqualTo(newMultiToken);
     }
 
     @Test
@@ -331,7 +336,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken newMultiToken = new MultiSourceTrackingToken(tokenMap);
 
-        assertNotEquals(newMultiToken, testSubject);
+        assertThat(testSubject).isNotEqualTo(newMultiToken);
     }
 
     @Test
@@ -342,7 +347,7 @@ class MultiSourceTrackingTokenTest {
 
         MultiSourceTrackingToken newMultiToken = new MultiSourceTrackingToken(tokenMap);
 
-        assertNotEquals(newMultiToken, testSubject);
+        assertThat(testSubject).isNotEqualTo(newMultiToken);
     }
 
     @Test
@@ -351,7 +356,7 @@ class MultiSourceTrackingTokenTest {
         samePositionTokens.put("token1", new GlobalSequenceTrackingToken(0));
         samePositionTokens.put("token2", new GlobalSequenceTrackingToken(0));
 
-        assertTrue(testSubject.samePositionAs(new MultiSourceTrackingToken(samePositionTokens)));
+        assertThat(testSubject.samePositionAs(new MultiSourceTrackingToken(samePositionTokens))).isTrue();
     }
 
     @Test
@@ -360,7 +365,7 @@ class MultiSourceTrackingTokenTest {
         differentTokens.put("token1", new GlobalSequenceTrackingToken(1));
         differentTokens.put("token2", new GlobalSequenceTrackingToken(0));
 
-        assertFalse(testSubject.samePositionAs(new MultiSourceTrackingToken(differentTokens)));
+        assertThat(testSubject.samePositionAs(new MultiSourceTrackingToken(differentTokens))).isFalse();
     }
 
     @Test
@@ -371,11 +376,11 @@ class MultiSourceTrackingTokenTest {
         MultiSourceTrackingToken tokenWithNull = new MultiSourceTrackingToken(tokensWithNull);
 
         // Comparing two tokens with samePositionAs null constituent
-        assertTrue(tokenWithNull.samePositionAs(tokenWithNull));
+        assertThat(tokenWithNull.samePositionAs(tokenWithNull)).isTrue();
 
         // Comparing token with null constituent to token without
-        assertFalse(tokenWithNull.samePositionAs(testSubject));
-        assertFalse(testSubject.samePositionAs(tokenWithNull));
+        assertThat(tokenWithNull.samePositionAs(testSubject)).isFalse();
+        assertThat(testSubject.samePositionAs(tokenWithNull)).isFalse();
     }
 
     @Test
@@ -384,8 +389,8 @@ class MultiSourceTrackingTokenTest {
         differentKeys.put("token1", new GlobalSequenceTrackingToken(0));
         differentKeys.put("token3", new GlobalSequenceTrackingToken(0));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> testSubject.samePositionAs(new MultiSourceTrackingToken(differentKeys)));
+        assertThatThrownBy(() -> testSubject.samePositionAs(new MultiSourceTrackingToken(differentKeys)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -393,12 +398,13 @@ class MultiSourceTrackingTokenTest {
         Map<String, TrackingToken> fewerTokens = new HashMap<>();
         fewerTokens.put("token1", new GlobalSequenceTrackingToken(0));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> testSubject.samePositionAs(new MultiSourceTrackingToken(fewerTokens)));
+        assertThatThrownBy(() -> testSubject.samePositionAs(new MultiSourceTrackingToken(fewerTokens)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void samePositionAsIncompatibleToken() {
-        assertThrows(IllegalArgumentException.class, () -> testSubject.samePositionAs(new GlobalSequenceTrackingToken(0)));
+        assertThatThrownBy(() -> testSubject.samePositionAs(new GlobalSequenceTrackingToken(0)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

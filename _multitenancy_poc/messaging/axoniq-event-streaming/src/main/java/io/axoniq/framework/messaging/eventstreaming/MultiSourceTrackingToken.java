@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.messaging.eventstreaming;
+package io.axoniq.framework.messaging.eventstreaming;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
