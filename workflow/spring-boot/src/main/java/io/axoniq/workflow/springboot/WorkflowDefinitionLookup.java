@@ -46,26 +46,24 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
 
     @Override
     public void postProcessBeanFactory(@Nonnull ConfigurableListableBeanFactory beanFactory) throws BeansException {
-        if (!(beanFactory instanceof BeanDefinitionRegistry)) {
+        if (!(beanFactory instanceof BeanDefinitionRegistry registry)) {
             logger.warn("Given bean factory is not a BeanDefinitionRegistry. Cannot auto-configure workflow handlers");
             return;
         }
 
-        String configurerBeanName = "WorkflowModuleConfigurer$$Axon$$WorkflowDefinition";
-        if (beanFactory.containsBeanDefinition(configurerBeanName)) {
-            logger.info("Workflow handler configurer already available. Skipping configuration");
-            return;
+        Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions = workflowBeanDefinitions(
+                WorkflowContext.class,
+                beanFactory,
+                true);
+
+        if (workflowBeanDefinitions.isEmpty()) {
+            return; // don't register an empty configurer; wait until workflows are visible
         }
 
         Map<Class<? extends WorkflowContext>, String> factoryBeanDefinitions = workflowContextFactoryBeans(beanFactory,
                                                                                                            false);
 
-        Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions = workflowBeanDefinitions(
-                WorkflowContext.class,
-                beanFactory,
-                false);
-
-
+        String configurerBeanName = "WorkflowModuleConfigurer$$Axon$$WorkflowDefinition";
         AbstractBeanDefinition beanDefinition =
                 BeanDefinitionBuilder
                         .genericBeanDefinition(WorkflowModuleConfigurer.class)
@@ -73,7 +71,10 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
                         .addConstructorArgValue(workflowBeanDefinitions)
                         .getBeanDefinition();
 
-        ((BeanDefinitionRegistry) beanFactory).registerBeanDefinition(configurerBeanName, beanDefinition);
+        if (registry.containsBeanDefinition(configurerBeanName)) {
+            registry.removeBeanDefinition(configurerBeanName);
+        }
+        registry.registerBeanDefinition(configurerBeanName, beanDefinition);
 
         logger.debug("Detected {} workflow definition bean{}: {}",
                     workflowBeanDefinitions.size(),
@@ -88,6 +89,6 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
 
     @Override
     public void postProcessBeanDefinitionRegistry(@Nonnull BeanDefinitionRegistry registry) throws BeansException {
-        // No action required.
+
     }
 }
