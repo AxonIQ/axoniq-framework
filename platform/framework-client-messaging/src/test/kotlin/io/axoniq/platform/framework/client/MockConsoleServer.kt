@@ -16,7 +16,7 @@
 
 package io.axoniq.platform.framework.client
 
-import com.fasterxml.jackson.dataformat.cbor.databind.CBORMapper
+import tools.jackson.dataformat.cbor.CBORMapper
 import io.axoniq.platform.framework.api.ClientSettingsV2
 import io.axoniq.platform.framework.api.Routes
 import io.netty.buffer.ByteBufAllocator
@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit
  */
 class MockConsoleServer {
 
-    private val mapper = CBORMapper.builder().build().findAndRegisterModules()
+    private val mapper = CBORMapper.builder().build()
     private var server: CloseableChannel? = null
 
     @Volatile
@@ -139,7 +139,7 @@ class MockConsoleServer {
     /**
      * Creates a response payload with a heap-backed data buffer.
      * [DefaultPayload.create(byte[])] wraps the byte array in an UnpooledHeapByteBuf, which supports
-     * [io.netty.buffer.ByteBuf.array] — required by [io.axoniq.platform.framework.client.strategy.CborJackson2EncodingStrategy.decode].
+     * [io.netty.buffer.ByteBuf.array] — required by [io.axoniq.platform.framework.client.strategy.CborJackson3EncodingStrategy.decode].
      */
     private fun encodeResponse(obj: Any): Payload = DefaultPayload.create(mapper.writeValueAsBytes(obj))
 
