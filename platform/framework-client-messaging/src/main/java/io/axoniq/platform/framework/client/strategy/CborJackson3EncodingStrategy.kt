@@ -26,6 +26,17 @@ import tools.jackson.databind.DeserializationFeature
 import tools.jackson.dataformat.cbor.CBORMapper
 
 class CborJackson3EncodingStrategy : RSocketPayloadEncodingStrategy {
+    init {
+        try {
+            Class.forName("com.fasterxml.jackson.annotation.JsonSerializeAs")
+        } catch (e: ClassNotFoundException) {
+            throw IllegalStateException(
+                    "Axoniq Platform requires jackson-annotations 2.21 or higher due to using Jackson 3, but an older version was found on the classpath. " +
+                            "Please specifically add com.fasterxml.jackson.core:jackson-annotations:2.21 or higher to your project dependencies."
+            )
+        }
+    }
+
     private val mapper = CBORMapper.builder()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build()

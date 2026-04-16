@@ -28,7 +28,6 @@ import io.axoniq.platform.framework.client.PlatformClientConnectionService;
 import io.axoniq.platform.framework.client.RSocketHandlerRegistrar;
 import io.axoniq.platform.framework.client.ServerProcessorReporter;
 import io.axoniq.platform.framework.client.SetupPayloadCreator;
-import io.axoniq.platform.framework.client.strategy.CborJackson2EncodingStrategy;
 import io.axoniq.platform.framework.client.strategy.CborJackson3EncodingStrategy;
 import io.axoniq.platform.framework.client.strategy.RSocketPayloadEncodingStrategy;
 import io.axoniq.platform.framework.eventprocessor.AxoniqPlatformEventHandlingComponent;
@@ -98,7 +97,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
                                            .withBuilder(EventProcessorManager::new))
                 .registerComponent(ComponentDefinition
                                            .ofType(RSocketPayloadEncodingStrategy.class)
-                                           .withBuilder(c -> createJackson2Or3EncodingStrategy()))
+                                           .withBuilder(c -> createEncodingStrategy()))
                 .registerComponent(ComponentDefinition
                                            .ofType(RSocketHandlerRegistrar.class)
                                            .withBuilder(c -> new RSocketHandlerRegistrar(c.getComponent(
@@ -223,31 +222,10 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
     }
 
     /**
-     * Checks the classpath for Jackson 2 or Jackson 3 and its requirements for this application.
-     * Will fail to create the component if neither is there, or if one is present and doesn't have the right modules.
+     * Checks the classpath for Jackson 3 and its requirements for this application.
+     * Will fail to create the component if Jackson 3 is not present or doesn't have the right modules.
      */
-    private static RSocketPayloadEncodingStrategy createJackson2Or3EncodingStrategy() {
-        try {
-            Class.forName("com.fasterxml.jackson.databind.ObjectMapper");
-            try {
-                Class.forName(
-                        "com.fasterxml.jackson.dataformat.cbor.databind.CBORMapper");
-                try {
-                    Class.forName(
-                            "com.fasterxml.jackson.module.kotlin.KotlinModule");
-                    return new CborJackson2EncodingStrategy();
-                } catch (ClassNotFoundException e) {
-                    throw new IllegalArgumentException(
-                            "Found Jackson 2 on the classpath, but can not find the KotlinModule. Please add the com.fasterxml.jackson.module:jackson-module-kotlin dependency to your project");
-                }
-            } catch (ClassNotFoundException e) {
-                throw new IllegalArgumentException(
-                        "Found Jackson 2 on the classpath, but cannot find the CBOR dataformat. Please add the com.fasterxml.jackson.dataformat:jackson-dataformat-cbor dependency to your project.");
-            }
-        } catch (ClassNotFoundException e) {
-            // Do nothing, Jackson 2 is not on the classpath. Continue to check for 3
-        }
-
+    private static RSocketPayloadEncodingStrategy createEncodingStrategy() {
         try {
             Class.forName("tools.jackson.databind.ObjectMapper");
             try {
@@ -265,7 +243,7 @@ public class AxoniqPlatformConfigurerEnhancer implements ConfigurationEnhancer {
             }
         } catch (ClassNotFoundException e) {
             throw new IllegalArgumentException(
-                    "Neither Jackson 2 nor 3 was found on the classpath. Please add either Jackson 2 or 3 to your project.");
+                    "Jackson 3 was not found on the classpath. Please add Jackson 3 to your project.");
         }
     }
 

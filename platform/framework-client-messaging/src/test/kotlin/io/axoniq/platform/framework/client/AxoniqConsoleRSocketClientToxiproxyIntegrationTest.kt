@@ -26,7 +26,7 @@ import io.axoniq.platform.framework.api.ModuleVersion
 import io.axoniq.platform.framework.api.QueryBusInformation
 import io.axoniq.platform.framework.api.SetupPayload
 import io.axoniq.platform.framework.api.Versions
-import io.axoniq.platform.framework.client.strategy.CborJackson2EncodingStrategy
+import io.axoniq.platform.framework.client.strategy.CborJackson3EncodingStrategy
 import io.mockk.every
 import io.mockk.mockk
 import org.awaitility.Awaitility.await
@@ -209,7 +209,7 @@ class AxoniqConsoleRSocketClientToxiproxyIntegrationTest {
     }
 
     private fun buildClient(): AxoniqConsoleRSocketClient {
-        val encodingStrategy = CborJackson2EncodingStrategy()
+        val encodingStrategy = CborJackson3EncodingStrategy()
         val setupPayloadCreator = mockk<SetupPayloadCreator>()
         every { setupPayloadCreator.createReport() } returns minimalSetupPayload()
 
