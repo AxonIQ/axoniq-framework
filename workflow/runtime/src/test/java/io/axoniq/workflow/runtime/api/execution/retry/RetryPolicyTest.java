@@ -38,7 +38,7 @@ class RetryPolicyTest {
         assertThat(policy.onRetryHandler()).isEqualTo(RetryHandler.NOOP);
         assertThat(policy.backoffStrategy()).isEqualTo(BackoffStrategy.NONE);
 
-        RetryContext context = new RetryContext("step", 0, 0, new RuntimeException());
+        RetryContext context = new RetryContext("step", 1, 0, new RuntimeException());
         assertThat(policy.shouldRetry(context)).isFalse();
     }
 
@@ -53,7 +53,21 @@ class RetryPolicyTest {
         assertThat(policy.shouldRetry(context)).isTrue();
 
         RetryContext contextMax = new RetryContext("step", 3, 3, new RuntimeException());
-        assertThat(policy.shouldRetry(contextMax)).isFalse();
+        assertThat(policy.shouldRetry(contextMax)).isTrue();
+
+        RetryContext contextExceeded = new RetryContext("step", 4, 3, new RuntimeException());
+        assertThat(policy.shouldRetry(contextExceeded)).isFalse();
+    }
+
+    @Test
+    void testMaxRetriesOneShouldAllowOneRetry() {
+        RetryPolicy policy = RetryPolicy.maxRetries(1);
+
+        RetryContext firstFailure = new RetryContext("step", 1, 1, new RuntimeException());
+        assertThat(policy.shouldRetry(firstFailure)).isTrue();
+
+        RetryContext afterRetry = new RetryContext("step", 2, 1, new RuntimeException());
+        assertThat(policy.shouldRetry(afterRetry)).isFalse();
     }
 
     @Test
@@ -107,7 +121,7 @@ class RetryPolicyTest {
         RetryContext ctx2 = new RetryContext("step", 1, 5, new RuntimeException());
         assertThat(policy.shouldRetry(ctx2)).isFalse();
 
-        RetryContext ctx3 = new RetryContext("step", 5, 5, new IllegalArgumentException());
+        RetryContext ctx3 = new RetryContext("step", 6, 5, new IllegalArgumentException());
         assertThat(policy.shouldRetry(ctx3)).isFalse();
     }
 

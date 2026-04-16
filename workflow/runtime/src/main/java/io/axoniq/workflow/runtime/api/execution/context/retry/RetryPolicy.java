@@ -70,6 +70,6 @@ public record RetryPolicy(int maxRetries, @Nonnull RetryHandler onRetryHandler,
     }
 
     public boolean shouldRetry(@Nonnull RetryContext context) {
-        return context.attempt() < maxRetries && retryPredicate.test(context);
+        return context.attempt() <= maxRetries && retryPredicate.test(context);
     }
 }
