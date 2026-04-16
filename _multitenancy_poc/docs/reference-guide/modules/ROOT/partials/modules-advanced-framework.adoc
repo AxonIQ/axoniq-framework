@@ -1,0 +1,43 @@
+== Advanced framework modules
+
+Besides the base framework, Axon Framework provides advanced features which are available for production use with a commercial license.
+
+Depending on the exact needs of your project, you will need to include one or more of these modules.
+
+.Commercially available Framework Modules Overview
+[excalidraw]
+....
+include::partial$advanced-modules.excalidraw[]
+....
+
+[cols="<,<,<,^"]
+|===
+|Module |Artifact Id |Group Id |Maven Central
+
+|<<Axoniq PostgreSQL>>            |`postgresql`                    |`io.axoniq.framework` |https://central.sonatype.com/search?q=axon+postgresql[available]
+|<<Axoniq Axon Server connector>> |`axoniq-server-connector`       |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-server-connector[available]
+|<<Axoniq distributed messaging>> |`axoniq-distributed-messaging`  |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-distributed-messaging[available]
+|<<Axoniq dead letter queue>>     |`axoniq-dead-letter-queue`      |`io.axoniq.framework` |https://central.sonatype.com/search?q=axoniq-dead-letter-queue[available]
+|<<Axoniq tracing OpenTelemetry>> |`axon-tracing-opentelemetry`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-tracing-opentelemetry[available]
+|===
+
+=== Axoniq PostgreSQL
+
+This module provides a storage solution optimized for use with link:https://www.postgresql.org/[PostgreSQL] by taking advantage of PostgreSQL-specifics.
+It supports the Dynamic-Consistency Boundary, just as Axon Server does
+
+=== Axoniq Axon Server connector
+
+This module provides infrastructure components that connect to Axon Server.
+
+=== Axoniq distributed messaging
+
+This module provides distributed variants for messaging components (namely `CommandBus` and `QueryBus`).
+
+=== Axoniq dead letter queue
+
+This module provides the dead letter queue functionality.
+
+=== Axoniq tracing OpenTelemetry
+
+This extension contains the components needed to xref:tracing:index.adoc[enable tracing with OpenTelemetry].
