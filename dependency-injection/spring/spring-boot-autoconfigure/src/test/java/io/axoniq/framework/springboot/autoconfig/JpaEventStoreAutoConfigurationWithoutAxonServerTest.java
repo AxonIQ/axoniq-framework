@@ -16,8 +16,9 @@
  *
  */
 
-package org.axonframework.extension.springboot;
+package io.axoniq.framework.springboot.autoconfig;
 
+import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -30,8 +31,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.axonframework.axonserver.connector.event.AxonServerEventStorageEngine;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -103,11 +102,6 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
 
         @Bean
         public EntityManagerFactory entityManagerFactory() {
-            return mock();
-        }
-
-        @Bean
-        public PlatformTransactionManager transactionManager() {
             return mock();
         }
     }
