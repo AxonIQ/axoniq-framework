@@ -1,7 +1,5 @@
 = Snapshots
 
-== Snapshotting
-
 Event-sourced entities reconstruct their state by replaying events from the event store. For entities that change frequently or exist for a long time, the number of events can grow significantly. Replaying all events each time an entity is loaded may eventually impact performance.
 
 A snapshot captures the state of an entity at a specific position in the event stream. When the entity is loaded later, the snapshot can be used as the starting point for reconstruction. Only the events that occurred after the snapshot need to be applied to rebuild the current state.
@@ -14,7 +12,7 @@ Snapshots are therefore a performance optimization. They do not replace events a
 xref:axoniq-platform-reference:ROOT:features/metrics.adoc#aggregate_metrics[Axoniq Platform] can measure the number of events that were loaded during command handling, so you know if you need to create snapshots or not. It's also able to track many more interesting metrics, such as the load time of the aggregate, and the time it took to store the events.
 ====
 
-=== Why use snapshots
+== Why use snapshots
 
 Snapshots can significantly reduce the number of events that must be replayed when sourcing an entity. This can improve the performance of loading entities whose event streams have grown large over time.
 
@@ -22,7 +20,7 @@ For example, consider an entity representing an inventory item. Each sale decrea
 
 By storing a snapshot of the entity state at regular intervals, the system can restore the entity directly from that snapshot and only apply the events that occurred afterwards. This greatly reduces the work required to reconstruct the current state.
 
-=== Snapshot lifecycle
+== Snapshot lifecycle
 
 Snapshotting takes place during the sourcing of an event-sourced entity and is activated by configuring a `SnapshotPolicy` on the repository.
 
@@ -34,7 +32,7 @@ After sourcing has completed, the policy is evaluated based on the full evolutio
 
 This snapshot can then be used the next time the entity is loaded, reducing the number of events that need to be replayed.
 
-=== Snapshot policies
+== Snapshot policies
 
 Snapshot creation is driven by a `SnapshotPolicy`, which determines whether a snapshot should be created after an entity has been sourced. A policy is configured on the repository and evaluated during sourcing.
 
@@ -64,7 +62,7 @@ SnapshotPolicy snapshotPolicy =
                       ));
 ----
 
-=== Snapshot storage
+== Snapshot storage
 
 Snapshots are persisted using a `SnapshotStore`, which abstracts the underlying storage mechanism. Note that `SnapshotStore` is currently a tentative API and may eventually be rolled into the `EventStore`. When using Axon Server, an `AxonServerSnapshotStore` is automatically provided.
 
@@ -100,7 +98,7 @@ registry.registerComponent(
 );
 ----
 
-=== Configuring snapshotting
+== Configuring snapshotting
 
 Snapshotting is enabled by providing a `SnapshotPolicy` for an event-sourced entity. When a policy is configured, the repository automatically handles the creation and application of snapshots during sourcing. If no policy is provided, snapshotting is disabled, and the entity is always reconstructed from the event stream.
 
@@ -135,7 +133,7 @@ If any of these components are missing, configuration will fail when snapshottin
 
 Custom snapshot behavior can be achieved by using `whenEventMatches` for domain-specific triggers, as shown in the example, or by implementing the `SnapshotPolicy` interface directly.
 
-=== Entity conversion for snapshots
+== Entity conversion for snapshots
 
 When a snapshot is created, the configured `Converter` must be able to serialize the entity into a storable format. This is similar to how events are converted, but now applies to the entity itself.
 
@@ -166,7 +164,7 @@ While setters and default constructors can still be used if necessary, the const
 
 Ensuring the entity is properly serializable guarantees that snapshots can be persisted and later restored correctly. If the converter cannot handle the entity, a warning will be logged, and snapshot loading will fall back to full event replay.
 
-=== Entity conversion for snapshots
+== Entity conversion for snapshots
 
 Snapshots store a representation of an event-sourced entity at a specific point in time. To persist this representation, the framework uses the configured `Converter` to serialize the entity into a storable format.  
 
@@ -180,7 +178,7 @@ When a snapshot is loaded, the converter reconstructs the entity in the same sta
 
 Users should verify that their entities are compatible with the configured converter, especially when using complex or custom types. Proper configuration prevents runtime errors during snapshot creation or loading.
 
-=== Snapshot compatibility and fallback behavior
+== Snapshot compatibility and fallback behavior
 
 Snapshots are a performance optimization and act as a cache of an entity's state at a specific position in the event stream. Because they are not required to reconstruct the entity, the framework always provides a safe fallback: if a snapshot cannot be used, the entity is reconstructed by replaying events from the event store.
 
