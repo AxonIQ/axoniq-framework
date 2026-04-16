@@ -16,25 +16,24 @@
  *
  */
 
-package org.axonframework.extension.springboot.connection;
-
-import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.time.Duration;
-
+package io.axoniq.framework.springboot.connection;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.extension.springboot.service.connection.AxonServerConnectionDetails;
-import org.axonframework.test.server.AxonServerContainer;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.springboot.service.connection.AxonServerConnectionDetails;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.time.Duration;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Testcontainers

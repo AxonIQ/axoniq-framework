@@ -16,8 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.connection;
-
+package io.axoniq.framework.springboot.connection;
 
 import org.springframework.boot.SpringApplication;
 

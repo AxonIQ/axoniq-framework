@@ -16,13 +16,13 @@
  *
  */
 
-package org.axonframework.extension.springboot.connection;
+package io.axoniq.framework.springboot.connection;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.extension.springboot.service.connection.AxonServerConnectionDetails;
-import org.axonframework.test.server.AxonServerContainer;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.springboot.service.connection.AxonServerConnectionDetails;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

@@ -16,11 +16,11 @@
  *
  */
 
-package org.axonframework.extension.springboot.connection;
+package io.axoniq.framework.springboot.connection;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.extension.springboot.service.connection.AxonServerConnectionDetails;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.springboot.service.connection.AxonServerConnectionDetails;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -51,7 +51,7 @@ class SpringBootDockerComposeIntegrationTest {
         assertTrue(application.isRunning());
 
         assertNotNull(application.getBean(AxonServerConnectionDetails.class),
-                                 "Expected an AxonServerConnectionDetails bean pointing to Axon Server in Docker");
+                      "Expected an AxonServerConnectionDetails bean pointing to Axon Server in Docker");
 
         AxonServerConnectionManager connectionFactory = application.getBean(AxonServerConnectionManager.class);
         AxonServerConnection connection = connectionFactory.getConnection();
