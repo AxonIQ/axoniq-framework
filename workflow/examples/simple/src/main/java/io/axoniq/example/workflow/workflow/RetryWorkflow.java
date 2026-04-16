@@ -126,7 +126,7 @@ public class RetryWorkflow {
         }, Duration.ofMillis(300), defaults(), RetryPolicy.maxRetries(5));
         r5.await();
 
-        // Step 6: Retry exhaustion — always throws, retries exhausted after 2 retries
+        // Step 6: Retry exhaustion — always throws, retries exhausted after 3 retries
         WorkflowStepResult r6 = ctx.execute("retryExhaustion", Map.of(), (c, p) -> {
             int attempt = retryExhaustionAttempts.incrementAndGet();
             logger.info("retryExhaustion: attempt {}", attempt);
