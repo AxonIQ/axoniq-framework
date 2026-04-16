@@ -16,10 +16,10 @@
  *
  */
 
-package io.axoniq.framework.integrationtests.testsuite.student;
+package org.axonframework.integrationtests.testsuite.student;
 
-import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
-import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
+import org.axonframework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.integrationtests.testsuite.student.commands.EnrollStudentToCourseCommand;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -39,6 +39,15 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  */
 class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
 
+    // AxonServer-only: payload conversion is a distributed-bus concern.
+    // SimpleCommandBus passes the payload through without serialization, so there is no in-memory equivalent.
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+
+    @Override
+    protected TestInfrastructure testInfrastructure() {
+        return INFRASTRUCTURE;
+    }
+
     @Test
     void commandAndResultSupportInlinePayloadConversion()
             throws InterruptedException, ExecutionException {
@@ -52,7 +61,7 @@ class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
                 new org.axonframework.messaging.core.QualifiedName(EnrollStudentToCourseCommand.class),
                 c -> (command, context) -> {
                     actualCommandMessage.set(command);
-                    return MessageStream.just(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT).cast();
+                    return MessageStream.just(SUCCESSFUL_COMMAND_RESULT).cast();
                 }
         ));
         startApp();
@@ -75,6 +84,6 @@ class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
         assertThatCode(() -> message.payloadAs(String.class))
                 .doesNotThrowAnyException();
         assertThat(message.payloadAs(String.class))
-                .isEqualTo(AbstractStudentIT.SUCCESSFUL_COMMAND_RESULT.payload());
+                .isEqualTo(SUCCESSFUL_COMMAND_RESULT.payload());
     }
 }
