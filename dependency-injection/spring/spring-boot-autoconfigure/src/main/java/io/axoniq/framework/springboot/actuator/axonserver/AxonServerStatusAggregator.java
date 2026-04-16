@@ -16,9 +16,9 @@
  *
  */
 
-package org.axonframework.extension.springboot.actuator.axonserver;
+package io.axoniq.framework.springboot.actuator.axonserver;
 
-import org.axonframework.extension.springboot.actuator.HealthStatus;
+import io.axoniq.framework.springboot.actuator.HealthStatus;
 import org.springframework.boot.actuate.health.SimpleStatusAggregator;
 import org.springframework.boot.actuate.health.Status;
 

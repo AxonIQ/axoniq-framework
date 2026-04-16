@@ -16,10 +16,10 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import org.axonframework.extension.springboot.util.GrpcServerStub;
-import org.axonframework.extension.springboot.util.TcpUtils;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -28,7 +28,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.ContextConfiguration;
 
 /**
- * Test class validating the {@link CommandLoadFactorProvider} is correctly auto-configured.
+ * Test class validating the {@code CommandLoadFactorProvider} is correctly auto-configured.
  *
  * @author Sara Pellegrini
  */

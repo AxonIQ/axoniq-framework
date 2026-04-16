@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.service.connection;
+package io.axoniq.framework.springboot.service.connection;
 
 import org.springframework.boot.autoconfigure.service.connection.ConnectionDetails;
 

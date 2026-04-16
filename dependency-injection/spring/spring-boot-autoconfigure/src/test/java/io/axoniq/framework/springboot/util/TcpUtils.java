@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.extension.springboot.util;
+package io.axoniq.framework.springboot.util;
 
 import org.axonframework.common.io.IOUtils;
 

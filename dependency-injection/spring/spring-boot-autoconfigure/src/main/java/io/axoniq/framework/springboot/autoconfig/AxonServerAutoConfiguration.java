@@ -16,22 +16,22 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 
 import io.axoniq.axonserver.connector.control.ControlChannel;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConfigurationEnhancer;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.TagsConfiguration;
-import org.axonframework.axonserver.connector.TopologyChangeListener;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
+import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.axonserver.connector.configuration.TopologyChangeListener;
+import io.axoniq.framework.springboot.TagsConfigurationProperties;
+import io.axoniq.framework.springboot.service.connection.AxonServerConnectionDetails;
 import org.axonframework.common.configuration.ComponentDecorator;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
-import org.axonframework.extension.springboot.TagsConfigurationProperties;
-import org.axonframework.extension.springboot.service.connection.AxonServerConnectionDetails;
 import org.axonframework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import org.springframework.beans.BeansException;
@@ -58,7 +58,7 @@ import java.util.List;
  * @since 4.0.0
  */
 @AutoConfiguration
-@AutoConfigureBefore(AxonAutoConfiguration.class)
+@AutoConfigureBefore(name = {"org.axonframework.extension.springboot.autoconfig.AxonAutoConfiguration"})
 @ConditionalOnClass(AxonServerConfiguration.class)
 @EnableConfigurationProperties(value = {
         AxonServerConfiguration.class,

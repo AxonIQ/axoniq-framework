@@ -16,9 +16,9 @@
  *
  */
 
-package org.axonframework.extension.springboot;
+package io.axoniq.framework.springboot;
 
-import org.axonframework.axonserver.connector.TagsConfiguration;
+import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.HashMap;
@@ -28,7 +28,7 @@ import java.util.Map;
  * Spring Configuration properties for {@link TagsConfiguration}.
  *
  * @author Milan Savic
- * @since 4.2
+ * @since 4.2.0
  */
 @ConfigurationProperties(prefix = "axon")
 public class TagsConfigurationProperties {

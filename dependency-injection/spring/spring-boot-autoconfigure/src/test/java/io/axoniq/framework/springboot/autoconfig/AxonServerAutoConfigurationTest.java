@@ -16,19 +16,18 @@
  *
  */
 
-package org.axonframework.extension.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConfigurationEnhancer;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.ManagedChannelCustomizer;
-import org.axonframework.axonserver.connector.TagsConfiguration;
-import org.axonframework.axonserver.connector.command.AxonServerCommandBusConnector;
-import org.axonframework.axonserver.connector.event.AxonServerEventStorageEngine;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
+import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
+import io.axoniq.framework.axonserver.connector.configuration.ManagedChannelCustomizer;
+import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
-import org.axonframework.extension.springboot.util.GrpcServerStub;
-import org.axonframework.extension.springboot.util.TcpUtils;
 import org.axonframework.messaging.commandhandling.distributed.CommandBusConnector;
 import org.axonframework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import org.axonframework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
@@ -40,16 +39,17 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
- * Test class validating that the {@link AxonServerConfigurationEnhancer} are registered and customizable when using
- * Spring Boot.
+ * Test class validating that the
+ * {@link io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer} are registered and
+ * customizable when using Spring Boot.
  *
  * @author Steven van Beelen
  */
