@@ -45,6 +45,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- TODO: replace with io.axoniq server-connector -->
             <groupId>org.axonframework</groupId>
             <artifactId>axon-server-connector</artifactId>
             <version>${axon-framework.version}</version>

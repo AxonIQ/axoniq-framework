@@ -27,7 +27,7 @@ package io.axoniq.framework.postgresql;
  * @author John Hendrikx
  * @since 1.0.0
  */
-class MurmurHash3 {
+final class MurmurHash3 {
 
     /**
      * Calculate the hash using the given bytes.
@@ -92,5 +92,9 @@ class MurmurHash3 {
         h1 ^= (h1 >>> 16);
 
         return h1;
+    }
+
+    private MurmurHash3() {
+        // do not instantiate
     }
 }

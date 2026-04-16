@@ -86,8 +86,9 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
         testSubject.describeTo(descriptor);
 
         Map<String, Object> describedProperties = descriptor.getDescribedProperties();
-        assertThat(describedProperties).hasSize(2);
-        assertThat(describedProperties).containsKey("connection");
-        assertThat(describedProperties).containsKey("converter");
+        assertThat(describedProperties)
+                .hasSize(2)
+                .containsKey("connection")
+                .containsKey("converter");
     }
 }

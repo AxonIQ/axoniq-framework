@@ -16,11 +16,12 @@
  *
  */
 
-package org.axonframework.messaging.eventstreaming;
+package io.axoniq.framework.messaging.eventstreaming;
 
 import org.axonframework.conversion.TestConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.params.*;
 import org.junit.jupiter.params.provider.*;
 
@@ -28,7 +29,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests conversion capabilities of {@link MultiSourceTrackingToken}.
@@ -44,11 +45,13 @@ class MultiSourceTrackingTokenSerializationTest {
     @MethodSource("converters")
     @ParameterizedTest
     void tokenShouldBeSerializable(TestConverter converter) {
-        Map<String, TrackingToken> tokenMap = new HashMap<>();
+        Map<String, @Nullable TrackingToken> tokenMap = new HashMap<>();
         tokenMap.put("token1", new GlobalSequenceTrackingToken(0));
         tokenMap.put("token2", new GlobalSequenceTrackingToken(0));
         tokenMap.put("token3", null);
+
         MultiSourceTrackingToken testSubject = new MultiSourceTrackingToken(tokenMap);
-        assertEquals(testSubject, converter.serializeDeserialize(testSubject));
+
+        assertThat(converter.serializeDeserialize(testSubject)).isEqualTo(testSubject);
     }
 }
