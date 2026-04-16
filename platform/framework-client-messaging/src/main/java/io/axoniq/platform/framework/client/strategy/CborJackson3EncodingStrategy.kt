@@ -32,8 +32,7 @@ class CborJackson3EncodingStrategy : RSocketPayloadEncodingStrategy {
         } catch (e: ClassNotFoundException) {
             throw IllegalStateException(
                     "Axoniq Platform requires jackson-annotations 2.21 or higher due to using Jackson 3, but an older version was found on the classpath. " +
-                            "Please specifically add com.fasterxml.jackson.core:jackson-annotations:2.21 or higher to your project dependencies.",
-                    e
+                            "Please specifically add com.fasterxml.jackson.core:jackson-annotations:2.21 or higher to your project dependencies."
             )
         }
     }
