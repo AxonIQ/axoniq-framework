@@ -106,7 +106,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
         this.enqueuePolicy = Objects.requireNonNull(enqueuePolicy, "EnqueuePolicy may not be null");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWorkFactory may not be null");
         this.allowReset = allowReset;
-        EntitlementManager.INSTANCE.registerAddon(DeadLetterAxoniqAddon.class);
+        EntitlementManager.INSTANCE.registerAddon(SequencedDeadLetterAxoniqAddon.class);
     }
 
     @Override
