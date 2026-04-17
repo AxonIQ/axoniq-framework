@@ -18,10 +18,11 @@
 
 package io.axoniq.framework.integrationtests.queryhandling;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.query.AxonServerQueryBusConnector;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.grpc.ManagedChannelBuilder;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.query.AxonServerQueryBusConnector;
 import org.axonframework.common.util.MockException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -41,7 +42,6 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import org.axonframework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
-import org.axonframework.test.server.AxonServerContainer;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

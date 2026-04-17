@@ -18,10 +18,11 @@
 
 package io.axoniq.framework.integrationtests.testsuite.infrastructure;
 
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.test.server.AxonServerContainer;
-import org.axonframework.test.server.AxonServerContainerUtils;
+import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

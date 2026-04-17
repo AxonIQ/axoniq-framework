@@ -18,6 +18,8 @@
 
 package io.axoniq.framework.integrationtests.testsuite.student;
 
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
 import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.integrationtests.testsuite.student.commands.EnrollStudentToCourseCommand;
@@ -38,6 +40,11 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * @author Jakob Hatzl
  */
 class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
+
+    @Override
+    protected TestInfrastructure testInfrastructure() {
+        return new AxonServerTestInfrastructure();
+    }
 
     @Test
     void commandAndResultSupportInlinePayloadConversion()

@@ -23,6 +23,8 @@ import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.infrastructure.InMemoryTestInfrastructure;
+import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
 import org.axonframework.messaging.core.Message;
@@ -34,10 +36,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -66,9 +65,14 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
 
     private FailingRecordingEventHandlingComponent[] components;
 
+    @Override
+    protected TestInfrastructure testInfrastructure() {
+        return new InMemoryTestInfrastructure();
+    }
+
     @BeforeEach
     void setUpComponents() {
-        purgeEventStorage();
+        this.purgeData();
 
         components = new FailingRecordingEventHandlingComponent[]{
                 new FailingRecordingEventHandlingComponent("component0", studentId -> studentId.contains("-fail-0")),
@@ -279,21 +283,21 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
         var componentName = "component" + componentIndex;
         var dlqName = "DeadLetterQueue[EventHandlingComponent[" + PROCESSOR_NAME + "][" + componentName + "]]";
         return moduleConfiguration().flatMap(m -> m.getOptionalComponent(
-                                          SequencedDeadLetterQueue.class, dlqName
-                                  ))
-                                  .orElseThrow(() -> new IllegalStateException(
-                                          "DLQ not found for component " + componentIndex));
+                                            SequencedDeadLetterQueue.class, dlqName
+                                    ))
+                                    .orElseThrow(() -> new IllegalStateException(
+                                            "DLQ not found for component " + componentIndex));
     }
 
     @SuppressWarnings("unchecked")
     private SequencedDeadLetterProcessor<EventMessage> getDeadLetterProcessor(int componentIndex) {
         var componentName = "component" + componentIndex;
         return moduleConfiguration().flatMap(m -> m.getOptionalComponent(
-                                   SequencedDeadLetterProcessor.class,
-                                   "EventHandlingComponent[" + PROCESSOR_NAME + "][" + componentName + "]"
-                           ))
-                           .orElseThrow(() -> new IllegalStateException(
-                                   "DeadLetterProcessor not found for component " + componentIndex));
+                                            SequencedDeadLetterProcessor.class,
+                                            "EventHandlingComponent[" + PROCESSOR_NAME + "][" + componentName + "]"
+                                    ))
+                                    .orElseThrow(() -> new IllegalStateException(
+                                            "DeadLetterProcessor not found for component " + componentIndex));
     }
 
     private Optional<Configuration> moduleConfiguration() {

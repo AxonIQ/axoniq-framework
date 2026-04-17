@@ -19,10 +19,11 @@
 package io.axoniq.framework.integrationtests.axonserverconnector;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.grpc.ManagedChannelBuilder;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.command.AxonServerCommandBusConnector;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandPriorityCalculator;
@@ -42,7 +43,6 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
-import org.axonframework.test.server.AxonServerContainer;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
