@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.test.server;
+package io.axoniq.framework.testcontainer;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;

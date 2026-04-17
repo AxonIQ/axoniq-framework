@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.test.server;
+package io.axoniq.framework.testcontainer;
 
 import org.junit.jupiter.api.*;
 import org.testcontainers.utility.DockerImageName;

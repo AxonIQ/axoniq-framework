@@ -76,6 +76,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Axoniq Framework: Test -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-testcontainer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <profiles>
