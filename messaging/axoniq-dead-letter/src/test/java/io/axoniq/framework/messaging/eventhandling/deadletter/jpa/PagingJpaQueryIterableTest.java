@@ -48,13 +48,13 @@ class PagingJpaQueryIterableTest {
     private EntityTransaction transaction;
 
     @BeforeEach
-    public void setUpJpa() {
+    void setUpJpa() {
         transaction = entityManager.getTransaction();
         transaction.begin();
     }
 
     @AfterEach
-    public void rollback() {
+    void rollback() {
         transaction.rollback();
     }
 
@@ -68,14 +68,14 @@ class PagingJpaQueryIterableTest {
                 em -> em.createQuery("select t from TestJpaEntry t", TestJpaEntry.class),
                 TestJpaEntry::getId);
 
-        List<String> result = StreamSupport.stream(iterable.spliterator(), false).collect(Collectors.toList());
-        assertThat(result.size()).isEqualTo(1);
-        assertThat(result.get(0)).isEqualTo("1");
+        List<String> result = StreamSupport.stream(iterable.spliterator(), false).toList();
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst()).isEqualTo("1");
     }
 
     @Test
     void queriesMultiplePages() {
-        List<String> wantedIds = IntStream.range(0, 102).mapToObj(i -> "" + i).collect(Collectors.toList());
+        List<String> wantedIds = IntStream.range(0, 102).mapToObj(i -> "" + i).toList();
         wantedIds.forEach(item -> {
             entityManager.persist(new TestJpaEntry(item));
         });
@@ -86,10 +86,10 @@ class PagingJpaQueryIterableTest {
                 em -> em.createQuery("select t from TestJpaEntry t", TestJpaEntry.class),
                 TestJpaEntry::getId);
 
-        List<String> result = StreamSupport.stream(iterable.spliterator(), false).collect(Collectors.toList());
-        assertThat(result.size()).isEqualTo(wantedIds.size());
+        List<String> result = StreamSupport.stream(iterable.spliterator(), false).toList();
+        assertThat(result).hasSameSizeAs(wantedIds);
         wantedIds.forEach(id -> {
-            assertThat(result.contains(id)).isTrue();
+            assertThat(result).contains(id);
         });
     }
 

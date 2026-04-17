@@ -55,7 +55,7 @@ public abstract class AbstractQueryResponseMessageStream<T> implements MessageSt
      * @param stream The {@link ResultStream} instance from which query response data will be fetched. Must not be
      *               null.
      */
-    public AbstractQueryResponseMessageStream(ResultStream<T> stream) {
+    protected AbstractQueryResponseMessageStream(ResultStream<T> stream) {
         this.stream = requireNonNull(stream, "The query result stream cannot be null.");
     }
 

@@ -18,8 +18,6 @@
 
 package io.axoniq.framework.axonserver.connector.configuration;
 
-import io.axoniq.framework.axonserver.connector.configuration.ManagedChannelCustomizer;
-import io.axoniq.framework.axonserver.connector.configuration.TopologyChangeListener;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
