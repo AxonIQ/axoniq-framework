@@ -16,7 +16,7 @@
  *
  */
 
-package org.axonframework.test.server;
+package io.axoniq.framework.testcontainer;
 
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.GenericContainer;
