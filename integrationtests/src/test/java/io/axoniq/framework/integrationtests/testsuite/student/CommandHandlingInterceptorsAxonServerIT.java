@@ -18,14 +18,15 @@
 
 package io.axoniq.framework.integrationtests.testsuite.student;
 
-import org.axonframework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
+import org.axonframework.integrationtests.testsuite.student.CommandHandlingInterceptorsIT;
 
 /**
- * Runs {@link org.axonframework.integrationtests.testsuite.student.CommandHandlingInterceptorsIT} against a real Axon Server instance.
+ * Runs {@link org.axonframework.integrationtests.testsuite.student.CommandHandlingInterceptorsIT} against a real Axon
+ * Server instance.
  */
-public class CommandHandlingInterceptorsAxonServerIT extends
-        org.axonframework.integrationtests.testsuite.student.CommandHandlingInterceptorsIT {
+public class CommandHandlingInterceptorsAxonServerIT extends CommandHandlingInterceptorsIT {
 
     private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 

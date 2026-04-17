@@ -18,15 +18,16 @@
 
 package io.axoniq.framework.integrationtests.testsuite.student;
 
-import org.axonframework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
+import org.axonframework.integrationtests.testsuite.student.CompoundEntityIdentifierCommandHandlingComponentIT;
 
 /**
- * Runs {@link org.axonframework.integrationtests.testsuite.student.CompoundEntityIdentifierCommandHandlingComponentIT} against a real Axon Server instance.
+ * Runs {@link org.axonframework.integrationtests.testsuite.student.CompoundEntityIdentifierCommandHandlingComponentIT}
+ * against a real Axon Server instance.
  */
 public class CompoundEntityIdentifierCommandHandlingComponentAxonServerIT
-        extends
-        org.axonframework.integrationtests.testsuite.student.CompoundEntityIdentifierCommandHandlingComponentIT {
+        extends CompoundEntityIdentifierCommandHandlingComponentIT {
 
     private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 

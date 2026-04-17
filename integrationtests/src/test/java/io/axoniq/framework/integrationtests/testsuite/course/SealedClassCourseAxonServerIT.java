@@ -18,14 +18,15 @@
 
 package io.axoniq.framework.integrationtests.testsuite.course;
 
-import org.axonframework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import org.axonframework.integrationtests.testsuite.course.SealedClassCourseIT;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 
 /**
- * Runs {@link org.axonframework.integrationtests.testsuite.course.SealedClassCourseIT} against a real Axon Server instance.
+ * Runs {@link org.axonframework.integrationtests.testsuite.course.SealedClassCourseIT} against a real Axon Server
+ * instance.
  */
-public class SealedClassCourseAxonServerIT extends
-        org.axonframework.integrationtests.testsuite.course.SealedClassCourseIT {
+public class SealedClassCourseAxonServerIT extends SealedClassCourseIT {
 
     private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 

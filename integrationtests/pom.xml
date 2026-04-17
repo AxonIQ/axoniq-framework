@@ -38,23 +38,10 @@
     </description>
 
     <dependencies>
-        <!-- Axon -->
+        <!-- Axon Framework -->
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- TODO: replace with io.axoniq server-connector -->
-            <groupId>org.axonframework</groupId>
-            <artifactId>axon-server-connector</artifactId>
-            <version>${axon-framework.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-dead-letter</artifactId>
-            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -79,6 +66,25 @@
             <groupId>org.axonframework</groupId>
             <artifactId>axon-integrationtests</artifactId>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <!-- Axoniq Framework -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axon-server-connector</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-dead-letter</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-testcontainer</artifactId>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <!-- Reactive -->

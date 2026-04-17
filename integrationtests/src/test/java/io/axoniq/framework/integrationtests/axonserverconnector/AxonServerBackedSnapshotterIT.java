@@ -18,15 +18,15 @@
 
 package io.axoniq.framework.integrationtests.axonserverconnector;
 
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.StoreBackedSnapshotterTestSuite;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.StoreBackedSnapshotter;
-import org.axonframework.test.server.AxonServerContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -39,25 +39,23 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public class AxonServerBackedSnapshotterIT extends StoreBackedSnapshotterTestSuite {
 
     @Container
-    private static final AxonServerContainer CONTAINER = new AxonServerContainer()
-        .withDevMode(true)
-        .withDcbContext(true);
+    private static final AxonServerContainer CONTAINER = new AxonServerContainer().withDevMode(true)
+                                                                                  .withDcbContext(true);
 
     @Override
     protected void registerComponents(ComponentRegistry registry) {
-        registry.registerComponent(AxonServerConfiguration.class, c -> AxonServerConfiguration.builder()
-            .componentName("AxonServerBackedSnapshotterIT")
-            .servers(CONTAINER.getAxonServerAddress())
-            .build()
+        registry.registerComponent(
+                AxonServerConfiguration.class,
+                c -> AxonServerConfiguration.builder()
+                                            .componentName("AxonServerBackedSnapshotterIT")
+                                            .servers(CONTAINER.getAxonServerAddress())
+                                            .build()
         );
 
         registry.registerComponent(SnapshotStore.class, c -> {
             AxonServerConnectionManager component = c.getComponent(AxonServerConnectionManager.class);
 
-            return new AxonServerSnapshotStore(
-                component.getConnection(),
-                c.getComponent(Converter.class)
-            );
+            return new AxonServerSnapshotStore(component.getConnection(), c.getComponent(Converter.class));
         });
     }
 }

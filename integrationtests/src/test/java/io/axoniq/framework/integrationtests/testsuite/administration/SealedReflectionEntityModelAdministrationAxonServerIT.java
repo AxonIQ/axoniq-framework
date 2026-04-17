@@ -18,12 +18,13 @@
 
 package io.axoniq.framework.integrationtests.testsuite.administration;
 
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.administration.SealedReflectionEntityModelAdministrationIT;
-import org.axonframework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 
 /**
- * Runs {@link org.axonframework.integrationtests.testsuite.administration.SealedReflectionEntityModelAdministrationIT} against a real Axon Server instance.
+ * Runs {@link org.axonframework.integrationtests.testsuite.administration.SealedReflectionEntityModelAdministrationIT}
+ * against a real Axon Server instance.
  */
 public class SealedReflectionEntityModelAdministrationAxonServerIT
         extends SealedReflectionEntityModelAdministrationIT {
