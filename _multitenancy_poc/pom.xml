@@ -77,7 +77,7 @@
         <module>axoniq-framework-bom</module>
 
         <module>connector/axoniq-postgresql</module>
-        <module>connector/axoniq-server-connector</module>
+        <module>connector/axon-server-connector</module>
 
         <module>dependency-injection/spring</module>
 
