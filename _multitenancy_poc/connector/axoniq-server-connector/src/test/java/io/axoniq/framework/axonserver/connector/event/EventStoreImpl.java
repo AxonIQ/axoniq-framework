@@ -101,7 +101,7 @@ public class EventStoreImpl extends EventStoreGrpc.EventStoreImplBase {
 
             @Override
             public void onError(Throwable throwable) {
-
+                // unused
             }
 
             @Override
@@ -180,7 +180,7 @@ public class EventStoreImpl extends EventStoreGrpc.EventStoreImplBase {
 
             @Override
             public void onError(Throwable throwable) {
-
+                // unused
             }
 
             @Override
@@ -200,7 +200,7 @@ public class EventStoreImpl extends EventStoreGrpc.EventStoreImplBase {
 
             @Override
             public void onError(Throwable t) {
-
+                // unused
             }
 
             @Override

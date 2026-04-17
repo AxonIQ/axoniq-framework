@@ -21,7 +21,6 @@ package io.axoniq.framework.axonserver.connector.event;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
-import org.assertj.core.api.Assertions;
 import org.axonframework.eventsourcing.eventstore.AggregateBasedStorageEngineTestSuite;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -42,9 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
-@Tags({
-        @Tag("slow"),
-})
+@Tag("slow")
 class AggregateBasedAxonServerEventStorageEngineIT extends
         AggregateBasedStorageEngineTestSuite<AggregateBasedAxonServerEventStorageEngine> {
 

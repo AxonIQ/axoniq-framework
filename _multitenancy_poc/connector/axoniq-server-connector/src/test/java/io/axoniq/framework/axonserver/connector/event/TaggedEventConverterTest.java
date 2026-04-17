@@ -113,29 +113,30 @@ class TaggedEventConverterTest {
         verify(converter).convert(eventPayload, (Type) byte[].class);
         assertThat(resultEvent.getPayload().toByteArray()).containsExactly(eventPayloadByteArray);
         Map<String, String> resultMetadata = resultEvent.getMetadataMap();
-        assertThat(resultMetadata).hasSize(1);
-        assertThat(resultMetadata).containsKey("String");
-        assertThat(resultMetadata.get("String")).isEqualTo("Lorem Ipsum");
+        assertThat(resultMetadata)
+                .hasSize(1)
+                .containsEntry("String", "Lorem Ipsum");
         List<io.axoniq.axonserver.grpc.event.dcb.Tag> tagList = result.getTagList();
-        assertThat(tagList).hasSize(3);
-        assertThat(tagList).contains(
-                io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
+        assertThat(tagList)
+                .hasSize(3)
+                .contains(
+                    io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                        .setKey(ByteString.copyFrom("key", StandardCharsets.UTF_8))
                                                        .setValue(ByteString.copyFrom("value", StandardCharsets.UTF_8))
                                                        .build()
-        );
-        assertThat(tagList).contains(
-                io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
+                )
+                .contains(
+                    io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                        .setKey(ByteString.copyFrom("key2", StandardCharsets.UTF_8))
                                                        .setValue(ByteString.copyFrom("value2", StandardCharsets.UTF_8))
                                                        .build()
-        );
-        assertThat(tagList).contains(
-                io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
+                )
+                .contains(
+                    io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
                                                        .setKey(ByteString.copyFrom("key3", StandardCharsets.UTF_8))
                                                        .setValue(ByteString.copyFrom("value3", StandardCharsets.UTF_8))
                                                        .build()
-        );
+                );
     }
 
     @Test
@@ -159,15 +160,15 @@ class TaggedEventConverterTest {
                                                 .getEvent()
                                                 .getMetadataMap();
         // then...
-        assertThat(result).hasSize(8);
-        assertThat(result.get("String")).isEqualTo("Lorem Ipsum");
-        assertThat(result.get("Double")).isEqualTo("3.53d");
-        assertThat(result.get("Float")).isEqualTo("3.53f");
-        assertThat(result.get("Long")).isEqualTo("42L");
-        assertThat(result.get("Integer")).isEqualTo("42");
-        assertThat(result.get("Short")).isEqualTo("42");
-        assertThat(result.get("Byte")).isEqualTo("4");
-        assertThat(result.get("Boolean")).isEqualTo("false");
+        assertThat(result).hasSize(8)
+                .containsEntry("String", "Lorem Ipsum")
+                .containsEntry("Double", "3.53d")
+                .containsEntry("Float", "3.53f")
+                .containsEntry("Long", "42L")
+                .containsEntry("Integer", "42")
+                .containsEntry("Short", "42")
+                .containsEntry("Byte", "4")
+                .containsEntry("Boolean", "false");
     }
 
     @Test

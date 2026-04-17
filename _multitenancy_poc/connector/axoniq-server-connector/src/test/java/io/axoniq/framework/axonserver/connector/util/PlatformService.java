@@ -116,7 +116,7 @@ public class PlatformService extends PlatformServiceGrpc.PlatformServiceImplBase
 
             @Override
             public void onError(Throwable throwable) {
-
+                // unused
             }
 
             @Override

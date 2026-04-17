@@ -54,7 +54,7 @@ public class DistributedCommandBusConfigurationEnhancer implements Configuration
             componentRegistry
                     .registerIfNotPresent(
                             DistributedCommandBusConfiguration.class,
-                            (c) -> DistributedCommandBusConfiguration.DEFAULT,
+                            c -> DistributedCommandBusConfiguration.DEFAULT,
                             SearchScope.ALL
                     )
                     .registerDecorator(forType(CommandBus.class).with(commandBusDecoratorDefinition())

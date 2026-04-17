@@ -156,8 +156,8 @@ class DefaultDeadLetterJdbcConverterTest {
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
             Optional<Cause> optionalCause = result.cause();
-            assertThat(optionalCause.isPresent()).isTrue();
-            Cause resultCause = optionalCause.get();
+            assertThat(optionalCause).isPresent();
+            Cause resultCause = optionalCause.orElseThrow();
             assertThat(resultCause.type()).isEqualTo(CAUSE_TYPE);
             assertThat(resultCause.message()).isEqualTo(CAUSE_MESSAGE);
         }
@@ -168,7 +168,7 @@ class DefaultDeadLetterJdbcConverterTest {
 
             JdbcDeadLetter<?> result = testSubject.convertToLetter(resultSet);
 
-            assertThat(result.cause().isPresent()).isFalse();
+            assertThat(result.cause()).isEmpty();
         }
     }
 
