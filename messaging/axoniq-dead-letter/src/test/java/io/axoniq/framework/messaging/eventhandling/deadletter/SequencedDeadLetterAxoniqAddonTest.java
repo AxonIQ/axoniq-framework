@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterAxoniqAddon;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

@@ -16,7 +16,7 @@
  *
  */
 
-package io.axoniq.framework.messaging.eventhandling.deadletter;
+package io.axoniq.framework.messaging.deadletter;
 
 import io.axoniq.license.entitlement.AxoniqAddon;
 
@@ -29,7 +29,7 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  */
 public class SequencedDeadLetterAxoniqAddon implements AxoniqAddon {
 
-    static final String IDENTIFIER = "framework.dead-letter";
+    public static final String IDENTIFIER = "framework.dead-letter";
 
     @Override
     public String identifier() {

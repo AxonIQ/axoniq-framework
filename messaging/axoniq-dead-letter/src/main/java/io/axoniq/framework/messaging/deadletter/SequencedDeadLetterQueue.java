@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.deadletter;
 
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.core.Message;
 
@@ -52,6 +53,14 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
  * @since 4.6.0
  */
 public interface SequencedDeadLetterQueue<M extends Message> {
+
+    @SuppressWarnings("unused")
+    boolean ADDON_REGISTERED = registerAddon();
+
+    private static boolean registerAddon() {
+        EntitlementManager.INSTANCE.registerAddon(SequencedDeadLetterAxoniqAddon.class);
+        return true;
+    }
 
     /**
      * Enqueues a {@link DeadLetter dead letter} containing an implementation of {@code M} to this queue.

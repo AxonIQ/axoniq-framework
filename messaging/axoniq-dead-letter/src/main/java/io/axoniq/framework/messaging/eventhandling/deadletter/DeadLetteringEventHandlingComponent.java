@@ -18,6 +18,13 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
+import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
+import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterAxoniqAddon;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.DelayedMessageStream;
@@ -25,12 +32,6 @@ import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
-import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
-import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.DelegatingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;

@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterAxoniqAddon;
 import io.axoniq.license.entitlement.AxoniqAddonNotGrantedException;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
