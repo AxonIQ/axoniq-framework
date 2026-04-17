@@ -16,4 +16,4 @@
 #
 #
 
-io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterAxoniqAddon
+io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterAxoniqAddon
