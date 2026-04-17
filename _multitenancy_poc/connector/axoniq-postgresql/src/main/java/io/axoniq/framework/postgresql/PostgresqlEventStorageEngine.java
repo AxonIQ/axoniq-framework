@@ -276,7 +276,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
     private final DataSource dataSource;
     private final EventConverter converter;
-    private final EntitlementManager entitlementManager;
 
     /**
      * This is the maximum number of consistency tags that are kept track of in
@@ -371,14 +370,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     /**
      * Constructs a new instance.
      *
-     * @param dataSource         a data source to connect to PostgreSQL, cannot be {@code null}
-     * @param converter          an event converter for converting the payload to bytes, cannot be {@code null}
-     * @param entitlementManager the entitlement manager to verify license entitlement before allowing appends, cannot be {@code null}
+     * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param converter  an event converter for converting the payload to bytes, cannot be {@code null}
      */
-    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter, EntitlementManager entitlementManager) {
+    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter) {
+        EntitlementManager.INSTANCE.registerAddon(PostgresAxoniqAddon.class);
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
-        this.entitlementManager = Objects.requireNonNull(entitlementManager, "entitlementManager");
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
 
         // TODO #7 Allow to configure tables, sequences and indices
@@ -562,7 +560,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         ProcessingContext context,
         List<TaggedEventMessage<?>> events
     ) {
-        entitlementManager.claimMessage(PostgresAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, events.size());
+        EntitlementManager.INSTANCE.claimMessage(PostgresAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, events.size());
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("appendEvents: called with condition=" + condition + ", events=" + events + ", context=" + context);
