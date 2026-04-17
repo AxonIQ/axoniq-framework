@@ -21,18 +21,17 @@ package io.axoniq.framework.axonserver.connector.event;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.infra.MockComponentDescriptor;
-import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.eventsourcing.eventstore.StorageEngineTestSuite;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.conversion.ChainingContentTypeConverter;
-import org.axonframework.test.server.AxonServerContainer;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.io.IOException;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,9 +48,10 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
 
     @SuppressWarnings("resource")
     @Container
-    private static final AxonServerContainer container = new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2025.2.0")
-            .withDevMode(true)
-            .withDcbContext(true);
+    private static final AxonServerContainer container =
+            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2025.2.0")
+                    .withDevMode(true)
+                    .withDcbContext(true);
 
     private static AxonServerConnection connection;
 
@@ -62,7 +62,7 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
     }
 
     @Override
-    protected AxonServerEventStorageEngine createStorageEngine() throws IOException {
+    protected AxonServerEventStorageEngine createStorageEngine() {
         container.start();
         ServerAddress address = new ServerAddress(container.getHost(), container.getGrpcPort());
         connection = AxonServerConnectionFactory.forClient("AxonServerEventStorageEngineTest")
