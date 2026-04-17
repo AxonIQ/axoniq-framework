@@ -39,7 +39,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Utility class for the {@link AxonServerContainer}, used to initialize the cluster.
@@ -262,7 +261,8 @@ public class AxonServerContainerUtils {
             connection.setDoOutput(true);
             connection.setRequestMethod("DELETE");
             connection.getInputStream().close();
-            assertEquals(202, connection.getResponseCode());
+            int responseCode = connection.getResponseCode();
+            Assert.isTrue(202 == responseCode, () -> "The response code [" + responseCode + "] did not match 202.");
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -302,7 +302,8 @@ public class AxonServerContainerUtils {
                 os.write(input, 0, input.length);
             }
             connection.getInputStream().close();
-            assertEquals(202, connection.getResponseCode());
+            int responseCode = connection.getResponseCode();
+            Assert.isTrue(202 == responseCode, () -> "The response code [" + responseCode + "] did not match 202.");
         } finally {
             if (connection != null) {
                 connection.disconnect();
