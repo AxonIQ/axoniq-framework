@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Verifies that constructing a {@link DeadLetteringEventHandlingComponent} registers the dead-letter addon
  * with the entitlement system.
  */
-class DeadLetteringEventHandlingComponentRegistrationTest {
+class DeadLetterAxoniqAddonRegistrationTest {
 
     @Test
     void constructingComponentRegistersDeadLetterAddon() {
