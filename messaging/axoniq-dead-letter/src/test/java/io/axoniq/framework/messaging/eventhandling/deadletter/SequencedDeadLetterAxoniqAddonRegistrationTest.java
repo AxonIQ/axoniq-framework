@@ -23,13 +23,13 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import io.axoniq.framework.messaging.deadletter.Decisions;
 import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
-import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.Test;
@@ -39,10 +39,10 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies that constructing a {@link DeadLetteringEventHandlingComponent} registers the dead-letter addon
+ * Verifies that constructing a {@link DeadLetteringEventHandlingComponent} registers the sequenced dead-letter addon
  * with the entitlement system.
  */
-class DeadLetterAxoniqAddonRegistrationTest {
+class SequencedDeadLetterAxoniqAddonRegistrationTest {
 
     @Test
     void constructingComponentRegistersDeadLetterAddon() {
@@ -58,10 +58,10 @@ class DeadLetterAxoniqAddonRegistrationTest {
         // then — claimMessage must not fail with ADDON_NOT_DECLARED, which would indicate the addon
         // was never registered. Other exceptions (e.g. grace period expired) are unrelated to registration.
         try {
-            EntitlementManager.INSTANCE.claimMessage(DeadLetterAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, 1);
+            EntitlementManager.INSTANCE.claimMessage(SequencedDeadLetterAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, 1);
         } catch (AxoniqAddonNotGrantedException e) {
             assertThat(e.getMessage())
-                    .as("Dead-letter addon should be registered with the entitlement system")
+                    .as("Sequenced dead-letter addon should be registered with the entitlement system")
                     .doesNotContain("Addon was not found in the application");
         }
     }

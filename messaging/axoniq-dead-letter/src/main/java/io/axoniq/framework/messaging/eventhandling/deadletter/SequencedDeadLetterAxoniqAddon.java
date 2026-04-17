@@ -18,21 +18,26 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
-import org.junit.jupiter.api.Test;
+import io.axoniq.license.entitlement.AxoniqAddon;
 
-import static org.assertj.core.api.Assertions.assertThat;
+/**
+ * {@link AxoniqAddon} implementation for the Axoniq Framework Sequenced Dead-Letter Queue. Allows the module to be
+ * detected and logged at startup, and to be included in the license entitlement system.
+ *
+ * @author Mateusz Nowak
+ * @since 5.1.0
+ */
+public class SequencedDeadLetterAxoniqAddon implements AxoniqAddon {
 
-class DeadLetterAxoniqAddonTest {
+    static final String IDENTIFIER = "framework.dead-letter";
 
-    private final DeadLetterAxoniqAddon addon = new DeadLetterAxoniqAddon();
-
-    @Test
-    void identifierReturnsExpectedValue() {
-        assertThat(addon.identifier()).isEqualTo("framework.dead-letter");
+    @Override
+    public String identifier() {
+        return IDENTIFIER;
     }
 
-    @Test
-    void nameReturnsExpectedValue() {
-        assertThat(addon.name()).isEqualTo("Axoniq Framework Dead Letter Queue");
+    @Override
+    public String name() {
+        return "Axoniq Framework - Sequenced Dead-Letter Queue";
     }
 }
