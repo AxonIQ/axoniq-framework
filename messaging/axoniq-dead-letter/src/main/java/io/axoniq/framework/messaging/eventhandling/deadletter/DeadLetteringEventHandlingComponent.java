@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.DelayedMessageStream;
 import org.axonframework.messaging.core.Message;
@@ -105,6 +106,7 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
         this.enqueuePolicy = Objects.requireNonNull(enqueuePolicy, "EnqueuePolicy may not be null");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWorkFactory may not be null");
         this.allowReset = allowReset;
+        EntitlementManager.INSTANCE.registerAddon(SequencedDeadLetterAxoniqAddon.class);
     }
 
     @Override
