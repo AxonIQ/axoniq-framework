@@ -1,0 +1,2 @@
+** xref:advanced-release-notes:major-releases.adoc[]
+** xref:advanced-release-notes:minor-releases.adoc[]

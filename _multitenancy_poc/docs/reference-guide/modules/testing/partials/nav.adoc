@@ -1,4 +1,0 @@
-* xref:testing:index.adoc[]
-** xref:testing:basic-testing.adoc[]
-** xref:testing:matchers-and-field-filters.adoc[]
-** xref:testing:advanced-testing.adoc[]

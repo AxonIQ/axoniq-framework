@@ -167,7 +167,9 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
         assertThat(thirdResult.payloadAs(String.class))
                 .isEqualTo(update2Payload);
 
-        await().until(result::isCompleted);
-        assertThat(result.isCompleted()).isTrue();
+        await().untilAsserted(() -> {
+           assertThat(result.hasNextAvailable()).isFalse();
+           assertThat(result.isCompleted()).isTrue();
+        });
     }
 }

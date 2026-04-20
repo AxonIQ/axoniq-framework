@@ -1,0 +1,8 @@
+= Advanced Framework Minor Releases
+:navtitle: Advanced Framework Minor Releases
+
+Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for advanced Framework features.
+
+[#release_5_1]
+== Release 5.1
+
