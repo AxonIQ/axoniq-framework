@@ -58,7 +58,10 @@ import java.util.List;
  * @since 4.0.0
  */
 @AutoConfiguration
-@AutoConfigureBefore(name = {"org.axonframework.extension.springboot.autoconfig.AxonAutoConfiguration"})
+@AutoConfigureBefore(name = {
+        "org.axonframework.extension.springboot.autoconfig.AxonAutoConfiguration",
+        "org.axonframework.extension.springboot.autoconfig.JpaEventStoreAutoConfiguration"
+})
 @ConditionalOnClass(AxonServerConfiguration.class)
 @EnableConfigurationProperties(value = {
         AxonServerConfiguration.class,
