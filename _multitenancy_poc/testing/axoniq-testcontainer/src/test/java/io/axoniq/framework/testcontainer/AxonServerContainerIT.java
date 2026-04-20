@@ -21,9 +21,7 @@ package io.axoniq.framework.testcontainer;
 import org.junit.jupiter.api.*;
 import org.testcontainers.utility.DockerImageName;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Simple test class for {@link AxonServerContainer}.
@@ -43,7 +41,7 @@ class AxonServerContainerIT {
                 AxonServerContainer testSubject = new AxonServerContainer(testName)
         ) {
             testSubject.start();
-            assertTrue(testSubject.isRunning());
+            assertThat(testSubject.isRunning()).isTrue();
         }
     }
 
@@ -55,7 +53,7 @@ class AxonServerContainerIT {
                         .withDcbContext(true)
         ) {
             testSubject.start();
-            assertTrue(testSubject.isRunning());
+            assertThat(testSubject.isRunning()).isTrue();
         }
     }
 
@@ -66,13 +64,11 @@ class AxonServerContainerIT {
                 AxonServerContainer testSubject = new AxonServerContainer(testName)
         ) {
             testSubject.start();
-            assertTrue(testSubject.isRunning());
-            assertNotNull(testSubject.getAxonServerAddress());
-            assertNotNull(testSubject.getGrpcPort());
-            assertNotNull(testSubject.getHost());
-            List<Integer> resultExposedPorts = testSubject.getExposedPorts();
-            assertTrue(resultExposedPorts.contains(8024));
-            assertTrue(resultExposedPorts.contains(8124));
+            assertThat(testSubject.isRunning()).isTrue();
+            assertThat(testSubject.getAxonServerAddress()).isNotNull();
+            assertThat(testSubject.getGrpcPort()).isNotNull();
+            assertThat(testSubject.getHost()).isNotNull();
+            assertThat(testSubject.getExposedPorts()).contains(8024, 8124);
         }
     }
 
@@ -91,13 +87,14 @@ class AxonServerContainerIT {
                                 .withDevMode(testDevMode)
         ) {
             testSubject.start();
-            assertTrue(testSubject.isRunning());
+            assertThat(testSubject.isRunning()).isTrue();
 
-            assertEquals(testName, testSubject.getEnvMap().get("AXONIQ_AXONSERVER_NAME"));
-            assertEquals(testInternalHostName, testSubject.getEnvMap().get("AXONIQ_AXONSERVER_INTERNAL_HOSTNAME"));
-            assertEquals(testHostName, testSubject.getEnvMap().get("AXONIQ_AXONSERVER_HOSTNAME"));
-            assertEquals(Boolean.toString(testDevMode),
-                         testSubject.getEnvMap().get("AXONIQ_AXONSERVER_DEVMODE_ENABLED"));
+            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_NAME")).isEqualTo(testName);
+            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_INTERNAL_HOSTNAME")).isEqualTo(
+                    testInternalHostName);
+            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_HOSTNAME")).isEqualTo(testHostName);
+            assertThat(testSubject.getEnvMap().get("AXONIQ_AXONSERVER_DEVMODE_ENABLED")).isEqualTo(Boolean.toString(
+                    testDevMode));
         }
     }
 
@@ -105,14 +102,14 @@ class AxonServerContainerIT {
     void constructionThroughDefaultConstructorStartsAsExpected() {
         try (AxonServerContainer testSubject = new AxonServerContainer()) {
             testSubject.start();
-            assertTrue(testSubject.isRunning());
+            assertThat(testSubject.isRunning()).isTrue();
         }
     }
 
     @Test
     void properlyConfiguredDefaultContainerLabel() {
         try (AxonServerContainer testSubject = new AxonServerContainer()) {
-            assertEquals("docker.axoniq.io/axoniq/axonserver:latest", testSubject.getDockerImageName());
+            assertThat(testSubject.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:latest");
         }
     }
 
@@ -121,10 +118,10 @@ class AxonServerContainerIT {
         try (AxonServerContainer testSubject = new AxonServerContainer().withReuse(true)) {
 
             testSubject.doStart();
-            assertTrue(testSubject.isRunning());
+            assertThat(testSubject.isRunning()).isTrue();
 
             testSubject.doStart();
-            assertTrue(testSubject.isRunning());
+            assertThat(testSubject.isRunning()).isTrue();
         }
     }
 }

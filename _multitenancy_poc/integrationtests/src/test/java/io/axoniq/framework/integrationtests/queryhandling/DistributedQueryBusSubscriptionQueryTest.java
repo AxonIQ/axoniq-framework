@@ -18,7 +18,9 @@
 
 package io.axoniq.framework.integrationtests.queryhandling;
 
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.integrationtests.queryhandling.AbstractSubscriptionQueryTestSuite;
 import org.axonframework.messaging.core.MessageStream;
@@ -32,8 +34,6 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus;
-import org.axonframework.test.server.AxonServerContainer;
-import org.axonframework.test.server.AxonServerContainerUtils;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

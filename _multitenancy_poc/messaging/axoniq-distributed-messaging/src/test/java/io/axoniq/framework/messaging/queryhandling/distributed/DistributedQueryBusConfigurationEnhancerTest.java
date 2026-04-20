@@ -18,7 +18,6 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.assertj.core.api.Assertions;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.queryhandling.QueryBus;

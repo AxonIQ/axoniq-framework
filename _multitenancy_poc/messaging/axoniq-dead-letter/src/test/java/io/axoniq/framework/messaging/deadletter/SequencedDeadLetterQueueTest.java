@@ -146,7 +146,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
         void enqueueThrowsDeadLetterQueueOverflowExceptionWhenMaxSequencesIsReached() {
             // given
             long maxSequences = maxSequences();
-            assertThat(maxSequences > 0).isTrue();
+            assertThat(maxSequences).isGreaterThan(0);
             for (int i = 0; i < maxSequences; i++) {
                 enqueue(generateId(), generateInitialLetter());
             }
@@ -165,7 +165,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
             // given
             Object testId = generateId();
             long maxSequenceSize = maxSequenceSize();
-            assertThat(maxSequenceSize > 0).isTrue();
+            assertThat(maxSequenceSize).isGreaterThan(0);
             for (int i = 0; i < maxSequenceSize; i++) {
                 enqueue(testId, generateInitialLetter());
             }
@@ -187,7 +187,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
             // given
             Object testId = generateId();
             long maxSequenceSize = maxSequenceSize();
-            assertThat(maxSequenceSize > 0).isTrue();
+            assertThat(maxSequenceSize).isGreaterThan(0);
             for (int i = 0; i < maxSequenceSize; i++) {
                 enqueue(testId, generateInitialLetter());
             }
@@ -472,7 +472,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
             // given
             assertThat(joinAndUnwrap(testSubject.isFull(generateId(), null))).isFalse();
             long maxSequences = maxSequences();
-            assertThat(maxSequences > 0).isTrue();
+            assertThat(maxSequences).isGreaterThan(0);
             for (int i = 0; i < maxSequences; i++) {
                 enqueue(generateId(), generateInitialLetter());
             }
@@ -487,7 +487,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
             Object testId = generateId();
             assertThat(joinAndUnwrap(testSubject.isFull(testId, null))).isFalse();
             long maxSequenceSize = maxSequenceSize();
-            assertThat(maxSequenceSize > 0).isTrue();
+            assertThat(maxSequenceSize).isGreaterThan(0);
             for (int i = 0; i < maxSequenceSize; i++) {
                 enqueue(testId, generateInitialLetter());
             }
@@ -499,7 +499,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
         @Test
         void sizeReturnsOverallNumberOfContainedDeadLetters() {
             // given / when / then
-            assertThat(joinAndUnwrap(testSubject.size(null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.size(null))).isZero();
 
             Object testId = generateId();
             enqueue(testId, generateInitialLetter());
@@ -514,24 +514,24 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
         @Test
         void sequenceSizeForSequenceIdentifierReturnsTheNumberOfContainedLettersForGivenSequenceIdentifier() {
             // given / when / then
-            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isZero();
 
             Object testId = generateId();
             enqueue(testId, generateInitialLetter());
-            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isZero();
             assertThat(joinAndUnwrap(testSubject.sequenceSize(testId, null))).isEqualTo(1);
             enqueue(testId, generateInitialLetter());
             assertThat(joinAndUnwrap(testSubject.sequenceSize(testId, null))).isEqualTo(2);
 
             enqueue(generateId(), generateInitialLetter());
-            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.sequenceSize("some-id", null))).isZero();
             assertThat(joinAndUnwrap(testSubject.sequenceSize(testId, null))).isEqualTo(2);
         }
 
         @Test
         void amountOfSequencesReturnsTheNumberOfUniqueSequences() {
             // given / when / then
-            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(0);
+            assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isZero();
 
             enqueue(generateId(), generateInitialLetter());
             assertThat(joinAndUnwrap(testSubject.amountOfSequences(null))).isEqualTo(1);
@@ -867,7 +867,7 @@ public abstract class SequencedDeadLetterQueueTest<M extends Message> {
 
             // then
             assertThat(result).isFalse();
-            assertThat(taskInvocations.get()).isEqualTo(0);
+            assertThat(taskInvocations.get()).isZero();
             // Verify letters are still in the queue (not evicted)
             assertThat(joinAndUnwrap(testSubject.contains(idOne, null))).isTrue();
             assertThat(joinAndUnwrap(testSubject.contains(idTwo, null))).isTrue();
