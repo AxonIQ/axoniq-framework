@@ -24,16 +24,16 @@ import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConn
 import io.axoniq.framework.axonserver.connector.event.EventProcessorControlService;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.messaging.commandhandling.distributed.CommandBusConnector;
-import org.axonframework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
-import org.axonframework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
-import org.axonframework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
