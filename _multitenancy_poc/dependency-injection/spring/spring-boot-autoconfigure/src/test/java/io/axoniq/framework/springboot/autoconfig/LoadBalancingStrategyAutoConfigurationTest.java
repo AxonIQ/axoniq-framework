@@ -30,7 +30,7 @@ import org.springframework.test.context.ContextConfiguration;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test class validating whether Axon Server's load balancing properties are set as expected.
@@ -65,17 +65,17 @@ class LoadBalancingStrategyAutoConfigurationTest {
                    )
                    .run(context -> {
                        AxonServerConfiguration serverConfig = context.getBean(AxonServerConfiguration.class);
-                       assertNotNull(serverConfig);
+                       assertThat(serverConfig).isNotNull();
 
                        Map<String, AxonServerConfiguration.Eventhandling.ProcessorSettings> processors =
                                serverConfig.getEventhandling().getProcessors();
-                       assertFalse(processors.isEmpty());
-                       assertTrue(processors.containsKey("my-processor"));
+                       assertThat(processors).isNotEmpty();
+                       assertThat(processors).containsKey("my-processor");
 
                        AxonServerConfiguration.Eventhandling.ProcessorSettings processorSettings =
                                processors.get("my-processor");
-                       assertTrue(processorSettings.isAutomaticBalancing());
-                       assertEquals("PER_THREAD", processorSettings.getLoadBalancingStrategy());
+                       assertThat(processorSettings.isAutomaticBalancing()).isTrue();
+                       assertThat(processorSettings.getLoadBalancingStrategy()).isEqualTo("PER_THREAD");
                    });
     }
 

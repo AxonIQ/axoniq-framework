@@ -27,6 +27,7 @@ import org.springframework.boot.actuate.health.Status;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -67,14 +68,14 @@ class AxonServerHealthIndicatorTest {
         assertEquals(Status.UP.getCode(), result.getStatus().getCode());
 
         Map<String, Object> resultDetails = result.getDetails();
-        assertFalse(resultDetails.isEmpty());
-        assertEquals(2, resultDetails.size());
+        assertThat(resultDetails).isNotEmpty();
+        assertThat(resultDetails.size()).isEqualTo(2);
         String detailsContextOne = (String) resultDetails.get(expectedDetailsContextOne);
-        assertNotNull(detailsContextOne);
-        assertEquals(Status.UP.getCode(), detailsContextOne);
+        assertThat(detailsContextOne).isNotNull();
+        assertThat(detailsContextOne).isEqualTo(Status.UP.getCode());
         String detailsContextTwo = (String) resultDetails.get(expectedDetailsContextTwo);
-        assertNotNull(detailsContextTwo);
-        assertEquals(Status.UP.getCode(), detailsContextTwo);
+        assertThat(detailsContextTwo).isNotNull();
+        assertThat(detailsContextTwo).isEqualTo(Status.UP.getCode());
     }
 
     @Test
@@ -97,14 +98,14 @@ class AxonServerHealthIndicatorTest {
         assertEquals(HealthStatus.WARN, result.getStatus());
 
         Map<String, Object> resultDetails = result.getDetails();
-        assertFalse(resultDetails.isEmpty());
-        assertEquals(2, resultDetails.size());
+        assertThat(resultDetails).isNotEmpty();
+        assertThat(resultDetails.size()).isEqualTo(2);
         String detailsContextOne = (String) resultDetails.get(expectedDetailsContextOne);
-        assertNotNull(detailsContextOne);
-        assertEquals(Status.UP.getCode(), detailsContextOne);
+        assertThat(detailsContextOne).isNotNull();
+        assertThat(detailsContextOne).isEqualTo(Status.UP.getCode());
         String detailsContextTwo = (String) resultDetails.get(expectedDetailsContextTwo);
-        assertNotNull(detailsContextTwo);
-        assertEquals(Status.DOWN.getCode(), detailsContextTwo);
+        assertThat(detailsContextTwo).isNotNull();
+        assertThat(detailsContextTwo).isEqualTo(Status.DOWN.getCode());
     }
 
     @Test
@@ -125,16 +126,16 @@ class AxonServerHealthIndicatorTest {
         testSubject.doHealthCheck(healthBuilder);
 
         Health result = healthBuilder.build();
-        assertEquals(Status.DOWN.getCode(), result.getStatus().getCode());
+        assertThat(result.getStatus().getCode()).isEqualTo(Status.DOWN.getCode());
 
         Map<String, Object> resultDetails = result.getDetails();
-        assertFalse(resultDetails.isEmpty());
-        assertEquals(2, resultDetails.size());
+        assertThat(resultDetails).isNotEmpty();
+        assertThat(resultDetails.size()).isEqualTo(2);
         String detailsContextOne = (String) resultDetails.get(expectedDetailsContextOne);
-        assertNotNull(detailsContextOne);
-        assertEquals(Status.DOWN.getCode(), detailsContextOne);
+        assertThat(detailsContextOne).isNotNull();
+        assertThat(detailsContextOne).isEqualTo(Status.DOWN.getCode());
         String detailsContextTwo = (String) resultDetails.get(expectedDetailsContextTwo);
-        assertNotNull(detailsContextTwo);
-        assertEquals(Status.DOWN.getCode(), detailsContextTwo);
+        assertThat(detailsContextTwo).isNotNull();
+        assertThat(detailsContextTwo).isEqualTo(Status.DOWN.getCode());
     }
 }
