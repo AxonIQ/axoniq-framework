@@ -18,7 +18,6 @@
 
 package io.axoniq.framework.postgresql;
 
-import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -52,8 +51,7 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
                 EventStorageEngine.class,
                 configuration -> new PostgresqlEventStorageEngine(
                         configuration.getComponent(DataSource.class),
-                        configuration.getComponent(EventConverter.class),
-                        configuration.getComponent(EntitlementManager.class)
+                        configuration.getComponent(EventConverter.class)
                 ),
                 SearchScope.ALL
         );
