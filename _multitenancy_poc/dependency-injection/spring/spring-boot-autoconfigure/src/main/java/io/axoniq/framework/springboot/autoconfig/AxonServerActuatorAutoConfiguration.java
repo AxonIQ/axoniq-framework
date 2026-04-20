@@ -37,7 +37,7 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration(after = AxonServerAutoConfiguration.class)
 @ConditionalOnClass(name = {
         "org.springframework.boot.actuate.health.AbstractHealthIndicator",
-        "org.axonframework.axonserver.connector.AxonServerConnectionManager"
+        "io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager"
 })
 @ConditionalOnProperty(name = "axon.axonserver.enabled", matchIfMissing = true)
 public class AxonServerActuatorAutoConfiguration {
