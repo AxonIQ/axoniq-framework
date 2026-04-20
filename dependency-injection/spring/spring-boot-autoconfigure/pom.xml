@@ -40,10 +40,28 @@
     <dependencies>
         <!-- Axon -->
         <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-messaging</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework.extensions.spring</groupId>
+            <artifactId>axon-spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Axoniq -->
+        <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-server-connector</artifactId>
+            <artifactId>axoniq-dead-letter</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-dead-letter</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -53,7 +71,7 @@
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-dead-letter</artifactId>
+            <artifactId>axon-server-connector</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>
         </dependency>
@@ -63,11 +81,26 @@
             <artifactId>jakarta.persistence-api</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>org.hsqldb</groupId>
+            <artifactId>hsqldb</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
         <!-- Spring Boot Actuator -->
         <dependency>
@@ -98,34 +131,6 @@
             <optional>true</optional>
         </dependency>
         <!-- Test -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-dead-letter</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.axonframework</groupId>
-            <artifactId>axon-messaging</artifactId>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.hsqldb</groupId>
-            <artifactId>hsqldb</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-core</artifactId>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
