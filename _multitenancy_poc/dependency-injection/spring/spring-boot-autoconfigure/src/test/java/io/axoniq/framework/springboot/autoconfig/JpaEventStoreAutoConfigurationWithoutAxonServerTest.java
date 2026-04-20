@@ -46,12 +46,16 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void construct() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.eventstorage.jpa.polling-interval=0")
+                .withPropertyValues(
+                        "axon.axonserver.enabled=false",
+                        "axon.postgresql.enabled=false",
+                        "axon.eventstorage.jpa.polling-interval=0"
+                )
                 .withUserConfiguration(EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(EventStore.class);
-                    assertThat(context).getBean(EventStorageEngine.class).isInstanceOf(
-                            AggregateBasedJpaEventStorageEngine.class);
+                    assertThat(context).getBean(EventStorageEngine.class)
+                                       .isInstanceOf(AggregateBasedJpaEventStorageEngine.class);
                 });
     }
 
@@ -71,7 +75,7 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void notConstructIfEventStoreDefinitionPresent() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false")
+                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false")
                 .withUserConfiguration(ContextWithStore.class, EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context)
@@ -84,7 +88,7 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void notConstructIfEventStorageEngineDefinitionPresent() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false")
+                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false")
                 .withUserConfiguration(ContextWithEngine.class, EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context)
