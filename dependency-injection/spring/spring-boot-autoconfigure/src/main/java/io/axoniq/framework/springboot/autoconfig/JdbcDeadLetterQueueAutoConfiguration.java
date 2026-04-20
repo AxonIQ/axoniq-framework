@@ -66,7 +66,7 @@ import javax.sql.DataSource;
                 "io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration"
         }
 )
-@ConditionalOnClass(DataSource.class)
+@ConditionalOnClass({DataSource.class, SequencedDeadLetterQueueFactory.class})
 @ConditionalOnBean(DataSource.class)
 public class JdbcDeadLetterQueueAutoConfiguration {
 
