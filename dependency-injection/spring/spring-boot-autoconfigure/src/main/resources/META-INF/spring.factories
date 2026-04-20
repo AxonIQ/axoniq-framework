@@ -15,7 +15,6 @@
 #
 #
 #
-
 org.springframework.boot.autoconfigure.service.connection.ConnectionDetailsFactory=\
   io.axoniq.framework.springboot.service.connection.AxonServerDockerComposeConnectionDetailsFactory, \
   io.axoniq.framework.springboot.service.connection.AxonServerTestContainerConnectionDetailsFactory
