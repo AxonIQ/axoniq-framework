@@ -16,10 +16,11 @@
  *
  */
 
-package org.axonframework.integrationtests.testsuite.student;
+package io.axoniq.framework.integrationtests.testsuite.student;
 
-import org.axonframework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
+import org.axonframework.integrationtests.testsuite.student.AbstractCommandHandlingStudentIT;
 import org.axonframework.integrationtests.testsuite.student.commands.EnrollStudentToCourseCommand;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
