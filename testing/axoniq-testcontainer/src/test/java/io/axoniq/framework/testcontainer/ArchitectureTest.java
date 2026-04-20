@@ -18,11 +18,10 @@
 
 package io.axoniq.framework.testcontainer;
 
-import com.tngtech.archunit.core.importer.ImportOption.DoNotIncludeTests;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import org.axonframework.common.archunit.MainArchUnitConventions;
 
-@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME, importOptions = DoNotIncludeTests.class)
+@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME)
 class ArchitectureTest implements MainArchUnitConventions {
 
 }
