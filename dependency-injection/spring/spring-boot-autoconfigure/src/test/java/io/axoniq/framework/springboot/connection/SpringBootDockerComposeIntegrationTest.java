@@ -27,8 +27,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 import java.time.Duration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
 
 class SpringBootDockerComposeIntegrationTest {
 
@@ -48,15 +48,16 @@ class SpringBootDockerComposeIntegrationTest {
 
     @Test
     void verifyApplicationRunsAndConnectsToAxonServerDefinedInDockerComposeFile() {
-        assertTrue(application.isRunning());
+        assertThat(application.isRunning()).isTrue();
 
-        assertNotNull(application.getBean(AxonServerConnectionDetails.class),
-                      "Expected an AxonServerConnectionDetails bean pointing to Axon Server in Docker");
+        assertThat(application.getBean(AxonServerConnectionDetails.class))
+                .isNotNull()
+                .describedAs("Expected an AxonServerConnectionDetails bean pointing to Axon Server in Docker");
 
         AxonServerConnectionManager connectionFactory = application.getBean(AxonServerConnectionManager.class);
         AxonServerConnection connection = connectionFactory.getConnection();
 
         await().atMost(Duration.ofSeconds(5))
-               .untilAsserted(() -> assertTrue(connection.isConnected()));
+               .untilAsserted(() -> assertThat(connection.isConnected()).isTrue());
     }
 }

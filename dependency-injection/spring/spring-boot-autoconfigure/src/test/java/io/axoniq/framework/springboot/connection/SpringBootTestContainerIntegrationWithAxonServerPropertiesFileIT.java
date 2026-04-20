@@ -33,8 +33,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Test class validating that the constructed {@link AxonServerConnectionDetails} from the {@link ServiceConnection}
@@ -63,16 +63,16 @@ class SpringBootTestContainerIntegrationWithAxonServerPropertiesFileIT {
 
     @Test
     void verifyApplicationStartsNormallyWithAxonServerInstance() {
-        assertTrue(axonServer.isRunning());
-        assertNotNull(connectionDetails);
-        assertEquals(axonServer.getHost() + ":" + axonServer.getGrpcPort(), connectionDetails.routingServers());
-        assertNotNull(axonServerConfiguration);
+        assertThat(axonServer.isRunning()).isTrue();
+        assertThat(connectionDetails).isNotNull();
+        assertThat(connectionDetails.routingServers()).isEqualTo(axonServer.getHost() + ":" + axonServer.getGrpcPort());
+        assertThat(axonServerConfiguration).isNotNull();
 
-        assertNotEquals("localhost:8024", axonServerConfiguration.getServers());
+        assertThat(axonServerConfiguration.getServers()).isEqualTo("localhost:8024");
 
         AxonServerConnection connection = axonServerConnectionManager.getConnection();
 
         await().atMost(Duration.ofSeconds(5))
-               .untilAsserted(() -> assertTrue(connection.isConnected()));
+               .untilAsserted(() -> assertThat(connection.isConnected()).isTrue());
     }
 }
