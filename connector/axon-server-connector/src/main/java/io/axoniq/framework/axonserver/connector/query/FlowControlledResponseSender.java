@@ -73,7 +73,7 @@ class FlowControlledResponseSender implements FlowControl {
     private void responseSendingLoop() {
         // this is to make sure that we check the status again if the gate was flipped to false
         // there may have been messages that were sent after the last check
-        while (!sendingGate.get() && ((requests.get() > 0 && upstream.hasNextAvailable()) || (upstream.isCompleted()
+        while (!sendingGate.get() && ((requests.get() > 0 && upstream.hasNextAvailable()) || (!upstream.hasNextAvailable() && upstream.isCompleted()
                 && !closed.get()))) {
             sendResponses();
         }
@@ -93,7 +93,7 @@ class FlowControlledResponseSender implements FlowControl {
                 next.ifPresent(i -> downstream.send(QueryConverter.convertQueryResponseMessage(queryIdentifier,
                                                                                                i.message())));
             }
-            if (upstream.isCompleted()) {
+            if (!upstream.hasNextAvailable() && upstream.isCompleted()) {
                 closed.set(true);
                 upstream.error()
                         .ifPresentOrElse(error -> {
