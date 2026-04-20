@@ -1,0 +1,6 @@
+* **`AxonServerEventStorageEngine`** - The default storage engine when using Axon Server.
+Provides full DCB support with event tagging and criteria-based querying.
+Recommended for production use.
+* **`AggregateBasedAxonServerEventStorageEngine`** - Uses Axon Server's aggregate-oriented APIs.
+Compatible with Axon Server versions that do not support DCB.
+Events are organized by aggregate identifier and sequence number.

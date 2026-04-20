@@ -57,7 +57,7 @@ class FlowControlledResponseSenderTest {
         for (int i = 0; i < 10; i++) {
             upstream.offer(newMessage(), Context.empty());
         }
-        upstream.complete();
+        upstream.seal();
         testSubject.request(Long.MAX_VALUE);
         verify(stubDownstream, times(10)).send(any());
         verify(stubDownstream).complete();
@@ -69,19 +69,19 @@ class FlowControlledResponseSenderTest {
         for (int i = 0; i < 10; i++) {
             upstream.offer(newMessage(), Context.empty());
         }
-        upstream.complete();
+        upstream.seal();
         verify(stubDownstream, times(10)).send(any());
         verify(stubDownstream).complete();
     }
 
     @Test
-    void shouldNotOverlowOnMoreThanMaxLongRequests() {
+    void shouldNotOverflowOnMoreThanMaxLongRequests() {
         testSubject.request(5);
         testSubject.request(Long.MAX_VALUE);
         for (int i = 0; i < 10; i++) {
             upstream.offer(newMessage(), Context.empty());
         }
-        upstream.complete();
+        upstream.seal();
         verify(stubDownstream, times(10)).send(any());
         verify(stubDownstream).complete();
     }
@@ -91,7 +91,7 @@ class FlowControlledResponseSenderTest {
         for (int i = 0; i < 10; i++) {
             upstream.offer(newMessage(), Context.empty());
         }
-        upstream.complete();
+        upstream.seal();
         for (int i = 0; i < 10; i++) {
             testSubject.request(1);
             verify(stubDownstream, times(i + 1)).send(any());
@@ -108,7 +108,7 @@ class FlowControlledResponseSenderTest {
             testSubject.request(1);
             verify(stubDownstream, times(i + 1)).send(any());
         }
-        upstream.complete();
+        upstream.seal();
         verify(stubDownstream).complete();
     }
 
@@ -129,7 +129,7 @@ class FlowControlledResponseSenderTest {
 
         testSubject.request(1);
         // this message won't arrive
-        upstream.complete();
+        upstream.seal();
 
         // still 3 messages sent
         verify(stubDownstream, times(3)).send(any());
@@ -139,7 +139,7 @@ class FlowControlledResponseSenderTest {
     @Test
     void shouldSendLastMessageWithErrorWhenUpstreamCompletesExceptionally() {
         upstream.offer(newMessage(), Context.empty());
-        upstream.completeExceptionally(new RuntimeException("Custom message"));
+        upstream.sealExceptionally(new RuntimeException("Custom message"));
 
         verify(stubDownstream, never()).complete();
         verify(stubDownstream, never()).completeWithError(any());
@@ -156,14 +156,15 @@ class FlowControlledResponseSenderTest {
     }
 
     @Test
-    void cancellingConsumerClosesUpstream() {
+    void cancellingConsumerCompletesUpstream() {
         upstream.offer(newMessage(), Context.empty());
         upstream.offer(newMessage(), Context.empty());
 
         testSubject.request(1);
         testSubject.cancel();
 
-        assertThat(upstream.isClosed()).isTrue();
+        assertThat(upstream.hasNextAvailable()).isFalse();
+        assertThat(upstream.isCompleted()).isTrue();
         assertThat(upstream.offer(newMessage(), Context.empty())).isFalse();
     }
 }

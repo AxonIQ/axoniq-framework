@@ -908,12 +908,14 @@ class DeadLetteringEventHandlingComponentTest {
     }
 
     private static void assertSuccessfulStream(MessageStream.Empty<Message> result) {
+        assertThat(result.hasNextAvailable()).isFalse();
         assertThat(result.error()).isEmpty();
     }
 
     private static void assertFailedStreamWithError(MessageStream.Empty<Message> result,
                                                     Class<? extends Throwable> expectedType,
                                                     String expectedMessage) {
+        assertThat(result.hasNextAvailable()).isFalse();
         assertThat(result.error()).isPresent();
         Throwable error = result.error().get();
         assertThat(error).isInstanceOf(expectedType);

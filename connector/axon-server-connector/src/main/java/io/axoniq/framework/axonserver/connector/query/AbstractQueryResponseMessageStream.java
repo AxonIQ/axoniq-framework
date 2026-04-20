@@ -21,18 +21,13 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.ResultStream;
 import org.axonframework.common.AxonException;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.AbstractMessageStream;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
-import org.jspecify.annotations.Nullable;
-
-
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
-import static org.axonframework.messaging.core.MessageStreamUtils.NO_OP_CALLBACK;
 
 /**
  * An abstract implementation of the {@link MessageStream} interface that wraps a {@link ResultStream}. This class
@@ -41,13 +36,15 @@ import static org.axonframework.messaging.core.MessageStreamUtils.NO_OP_CALLBACK
  *
  * @param <T> The type of the objects in the underlying {@link ResultStream} to be transformed into
  *            {@link QueryResponseMessage}s.
+ * @author Allard Buijze
+ * @author Jan Gallinkski
+ * @author John Hendrikx
+ * @since 5.0.0
  */
 @Internal
-public abstract class AbstractQueryResponseMessageStream<T> implements MessageStream<QueryResponseMessage> {
+public abstract class AbstractQueryResponseMessageStream<T> extends AbstractMessageStream<QueryResponseMessage> {
 
     private final ResultStream<T> stream;
-    private final AtomicReference<@Nullable Throwable> error = new AtomicReference<>();
-    private final AtomicReference<Runnable> callback = new AtomicReference<>(NO_OP_CALLBACK);
 
     /**
      * Constructs an instance of the AbstractQueryResponseMessageStream class with the provided result stream.
@@ -57,101 +54,34 @@ public abstract class AbstractQueryResponseMessageStream<T> implements MessageSt
      */
     protected AbstractQueryResponseMessageStream(ResultStream<T> stream) {
         this.stream = requireNonNull(stream, "The query result stream cannot be null.");
+
+        stream.onAvailable(this::signalProgress);
     }
 
     @Override
-    public Optional<MessageStream.Entry<QueryResponseMessage>> next() {
-        return Optional.ofNullable(stream.nextIfAvailable()).flatMap(this::toEntry);
-    }
+    protected FetchResult<Entry<QueryResponseMessage>> fetchNext() {
+        T next = stream.nextIfAvailable();
 
-    @Override
-    public Optional<Entry<QueryResponseMessage>> peek() {
-        return Optional.ofNullable(stream.peek()).flatMap(this::toEntry);
-    }
+        if (next != null) {
+            if (isError(next)) {
+                return FetchResult.error(createAxonException(next));
+            }
 
-    @Override
-    public void setCallback(Runnable callback) {
-        this.callback.set(callback);
-        stream.onAvailable(callback);
-    }
-
-    @Override
-    public Optional<Throwable> error() {
-        return errorIfPresent();
-    }
-
-    @Override
-    public boolean isCompleted() {
-        return hasError() || stream.isClosed();
-    }
-
-    @Override
-    public boolean hasNextAvailable() {
-        return !hasError() && stream.peek() != null;
-    }
-
-    /**
-     * Checks if there is an error in the stream by examining three sources:
-     * <ol>
-     *     <li>The error that has already been processed and stored</li>
-     *     <li>The underlying stream's error state</li>
-     *     <li>The next peeked message in the stream (if it's an error message)</li>
-     * </ol>
-     * A stream which contains an error should be considered completed.
-     *
-     * @return {@code true} if an error is detected from any source, {@code false} otherwise.
-     */
-    private boolean hasError() {
-        return errorIfPresent().isPresent();
-    }
-
-    /**
-     * Returns the error if present from any of three sources:
-     * <ol>
-     *     <li>The error that has already been processed and stored</li>
-     *     <li>The underlying stream's error state</li>
-     *     <li>The next peeked message in the stream (if it's an error message)</li>
-     * </ol>
-     *
-     * @return An {@link Optional} containing the error if present, or {@link Optional#empty()} if no error is detected.
-     */
-    private Optional<Throwable> errorIfPresent() {
-        // Check if we've already processed and stored an error
-        if (error.get() != null) {
-            return Optional.of(error.get());
+            return FetchResult.of(new SimpleEntry<>(buildResponseMessage(next), Context.empty()));
         }
-        // Check if the underlying stream has an error
-        Optional<Throwable> streamError = stream.getError();
-        if (streamError.isPresent()) {
-            return streamError;
+
+        if (stream.getError().isPresent()) {
+            return FetchResult.error(stream.getError().orElseThrow());
         }
-        // Check if the first peeked message is an error
-        T peeked = stream.peek();
-        if (peeked != null && isError(peeked)) {
-            return Optional.of(createAxonException(peeked));
-        }
-        return Optional.empty();
+
+        return stream.isClosed() ? FetchResult.completed() : FetchResult.notReady();
     }
 
     @Override
-    public void close() {
+    protected void onCompleted() {
         if (!stream.isClosed()) {
             stream.close();
         }
-    }
-
-    private Optional<MessageStream.Entry<QueryResponseMessage>> toEntry(T t) {
-        if (isError(t)) {
-            error.set(createAxonException(t));
-            close();
-            callback.get().run();
-            return Optional.empty();
-        }
-
-        return Optional.of(new SimpleEntry<>(
-                buildResponseMessage(t),
-                Context.empty()
-        ));
     }
 
     abstract QueryResponseMessage buildResponseMessage(T t);
