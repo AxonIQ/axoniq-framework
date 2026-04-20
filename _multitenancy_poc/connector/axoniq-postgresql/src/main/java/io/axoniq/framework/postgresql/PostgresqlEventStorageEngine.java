@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.Registration;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.tx.TransactionalExecutor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -371,11 +372,25 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     /**
      * Constructs a new instance.
      *
+     * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param converter  an event converter for converting the payload to bytes, cannot be {@code null}
+     */
+    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter) {
+        this(dataSource, converter, EntitlementManager.INSTANCE);
+        EntitlementManager.INSTANCE.registerAddon(PostgresAxoniqAddon.class);
+    }
+
+    /**
+     * Package-private constructor for testing, allowing injection of an alternative {@link EntitlementManager}.
+     * Production code must use {@link #PostgresqlEventStorageEngine(DataSource, EventConverter)}, which
+     * uses {@link EntitlementManager#INSTANCE} directly.
+     *
      * @param dataSource         a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter          an event converter for converting the payload to bytes, cannot be {@code null}
-     * @param entitlementManager the entitlement manager to verify license entitlement before allowing appends, cannot be {@code null}
+     * @param entitlementManager the entitlement manager to use, cannot be {@code null}
      */
-    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter, EntitlementManager entitlementManager) {
+    @Internal
+    PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter, EntitlementManager entitlementManager) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
         this.entitlementManager = Objects.requireNonNull(entitlementManager, "entitlementManager");
