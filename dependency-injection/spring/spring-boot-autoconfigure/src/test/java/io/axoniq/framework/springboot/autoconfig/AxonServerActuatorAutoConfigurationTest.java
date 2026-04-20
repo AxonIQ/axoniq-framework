@@ -63,7 +63,10 @@ class AxonServerActuatorAutoConfigurationTest {
     @Test
     void axonServerHealthIndicatorIsNotCreatedForAxonServerDisabled() {
         testApplicationContext.withUserConfiguration(TestContext.class)
-                              .withPropertyValues("axon.axonserver.enabled:false")
+                              .withPropertyValues(
+                                      "axon.axonserver.enabled:false",
+                                      "axon.postgresql.enabled:false"
+                              )
                               .run(context -> {
                                   assertThat(context).doesNotHaveBean(AxonServerHealthIndicator.class);
                                   assertThat(context).doesNotHaveBean(AxonServerStatusAggregator.class);
