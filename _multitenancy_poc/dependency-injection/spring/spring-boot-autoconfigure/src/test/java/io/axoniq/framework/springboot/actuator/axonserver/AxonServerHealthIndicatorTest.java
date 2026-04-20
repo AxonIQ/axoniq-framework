@@ -28,7 +28,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -65,7 +64,7 @@ class AxonServerHealthIndicatorTest {
         testSubject.doHealthCheck(healthBuilder);
 
         Health result = healthBuilder.build();
-        assertEquals(Status.UP.getCode(), result.getStatus().getCode());
+        assertThat(result.getStatus().getCode()).isEqualTo(Status.UP.getCode());
 
         Map<String, Object> resultDetails = result.getDetails();
         assertThat(resultDetails).isNotEmpty();
@@ -95,7 +94,7 @@ class AxonServerHealthIndicatorTest {
         testSubject.doHealthCheck(healthBuilder);
 
         Health result = healthBuilder.build();
-        assertEquals(HealthStatus.WARN, result.getStatus());
+        assertThat(result.getStatus()).isEqualTo(HealthStatus.WARN);
 
         Map<String, Object> resultDetails = result.getDetails();
         assertThat(resultDetails).isNotEmpty();
