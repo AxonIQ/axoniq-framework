@@ -183,18 +183,27 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
                                  var workflowConfiguration = configuration.configuration();
 
+                                 var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
+
+                                 if (workflowExecutionRepository.findById(workflowId).isPresent()) {
+                                     logger.warn(
+                                             "A workflow with id '{}' is already running; ignoring new start request triggered by event '{}'. "
+                                                     + "If this was intentional, associate each parallel workflow with a different idProperty so every instance gets a unique id.",
+                                             workflowId, eventMessage.type().qualifiedName()
+                                     );
+                                     return;
+                                 }
+
                                  var payload = Objects.requireNonNull(eventMessage.payloadAs(
                                          new TypeReference<Map<String, Object>>() {
                                          },
                                          processingContext.component(Converter.class)
                                  ), "Error converting initial payload");
-                                 var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
 
                                  var workflowContext = workflowConfiguration
                                          .workflowContextFactory()
                                          .createContext(payload, workflowId, processingContext, workflowConfiguration);
 
-                                 // avoid multiple workflows for the same workflow id.
                                  var execution = workflowExecutionRepository.save(workflowId, () -> {
                                      logger.debug("Creating a new workflow with '{}'", eventMessage.payload());
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);

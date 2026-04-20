@@ -315,7 +315,9 @@ if (!result.success()) {
 == Parallel workflows
 
 Multiple workflows can be triggered by the same event, each handling a different concern independently.
-When an `OrderPlaced` event is published, both workflows start in parallel — each with its own state and lifecycle:
+When an `OrderPlaced` event is published, both workflows start in parallel — each with its own state and lifecycle.
+
+Workflow IDs must be unique across all running workflows. If two workflow definitions derive the same ID from the triggering event, only the first one starts — the second is ignored and a warning is logged. To run genuinely parallel workflows on the same event, associate each with a different `idProperty`:
 
 [source,java]
 .OrderFulfillmentWorkflow — handles stock and shipping
@@ -332,7 +334,7 @@ public void execute(SimpleWorkflowContext ctx) {
 [source,java]
 .CustomerNotificationWorkflow — handles all customer communication
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+@Workflow(idProperty = "customerId", startOnEvent = "OrderPlaced")
 public void execute(SimpleWorkflowContext ctx) {
     ctx.awaitExecute("sendConfirmationEmail",
             payload("email", ctx.workflowPayload().get("email"),
@@ -348,7 +350,7 @@ public void execute(SimpleWorkflowContext ctx) {
 }
 ----
 
-Both workflows receive the same `OrderPlaced` event payload, but they run independently — each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected.
+Both workflows receive the same `OrderPlaced` event payload, but they run independently — each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected. Because each workflow binds to a different ID property (`orderId` vs. `customerId`), both start independently even though they react to the same event.
 
 ++++
 <div class="et-player" data-autoplay>

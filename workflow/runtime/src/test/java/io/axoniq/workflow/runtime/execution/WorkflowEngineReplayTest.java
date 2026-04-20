@@ -21,9 +21,13 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -33,6 +37,7 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
@@ -48,12 +53,14 @@ class WorkflowEngineReplayTest {
 
     private WorkflowEngine workflowEngine;
     private WorkflowExecutionRepository workflowExecutionRepository;
+    private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
 
     @BeforeEach
     void setUp() {
         workflowExecutionRepository = spy(new InMemoryWorkflowExecutionRepository());
+        workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
         workflowEngine = new WorkflowEngine(
-                mock(WorkflowConfigurationRegistry.class),
+                workflowConfigurationRegistry,
                 workflowExecutionRepository
         );
     }
@@ -159,5 +166,40 @@ class WorkflowEngineReplayTest {
         execution.execute(i -> {
         });
         assertThat(execution.isExecutable()).isTrue();
+    }
+
+    @Test
+    void duplicateWorkflowIdStartRequestIsIgnored() {
+        String workflowId = "dup-id";
+
+        // Pre-register a running workflow under "dup-id"
+        WorkflowExecution existing = mock(WorkflowExecution.class);
+        workflowExecutionRepository.save(workflowId, () -> existing);
+        clearInvocations(workflowExecutionRepository);
+
+        // A configuration that matches the incoming event and resolves to the same id
+        WorkflowConfiguration<?> configuration = mock(WorkflowConfiguration.class);
+        WorkflowIdProvider idProvider = event -> workflowId;
+        when(configuration.workflowIdProvider()).thenReturn(idProvider);
+
+        QualifiedName eventName = new QualifiedName("OrderPlaced");
+        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration(e -> true, configuration)));
+
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(eventName));
+
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+
+        workflowEngine.handle(eventMessage, processingContext);
+
+        // No new workflow is created for the duplicate id
+        verify(workflowExecutionRepository, never()).save(eq(workflowId), any());
+        verify(configuration, never()).workflowExecutionFactory();
+        verify(configuration, never()).workflowContextFactory();
+
+        // The pre-existing workflow still receives the event through the routing loop
+        verify(existing).onEvent(eventMessage, processingContext);
     }
 }
