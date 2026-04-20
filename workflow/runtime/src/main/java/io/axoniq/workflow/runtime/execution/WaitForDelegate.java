@@ -135,7 +135,11 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                             );
                         },
                         CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                ).exceptionally(e -> {
+                );
+                // Attach the cancellation side-effect handler to the upstream future so that
+                // completeExceptionally on the registered future (e.g. from cancelAllRunningSteps)
+                // fires the handler immediately instead of waiting for the delayed runnable.
+                timeoutFuture.exceptionally(e -> {
                     workflowExecution.removeRunningStep(stepName);
                     if (isCancellation(e)) {
                         var terminationCause = unwrapCancellation(e);
