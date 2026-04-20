@@ -1,0 +1,9 @@
+== Advanced framework
+
+[cols="<,<"]
+|===
+|Release Type |Version
+
+|**Major** |xref:major-releases.adoc#release_5_1[5.1]
+|**Minor** |xref:minor-releases.adoc#release_5_1[5.1]
+|===
