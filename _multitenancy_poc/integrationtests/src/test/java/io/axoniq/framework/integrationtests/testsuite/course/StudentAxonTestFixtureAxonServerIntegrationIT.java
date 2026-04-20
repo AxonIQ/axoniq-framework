@@ -1,0 +1,143 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package io.axoniq.framework.integrationtests.testsuite.course;
+
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.integrationtests.testsuite.course.commands.CreateCourse;
+import org.axonframework.integrationtests.testsuite.course.events.CourseCreated;
+import org.axonframework.integrationtests.testsuite.course.module.CreateCourseConfiguration;
+import org.axonframework.test.fixture.AxonTestFixture;
+import org.junit.jupiter.api.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.UUID;
+
+class StudentAxonTestFixtureAxonServerIntegrationIT {
+
+    protected static final Logger logger = LoggerFactory.getLogger(StudentAxonTestFixtureAxonServerIntegrationIT.class);
+
+    private static final AxonServerContainer container = new AxonServerContainer(
+            "docker.axoniq.io/axoniq/axonserver:2025.2.0")
+            .withAxonServerHostname("localhost")
+            .withDevMode(true)
+            .withReuse(true);
+
+    private AxonTestFixture fixture;
+
+    @BeforeAll
+    static void beforeAll() {
+        container.start();
+    }
+
+    @AfterAll
+    static void afterAll() {
+        container.stop();
+    }
+
+    @BeforeEach
+    void setUp() {
+        fixture = AxonTestFixture.with(testConfigurer());
+    }
+
+    @AfterEach
+    void tearDown() {
+        fixture.stop();
+    }
+
+    private EventSourcingConfigurer testConfigurer() {
+        container.start();
+        var configurer = EventSourcingConfigurer.create();
+        try {
+            AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
+                                                               container.getHttpPort(),
+                                                               "default",
+                                                               AxonServerContainerUtils.DCB_CONTEXT);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
+                    container.getHttpPort());
+        AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
+        axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
+        configurer.componentRegistry(cr -> cr.registerComponent(
+                AxonServerConfiguration.class,
+                c -> axonServerConfiguration
+        ));
+        return CreateCourseConfiguration.configure(configurer);
+    }
+
+    @RepeatedTest(5)
+    void axonTestFixtureWorksWithAxonServer() {
+        var courseId = UUID.randomUUID().toString();
+
+        fixture.given()
+               .when()
+               .command(new CreateCourse(courseId))
+               .then()
+               .success()
+               .events(new CourseCreated(courseId));
+    }
+
+    @RepeatedTest(5)
+    void axonTestFixtureWorksWithAxonServerShutdown() {
+        var courseId = UUID.randomUUID().toString();
+
+        fixture.given()
+               .when()
+               .command(new CreateCourse(courseId))
+               .then()
+               .success()
+               .events(new CourseCreated(courseId));
+    }
+
+    @Test
+    void axonTestFixtureRecordsCommandWithNonSerializedPayload() {
+        var courseId = UUID.randomUUID().toString();
+        var command = new CreateCourse(courseId);
+
+        fixture.given()
+               .when()
+               .command(command)
+               .then()
+               .success()
+               .commands(command);
+    }
+
+    @Test
+    void axonTestFixtureRecordsCommandPayloadSatisfyingCustomAssertion() {
+        var courseId = UUID.randomUUID().toString();
+
+        fixture.given()
+               .when()
+               .command(new CreateCourse(courseId))
+               .then()
+               .success()
+               .commandsSatisfy(commands -> {
+                   Assertions.assertEquals(1, commands.size());
+                   var payload = commands.getFirst().payload();
+                   Assertions.assertInstanceOf(CreateCourse.class, payload);
+                   Assertions.assertEquals(courseId, ((CreateCourse) payload).courseId());
+               });
+    }
+}
