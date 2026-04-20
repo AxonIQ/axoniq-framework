@@ -33,13 +33,20 @@
 
     <properties>
         <revision>5.1.0-SNAPSHOT</revision>
+
+        <!-- Global Axoniq version properties -->
         <axon-framework.version>5.1.0-SNAPSHOT</axon-framework.version>
+        <axoniq-entitlement-manager.version>1.0.0-RC4</axoniq-entitlement-manager.version>
+        <axonserver-connector-java.version>2026.0.0</axonserver-connector-java.version>
 
         <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <!-- Main -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <maven-enforcer.allow-spring-dependencies>false</maven-enforcer.allow-spring-dependencies>
+
         <sonar.coverage.jacoco.xmlReportPaths>
             ${project.basedir}/coverage-report/target/site/jacoco-aggregate/jacoco.xml,
             ${project.basedir}/../coverage-report/target/site/jacoco-aggregate/jacoco.xml
@@ -70,14 +77,15 @@
         <module>axoniq-framework-bom</module>
 
         <module>connector/axoniq-postgresql</module>
-        <module>connector/axoniq-server-connector</module>
+        <module>connector/axon-server-connector</module>
 
         <module>dependency-injection/spring</module>
 
         <module>integrationtests</module>
 
-        <module>messaging/axoniq-distributed-messaging</module>
         <module>messaging/axoniq-dead-letter</module>
+        <module>messaging/axoniq-distributed-messaging</module>
+        <module>messaging/axoniq-event-streaming</module>
 
         <module>testing/axoniq-testcontainer</module>
     </modules>
@@ -128,7 +136,6 @@
                 <executions>
                     <execution>
                         <id>enforce-java</id>
-                        <phase>deploy</phase>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -141,6 +148,28 @@
                                     <version>3.9</version>
                                 </requireMavenVersion>
                             </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>enforce-banned-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${maven-enforcer.allow-spring-dependencies}</skip>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>org.springframework</exclude>
+                                        <exclude>org.springframework.boot</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <!-- allow any spring dependency with test scope -->
+                                        <include>org.springframework:*:*:*:test</include>
+                                    </includes>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
                         </configuration>
                     </execution>
                 </executions>
@@ -169,6 +198,36 @@
                     <publishingServerId>central</publishingServerId>
                     <excludeArtifacts>axoniq-integrationtests</excludeArtifacts>
                 </configuration>
+            </plugin>
+
+            <!--
+                Flattens the effective POM before deployment so that CI-friendly version placeholders
+                (such as ${revision}) are resolved to concrete values.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.7.3</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
         </plugins>

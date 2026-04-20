@@ -18,14 +18,14 @@
 
 package io.axoniq.framework.integrationtests.testsuite.course;
 
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.integrationtests.testsuite.course.events.CourseCreated;
 import org.axonframework.integrationtests.testsuite.course.commands.CreateCourse;
+import org.axonframework.integrationtests.testsuite.course.events.CourseCreated;
 import org.axonframework.integrationtests.testsuite.course.module.CreateCourseConfiguration;
 import org.axonframework.test.fixture.AxonTestFixture;
-import org.axonframework.test.server.AxonServerContainer;
-import org.axonframework.test.server.AxonServerContainerUtils;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -54,11 +54,16 @@
             </dependency>
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
-                <artifactId>axoniq-server-connector</artifactId>
+                <artifactId>axon-server-connector</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- Axoniq Framework: Messaging -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-dead-letter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-distributed-messaging</artifactId>
@@ -66,7 +71,7 @@
             </dependency>
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
-                <artifactId>axoniq-dead-letter</artifactId>
+                <artifactId>axoniq-event-streaming</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -80,6 +85,13 @@
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Axoniq Framework: Test -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-testcontainer</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

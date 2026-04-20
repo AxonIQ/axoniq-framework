@@ -283,8 +283,8 @@ public class InMemorySequencedDeadLetterQueue<M extends Message> implements Sequ
     }
 
     private static String toIdentifier(Object sequenceIdentifier) {
-        return sequenceIdentifier instanceof String
-                ? (String) sequenceIdentifier
+        return (sequenceIdentifier instanceof String identifier)
+                ? identifier
                 : Integer.toString(sequenceIdentifier.hashCode());
     }
 
