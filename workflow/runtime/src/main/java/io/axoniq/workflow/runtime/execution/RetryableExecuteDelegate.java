@@ -189,6 +189,23 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
 
             var retryInfo = new StepRetryInfo(attempt, retryPolicy.maxRetries(), error);
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
+            try {
+                workflowExecution.awaitStateChange(s -> {
+                    var st = s.getStep(stepName);
+                    if (st.status().isTerminal()) {
+                        return true;
+                    }
+                    return st.status() == StepStatus.RETRYING
+                            && st.result() instanceof StepRetryInfo r
+                            && r.attempt() == attempt;
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
+                return;
+            }
 
             Instant retryReadyAt = computeRetryReadyAt(retryPolicy, attempt, clock.instant());
             scheduleRetryAttempt(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,

@@ -177,7 +177,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                             } else {
                                 if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                                     // FIXME - This is where we should publish using an append condition
-                                    timeoutHandler.onTimeout(stepName, eventNameCustomizer);
+                                    workflowExecution.appendTask(
+                                            i -> timeoutHandler.onTimeout(stepName, eventNameCustomizer));
                                 } else if (isCancellation(e)) {
                                     var terminationCause = unwrapCancellation(e);
                                     // FIXME - This is where we should publish using an append condition
@@ -186,7 +187,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                     });
                                 } else {
                                     // FIXME - This is where we should publish using an append condition
-                                    failureHandler.onFailure(stepName, e, eventNameCustomizer);
+                                    workflowExecution.appendTask(
+                                            i -> failureHandler.onFailure(stepName, e, eventNameCustomizer));
                                 }
                             }
                         });
