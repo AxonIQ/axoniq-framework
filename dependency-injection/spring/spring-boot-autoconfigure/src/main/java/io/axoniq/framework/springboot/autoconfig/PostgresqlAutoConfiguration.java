@@ -38,10 +38,10 @@ import org.springframework.context.annotation.Bean;
  * {@code axon.postgresql.enabled} property to {@code false}.
  *
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 5.1.0
  */
 @AutoConfiguration(
-        afterName = "org.axonframework.extension.springboot.autoconfig.AxonServerAutoConfiguration",
+        afterName = "io.axoniq.framework.springboot.autoconfig.AxonServerAutoConfiguration",
         beforeName = "org.axonframework.extension.springboot.autoconfig.JpaEventStoreAutoConfiguration"
 )
 @ConditionalOnClass(PostgresqlEventStorageEngine.class)
