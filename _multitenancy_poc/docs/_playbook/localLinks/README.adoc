@@ -1,0 +1,20 @@
+= Local links
+
+This folder contains local installations of related repositories on specific branches.
+For each required related repository there is a symbolic link as a placeholder, pointing to a sibling of the repository root.
+
+In case you don't have the repositories checked out at these locations, you can run `sh update.sh` in this folder to clone or update them.
+You can switch branches by editing the file.
+
+This allows for commits over all repositories at once, for structural changes or updates.
+In addition, it will allow you to test changes out easily.
+
+We are relying on https git URLs here, so make sure to setup a proper git credential helper to access the repositories before running `sh update.sh`.
+This depends on your local setup, you can for example create a Github access token and add the following line to your `~/.git-credentials` file:
+
+[source]
+----
+https://GITHUB_USERNAME:GITHUB_TOKEN@github.com
+----
+
+After updating, you can build the documentation by running `npx antora playbook.yaml` in the root of the repository.
