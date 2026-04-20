@@ -20,8 +20,6 @@ package io.axoniq.framework.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import io.axoniq.license.entitlement.EnforcingEntitlementManager;
-import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.jdbc.ConnectionExecutor;
 import org.axonframework.common.jdbc.ConnectionProvider;
 import org.axonframework.conversion.CachingSupplier;
@@ -34,7 +32,6 @@ import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransact
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.mockito.Mockito;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
@@ -50,12 +47,10 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
     private static DataSource dataSource;
 
     private static PostgresqlEventStorageEngine engine;
-    private static EntitlementManager entitlementManager;
 
     @SuppressWarnings("resource")
     @BeforeAll
     static void buildEngine() {
-        entitlementManager = Mockito.mock(EnforcingEntitlementManager.class);
         postgresContainer = new PostgreSQLContainer("postgres:16.2")
             .withDatabaseName("testdb")
             .withUsername("test")
@@ -89,7 +84,7 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
     @Override
     protected PostgresqlEventStorageEngine getStorageEngine(EventConverter converter) {
         if (engine == null) {
-            engine = new PostgresqlEventStorageEngine(dataSource, converter, entitlementManager);
+            engine = new PostgresqlEventStorageEngine(dataSource, converter);
         }
 
         return engine;

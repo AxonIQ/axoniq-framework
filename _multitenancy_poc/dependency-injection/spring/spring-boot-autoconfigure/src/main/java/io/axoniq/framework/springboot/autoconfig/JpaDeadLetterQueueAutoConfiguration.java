@@ -63,7 +63,7 @@ import org.springframework.context.annotation.Bean;
                 "org.axonframework.extension.springboot.autoconfig.ConverterAutoConfiguration"
         }
 )
-@ConditionalOnClass(EntityManagerFactory.class)
+@ConditionalOnClass({EntityManagerFactory.class, SequencedDeadLetterQueueFactory.class})
 @ConditionalOnBean(EntityManagerFactory.class)
 public class JpaDeadLetterQueueAutoConfiguration {
 
