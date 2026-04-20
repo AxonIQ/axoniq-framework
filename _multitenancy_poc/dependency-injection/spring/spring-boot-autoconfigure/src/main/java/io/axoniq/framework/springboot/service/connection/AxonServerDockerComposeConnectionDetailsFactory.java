@@ -32,7 +32,8 @@ import org.springframework.boot.docker.compose.service.connection.DockerComposeC
  * @author Allard Buijze
  * @since 4.9.0
  */
-public class AxonServerDockerComposeConnectionDetailsFactory extends DockerComposeConnectionDetailsFactory<AxonServerConnectionDetails> {
+public class AxonServerDockerComposeConnectionDetailsFactory
+        extends DockerComposeConnectionDetailsFactory<AxonServerConnectionDetails> {
 
     private static final Logger logger = LoggerFactory.getLogger(AxonServerDockerComposeConnectionDetailsFactory.class);
 

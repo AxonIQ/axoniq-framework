@@ -31,16 +31,19 @@ import org.springframework.boot.testcontainers.service.connection.ContainerConne
  * @author Allard Buijze
  * @since 4.9.0
  */
-public class AxonServerTestContainerConnectionDetailsFactory extends ContainerConnectionDetailsFactory<AxonServerContainer, AxonServerConnectionDetails> {
+public class AxonServerTestContainerConnectionDetailsFactory
+        extends ContainerConnectionDetailsFactory<AxonServerContainer, AxonServerConnectionDetails> {
 
     public AxonServerTestContainerConnectionDetailsFactory() {
         super(ContainerConnectionDetailsFactory.ANY_CONNECTION_NAME,
-              "org.axonframework.test.server.AxonServerContainer",
-              "org.axonframework.axonserver.connector.AxonServerConnectionManager");
+              "io.axoniq.framework.testcontainer.AxonServerContainer",
+              "io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager");
     }
 
     @Override
-    protected AxonServerConnectionDetails getContainerConnectionDetails(ContainerConnectionSource<AxonServerContainer> source) {
+    protected AxonServerConnectionDetails getContainerConnectionDetails(
+            ContainerConnectionSource<AxonServerContainer> source
+    ) {
         return new AxonServerContainerConnectionDetails(source);
     }
 
