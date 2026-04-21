@@ -26,6 +26,7 @@
     <logger name="io.axoniq.framework" level="DEBUG"/>
     <logger name="io.axoniq.axonserver" level="INFO"/>
     <logger name="org.axonframework" level="DEBUG"/>
+    <logger name="com.tngtech.archunit" level="INFO"/>
 
     <root level="INFO">
         <appender-ref ref="STDOUT" />
