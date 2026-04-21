@@ -1,0 +1,67 @@
+name: Main - Test, Build, and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Test and Build on JDK ${{ matrix.java-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - java-version: 21
+            sonar-enabled: true
+            deploy-enabled: true
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v5.2.0
+        with:
+          distribution: "zulu"
+          java-version: ${{ matrix.java-version }}
+          cache: "maven"
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+
+      - name: Import GPG key
+        if: matrix.deploy-enabled
+        run: |
+          echo "${{ secrets.SONATYPE_GPG_KEY }}" | base64 --decode | gpg --batch --import
+          gpg --list-secret-keys --keyid-format LONG
+        env:
+          GPG_TTY: $(tty)
+
+      - name: Test and Build
+        if: ${{ !matrix.sonar-enabled }}
+        run: |
+          ./mvnw -B -U -Dstyle.color=always -Possrh clean verify
+
+      - name: Test and Build with Coverage reports
+        if: matrix.sonar-enabled
+        run: |
+          ./mvnw -B -U -Dstyle.color=always -Dcoverage clean verify
+
+      - name: Sonar Analysis
+        if: ${{ success() && matrix.sonar-enabled }}
+        run: ./mvnw -B -Dstyle.color=always org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=AxonIQ_console-framework-client
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.CONSOLE_SONAR_TOKEN }}
+
+      - name: Deploy to Sonatype
+        if: matrix.deploy-enabled
+        run: |
+          ./mvnw -B -U -Dstyle.color=always -Prelease -Psign deploy -DskipTests=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
+          MAVEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASS }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.SONATYPE_GPG_PASSWORD }}
