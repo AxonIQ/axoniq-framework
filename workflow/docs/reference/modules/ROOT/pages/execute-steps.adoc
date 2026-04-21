@@ -137,7 +137,7 @@ See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitFor
 
 [IMPORTANT]
 ====
-If your workflow body returns while a step started with `execute(...)` is still running, the engine cancels that step and writes its `CANCELLED` event before the workflow transitions to `COMPLETED`.
+If your workflow body returns while an async step started with `execute(...)` is still running, the engine cancels that step and writes its `CANCELLED` event before the workflow transitions to `COMPLETED`.
 If you need the workflow to wait for the step's real result, call `.await()` on the returned `WorkflowStepResult` (or use `awaitExecute` / `allMatch` / `anyMatch`).
 See xref:workflow-lifecycle.adoc#complete-with-running-steps[Normal completion with running steps].
 ====
