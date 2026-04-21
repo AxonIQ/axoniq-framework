@@ -152,10 +152,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                  processingContext));
                     break;
                 case FAILED:
-                    Throwable error = eventMessage.payloadAs(Throwable.class,
-                                                             processingContext.component(Converter.class));
+                    Throwable stepCause;
+                    try {
+                        stepCause = eventMessage.payloadAs(Throwable.class, processingContext.component(Converter.class));
+                    } catch (Exception e) {
+                        stepCause = null;
+                    }
                     addStep(WorkflowStep.failed(stepName,
-                                                error,
+                                                stepCause,
                                                 eventMessage.timestamp(),
                                                 processingContext));
                     break;
@@ -199,9 +203,15 @@ public class EventSourcedWorkflowState implements WorkflowState {
                              return;
                          }
                          final Throwable terminationCause;
-                         if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
-                                 && eventPayload instanceof Throwable t) {
-                             terminationCause = t;
+                         if (status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED) {
+                             Throwable cause;
+                             try {
+                                 cause = eventMessage.payloadAs(Throwable.class, processingContext.component(Converter.class));
+                             } catch (Exception e) {
+                                 // payload is not a throwable
+                                 cause = null;
+                             }
+                             terminationCause = cause;
                          } else {
                              terminationCause = null;
                          }
@@ -225,11 +235,19 @@ public class EventSourcedWorkflowState implements WorkflowState {
         MetadataUtils.payloadReducer(eventMessage.metadata()).ifPresent(reducerName -> {
             if (PayloadReducer.isDefault(reducerName)) {
                 var resultReducer = PayloadReducer.byName(reducerName);
-                Map<String, Object> stepPayload = eventMessage.payloadAs(new TypeReference<>() {
-                }, processingContext.component(Converter.class));
-                var result = resultReducer.apply(this.payload, stepPayload);
-                logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
-                this.payload = result;
+                Map<String, Object> stepPayload;
+                try {
+                    stepPayload = eventMessage.payloadAs(new TypeReference<>() {
+                    }, processingContext.component(Converter.class));
+                } catch (Exception e) {
+                    logger.debug("Could not convert payload to map for reducer {}. Skipping payload update.", reducerName, e);
+                    stepPayload = null;
+                }
+                if (stepPayload != null) {
+                    var result = resultReducer.apply(this.payload, stepPayload);
+                    logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
+                    this.payload = result;
+                }
             }
         });
     }
