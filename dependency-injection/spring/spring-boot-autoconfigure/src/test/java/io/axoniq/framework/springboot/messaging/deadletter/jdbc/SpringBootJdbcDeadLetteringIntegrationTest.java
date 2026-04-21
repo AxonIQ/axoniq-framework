@@ -56,6 +56,7 @@ import javax.sql.DataSource;
  */
 @SpringBootTest(properties = {
         "axon.axonserver.enabled=false",
+        "axon.postgresql.enabled=false",
         "spring.main.banner-mode=off",
         "spring.datasource.generate-unique-name=true"
 })

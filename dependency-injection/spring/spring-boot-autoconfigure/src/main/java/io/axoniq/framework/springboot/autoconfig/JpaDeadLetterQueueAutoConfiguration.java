@@ -21,6 +21,7 @@ package io.axoniq.framework.springboot.autoconfig;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.Converter;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import org.axonframework.extension.springboot.util.RegisterDefaultEntities;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
@@ -65,6 +66,9 @@ import org.springframework.context.annotation.Bean;
 )
 @ConditionalOnClass({EntityManagerFactory.class, SequencedDeadLetterQueueFactory.class})
 @ConditionalOnBean(EntityManagerFactory.class)
+@RegisterDefaultEntities(packages = {
+        "io.axoniq.framework.messaging.eventhandling.deadletter.jpa",
+})
 public class JpaDeadLetterQueueAutoConfiguration {
 
     /**
