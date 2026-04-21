@@ -25,9 +25,9 @@
         </encoder>
     </appender>
 
-    <logger name="io.axoniq.framework" level="DEBUG"/>
+    <logger name="io.axoniq.framework" level="INFO"/>
     <logger name="io.axoniq.axonserver" level="INFO"/>
-    <logger name="org.axonframework" level="DEBUG"/>
+    <logger name="org.axonframework" level="INFO"/>
 
     <root level="INFO">
         <appender-ref ref="STDOUT" />

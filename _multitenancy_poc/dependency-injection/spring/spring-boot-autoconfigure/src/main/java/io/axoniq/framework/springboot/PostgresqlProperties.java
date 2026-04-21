@@ -18,8 +18,6 @@
 
 package io.axoniq.framework.springboot;
 
-import io.axoniq.framework.postgresql.PostgresqlConfigurationEnhancer;
-import io.axoniq.framework.postgresql.PostgresqlEventStorageEngine;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -36,8 +34,9 @@ public class PostgresqlProperties {
     /**
      * Whether the PostgreSQL extension is enabled.
      * <p>
-     * When set to {@code false}, the service-loaded {@link PostgresqlConfigurationEnhancer} is disabled, preventing the
-     * {@link PostgresqlEventStorageEngine} from being registered as the
+     * When set to {@code false}, the service-loaded
+     * {@link io.axoniq.framework.postgresql.PostgresqlConfigurationEnhancer} is disabled, preventing the
+     * {@link io.axoniq.framework.postgresql.PostgresqlEventStorageEngine} from being registered as the
      * {@link org.axonframework.eventsourcing.eventstore.EventStorageEngine}. Defaults to {@code true}.
      */
     private boolean enabled = true;
