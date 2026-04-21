@@ -49,11 +49,11 @@ import org.springframework.test.context.ContextConfiguration;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * Reproducer for
@@ -78,7 +78,6 @@ class ShutdownDuringSleepIT {
     private static final String SLEEP_STEP = "cooldown";
     private static final Duration SLEEP_DURATION = Duration.ofSeconds(30);
     private static final Duration SHUTDOWN_BUDGET = Duration.ofSeconds(5);
-    private static final Duration SHUTDOWN_HARD_LIMIT = Duration.ofSeconds(20);
 
     @Autowired
     private ConfigurableApplicationContext applicationContext;
@@ -105,19 +104,16 @@ class ShutdownDuringSleepIT {
             assertThat(state.getStep(SLEEP_STEP).status()).isEqualTo(StepStatus.STARTED);
         });
 
-        long startNanos = System.nanoTime();
-        assertTimeoutPreemptively(SHUTDOWN_HARD_LIMIT, () -> applicationContext.close());
-        Duration elapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+        var closeFuture = CompletableFuture.runAsync(() -> applicationContext.close());
+
+        assertThat(closeFuture)
+                .as("Spring context close should complete within %s even while a %s sleep step is active",
+                    SHUTDOWN_BUDGET, SLEEP_DURATION)
+                .succeedsWithin(SHUTDOWN_BUDGET);
 
         var descriptor = new FilesystemStyleComponentDescriptor();
         PrettyPrintingRecordingEventStore.lastInstance().describeTo(descriptor);
         logger.info("Recorded events after shutdown:\n{}", descriptor.describe());
-
-        assertThat(elapsed)
-                .as("Spring context close took %s but should complete within %s " +
-                            "even while a %s sleep step is active",
-                    elapsed, SHUTDOWN_BUDGET, SLEEP_DURATION)
-                .isLessThan(SHUTDOWN_BUDGET);
     }
 
     @ContextConfiguration

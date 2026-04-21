@@ -183,7 +183,7 @@ public interface WorkflowExecution extends DescribableComponent {
      * event store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app
      * start. Safe to call from any thread.
      */
-    void signalInterruptAllRunningSteps();
+    void interrupt();
 
     /**
      * Cancel and remove a running step.

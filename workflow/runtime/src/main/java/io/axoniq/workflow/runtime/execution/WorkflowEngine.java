@@ -240,7 +240,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());
         for (var execution : executions) {
-            execution.signalInterruptAllRunningSteps();
+            execution.interrupt();
         }
         workflowExecutionRepository.clear();
     }
