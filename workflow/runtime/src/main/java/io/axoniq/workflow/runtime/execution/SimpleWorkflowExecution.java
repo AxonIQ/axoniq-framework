@@ -388,10 +388,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             if (cancelledSteps.isEmpty()) {
                 return;
             }
-            Predicate<WorkflowState> allTerminal = s -> cancelledSteps
+            Predicate<WorkflowState> allTerminal = workflowState -> cancelledSteps
                     .stream()
-                    .allMatch(stepName -> s.containsStep(stepName)
-                            && s.getStep(stepName).status().isTerminal());
+                    .allMatch(stepName -> workflowState.containsStep(stepName)
+                            && workflowState.getStep(stepName).status().isTerminal());
             // If every cancelled step is already terminal (e.g., the future had already
             // completed before we requested cancellation), there are no pending tasks
             // to wait for — awaitStateChange would block on an empty task queue.
