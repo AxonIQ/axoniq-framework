@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <!--
   ~ Copyright (c) 2010-2026. AxonIQ B.V.
   ~
@@ -18,27 +17,24 @@
   ~
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.axoniq.framework</groupId>
-        <artifactId>axoniq-framework-spring</artifactId>
+        <groupId>io.axoniq.framework.platform</groupId>
+        <artifactId>axoniq-platform-client-parent</artifactId>
         <version>${revision}</version>
     </parent>
 
-    <artifactId>axoniq-spring-boot-starter</artifactId>
+    <artifactId>axoniq-platform-spring-boot-starter</artifactId>
 
-    <name>Axoniq Framework - Spring Boot Starter</name>
+    <name>Axoniq Framework - Platform Client Spring Boot Starter</name>
     <description>
-        Starter bundling the Axoniq framework autoconfiguration for Spring Boot.
+        Starter bundling the Axoniq Platform autoconfiguration for Spring Boot.
     </description>
 
     <dependencies>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-spring-boot-autoconfigure</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <dependency>
             <groupId>io.axoniq.framework.platform</groupId>
             <artifactId>axoniq-platform-spring-boot-autoconfigure</artifactId>

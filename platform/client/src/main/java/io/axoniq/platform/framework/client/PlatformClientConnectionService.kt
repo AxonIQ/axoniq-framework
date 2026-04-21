@@ -1,0 +1,70 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+ * Version September 2025 (the "License");
+ * The software is available under Non-Production Free License.
+ * Production use requires a paid license. See the License for the
+ * specific language governing permissions and limitations under
+ * the License.
+ *
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ *    https://www.axoniq.io/legal/terms-of-service
+ *
+ *
+ */
+
+package io.axoniq.platform.framework.client
+
+import io.axoniq.platform.framework.api.ClientSettingsV2
+import io.axoniq.platform.framework.api.ClientStatus
+import io.github.oshai.kotlinlogging.KotlinLogging
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * Service that holds the client settings. See [PlatformClientConnectionObserver] for more information.
+ */
+class PlatformClientConnectionService {
+    private val observers = CopyOnWriteArrayList<PlatformClientConnectionObserver>()
+    private var clientStatus: ClientStatus = ClientStatus.PENDING
+    private var settings: ClientSettingsV2? = null
+    private val logger = KotlinLogging.logger { }
+
+    fun clearSettings() {
+        logger.debug { "Clearing client settings" }
+        if (settings != null) {
+            settings = null
+        }
+        observers.forEach { it.onDisconnected() }
+    }
+
+    fun subscribeToSettings(observer: PlatformClientConnectionObserver) {
+        logger.debug { "Subscribing to client settings $observer" }
+        this.observers.add(observer)
+        if (settings != null) {
+            observer.onConnected(clientStatus, settings!!)
+        }
+    }
+
+    fun updateClientStatus(clientStatus: ClientStatus) {
+        logger.debug { "Client status changed to $clientStatus" }
+        this.clientStatus = clientStatus
+        if (settings != null) {
+            observers.forEach { it.onConnected(clientStatus, settings!!) }
+        }
+    }
+
+    fun notifyUnreachable(reason: PlatformClientConnectionObserver.UnreachableReason) {
+        logger.debug { "Notifying observers of unreachable: $reason" }
+        observers.forEach { it.onUnreachable(reason) }
+    }
+
+    fun onConnected(settings: ClientSettingsV2) {
+        clearSettings()
+        logger.debug { "Client settings changed to $settings" }
+        this.settings = settings
+        observers.forEach { it.onConnected(clientStatus, settings) }
+    }
+}

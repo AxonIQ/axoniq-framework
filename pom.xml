@@ -87,6 +87,8 @@
         <module>messaging/axoniq-distributed-messaging</module>
         <module>messaging/axoniq-event-streaming</module>
 
+        <module>platform</module>
+
         <module>testing/axoniq-testcontainer</module>
     </modules>
 

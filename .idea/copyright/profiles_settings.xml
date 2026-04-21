@@ -1,3 +1,7 @@
 <component name="CopyrightManager">
-  <settings default="Axoniq Framework" />
+  <settings default="Axoniq Framework">
+    <module2copyright>
+      <element module="All" copyright="Axoniq Framework" />
+    </module2copyright>
+  </settings>
 </component>
