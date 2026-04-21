@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -193,6 +194,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         logger.info("Workflow executed. Resulting workflow payload {}.", workflowPayload);
 
         if (!this.state().workflowStatus().isTerminal()) {
+            // Cancel any async steps still running so their CANCELLED events land
+            // while the workflow is still non-terminal (sendStepEvent rejects events
+            // once the workflow reaches a terminal state).
+            cancelAllRunningSteps(new StepCancellationException("Workflow completed"));
+
             sendWorkflowEvent(
                     completedWorkflow(this.workflowContext(),
                                       workflowName,
@@ -213,6 +219,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             case WorkflowFailedException wfe -> {
                 // if Events are already sent by TerminateDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
+                    // Mirror the completion path: cancel running async steps so their
+                    // terminal events land before the workflow itself becomes terminal.
+                    cancelAllRunningSteps(wfe);
                     sendWorkflowEvent(failedWorkflow(
                                               this.workflowContext(),
                                               workflowName,
@@ -229,6 +238,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             case WorkflowCancelledException wce -> {
                 // if Events are already sent by TerminateDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
+                    cancelAllRunningSteps(wce);
                     sendWorkflowEvent(
                             cancelledWorkflow(this.workflowContext(),
                                               workflowName,
@@ -244,6 +254,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
+                    cancelAllRunningSteps(new StepCancellationException("Workflow timed out"));
                     sendWorkflowEvent(timeoutWorkflow(
                                               this.workflowContext(),
                                               workflowName,
@@ -377,13 +388,18 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             if (cancelledSteps.isEmpty()) {
                 return;
             }
+            Predicate<WorkflowState> allTerminal = workflowState -> cancelledSteps
+                    .stream()
+                    .allMatch(stepName -> workflowState.containsStep(stepName)
+                            && workflowState.getStep(stepName).status().isTerminal());
+            // If every cancelled step is already terminal (e.g., the future had already
+            // completed before we requested cancellation), there are no pending tasks
+            // to wait for — awaitStateChange would block on an empty task queue.
+            if (allTerminal.test(this.state())) {
+                return;
+            }
             try {
-                awaitStateChange(s -> cancelledSteps
-                        .stream()
-                        .allMatch(stepName -> s.containsStep(stepName)
-                                && s.getStep(stepName).status().isTerminal()
-                        )
-                );
+                awaitStateChange(allTerminal);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

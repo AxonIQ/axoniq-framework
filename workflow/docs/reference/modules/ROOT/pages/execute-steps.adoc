@@ -135,6 +135,13 @@ var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
 
 See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitForEvent` results with `allMatch`, `anyMatch`, and `noneMatch`.
 
+[IMPORTANT]
+====
+If your workflow body returns while an async step started with `execute(...)` is still running, the engine cancels that step and writes its `CANCELLED` event before the workflow transitions to `COMPLETED`.
+If you need the workflow to wait for the step's real result, call `.await()` on the returned `WorkflowStepResult` (or use `awaitExecute` / `allMatch` / `anyMatch`).
+See xref:workflow-lifecycle.adoc#complete-with-running-steps[Normal completion with running steps].
+====
+
 == Kotlin DSL
 
 The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support:
