@@ -176,6 +176,16 @@ public interface WorkflowExecution extends DescribableComponent {
     void cancelAllRunningSteps(@Nullable Throwable cause);
 
     /**
+     * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
+     * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
+     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running
+     * step is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the
+     * event store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app
+     * start. Safe to call from any thread.
+     */
+    void signalInterruptAllRunningSteps();
+
+    /**
      * Cancel and remove a running step.
      *
      * @param stepName              name of the step.

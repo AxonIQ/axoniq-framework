@@ -391,6 +391,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
+    public void signalInterruptAllRunningSteps() {
+        runningSteps.cancelAll(new InterruptedException("Workflow engine shutdown"), s -> { });
+    }
+
+    @Override
     public void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning) {
         runningSteps.cancelAndRemove(stepName, mayInterruptIfRunning);
     }

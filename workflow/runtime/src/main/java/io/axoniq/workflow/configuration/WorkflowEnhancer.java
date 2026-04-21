@@ -30,12 +30,16 @@ import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.lifecycle.Phase;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BiConsumer;
 
 /**
  * Enhancer for registration of the workflow component.
@@ -83,11 +87,19 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                                    cfg -> new InMemoryWorkflowHistoryRepository());
 
         componentRegistry
-                .registerComponent(WorkflowEngine.class, cfg ->
-                        new WorkflowEngine(
-                                cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                cfg.getComponent(WorkflowExecutionRepository.class)
-                        )
+                .registerComponent(
+                        ComponentDefinition
+                                .ofType(WorkflowEngine.class)
+                                .withBuilder(cfg -> new WorkflowEngine(
+                                        cfg.getComponent(WorkflowConfigurationRegistry.class),
+                                        cfg.getComponent(WorkflowExecutionRepository.class)
+                                ))
+                                .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
+                                            (BiConsumer<Configuration, WorkflowEngine>) (cfg, engine) -> {
+                                                engine.shutdown();
+                                                cfg.getComponent(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR)
+                                                   .shutdownNow();
+                                            })
                 );
         componentRegistry
                 .registerComponent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(

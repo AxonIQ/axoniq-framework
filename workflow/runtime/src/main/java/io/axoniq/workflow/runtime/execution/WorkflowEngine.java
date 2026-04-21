@@ -227,8 +227,21 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
     /**
      * Shuts downs the engine and removes all running workflow executions.
+     * <p>
+     * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads
+     * parked in {@code sleepAsync} / {@code waitFor} / async {@code execute} can exit. This is an interrupt, not a
+     * cancellation: no {@code <Step>Cancelled} / {@code <Workflow>Cancelled} events are emitted, so the persisted
+     * event stream still reflects the most recent {@code <Step>Started} and the step resumes on the next app start.
+     * Without this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task
+     * executor) blocks on {@code close()} waiting for those threads to terminate. See issue #125.
      */
     public void shutdown() {
+        var executions = workflowExecutionRepository.findAll();
+        logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
+                    executions.size());
+        for (var execution : executions) {
+            execution.signalInterruptAllRunningSteps();
+        }
         workflowExecutionRepository.clear();
     }
 }
