@@ -28,10 +28,10 @@ import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngi
 import io.axoniq.framework.springboot.util.GrpcServerStub;
 import io.axoniq.framework.springboot.util.TcpUtils;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
-import org.axonframework.messaging.commandhandling.distributed.CommandBusConnector;
-import org.axonframework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
-import org.axonframework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
-import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
+import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
