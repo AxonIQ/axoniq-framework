@@ -15,9 +15,6 @@
 #
 #
 #
-io.axoniq.framework.springboot.autoconfig.AxonServerAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.AxonServerActuatorAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.DeadLetterQueueAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
-io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration
+org.springframework.boot.autoconfigure.service.connection.ConnectionDetailsFactory=\
+  io.axoniq.framework.springboot.service.connection.AxonServerDockerComposeConnectionDetailsFactory, \
+  io.axoniq.framework.springboot.service.connection.AxonServerTestContainerConnectionDetailsFactory

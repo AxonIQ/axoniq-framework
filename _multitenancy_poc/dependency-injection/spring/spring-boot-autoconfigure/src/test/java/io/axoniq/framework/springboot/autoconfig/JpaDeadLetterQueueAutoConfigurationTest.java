@@ -41,7 +41,11 @@ class JpaDeadLetterQueueAutoConfigurationTest {
     void setUp() {
         testContext = new ApplicationContextRunner()
                 .withUserConfiguration(TestContext.class)
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.eventstorage.jpa.polling-interval=0");
+                .withPropertyValues(
+                        "axon.axonserver.enabled=false",
+                        "axon.postgresql.enabled=false",
+                        "axon.eventstorage.jpa.polling-interval=0"
+                );
     }
 
     @Test
