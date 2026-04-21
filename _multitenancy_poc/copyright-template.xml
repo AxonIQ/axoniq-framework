@@ -1,24 +1,25 @@
 <!--
   ~ Copyright (c) 2010-2026. AxonIQ B.V.
   ~
-  ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
-  ~ Version September 2025 (the "License");
-  ~ The software is available under Non-Production Free License.
-  ~ Production use requires a paid license. See the License for the
-  ~ specific language governing permissions and limitations under
-  ~ the License.
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
   ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
   ~ You may not use this file except in compliance with the License.
+  ~
   ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
   ~
-  ~    https://www.axoniq.io/legal/terms-of-service
-  ~
-  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
   -->
 
 <component name="CopyrightManager">
     <copyright>
         <option name="notice"
-                value="Copyright (c) 2010-&amp;#36;today.year. AxonIQ B.V.&#10;&#10;Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,&#10;Version September 2025 (the &quot;License&quot;);&#10;The software is available under Non-Production Free License. &#10;Production use requires a paid license. See the License for the&#10;specific language governing permissions and limitations under&#10;the License.&#10;&#10;You may not use this file except in compliance with the License.&#10;You may obtain a copy of the License at:&#10;&#10;   https://www.axoniq.io/legal/terms-of-service&#10;&#10;"/>
+                value="Copyright (c) 2010-&amp;#36;today.year. AxonIQ B.V.&#10;&#10;Licensed under the AXONIQ TERMS OF SERVICE,&#10;Version 29 April 2026 (the &quot;License&quot;);&#10;&#10;The software is available for evaluation use without registration.&#10;Continued use beyond the evaluation period requires registration&#10;and a commercial license. See the License for the specific language&#10;governing permissions and limitations under the License.&#10;You may not use this file except in compliance with the License.&#10;&#10;You may obtain a copy of the License at:&#10; https://www.axoniq.io/legal/terms-of-service&#10;&#10;For licensing information and to register, visit:&#10; https://www.axoniq.io/pricing"/>
     </copyright>
 </component>
