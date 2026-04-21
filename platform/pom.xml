@@ -22,15 +22,12 @@
 
     <groupId>io.axoniq.platform</groupId>
     <artifactId>framework-client-parent</artifactId>
-    <version>2.0.5-SNAPSHOT</version>
+    <version>5.1.0-RC1</version>
 
     <modules>
         <module>framework-client-api</module>
-        <module>framework-client-messaging</module>
-        <module>framework-client-modelling</module>
-        <module>framework-client-eventsourcing</module>
+        <module>framework-client</module>
         <module>framework-client-spring-boot-starter</module>
-        <module>framework-client-all</module>
     </modules>
     <packaging>pom</packaging>
 
