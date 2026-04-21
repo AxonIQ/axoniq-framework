@@ -94,6 +94,19 @@
                 <artifactId>axoniq-testcontainer</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
+            <!--Axoniq Platform -->
+            <dependency>
+                <groupId>io.axoniq.platform</groupId>
+                <artifactId>framework-client-all</artifactId>
+                <version>${axoniq-platform-client.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.axoniq.platform</groupId>
+                <artifactId>framework-client-spring-boot-starter</artifactId>
+                <version>${axoniq-platform-client.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>

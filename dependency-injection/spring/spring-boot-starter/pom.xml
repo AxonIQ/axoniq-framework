@@ -33,6 +33,10 @@
         Starter bundling the Axoniq framework autoconfiguration for Spring Boot.
     </description>
 
+    <properties>
+        <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.axoniq.framework</groupId>

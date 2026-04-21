@@ -244,6 +244,12 @@
                 <version>${axoniq-entitlement-manager.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.axoniq.platform</groupId>
+                <artifactId>framework-client-spring-boot-starter</artifactId>
+                <version>${axoniq-platform-client.version}</version>
+            </dependency>
+
             <!-- Java -->
             <dependency>
                 <groupId>org.jspecify</groupId>
