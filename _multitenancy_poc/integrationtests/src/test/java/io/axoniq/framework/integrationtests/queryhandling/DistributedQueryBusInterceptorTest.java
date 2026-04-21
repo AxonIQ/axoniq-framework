@@ -19,13 +19,13 @@
 package io.axoniq.framework.integrationtests.queryhandling;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.integrationtests.queryhandling.AbstractQueryInterceptorTestSuite;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.queryhandling.QueryBus;
-import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBus;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
