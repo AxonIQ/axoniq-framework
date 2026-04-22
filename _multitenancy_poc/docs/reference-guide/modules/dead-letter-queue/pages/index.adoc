@@ -139,7 +139,7 @@ Configuration API::
 [source,java]
 ----
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
+import org.axonframework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 
 public class AxonConfig {
@@ -177,8 +177,8 @@ When this bean is present, it replaces the Spring Boot auto-configured factory f
 ----
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
+import org.axonframework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import org.axonframework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.context.annotation.Bean;
@@ -371,8 +371,8 @@ Process the oldest dead-letter sequence matching a message name::
 ----
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.QualifiedName;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
+import org.axonframework.messaging.deadletter.DeadLetter;
+import org.axonframework.messaging.deadletter.SequencedDeadLetterProcessor;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import java.util.concurrent.TimeUnit;
 
@@ -405,7 +405,7 @@ Process the oldest dead-letter sequence in the queue::
 [source,java]
 ----
 import org.axonframework.common.configuration.Configuration;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
+import org.axonframework.messaging.deadletter.SequencedDeadLetterProcessor;
 import java.util.concurrent.TimeUnit;
 
 public class DeadLetterProcessor {
@@ -431,7 +431,7 @@ Process all dead-letter sequences in the queue::
 [source,java]
 ----
 import org.axonframework.common.configuration.Configuration;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
+import org.axonframework.messaging.deadletter.SequencedDeadLetterProcessor;
 import java.util.concurrent.TimeUnit;
 
 public class DeadLetterProcessor {
@@ -469,7 +469,7 @@ The `DeadLetter` parameter is _nullable_: it is `null` during normal event handl
 
 [source,java]
 ----
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import org.axonframework.messaging.deadletter.DeadLetter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 
@@ -557,10 +557,10 @@ See the sample `EnqueuePolicy` below for an example of retry-count-based evictio
 [source,java]
 ----
 import org.axonframework.messaging.core.QualifiedName;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.Decisions;
-import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
-import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
+import org.axonframework.messaging.deadletter.DeadLetter;
+import org.axonframework.messaging.deadletter.Decisions;
+import org.axonframework.messaging.deadletter.EnqueueDecision;
+import org.axonframework.messaging.deadletter.EnqueuePolicy;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 // ErrorEvent is your application-defined event class.
