@@ -43,7 +43,7 @@ Customize the distributed query bus configuration:
 [source,java]
 ----
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 
 public class AxonConfig {
     public void configureQueryBus(MessagingConfigurer configurer) {
@@ -85,7 +85,7 @@ axon.axonserver.query-threads=20
 ----
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import org.axonframework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 
 @Configuration
 public class AxonConfig {

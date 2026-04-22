@@ -21,7 +21,7 @@ The `AxonServerEventStorageEngineFactory` is provided out of the box, which give
 
 [source,java]
 ----
-import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
+import org.axonframework.axonserver.connector.event.AxonServerEventStorageEngine;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 
