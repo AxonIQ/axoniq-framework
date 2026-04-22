@@ -17,9 +17,9 @@ Declare dependencies:
 ----
 <!--somewhere in the POM file-->
 <dependency>
-    <groupId>io.axoniq.framework</groupId>
+    <groupId>org.axonframework</groupId>
     <artifactId>axon-server-connector</artifactId>
-    <version>${axoniq.version}</version>
+    <version>${axon.version}</version>
 </dependency>
 <dependency>
     <groupId>org.axonframework</groupId>
