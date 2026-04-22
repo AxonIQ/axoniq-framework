@@ -30,7 +30,7 @@
 
     <artifactId>axoniq-dead-letter</artifactId>
 
-    <name>Axoniq Framework - Seqeuenced Dead-Letter Queue</name>
+    <name>Axoniq Framework - Dead Letter</name>
     <description>
         Module providing Sequenced Dead-Letter Queue (DLQ) support for event handling components,
         including in-memory, JDBC, and JPA-backed implementations.
