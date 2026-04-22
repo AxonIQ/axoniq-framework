@@ -80,7 +80,6 @@
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axon-server-connector</artifactId>
             <version>${project.version}</version>
-            <optional>true</optional>
         </dependency>
         <!-- Database -->
         <dependency>
