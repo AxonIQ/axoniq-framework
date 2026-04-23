@@ -17,9 +17,9 @@ Declare dependencies:
 ----
 <!--somewhere in the POM file-->
 <dependency>
-    <groupId>org.axonframework</groupId>
+    <groupId>io.axoniq.framework</groupId>
     <artifactId>axon-server-connector</artifactId>
-    <version>${axon.version}</version>
+    <version>${axoniq.version}</version>
 </dependency>
 <dependency>
     <groupId>org.axonframework</groupId>
@@ -73,8 +73,8 @@ Configuration API::
 --
 [source,java]
 ----
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
@@ -100,8 +100,8 @@ Spring Boot::
 --
 [source,java]
 ----
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
-import org.axonframework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.springframework.context.annotation.Bean;
