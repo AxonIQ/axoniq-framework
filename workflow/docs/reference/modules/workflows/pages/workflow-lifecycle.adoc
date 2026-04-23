@@ -177,7 +177,6 @@ execution.cancel("Cancelled by user");
 
 All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
 
-
 [[complete-with-running-steps]]
 === Normal completion with running steps
 
