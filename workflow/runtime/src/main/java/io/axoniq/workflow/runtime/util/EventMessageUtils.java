@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -113,7 +114,7 @@ public class EventMessageUtils {
                                               @Nonnull Exception exception,
                                               @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.FAILED);
-        return new GenericEventMessage(new MessageType(name), exception,
+        return new GenericEventMessage(new MessageType(name), WorkflowError.from(exception),
                                        MetadataUtils.create(context.workflowId(), WorkflowStatus.FAILED)
         );
     }
@@ -159,7 +160,7 @@ public class EventMessageUtils {
                                                  @Nullable Throwable cause,
                                                  @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
-        return new GenericEventMessage(new MessageType(name), cause != null ? cause : Map.of(),
+        return new GenericEventMessage(new MessageType(name), cause != null ? WorkflowError.from(cause) : Map.of(),
                                        MetadataUtils.create(context.workflowId(), WorkflowStatus.CANCELLED)
         );
     }
@@ -226,7 +227,7 @@ public class EventMessageUtils {
                                         @Nonnull Throwable exception,
                                         @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
-        return new GenericEventMessage(new MessageType(name), exception,
+        return new GenericEventMessage(new MessageType(name), WorkflowError.from(exception),
                                        MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
         );
     }
@@ -261,7 +262,7 @@ public class EventMessageUtils {
                                              @Nullable Throwable cause,
                                              @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
-        Object payload = cause != null ? cause : Map.of();
+        Object payload = cause != null ? WorkflowError.from(cause) : Map.of();
         return new GenericEventMessage(new MessageType(name), payload,
                                        MetadataUtils.create(context.workflowId(), stepName, StepStatus.CANCELLED)
         );

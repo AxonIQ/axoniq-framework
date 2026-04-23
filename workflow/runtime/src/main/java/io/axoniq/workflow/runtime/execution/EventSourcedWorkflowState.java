@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -155,7 +156,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 case FAILED:
                     Throwable stepCause;
                     try {
-                        stepCause = eventMessage.payloadAs(Throwable.class, processingContext.component(Converter.class));
+                        WorkflowError err = eventMessage.payloadAs(WorkflowError.class, processingContext.component(Converter.class));
+                        stepCause = err != null ? err.toThrowable() : null;
                     } catch (Exception e) {
                         stepCause = null;
                     }
@@ -207,9 +209,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
                          if (status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED) {
                              Throwable cause;
                              try {
-                                 cause = eventMessage.payloadAs(Throwable.class, processingContext.component(Converter.class));
+                                 WorkflowError err = eventMessage.payloadAs(WorkflowError.class, processingContext.component(Converter.class));
+                                 cause = err != null ? err.toThrowable() : null;
                              } catch (Exception e) {
-                                 // payload is not a throwable
+                                 // payload is not a WorkflowError
                                  cause = null;
                              }
                              terminationCause = cause;

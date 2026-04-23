@@ -162,6 +162,7 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
+        logger.error("Step '{}' failed in workflow '{}'", stepName, workflowExecution.workflowId(), ex);
         return sendStepEvent(stepName, failStep(workflowContext, stepName, ex,
                                                 merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));

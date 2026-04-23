@@ -129,14 +129,14 @@ if (!reserved) {
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="ctx.fail() — event store">
-1 cancelled ShipOrderCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-2 cancelled NotifyCustomerCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-3 failed OrderFulfillmentWorkflow#ExecuteFailed {"reason": "RuntimeException: Stock unavailable"}
+1 cancelled ShipOrderCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
+2 cancelled NotifyCustomerCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
+3 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
   </div>
 </div>
 ++++
 
-Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception (`RuntimeException` in this case), not the wrapper.
+Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper. See xref:#failure-payloads[Failure payloads] below for the on-wire shape.
 
 === `cancel`—external termination
 
@@ -168,14 +168,32 @@ execution.cancel("Cancelled by user");
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="execution.cancel() — event store">
-1 cancelled ShipOrderCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-2 cancelled NotifyCustomerCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+1 cancelled ShipOrderCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+2 cancelled NotifyCustomerCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
   </div>
 </div>
 ++++
 
 All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
+
+[[failure-payloads]]
+=== Failure payloads
+
+FAILED and CANCELLED-with-cause events carry a compact `WorkflowError` record — not the full `Throwable`:
+
+[source,java]
+----
+record WorkflowError(String type, String message, WorkflowError cause)
+----
+
+- `type` — fully-qualified class name of the originating throwable (e.g. `java.lang.RuntimeException`).
+- `message` — truncated to 1023 characters to match the framework's `ThrowableCause` convention.
+- `cause` — nested `WorkflowError`, bounded to 10 levels of depth.
+
+Stack traces are **not** stored in the event. They are written to the application log at the moment of failure (`ERROR` level), so operators still have them for debugging, but events stay small and portable across JVM versions.
+
+On read, `step.error()` and `state.throwTerminalCause()` reconstruct a `WorkflowExecutionException` (`implements Cause`) carrying the original `type()` and the message. The reconstructed throwable has no stack trace (`fillInStackTrace()` is a no-op), and its concrete class is always `WorkflowExecutionException` — `instanceof` checks against the original exception type do not survive replay. Use `WorkflowExecutionException.type()` or parse the FQN from `getMessage()` if you need to branch on the original class.
 
 [[complete-with-running-steps]]
 === Normal completion with running steps
