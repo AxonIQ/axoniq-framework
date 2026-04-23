@@ -51,6 +51,17 @@
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
         </dependency>
+        <!-- Spring Boot (optional - for @ServiceConnection support) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <optional>true</optional>
+        </dependency>
         <!-- Testcontainers -->
         <dependency>
             <groupId>org.testcontainers</groupId>
