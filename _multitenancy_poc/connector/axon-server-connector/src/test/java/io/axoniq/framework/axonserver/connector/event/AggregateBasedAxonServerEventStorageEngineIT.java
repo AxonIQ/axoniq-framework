@@ -40,32 +40,33 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 @Testcontainers
 @Tag("slow")
 class AggregateBasedAxonServerEventStorageEngineIT extends
         AggregateBasedStorageEngineTestSuite<AggregateBasedAxonServerEventStorageEngine> {
 
-    @SuppressWarnings("resource")
     private static final AxonServerContainer axonServerContainer = new AxonServerContainer()
             .withAxonServerHostname("localhost")
-            .withDevMode(true);
-    private static AxonServerConnection connection;
+            .withDevMode(true)
+            .withReuse(false);
+
+    private AxonServerConnection connection;
 
     @BeforeAll
     static void beforeAll() {
         axonServerContainer.start();
-        connection = AxonServerConnectionFactory.forClient("Test")
-                                                .routingServers(new ServerAddress(axonServerContainer.getHost(),
-                                                                                  axonServerContainer.getGrpcPort()))
-                                                .build()
-                                                .connect("default");
     }
 
     @AfterAll
     static void afterAll() {
-        connection.disconnect();
         axonServerContainer.stop();
+    }
+
+    @AfterEach
+    void tearDown() {
+        connection.disconnect();
     }
 
     @Test
@@ -81,6 +82,11 @@ class AggregateBasedAxonServerEventStorageEngineIT extends
                                                            axonServerContainer.getHttpPort(),
                                                            "default",
                                                            AxonServerContainerUtils.NO_DCB_CONTEXT);
+        connection = AxonServerConnectionFactory.forClient("Test")
+                                                .routingServers(new ServerAddress(axonServerContainer.getHost(),
+                                                                                  axonServerContainer.getGrpcPort()))
+                                                .build()
+                                                .connect("default");
         return new AggregateBasedAxonServerEventStorageEngine(connection, converter);
     }
 
