@@ -31,8 +31,10 @@ import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.lifecycle.Phase;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
@@ -84,11 +86,14 @@ public class WorkflowEnhancer implements ConfigurationEnhancer {
                                    cfg -> new InMemoryWorkflowHistoryRepository());
 
         componentRegistry
-                .registerComponent(WorkflowEngine.class, cfg ->
-                        new WorkflowEngine(
-                                cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                cfg.getComponent(WorkflowExecutionRepository.class)
-                        )
+                .registerComponent(
+                        ComponentDefinition
+                                .ofType(WorkflowEngine.class)
+                                .withBuilder(cfg -> new WorkflowEngine(
+                                        cfg.getComponent(WorkflowConfigurationRegistry.class),
+                                        cfg.getComponent(WorkflowExecutionRepository.class)
+                                ))
+                                .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
                 );
         componentRegistry
                 .registerComponent(WorkflowHistoryProjector.class, cfg -> new WorkflowHistoryProjector(

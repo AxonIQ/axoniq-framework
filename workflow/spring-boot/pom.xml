@@ -71,6 +71,12 @@
             <version>${axon.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework.workflow</groupId>
+            <artifactId>axon-workflow-test</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

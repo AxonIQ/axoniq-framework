@@ -408,6 +408,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
+    public void interrupt() {
+        runningSteps.cancelAll(new InterruptedException("Workflow engine shutdown"), s -> { });
+        // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
+        // The task sets the driver thread's interrupt flag; the next taskQueue.take() observes it and throws
+        // InterruptedException, propagating up so the driver thread exits cleanly.
+        taskQueue.offer(i -> Thread.currentThread().interrupt());
+    }
+
+    @Override
     public void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning) {
         runningSteps.cancelAndRemove(stepName, mayInterruptIfRunning);
     }
