@@ -136,7 +136,7 @@ if (!reserved) {
 </div>
 ++++
 
-Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper. See xref:#failure-payloads[Failure payloads] below for the on-wire shape.
+Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper.
 
 === `cancel`—external termination
 
@@ -177,60 +177,6 @@ execution.cancel("Cancelled by user");
 
 All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
 
-[[failure-payloads]]
-=== Failure payloads
-
-FAILED and CANCELLED-with-cause events carry a compact `WorkflowError` record — not the full `Throwable`:
-
-[source,java]
-----
-record WorkflowError(String type, String message, WorkflowError cause)
-----
-
-- `type` — fully-qualified class name of the originating throwable (e.g. `java.lang.RuntimeException`).
-- `message` — truncated to 1023 characters to match the framework's `ThrowableCause` convention.
-- `cause` — nested `WorkflowError`, bounded to 10 levels of depth.
-
-Stack traces are **not** stored in the event. They are written to the application log at the moment of failure (`ERROR` level), so operators still have them for debugging, but events stay small and portable across JVM versions.
-
-On read, `step.error()` and `state.throwTerminalCause()` reconstruct a `WorkflowExecutionException` (`implements Cause`) carrying the original `type()` and the message. The reconstructed throwable has no stack trace (`fillInStackTrace()` is a no-op), and its concrete class is always `WorkflowExecutionException`.
-
-==== Why `instanceof` does not survive replay
-
-Reconstructing the original exception subclass would require loading `Class.forName(type)` on the reader's classpath, invoking a constructor by reflection, and hoping the class still exists with a compatible shape. Event-sourced systems replay events that may have been written years ago; by then the user-defined exception class may have been renamed, moved, removed, or refactored with different constructor signatures. Supporting this path would re-introduce the bytecode-incompatibility problem this change exists to avoid, plus add a silent "works for standard exceptions, falls back for yours" behaviour that is worse than a consistent one. The framework follows the same posture as Temporal's `ApplicationFailure` and Restate's `Failure`: the on-wire form is data, not a class.
-
-==== Branch on data, not on exception type
-
-If your workflow logic needs to react to _kinds_ of failure, model that as data rather than as Java exception subtypes. Prefer one of:
-
-[source,java]
-----
-// Anti-pattern — does not survive replay
-try {
-    ctx.awaitExecute("charge", ctx.workflowPayload(), PaymentService::charge);
-} catch (StepFailedException e) {
-    if (e.getCause() instanceof InsufficientFundsException) {  // <1>
-        ctx.fail(new RuntimeException("No funds"));
-    }
-}
-----
-<1> Fails after event-sourced replay: the cause is always `WorkflowExecutionException`, not `InsufficientFundsException`.
-
-[source,java]
-----
-// Recommended — branch on data carried in the error
-try {
-    ctx.awaitExecute("charge", ctx.workflowPayload(), PaymentService::charge);
-} catch (StepFailedException e) {
-    var cause = e.getCause();
-    if (cause instanceof WorkflowExecutionException wex
-            && "com.example.payments.InsufficientFundsException".equals(wex.type())) {
-        ctx.fail(new RuntimeException("No funds"));
-    }
-}
-----
-
-Even better: design step actions so that expected business failures are part of the _result_ rather than exceptions. A sealed result type (`ChargeResult.Succeeded | ChargeResult.Declined | ...`) round-trips through the event store losslessly and is safe to pattern-match on across replay. Reserve exceptions for unexpected faults.
 
 [[complete-with-running-steps]]
 === Normal completion with running steps

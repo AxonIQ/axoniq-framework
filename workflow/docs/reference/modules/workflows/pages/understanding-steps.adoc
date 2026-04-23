@@ -344,8 +344,7 @@ if (shipping.failure()) { // blocks until shipping reaches a terminal state
 Any exception thrown during step execution is wrapped in `StepFailedException`.
 Use `getCause()` to access the reconstructed cause — a `WorkflowExecutionException` that preserves the original class name via `type()` and the message via `getMessage()`.
 The original stack trace is written to the application log at the moment of failure but is not stored in the event store, so it is not available after replay.
-Because the cause is always reconstructed as `WorkflowExecutionException`, `instanceof` checks against the original exception class will not match after event-sourced replay.
-For recommended patterns (branching on data, not exception subtype), see xref:workflow-lifecycle.adoc#failure-payloads[Failure payloads].
+Because the cause is always reconstructed as `WorkflowExecutionException`, `instanceof` checks against the original exception class will not match after event-sourced replay — branch on `type()` instead.
 ====
 
 [[cancelling-a-step]]
