@@ -1,14 +1,14 @@
 [.axoniq-feature]
 [#advanced-framework-bom]
-=== Advanced Axon Framework Bill of Materials
+=== Axoniq Framework Bill of Materials
 
-For the advanced framework, we provide a BOM under the `io.axoniq.framework` Group id as follows:
+For the Axoniq Framework, we provide a BOM under the `io.axoniq.framework` Group id as follows:
 
 [cols="<,<,<,^"]
 |===
 |Module |Artifact Id |Group Id |Maven Central
 
-|<<Advanced Axon Framework Bill of Materials>> |`axoniq-framework-bom` |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-framework-bom[available]
+|<<Axoniq Framework Bill of Materials>> |`axoniq-framework-bom` |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-framework-bom[available]
 |===
 
 For using the BOM, you would add the `axoniq-framework-bom` dependency to your dependency management system:
@@ -77,10 +77,10 @@ Beginning with *https://docs.gradle.org/5.0/userguide/managing_transitive_depend
 --
 ====
 
-After that is in place, you can add any of the mentioned dependencies from the <<Advanced framework modules, advanced modules>> without specifying versions.
+After that is in place, you can add any of the mentioned dependencies from the <<Axoniq Framework modules, advanced modules>> without specifying versions.
 Furthermore, you will be guaranteed that the provided versions in the BOM are compatible with one another.
 
 [NOTE]
 ====
-The advanced framework BOM includes all dependencies for the xref:ROOT:modules.adoc#_main_modules[base framework modules] and the xref:ROOT:modules.adoc#_extension_modules[base framework extension modules], so whenever you use the advanced framework BOM you do not need to additionally include the xref:ROOT:modules.adoc#base-framework-bom[base framework BOM].
+The Axoniq Framework BOM includes all dependencies for the xref:ROOT:modules.adoc#_main_modules[Axon Framework modules] and the xref:ROOT:modules.adoc#_extension_modules[Axon Framework extension modules], so whenever you use the Axoniq Framework BOM you do not need to additionally include the xref:ROOT:modules.adoc#axon-framework-bom[Axon Framework BOM].
 ====

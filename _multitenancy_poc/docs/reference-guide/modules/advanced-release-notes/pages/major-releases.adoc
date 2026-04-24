@@ -1,7 +1,7 @@
-= Advanced Framework Major Releases
-:navtitle: Advanced Framework Major Releases
+= Axoniq Framework Major Releases
+:navtitle: Axoniq Framework Major Releases
 
-All the enhancements and features which have been introduced to our major releases of the advanced Axon Framework feature are noted here.
+All the enhancements and features which have been introduced to our major releases of the Axoniq Framework are noted here.
 
 [#release_5_1]
 == Release 5.1
