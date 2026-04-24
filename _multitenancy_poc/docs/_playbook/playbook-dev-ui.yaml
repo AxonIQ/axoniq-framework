@@ -7,7 +7,7 @@ content:
   - url: localLinks/AxonFramework   # include docs from Axon Framework repo
     start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']
   - url: ../..
-    start_paths: ['docs/*', '!docs/_*', '!docs/ref*']
+    start_paths: ['docs/*', '!docs/_*', '!docs/reference/']
 
 asciidoc:
   attributes:
