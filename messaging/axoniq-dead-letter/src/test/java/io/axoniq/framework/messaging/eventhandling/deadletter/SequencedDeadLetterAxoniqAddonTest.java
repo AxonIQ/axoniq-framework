@@ -29,7 +29,7 @@ class SequencedDeadLetterAxoniqAddonTest {
 
     @Test
     void identifierReturnsExpectedValue() {
-        assertThat(addon.identifier()).isEqualTo("framework.dead-letter");
+        assertThat(addon.identifier()).isEqualTo("framework.dead_letter_queue");
     }
 
     @Test
