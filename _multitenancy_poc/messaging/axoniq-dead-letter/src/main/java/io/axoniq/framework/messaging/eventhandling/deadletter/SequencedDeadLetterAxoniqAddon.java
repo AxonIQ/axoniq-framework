@@ -30,7 +30,7 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  */
 public class SequencedDeadLetterAxoniqAddon implements AxoniqAddon {
 
-    static final String IDENTIFIER = "framework.dead-letter";
+    static final String IDENTIFIER = "framework.dead_letter_queue";
 
     @Override
     public String identifier() {
