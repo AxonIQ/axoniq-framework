@@ -1,4 +1,5 @@
-== Advanced framework modules
+[.axoniq-feature]
+== Axoniq Framework modules
 
 Besides the base framework, Axon Framework provides advanced features which are available for production use with a commercial license.
 
