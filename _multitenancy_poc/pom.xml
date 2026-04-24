@@ -188,6 +188,7 @@
                     <mavenExecutorId>forked-path</mavenExecutorId>
                     <localCheckout>true</localCheckout>
                     <releaseProfiles>javadoc,sources,sign</releaseProfiles>
+                    <tagNameFormat>axoniq-@{project.version}</tagNameFormat>
                 </configuration>
             </plugin>
             <plugin>
