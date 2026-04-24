@@ -1,4 +1,4 @@
-// TODO Axoniq feature
+[.axoniq-feature]
 == Distributed command bus
 
 For applications that need to distribute command handling across multiple JVM instances, Axon provides distributed command bus implementations. To that end, Axon Framework has a special type of `CommandBus` implementation, called the `DistributedCommandBus`.

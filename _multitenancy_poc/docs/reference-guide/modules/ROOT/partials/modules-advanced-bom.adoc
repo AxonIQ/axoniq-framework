@@ -1,3 +1,4 @@
+[.axoniq-feature]
 [#advanced-framework-bom]
 === Advanced Axon Framework Bill of Materials
 
