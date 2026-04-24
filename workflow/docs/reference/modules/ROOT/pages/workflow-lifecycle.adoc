@@ -24,6 +24,7 @@ A workflow is always in one of these states:
 
 |`COMPLETED`
 |The workflow method returned normally — all work is done.
+Any async steps (started via `execute(...)` without a follow-up `await()`) that are still running are cancelled before the workflow transitions to `COMPLETED`.
 
 |`FAILED`
 |The workflow was explicitly failed via `ctx.fail()`.
@@ -175,6 +176,42 @@ execution.cancel("Cancelled by user");
 ++++
 
 All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
+
+[[complete-with-running-steps]]
+=== Normal completion with running steps
+
+The same "cancel first, terminate after" rule applies when the workflow method simply returns while async steps are still running.
+A step started with `execute(...)` and never awaited keeps running in the background.
+When your workflow body returns, the engine cancels any such step and waits for its `CANCELLED` event to be written **before** publishing the `CompletedWorkflow` event:
+
+[source,java]
+----
+public void execute(SimpleWorkflowContext ctx) {
+    // fire-and-forget — notice there is no .await() on the returned result
+    ctx.execute("sendReceipt", ctx.workflowPayload(),
+                NotificationService::sendReceipt,
+                Duration.ofMinutes(1), defaults());
+
+    // workflow body returns while sendReceipt is still running
+}
+----
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="normal completion — event store">
+1 cancelled SendReceiptCancelled {"reason": "StepCancellationException: Workflow completed"}
+2 completed OrderFulfillmentWorkflow#ExecuteCompleted {}
+  </div>
+</div>
+++++
+
+This guarantees that every started step has a terminal event in the log — no silent losses from a step that would have failed after the workflow had already completed.
+
+[TIP]
+====
+If you need the workflow to wait for the step's actual result, call `.await()` on the returned `WorkflowStepResult`, use `awaitExecute(...)`, or combine results with `allMatch` / `anyMatch` / `noneMatch`.
+See xref:execute-steps.adoc[] and xref:step-orchestration.adoc[].
+====
 
 == Unhandled exceptions
 

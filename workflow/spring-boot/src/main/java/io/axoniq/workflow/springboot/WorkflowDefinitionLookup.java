@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.springboot;
 
@@ -46,26 +47,24 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
 
     @Override
     public void postProcessBeanFactory(@Nonnull ConfigurableListableBeanFactory beanFactory) throws BeansException {
-        if (!(beanFactory instanceof BeanDefinitionRegistry)) {
+        if (!(beanFactory instanceof BeanDefinitionRegistry registry)) {
             logger.warn("Given bean factory is not a BeanDefinitionRegistry. Cannot auto-configure workflow handlers");
             return;
         }
 
-        String configurerBeanName = "WorkflowModuleConfigurer$$Axon$$WorkflowDefinition";
-        if (beanFactory.containsBeanDefinition(configurerBeanName)) {
-            logger.info("Workflow handler configurer already available. Skipping configuration");
-            return;
+        Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions = workflowBeanDefinitions(
+                WorkflowContext.class,
+                beanFactory,
+                true);
+
+        if (workflowBeanDefinitions.isEmpty()) {
+            return; // don't register an empty configurer; wait until workflows are visible
         }
 
         Map<Class<? extends WorkflowContext>, String> factoryBeanDefinitions = workflowContextFactoryBeans(beanFactory,
                                                                                                            false);
 
-        Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions = workflowBeanDefinitions(
-                WorkflowContext.class,
-                beanFactory,
-                false);
-
-
+        String configurerBeanName = "WorkflowModuleConfigurer$$Axon$$WorkflowDefinition";
         AbstractBeanDefinition beanDefinition =
                 BeanDefinitionBuilder
                         .genericBeanDefinition(WorkflowModuleConfigurer.class)
@@ -73,7 +72,10 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
                         .addConstructorArgValue(workflowBeanDefinitions)
                         .getBeanDefinition();
 
-        ((BeanDefinitionRegistry) beanFactory).registerBeanDefinition(configurerBeanName, beanDefinition);
+        if (registry.containsBeanDefinition(configurerBeanName)) {
+            registry.removeBeanDefinition(configurerBeanName);
+        }
+        registry.registerBeanDefinition(configurerBeanName, beanDefinition);
 
         logger.debug("Detected {} workflow definition bean{}: {}",
                     workflowBeanDefinitions.size(),
@@ -88,6 +90,6 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
 
     @Override
     public void postProcessBeanDefinitionRegistry(@Nonnull BeanDefinitionRegistry registry) throws BeansException {
-        // No action required.
+
     }
 }

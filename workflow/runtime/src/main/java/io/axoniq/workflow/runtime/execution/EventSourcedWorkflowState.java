@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.runtime.execution;
 
@@ -152,8 +153,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                  processingContext));
                     break;
                 case FAILED:
+                    Throwable stepCause;
+                    try {
+                        stepCause = eventMessage.payloadAs(Throwable.class, processingContext.component(Converter.class));
+                    } catch (Exception e) {
+                        stepCause = null;
+                    }
                     addStep(WorkflowStep.failed(stepName,
-                                                (Throwable) eventPayload,
+                                                stepCause,
                                                 eventMessage.timestamp(),
                                                 processingContext));
                     break;
@@ -197,9 +204,15 @@ public class EventSourcedWorkflowState implements WorkflowState {
                              return;
                          }
                          final Throwable terminationCause;
-                         if ((status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED)
-                                 && eventPayload instanceof Throwable t) {
-                             terminationCause = t;
+                         if (status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED) {
+                             Throwable cause;
+                             try {
+                                 cause = eventMessage.payloadAs(Throwable.class, processingContext.component(Converter.class));
+                             } catch (Exception e) {
+                                 // payload is not a throwable
+                                 cause = null;
+                             }
+                             terminationCause = cause;
                          } else {
                              terminationCause = null;
                          }
@@ -223,11 +236,19 @@ public class EventSourcedWorkflowState implements WorkflowState {
         MetadataUtils.payloadReducer(eventMessage.metadata()).ifPresent(reducerName -> {
             if (PayloadReducer.isDefault(reducerName)) {
                 var resultReducer = PayloadReducer.byName(reducerName);
-                Map<String, Object> stepPayload = eventMessage.payloadAs(new TypeReference<>() {
-                }, processingContext.component(Converter.class));
-                var result = resultReducer.apply(this.payload, stepPayload);
-                logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
-                this.payload = result;
+                Map<String, Object> stepPayload;
+                try {
+                    stepPayload = eventMessage.payloadAs(new TypeReference<>() {
+                    }, processingContext.component(Converter.class));
+                } catch (Exception e) {
+                    logger.debug("Could not convert payload to map for reducer {}. Skipping payload update.", reducerName, e);
+                    stepPayload = null;
+                }
+                if (stepPayload != null) {
+                    var result = resultReducer.apply(this.payload, stepPayload);
+                    logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
+                    this.payload = result;
+                }
             }
         });
     }

@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.configuration;
 
@@ -43,6 +44,7 @@ import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collection;
@@ -53,6 +55,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
 import static io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus.*;
@@ -97,10 +100,14 @@ public class AutoDetectionUtils {
     public static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
             @Nonnull Class<?> type,
             @Nonnull Class<C> workflowContextType) {
-        var methodCandidates = ((Collection<Method>) ReflectionUtils.methodsOf(type));
-        return methodCandidates
-                .stream()
-                .filter(AutoDetectionUtils.parameterOfType(workflowContextType, 0)) // FIXME using parameter resolver
+        Stream<Method> methodStream;
+        try {
+            methodStream = StreamSupport.stream(ReflectionUtils.methodsOf(type).spliterator(), false);
+        } catch (Exception e) {
+            methodStream = Arrays.stream(type.getMethods());
+        }
+        return methodStream
+                .filter(hasContextParameter(workflowContextType)) // FIXME using parameter resolver
                 .map(AutoDetectionUtils.annotatedMethods(Workflow.class))
                 .filter(Objects::nonNull);
     }
@@ -155,20 +162,37 @@ public class AutoDetectionUtils {
             @Nonnull WorkflowStatus status,
             @Nonnull ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners) {
         methodCandidates.stream()
-                        .filter(parameterOfType(WorkflowStatus.class, 0).and(parameterOfType(workflowContextType, 1)))
+                        .filter(hasParameterOfType(WorkflowStatus.class).and(hasContextParameter(workflowContextType)))
                         .map(AutoDetectionUtils.annotatedMethods(annotation))
                         .filter(Objects::nonNull)
                         .filter(mwa -> {
                             Object nameAttr = mwa.attributes.getOrDefault(ATTR_WORKFLOW_NAME, "");
                             return !(nameAttr instanceof String s) || s.isEmpty() || s.equals(workflowName);
                         })
-                        .forEach(method -> {
+                        .forEach(mwa -> {
                             listeners.get(status).addListener(
                                     new WorkflowStatusChangeListener() {
                                         @Override
                                         public <X extends WorkflowContext> void onWorkflowStatus(
                                                 @Nonnull WorkflowStatus state, @Nonnull X context) {
-                                            WorkflowReflectionUtils.invoke(instance, method.method, state, context);
+                                            Method method = mwa.method();
+                                            Class<?>[] parameterTypes = method.getParameterTypes();
+                                            Object[] args = new Object[parameterTypes.length];
+                                            for (int i = 0; i < parameterTypes.length; i++) {
+                                                if (parameterTypes[i].isAssignableFrom(WorkflowStatus.class)) {
+                                                    args[i] = state;
+                                                } else if (WorkflowContext.class.isAssignableFrom(parameterTypes[i])) {
+                                                    args[i] = context;
+                                                } else if (parameterTypes[i].isInstance(instance)) {
+                                                    args[i] = instance;
+                                                } else {
+                                                    Object wrap = wrapIfPossible(parameterTypes[i], context);
+                                                    if (wrap != null) {
+                                                        args[i] = wrap;
+                                                    }
+                                                }
+                                            }
+                                            WorkflowReflectionUtils.invoke(instance, method, args);
                                         }
                                     }
                             );
@@ -250,6 +274,91 @@ public class AutoDetectionUtils {
     }
 
     /**
+     * Creates a predicate to check if the method has at least one parameter of given type
+     * or a parameter that can wrap it.
+     *
+     * @param expectedType type to check for.
+     * @return predicate.
+     */
+    @Nonnull
+    static Predicate<Method> hasContextParameter(@Nonnull Class<?> expectedType) {
+        return m -> {
+            var parameterTypes = m.getParameterTypes();
+            for (var type : parameterTypes) {
+                if (WorkflowContext.class.isAssignableFrom(type) || isWrapper(type)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+    }
+
+    /**
+     * Checks if given type can wrap the expected type.
+     *
+     * @param type         type to check.
+     * @param expectedType type to be wrapped.
+     * @return true if it can.
+     */
+    static boolean canWrap(@Nonnull Class<?> type, @Nonnull Class<?> expectedType) {
+        try {
+            for (var constructor : type.getConstructors()) {
+                if (constructor.getParameterCount() == 1) {
+                    var parameterType = constructor.getParameterTypes()[0];
+                    if (WorkflowContext.class.isAssignableFrom(parameterType)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (NoClassDefFoundError e) {
+            return false;
+        }
+        return false;
+    }
+
+    /**
+     * Wraps the context if possible.
+     *
+     * @param type    type to wrap into.
+     * @param context context to wrap.
+     * @return wrapped context or null.
+     */
+    @Nullable
+    public static Object wrapIfPossible(@Nonnull Class<?> type, @Nullable WorkflowContext context) {
+        if (context == null) {
+            return null;
+        }
+        try {
+            var constructor = type.getConstructor(context.getClass());
+            return constructor.newInstance(context);
+        } catch (NoSuchMethodException | InvocationTargetException | InstantiationException |
+                 IllegalAccessException e) {
+            // try with interface
+            try {
+                var constructor = type.getConstructor(WorkflowContext.class);
+                return constructor.newInstance(context);
+            } catch (NoSuchMethodException | InvocationTargetException | InstantiationException |
+                     IllegalAccessException ex) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Creates a predicate to check if the method has at least one parameter of given type.
+     *
+     * @param expectedType type to check for.
+     * @return predicate.
+     */
+    @Nonnull
+    static Predicate<Method> hasParameterOfType(@Nonnull Class<?> expectedType) {
+        return m -> {
+            var parameterTypes = m.getParameterTypes();
+            return Arrays.stream(parameterTypes).anyMatch(expectedType::isAssignableFrom);
+        };
+    }
+
+    /**
      * Creates a predicate to check if the parameter of the method, addressed by its index is assignable from given
      * type.
      *
@@ -287,13 +396,39 @@ public class AutoDetectionUtils {
     static Class<? extends WorkflowContext> findWorkflowContextType(@Nonnull Method method) {
         var parameterTypes = method.getParameterTypes();
         return Stream.of(parameterTypes)
-                     .filter(WorkflowContext.class::isAssignableFrom)
+                     .filter(type -> WorkflowContext.class.isAssignableFrom(type) || isWrapper(type))
+                     .map(p -> {
+                         if (WorkflowContext.class.isAssignableFrom(p)) {
+                             //noinspection unchecked
+                             return (Class<? extends WorkflowContext>) p;
+                         } else {
+                             // it is a wrapper, so we find the type it wraps
+                             Class<?> wrapped = WorkflowContext.class;
+                             for (var constructor : p.getConstructors()) {
+                                 if (constructor.getParameterCount() == 1 && WorkflowContext.class.isAssignableFrom(
+                                         constructor.getParameterTypes()[0])) {
+                                     wrapped = constructor.getParameterTypes()[0];
+                                     break;
+                                 }
+                             }
+                             //noinspection unchecked
+                             return (Class<? extends WorkflowContext>) wrapped;
+                         }
+                     })
                      .findFirst()
-                     .map(p -> (Class<? extends WorkflowContext>) p)
                      .orElseThrow(
                              () -> new IllegalArgumentException(
                                      "Method must have at least one parameter of type assignable to WorkflowContext")
                      );
+    }
+
+    static boolean isWrapper(@Nonnull Class<?> type) {
+        try {
+            return Arrays.stream(type.getConstructors())
+                         .anyMatch(c -> c.getParameterCount() == 1 && WorkflowContext.class.isAssignableFrom(c.getParameterTypes()[0]));
+        } catch (NoClassDefFoundError e) {
+            return false;
+        }
     }
 
     /**

@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.runtime.execution;
 
@@ -189,6 +190,23 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
 
             var retryInfo = new StepRetryInfo(attempt, retryPolicy.maxRetries(), error);
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
+            try {
+                workflowExecution.awaitStateChange(s -> {
+                    var st = s.getStep(stepName);
+                    if (st.status().isTerminal()) {
+                        return true;
+                    }
+                    return st.status() == StepStatus.RETRYING
+                            && st.result() instanceof StepRetryInfo r
+                            && r.attempt() == attempt;
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
+                return;
+            }
 
             Instant retryReadyAt = computeRetryReadyAt(retryPolicy, attempt, clock.instant());
             scheduleRetryAttempt(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,

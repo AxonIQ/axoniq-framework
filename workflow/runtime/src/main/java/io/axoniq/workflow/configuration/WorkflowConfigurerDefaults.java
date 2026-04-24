@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.configuration;
 
@@ -30,8 +31,10 @@ import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 
 import java.time.Clock;
@@ -103,11 +106,15 @@ public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
     }
 
     void registerWorkflowEngine(@Nonnull ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(WorkflowEngine.class,
-                                               cfg -> new WorkflowEngine(
-                                                       cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                                       cfg.getComponent(WorkflowExecutionRepository.class)
-                                               ));
+        componentRegistry.registerIfNotPresent(
+                ComponentDefinition
+                        .ofType(WorkflowEngine.class)
+                        .withBuilder(cfg -> new WorkflowEngine(
+                                cfg.getComponent(WorkflowConfigurationRegistry.class),
+                                cfg.getComponent(WorkflowExecutionRepository.class)
+                        ))
+                        .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
+                );
     }
 
     void registerWorkflowHistoryProjector(@Nonnull ComponentRegistry componentRegistry) {

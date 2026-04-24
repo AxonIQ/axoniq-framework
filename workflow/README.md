@@ -32,6 +32,16 @@ loanWorkflow = workflow {
 // Engine handles: events, retries, timeouts, state persistence, crash recovery
 ```
 
+## Documentation
+
+To preview the docs locally with live reload:
+
+```bash
+cd docs/_playbook && npm install && node watch.js
+```
+
+Then open [http://localhost:3001](http://localhost:3001).
+
 ## Licensing
 
 Axon Framework consists out of a number of different modules, each with different licenses. Modules residing under the

@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://lp.axoniq.io/axoniq-software-subscription-agreement-terms
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.runtime.api.execution.retry;
 
@@ -38,7 +39,7 @@ class RetryPolicyTest {
         assertThat(policy.onRetryHandler()).isEqualTo(RetryHandler.NOOP);
         assertThat(policy.backoffStrategy()).isEqualTo(BackoffStrategy.NONE);
 
-        RetryContext context = new RetryContext("step", 0, 0, new RuntimeException());
+        RetryContext context = new RetryContext("step", 1, 0, new RuntimeException());
         assertThat(policy.shouldRetry(context)).isFalse();
     }
 
@@ -53,7 +54,21 @@ class RetryPolicyTest {
         assertThat(policy.shouldRetry(context)).isTrue();
 
         RetryContext contextMax = new RetryContext("step", 3, 3, new RuntimeException());
-        assertThat(policy.shouldRetry(contextMax)).isFalse();
+        assertThat(policy.shouldRetry(contextMax)).isTrue();
+
+        RetryContext contextExceeded = new RetryContext("step", 4, 3, new RuntimeException());
+        assertThat(policy.shouldRetry(contextExceeded)).isFalse();
+    }
+
+    @Test
+    void testMaxRetriesOneShouldAllowOneRetry() {
+        RetryPolicy policy = RetryPolicy.maxRetries(1);
+
+        RetryContext firstFailure = new RetryContext("step", 1, 1, new RuntimeException());
+        assertThat(policy.shouldRetry(firstFailure)).isTrue();
+
+        RetryContext afterRetry = new RetryContext("step", 2, 1, new RuntimeException());
+        assertThat(policy.shouldRetry(afterRetry)).isFalse();
     }
 
     @Test
@@ -107,7 +122,7 @@ class RetryPolicyTest {
         RetryContext ctx2 = new RetryContext("step", 1, 5, new RuntimeException());
         assertThat(policy.shouldRetry(ctx2)).isFalse();
 
-        RetryContext ctx3 = new RetryContext("step", 5, 5, new IllegalArgumentException());
+        RetryContext ctx3 = new RetryContext("step", 6, 5, new IllegalArgumentException());
         assertThat(policy.shouldRetry(ctx3)).isFalse();
     }
 
