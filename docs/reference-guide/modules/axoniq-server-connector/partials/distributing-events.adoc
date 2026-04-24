@@ -1,4 +1,4 @@
-// TODO Axoniq feature
+[.axoniq-feature]
 [#distributing_events]
 == Distributing events
 

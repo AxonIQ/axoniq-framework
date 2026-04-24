@@ -1,4 +1,4 @@
-// TODO Axoniq feature
+[.axoniq-feature]
 ==== `AxonServerEventStorageEngine`
 
 The `AxonServerEventStorageEngine` connects to link:https://www.axoniq.io/products/axon-server[Axon Server,window=_blank,role=external], fully supporting a Dynamic Consistency Boundaries where events may have several tags.
@@ -59,7 +59,7 @@ If you want to disable Axon Server as the default `EventStorageEngine`, you have
 --
 ======
 
-// TODO Axoniq feature
+[.axoniq-feature]
 ==== `AggregateBasedAxonServerEventStorageEngine`
 
 The `AggregateBasedAxonServerEventStorageEngine` uses Axon Server's API before we supported the Dynamic Consistency Boundary.

@@ -1,4 +1,4 @@
-// TODO Axoniq feature
+[.axoniq-feature]
 = Deadlines
 :page-aliases: README.adoc
 
