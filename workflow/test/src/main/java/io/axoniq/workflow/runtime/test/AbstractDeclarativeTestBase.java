@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * Abstract test base for workflow test, until we develop a test fixture.
@@ -80,11 +81,20 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
                                    )
                 );
 
-        configuration = configurer.start();
+        configuration = configure().apply(configurer).start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
         workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         delayedPublisher = configuration.getComponent(DelayedPublisher.class);
         workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
+    }
+
+    /**
+     * Allows further customization before the start of the configurer.
+     *
+     * @return modified configurer
+     */
+    protected UnaryOperator<WorkflowConfigurer> configure() {
+        return UnaryOperator.identity();
     }
 
     protected abstract Function<DetectionPhase<T>, FinalizedPhase<T>> getDeclaredDefinition();
