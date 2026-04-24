@@ -36,6 +36,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
@@ -49,14 +50,14 @@ import java.util.concurrent.Executors;
  */
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
-public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
+public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     /**
      * Name of the event handling component used for workflow history projector.
      */
     public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "WorkflowHistoryProjector";
     /**
-     * Name of the event handling component used for workflow engine.
+     * Name of the event handling component used for the workflow engine.
      */
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
 
@@ -96,7 +97,10 @@ public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
     }
 
     void registerClock(@Nonnull ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(Clock.class, cfg -> Clock.systemUTC());
+        //  Issue AxonIQ/AxonFramework#3083 will introduce an ApplicationConfigurer wide Clock,
+        //  which should replace the GenericEventMessage and subsequently this Clock.
+        //noinspection deprecation
+        componentRegistry.registerIfNotPresent(Clock.class, cfg -> GenericEventMessage.clock);
     }
 
     void registerWorkflowEngineExecutor(@Nonnull ComponentRegistry componentRegistry) {
@@ -114,7 +118,7 @@ public class WorkflowConfigurerDefaults implements ConfigurationEnhancer {
                                 cfg.getComponent(WorkflowExecutionRepository.class)
                         ))
                         .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
-                );
+        );
     }
 
     void registerWorkflowHistoryProjector(@Nonnull ComponentRegistry componentRegistry) {

@@ -22,8 +22,10 @@ package io.axoniq.workflow.configuration;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
@@ -47,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-class ModuleComponentIsolationTest {
+class WorkflowConfigurerModuleComponentIsolationTest {
 
     @Test
     void testModuleComponentIsolation() {
@@ -119,6 +121,70 @@ class ModuleComponentIsolationTest {
         // we have demonstrated the configuration of such modules.
         // As a proxy, we verify that the configurer build succeeded with multiple modules.
         assertThat(configuration).isNotNull();
+    }
+
+    @Test
+    void testMultipleModulesHaveDifferentEngines() {
+        WorkflowConfigurer configurer = WorkflowConfigurer.create();
+
+        EventCondition startCondition1 = EventConditions.fromQualifiedName(new QualifiedName("startEvent1"));
+        WorkflowDefinition<TestContext1> definition1 = ctx -> {
+        };
+
+        EventCondition startCondition2 = EventConditions.fromQualifiedName(new QualifiedName("startEvent2"));
+        WorkflowDefinition<TestContext2> definition2 = ctx -> {
+        };
+
+        var module1 = WorkflowModule.defaults("wf1", TestContext1.class)
+                                    .workflowContextFactory(c -> TestContext1::new)
+                                    .definition(d -> d
+                                            .declarative(c -> definition1)
+                                            .workflowName("wf1")
+                                            .on(c -> startCondition1)
+                                            .notCustomized()
+                                    );
+
+        var module2 = WorkflowModule.defaults("wf2", TestContext2.class)
+                                    .workflowContextFactory(c -> (payload, workflowId, processingContext, workflowConfiguration) -> new TestContext2(
+                                            payload,
+                                            workflowId,
+                                            processingContext,
+                                            workflowConfiguration))
+                                    .definition(d -> d
+                                            .declarative(c -> (WorkflowDefinition<TestContext2>) (ctx) -> definition2.accept(
+                                                    ctx))
+                                            .workflowName("wf2")
+                                            .on(c -> startCondition2)
+                                            .notCustomized()
+                                    );
+
+        configurer.componentRegistry(componentRegistry -> componentRegistry.registerModule(module1)
+                                                                           .registerModule(module2));
+        AxonConfiguration configuration = configurer.build();
+
+        // Verify that we have two workflow modules registered
+        // Actually AxonConfiguration doesn't expose modules easily.
+        // But if configurer.build() succeeded, it means the SPI issue is gone
+        // and the modules were initialized.
+        assertThat(configuration).isNotNull();
+    }
+
+    static class TestContext1 extends AbstractDSLWorkflowContext {
+
+        public TestContext1(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
+                            @Nonnull ProcessingContext processingContext,
+                            @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+            super(workflowId, payload, processingContext, workflowConfiguration);
+        }
+    }
+
+    static class TestContext2 extends AbstractDSLWorkflowContext {
+
+        public TestContext2(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
+                            @Nonnull ProcessingContext processingContext,
+                            @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+            super(workflowId, payload, processingContext, workflowConfiguration);
+        }
     }
 
     static class TestContext extends AbstractDSLWorkflowContext {

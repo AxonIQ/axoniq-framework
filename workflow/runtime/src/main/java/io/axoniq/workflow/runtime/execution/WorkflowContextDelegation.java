@@ -50,7 +50,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.configuration.WorkflowConfigurerDefaults.WORKFLOW_ENGINE_EXECUTOR;
+import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
 
 /**

@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.configuration.WorkflowConfigurerDefaults;
+import io.axoniq.workflow.configuration.WorkflowConfigurationDefaults;
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -49,7 +49,7 @@ public class WorkflowAutoConfiguration {
 
     @Bean
     public ConfigurationEnhancer workflowConfigurationDefaults() {
-        return new WorkflowConfigurerDefaults();
+        return new WorkflowConfigurationDefaults();
     }
 
     @Bean

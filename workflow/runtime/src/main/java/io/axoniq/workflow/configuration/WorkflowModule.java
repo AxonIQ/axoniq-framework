@@ -78,6 +78,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      */
     interface ConfigurationPhase {
 
+        /**
+         * Phase for providing a custom workflow configuration registry.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface WorkflowConfigurationRegistryPhase<C extends WorkflowContext>
                 extends WorkflowExecutionRepositoryPhase<C> {
 
@@ -91,6 +96,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
                     @Nonnull ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistry);
         }
 
+        /**
+         * Phase for providing a custom workflow execution repository.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface WorkflowExecutionRepositoryPhase<C extends WorkflowContext> extends HistoryPhase<C> {
 
             /**
@@ -103,6 +113,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
                     @Nonnull ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepository);
         }
 
+        /**
+         * Phase for configuring whether to use history.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface HistoryPhase<C extends WorkflowContext> extends LanguagePhase.WorkflowContextFactoryPhase<C> {
 
             /**
@@ -128,6 +143,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
      */
     interface LanguagePhase {
 
+        /**
+         * Phase for providing a custom workflow context factory.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface WorkflowContextFactoryPhase<C extends WorkflowContext> {
 
             /**
@@ -141,6 +161,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         }
     }
 
+    /**
+     * Workflow definition phase.
+     *
+     * @param <C> type of the workflow context.
+     */
     interface WorkflowDefinitionPhase<C extends WorkflowContext> {
 
         /**
@@ -152,10 +177,15 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
         WorkflowModule<C> definition(@Nonnull Function<DetectionPhase<C>, FinalizedPhase<C>> definition);
 
 
+        /**
+         * Phase for defining workflow detection.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface DetectionPhase<C extends WorkflowContext> {
 
             /**
-             * Names the workflow.
+             * Declarative workflow definition phase.
              *
              * @param componentBuilder builder for the workflow component.
              * @return builder for the trigger definition phase.
@@ -170,6 +200,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             FinalizedPhase<C> autodetected(@Nonnull ComponentBuilder<Object> componentBuilder);
         }
 
+        /**
+         * Phase for naming the workflow.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface NamingPhase<C extends WorkflowContext> {
 
             /**
@@ -181,6 +216,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             OnPhase<C> workflowName(@Nonnull String workflowName);
         }
 
+        /**
+         * Phase for defining workflow trigger.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface OnPhase<C extends WorkflowContext> {
 
             /**
@@ -192,6 +232,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             WorkflowCustomizationPhase<C> on(@Nonnull ComponentBuilder<EventCondition> startCondition);
         }
 
+        /**
+         * Phase for applying workflow customizations.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface WorkflowCustomizationPhase<C extends WorkflowContext> {
 
             /**
@@ -214,6 +259,11 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
             }
         }
 
+        /**
+         * Terminal phase for the workflow module.
+         *
+         * @param <C> type of the workflow context.
+         */
         interface FinalizedPhase<C> {
 
         }

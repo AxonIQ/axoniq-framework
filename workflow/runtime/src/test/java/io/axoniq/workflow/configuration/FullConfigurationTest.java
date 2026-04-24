@@ -45,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FullConfigurationTest {
 
     @Test
-    void testConfigurationWithDefaults() {
+    void configurationWithDefaults() {
         WorkflowConfigurer configurer = WorkflowConfigurer.create();
 
         var module = WorkflowModule.defaults("defaults-module", TestContext.class)

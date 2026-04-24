@@ -53,7 +53,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.configuration.WorkflowConfigurerDefaults.WORKFLOW_ENGINE_EXECUTOR;
+import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
 import static java.lang.Thread.currentThread;
 

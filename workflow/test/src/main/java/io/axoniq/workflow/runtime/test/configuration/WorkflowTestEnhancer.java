@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.runtime.test.configuration;
 
-import io.axoniq.workflow.configuration.WorkflowConfigurerDefaults;
+import io.axoniq.workflow.configuration.WorkflowConfigurationDefaults;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -45,7 +45,7 @@ public class WorkflowTestEnhancer implements ConfigurationEnhancer {
                 .registerComponent(DelayedPublisher.class, cfg ->
                         new DelayedPublisher(
                                 cfg.getComponent(EventSink.class),
-                                cfg.getComponent(Executor.class, WorkflowConfigurerDefaults.WORKFLOW_ENGINE_EXECUTOR),
+                                cfg.getComponent(Executor.class, WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR),
                                 cfg.getComponent(MessageTypeResolver.class),
                                 cfg.getComponent(Converter.class)
                         )

@@ -46,6 +46,15 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     private final String moduleName;
     private final boolean registerHistoryProjector;
 
+    /**
+     * Creates a workflow event processing registration enhancer, responsible for registering the workflow engine and
+     * history projector components to the event processing module.
+     *
+     * @param moduleName name of the event processing module.
+     * @param engineComponentName name of the workflow engine component.
+     * @param projectorComponentName name of the workflow history projector component.
+     * @param registerHistoryProjector flag indicating whether to register the history projector component.
+     */
     public WorkflowEventProcessingRegistrationEnhancer(
             @Nonnull String moduleName,
             @Nullable String engineComponentName,

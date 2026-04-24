@@ -23,27 +23,45 @@ import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.LifecycleRegistry;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.messaging.core.configuration.MessagingConfigurationDefaults;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventBusConfigurationDefaults;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Configurer for the Workflow Engine.
+ * The workflow {@link ApplicationConfigurer} of Axon Framework's configuration API.
+ * <p>
+ * Provides register operations for {@link #registerWorkflowModule(WorkflowModule) the workflow module} infrastructure
+ * components.
+ * <p>
+ * This configurer registers the following defaults:
+ * <ul>
+ *     <li>Registers a {@link io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer} for class {@link io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer}</li>
+ *     <li>Registers a {@link io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository} </li>
+ *     <li>Registers a {@link io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}</li>
+ *     <li>Registers a {@link io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry}</li>
+ *     <li>Registers a {@link io.axoniq.workflow.runtime.execution.WorkflowEngine}</li>
+ *     <li>Registers a {@link io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector}</li>
+ * </ul>
+ * To replace or decorate any of these defaults, use their respective interfaces as the identifier. For example, to
+ * adjust the {@code InMemoryWorkflowHistoryRepository}, do
+ * <pre><code>
+ *     configurer.componentRegistry(cr ->
+ *                  cr.registerComponent(InMemoryWorkflowHistoryRepository.class, c -> new CustomWorkflowHistoryRepository()))
+ * </code></pre>
+ * to replace it.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 public class WorkflowConfigurer implements ApplicationConfigurer {
 
-    private final MessagingConfigurer delegate;
+    private final EventSourcingConfigurer delegate;
 
-    private WorkflowConfigurer(MessagingConfigurer delegate) {
-        this.delegate = requireNonNull(delegate, "The Messaging Configurer cannot be null.");
+    private WorkflowConfigurer(@Nonnull EventSourcingConfigurer delegate) {
+        this.delegate = requireNonNull(delegate, "The Event Sourcing Configurer cannot be null.");
     }
 
     /**
@@ -52,26 +70,39 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
      * @return configurer.
      */
     public static WorkflowConfigurer create() {
-        return enhance(MessagingConfigurer.create());
+        return enhance(EventSourcingConfigurer.create());
     }
 
     /**
-     * Enhances the given {@link MessagingConfigurer} with the defaults required by the Workflow Engine.
+     * Enhances the given {@link EventSourcingConfigurer} with the defaults required by the Workflow Engine.
      *
-     * @param messagingConfigurer the messaging configurer to enhance.
+     * @param eventSourcingConfigurer the event sourcing configurer to enhance.
      * @return enhanced configurer.
      */
-    static WorkflowConfigurer enhance(MessagingConfigurer messagingConfigurer) {
-        return new WorkflowConfigurer(messagingConfigurer)
+    static WorkflowConfigurer enhance(EventSourcingConfigurer eventSourcingConfigurer) {
+        return new WorkflowConfigurer(eventSourcingConfigurer)
                 .componentRegistry(cr -> cr
-                        .registerEnhancer(new EventBusConfigurationDefaults())
-                        .registerEnhancer(new MessagingConfigurationDefaults())
-                        .registerEnhancer(new EventSourcingConfigurationDefaults())
-                        .registerEnhancer(new WorkflowConfigurerDefaults())
+                        .registerEnhancer(new WorkflowConfigurationDefaults())
                         .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
-                                "Workflow", null, null, true
-                        ))
+                                                  "Workflow",
+                                                  null,
+                                                  null,
+                                                  true
+                                          )
+                        )
                 );
+    }
+
+    /**
+     * Registers a workflow module.
+     *
+     * @param workflowModule workflow module to register.
+     * @return this configurer.
+     */
+    public WorkflowConfigurer registerWorkflowModule(@Nonnull WorkflowModule<?> workflowModule) {
+        Objects.requireNonNull(workflowModule, "Workflow module must not be null");
+        delegate.componentRegistry(cr -> cr.registerModule(workflowModule));
+        return this;
     }
 
     @Override
