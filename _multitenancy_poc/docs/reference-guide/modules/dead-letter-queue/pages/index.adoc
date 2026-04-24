@@ -1,4 +1,4 @@
-// TODO Axoniq feature
+[.axoniq-feature]
 = Dead-Letter Queue
 
 When configuring xref:events:event-processors/index.adoc#error-handling[error handling] for your event processors, you might want to consider a Dead-Letter Queue to park events that you were unable to handle.

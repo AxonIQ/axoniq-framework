@@ -1,4 +1,4 @@
-// TODO Axoniq feature
+[.axoniq-feature]
 = Distributed Tracing
 :navtitle: Tracing
 
