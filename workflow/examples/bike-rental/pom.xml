@@ -30,8 +30,8 @@
     </parent>
 
     <properties>
-        <spring.boot.version>4.0.5</spring.boot.version>
-        <testcontainers.version>2.0.4</testcontainers.version>
+        <spring.boot.version>4.0.6</spring.boot.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
 
     <artifactId>axon-workflow-example-bike-rental</artifactId>

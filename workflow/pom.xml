@@ -33,7 +33,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <kotlin.version>2.3.20</kotlin.version>
+        <kotlin.version>2.3.21</kotlin.version>
         <archunit.version>1.4.2</archunit.version>
         <axon.version>5.1.0-RC2</axon.version>
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
