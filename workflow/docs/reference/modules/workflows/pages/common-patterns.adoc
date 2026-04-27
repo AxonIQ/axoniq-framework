@@ -2,13 +2,13 @@
 :navtitle: Common Patterns
 
 This section shows how to compose the engine's primitives and combinators into common workflow patterns.
-These aren't special features — they're built from `execute`, `waitForEvent`, `awaitExecute`, and the combinators you already know.
+These aren't special features—they're built from `execute`, `waitForEvent`, `awaitExecute`, and the combinators you already know.
 
-== Fan-out / Fan-in
+== `Fan-out` / `Fan-in`
 
 Fan-out launches multiple steps in parallel. Fan-in collects all results before continuing.
 
-=== Fan-out — launch parallel steps
+=== `Fan-out`—launch parallel steps
 
 Reserve stock for every line item in an order concurrently:
 
@@ -26,9 +26,9 @@ var reservations = lineItems.stream()
                 Duration.ofSeconds(30), defaults()))
         .toArray(WorkflowStepResult[]::new);
 ----
-<.> Each step gets a unique name based on the SKU — the engine tracks them independently.
+<.> Each step gets a unique name based on the SKU—the engine tracks them independently.
 
-=== Fan-in — collect all results
+=== `Fan-in`—collect all results
 
 Use `allMatch` to wait for every reservation to complete:
 
@@ -56,9 +56,9 @@ if (!guard.success()) {
 
 logger.info("All {} items reserved!", reservations.length);
 ----
-<.> `allMatch` accepts a varargs array — works naturally with the collected results.
+<.> `allMatch` accepts a varargs array—works naturally with the collected results.
 
-=== Fan-out with waitForEvent
+=== `Fan-out` with `waitForEvent`
 
 Same pattern works for events. Request approval from multiple approvers in parallel, wait for all:
 
@@ -89,12 +89,12 @@ if (!result.success()) {
 
 logger.info("All {} approvers responded!", approvers.size());
 ----
-<.> Each approver gets their own `waitForEvent` — all run concurrently.
+<.> Each approver gets their own `waitForEvent`—all run concurrently.
 
-== Saga — compensating transactions
+== Saga—compensating transactions
 
 A saga executes steps sequentially and rolls back completed steps if a later step fails.
-This is standard imperative code — try each step, and on failure, compensate in reverse order:
+This is standard imperative code—try each step, and on failure, compensate in reverse order:
 
 [source,java]
 ----
@@ -133,11 +133,11 @@ try {
 }
 ----
 
-Each compensating action is itself a durable step — the engine records it, and crash recovery ensures the rollback completes even if the application restarts mid-compensation.
+Each compensating action is itself a durable step—the engine records it, and crash recovery ensures the rollback completes even if the application restarts mid-compensation.
 
 == Scatter-gather
 
-Scatter-gather fans out to multiple services and collects results as they arrive — without waiting for all.
+Scatter-gather fans out to multiple services and collects results as they arrive—without waiting for all.
 Use `anyMatch` in a loop to process results one at a time:
 
 [source,java]
@@ -168,11 +168,11 @@ while (!remaining.isEmpty()) {
 ----
 <.> Remove the processed result and loop until all quotes are collected.
 
-This lets you react to each response immediately — e.g., display partial results, make early decisions, or short-circuit once you have enough data.
+This lets you react to each response immediately—for example, display partial results, make early decisions, or short-circuit once you have enough data.
 
 == Human-in-the-loop
 
-Wait for a human action — an approval, a review, a manual data entry — with escalation if they don't respond in time:
+Wait for a human action—an approval, a review, a manual data entry—with escalation if they don't respond in time:
 
 [source,java]
 ----
@@ -202,12 +202,12 @@ if (decision.timeout()) {                                                // <1>
 decision.await();
 logger.info("Approval decision received: {}", decision.result());
 ----
-<.> `timeout()` blocks until the step completes, then returns `true` if it timed out — perfect for escalation logic.
+<.> `timeout()` blocks until the step completes, then returns `true` if it timed out—perfect for escalation logic.
 
 == Circuit breaker
 
 Skip a step entirely if it has been failing consistently.
-This is implemented in your action code, not in the engine — but the engine's durable state makes it easy:
+This is implemented in your action code, not in the engine—but the engine's durable state makes it easy:
 
 [source,java]
 ----
@@ -231,7 +231,7 @@ if (failureCount < 3) {                                                  // <1>
 ----
 <.> Only attempt the step if under the failure threshold.
 <.> Reset the counter on success.
-<.> Increment the counter on failure — persisted durably in the workflow payload.
+<.> Increment the counter on failure—persisted durably in the workflow payload.
 
 [#_scheduled_delayed_steps]
 == Scheduled / delayed steps [.badge]#coming soon#
@@ -239,7 +239,7 @@ if (failureCount < 3) {                                                  // <1>
 [NOTE]
 ====
 **Dedicated scheduling support is coming soon.**
-In a future version, you will be able to schedule steps to run at a specific time (e.g., "send reminder at 9am tomorrow").
+In a future version, you will be able to schedule steps to run at a specific time (for example, "send reminder at 9 AM tomorrow").
 ====
 
 For now, use `sleep` to implement delays:
@@ -257,7 +257,7 @@ ctx.awaitExecute("sendReminder",
         ReminderService::send);
 ----
 
-This is durable — if the application restarts during the sleep, the engine recalculates the remaining delay and resumes correctly.
+This is durable—if the application restarts during the sleep, the engine recalculates the remaining delay and resumes correctly.
 
 [#_sub_workflows]
 == Sub-workflows [.badge]#coming soon#
@@ -270,10 +270,10 @@ First-class sub-workflow support with built-in lifecycle management is **coming 
 In the meantime, the engine's event-sourced nature makes it straightforward to implement sub-workflows yourself.
 The trick: inside an `awaitExecute` action, publish a dedicated event that the engine routes through normal processing, which triggers the child workflow.
 
-The same approach works in reverse: the child publishes a dedicated completion event in a final step, and the parent matches it with `payloadProperty` on a shared correlation ID (e.g., `orderId`).
+The same approach works in reverse: the child publishes a dedicated completion event in a final step, and the parent matches it with `payloadProperty` on a shared correlation ID (for example, `orderId`).
 
 [source,java]
-.Parent workflow — launches a child and waits for it to finish
+.Parent workflow—launches a child and waits for it to finish
 ----
 @Workflow(idProperty = "orderId",
           startOnEvent = "OrderPlaced",
@@ -311,12 +311,12 @@ public void execute(SimpleWorkflowContext ctx) {
 }
 ----
 <.> The step name `startPaymentProcess` produces a durable `io.myapp.StartPaymentProcessStarted` event in the parent's stream for auditability.
-<.> Inside the action, a dedicated `StartPaymentProcess` event is published via `EventSink` with `null` `ProcessingContext` — no workflow metadata attached, so it triggers the child workflow.
-<.> The parent waits for `PaymentProcessCompleted` — a dedicated event the child publishes explicitly (not an auto-generated lifecycle event).
+<.> Inside the action, a dedicated `StartPaymentProcess` event is published via `EventSink` with `null` `ProcessingContext`—no workflow metadata attached, so it triggers the child workflow.
+<.> The parent waits for `PaymentProcessCompleted`—a dedicated event the child publishes explicitly (not an auto-generated lifecycle event).
 <.> `payloadProperty("orderId")` matches on a field in the event payload. This works across workflow boundaries because the event carries no workflow metadata.
 
 [source,java]
-.Child workflow — triggered by the dedicated event, signals completion explicitly
+.Child workflow—triggered by the dedicated event, signals completion explicitly
 ----
 @Workflow(idProperty = "childWorkflowId",
           startOnEvent = "io.myapp.StartPaymentProcess",                   // <1>
@@ -344,7 +344,7 @@ public void execute(SimpleWorkflowContext ctx) {
 }
 ----
 <.> The child workflow starts when the `StartPaymentProcess` event (published without workflow metadata) is processed. The `childWorkflowId` from the payload becomes this workflow's instance ID.
-<.> A final `notifyParent` step publishes `PaymentProcessCompleted` via `EventSink` with `null` `ProcessingContext` — no workflow metadata, so it reaches the parent's `awaitEvent`.
+<.> A final `notifyParent` step publishes `PaymentProcessCompleted` via `EventSink` with `null` `ProcessingContext`—no workflow metadata, so it reaches the parent's `awaitEvent`.
 
 The event store shows the handoff:
 
