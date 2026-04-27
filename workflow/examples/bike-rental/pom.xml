@@ -123,6 +123,7 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-server-connector</artifactId>
+            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
