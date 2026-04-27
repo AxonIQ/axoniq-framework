@@ -4,12 +4,12 @@
 Real-world workflows often need to run steps concurrently.
 You might want to ship the order and send a confirmation email at the same time, request shipping quotes from two carriers and take the fastest, or wait for multiple approvals before proceeding.
 
-The three combinators — `anyMatch`, `allMatch`, and `noneMatch` — let you compose non-blocking steps (`execute` and `waitForEvent`) into powerful orchestration patterns.
+The three combinators—`anyMatch`, `allMatch`, and `noneMatch`—let you compose non-blocking steps (`execute` and `waitForEvent`) into powerful orchestration patterns.
 
 == Non-blocking execution
 
 So far we've used `awaitExecute` and `awaitEvent`, which block until the step completes.
-The non-blocking variants — `execute` and `waitForEvent` — start steps without waiting and return a `WorkflowStepResult`:
+The non-blocking variants—`execute` and `waitForEvent`—start steps without waiting and return a `WorkflowStepResult`:
 
 [source,java]
 ----
@@ -34,20 +34,20 @@ var backgroundCheck = ctx.execute("runBackgroundCheck", ctx.workflowPayload(),
         Duration.ofMinutes(10), defaults());
 ----
 
-== anyMatch — first match wins
+== `anyMatch`—first match wins
 
 `anyMatch` resolves as soon as the *first* step reaches a terminal state that matches the predicate.
 
 [IMPORTANT]
 ====
-`anyMatch` uses **short-circuit semantics** — the moment the first step matches, the combinator resolves.
+`anyMatch` uses **short-circuit semantics**—the moment the first step matches, the combinator resolves.
 The remaining steps may still be running.
-They are *not* automatically cancelled — if you need cleanup, cancel them explicitly via `unmatched()`.
+They are *not* automatically cancelled—if you need cleanup, cancel them explicitly via `unmatched()`.
 ====
 
 === Race two events
 
-Wait for the first of two possible outcomes — whichever event arrives first wins:
+Wait for the first of two possible outcomes—whichever event arrives first wins:
 
 [source,java]
 ----
@@ -76,12 +76,12 @@ if (winner == declined) {
 ----
 <.> Resolves when the first result reaches a terminal state matching the predicate.
 <.> Blocks until the outcome is determined.
-<.> `matched()` contains the event that arrived first — the winner is always the first element.
-<.> `unmatched()` contains the other wait — cancel it since we already have our answer.
+<.> `matched()` contains the event that arrived first—the winner is always the first element.
+<.> `unmatched()` contains the other wait—cancel it since we already have our answer.
 
 === Race two services
 
-Same pattern works with `execute` — request shipping quotes from two carriers, take whichever responds first:
+Same pattern works with `execute`—request shipping quotes from two carriers, take whichever responds first:
 
 [source,java]
 ----
@@ -104,7 +104,7 @@ for (var loser : race.unmatched()) {
 }
 ----
 
-== allMatch — all must succeed
+== `allMatch`—all must succeed
 
 `allMatch` succeeds only when _all_ steps match the predicate.
 It short-circuits on the first non-match:
@@ -137,15 +137,15 @@ if (guard.success()) {                                           // <2>
 <.> `success()` on the combinator is `true` only if all steps matched the predicate.
 <.> `unmatched()` contains the step that violated the predicate, plus any steps that hadn't completed yet when the short-circuit happened.
 
-== noneMatch — no failures allowed
+== `noneMatch`—no failures allowed
 
 `noneMatch` succeeds when _no_ step matches the predicate.
 
 [IMPORTANT]
 ====
-`noneMatch` uses **short-circuit semantics** — the moment the first step matches the predicate (e.g., a step fails), the combinator resolves immediately.
+`noneMatch` uses **short-circuit semantics**—the moment the first step matches the predicate (for example, a step fails), the combinator resolves immediately.
 The remaining steps may still be running.
-They are *not* automatically cancelled — cancel them explicitly via `unmatched()` if needed.
+They are *not* automatically cancelled—cancel them explicitly via `unmatched()` if needed.
 ====
 
 === Basic usage
@@ -167,7 +167,7 @@ if (check.success()) {
     logger.info("No failures — all clear!");
 }
 ----
-<.> Succeeds if none of the steps fail. Short-circuits as soon as one fails. When `success()` returns `true`, all steps have reached a terminal state — no cancellation is needed.
+<.> Succeeds if none of the steps fail. Short-circuits as soon as one fails. When `success()` returns `true`, all steps have reached a terminal state—no cancellation is needed.
 
 === Cancel remaining on failure
 
@@ -191,8 +191,8 @@ if (!check.success()) {
     ctx.fail(new RuntimeException("Step " + failedStep.getStepName() + " failed"));
 }
 ----
-<.> `matched()` contains the step(s) that triggered the predicate — the violator(s).
-<.> `unmatched()` contains the steps that didn't fail — some may still be running.
+<.> `matched()` contains the steps that triggered the predicate—the violators.
+<.> `unmatched()` contains the steps that didn't fail—some may still be running.
 
 === Compensating actions on failure
 
@@ -239,7 +239,7 @@ if (!check.success()) {
              + ": " + failedStep.error().map(Throwable::getMessage).orElse("unknown")));
 }
 ----
-<.> Iterate over `unmatched()` — steps that didn't fail. If they already completed successfully, run a compensating action to undo their work.
+<.> Iterate over `unmatched()`—steps that didn't fail. If they already completed successfully, run a compensating action to undo their work.
 
 == Inspecting sub-results
 
@@ -253,12 +253,12 @@ All three combinators return a `CombinatorWorkflowStepResult` with `matched()` a
 |Steps that satisfied the predicate. Sorted by event-sourced timestamps (earliest first). For `anyMatch`, the winner is always the first element.
 
 |`unmatched()`
-|Everything else — steps that didn't match, plus steps that hadn't completed when the combinator short-circuited. Completed results appear first (sorted by timestamp), followed by still-running results.
+|Everything else—steps that didn't match, plus steps that hadn't completed when the combinator short-circuited. Completed results appear first (sorted by timestamp), followed by still-running results.
 |===
 
 [NOTE]
 ====
-`matched()` and `unmatched()` reflect a *snapshot* of each result's state at the time they are called — not the final outcome.
+`matched()` and `unmatched()` reflect a *snapshot* of each result's state at the time they are called—not the final outcome.
 Because combinators short-circuit, some results may not have completed yet.
 Those not-yet-completed results always appear in `unmatched()`.
 ====
@@ -278,12 +278,12 @@ After a combinator short-circuits, use `matched()` to identify what triggered it
 |Combinator |`matched()` contains |`unmatched()` contains
 
 |`anyMatch`
-|The winner(s) — steps that satisfied the predicate
-|The losers — cancel them if no longer needed
+|The winners—steps that satisfied the predicate
+|The losers—cancel them if no longer needed
 
 |`noneMatch`
-|The violator(s) — steps that triggered the predicate (e.g., the failed step)
-|The rest — some may still be running, cancel them; some may have completed successfully, compensate them
+|The violators—steps that triggered the predicate (for example, the failed step)
+|The rest—some may still be running, cancel them; some may have completed successfully, compensate them
 
 |`allMatch`
 |The steps that satisfied the predicate so far
@@ -315,12 +315,12 @@ if (!result.success()) {
 == Parallel workflows
 
 Multiple workflows can be triggered by the same event, each handling a different concern independently.
-When an `OrderPlaced` event is published, both workflows start in parallel — each with its own state and lifecycle.
+When an `OrderPlaced` event is published, both workflows start in parallel—each with its own state and lifecycle.
 
-Workflow IDs must be unique across all running workflows. If two workflow definitions derive the same ID from the triggering event, only the first one starts — the second is ignored and a warning is logged. To run genuinely parallel workflows on the same event, associate each with a different `idProperty`:
+Workflow IDs must be unique across all running workflows. If two workflow definitions derive the same ID from the triggering event, only the first one starts—the second is ignored and a warning is logged. To run genuinely parallel workflows on the same event, associate each with a different `idProperty`:
 
 [source,java]
-.OrderFulfillmentWorkflow — handles stock and shipping
+.OrderFulfillmentWorkflow—handles stock and shipping
 ----
 @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
 public void execute(SimpleWorkflowContext ctx) {
@@ -332,7 +332,7 @@ public void execute(SimpleWorkflowContext ctx) {
 ----
 
 [source,java]
-.CustomerNotificationWorkflow — handles all customer communication
+.CustomerNotificationWorkflow—handles all customer communication
 ----
 @Workflow(idProperty = "customerId", startOnEvent = "OrderPlaced")
 public void execute(SimpleWorkflowContext ctx) {
@@ -350,7 +350,7 @@ public void execute(SimpleWorkflowContext ctx) {
 }
 ----
 
-Both workflows receive the same `OrderPlaced` event payload, but they run independently — each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected. Because each workflow binds to a different ID property (`orderId` vs. `customerId`), both start independently even though they react to the same event.
+Both workflows receive the same `OrderPlaced` event payload, but they run independently—each has its own workflow instance, event stream, and lifecycle. If one fails, the other is unaffected. Because each workflow binds to a different ID property (`orderId` vs. `customerId`), both start independently even though they react to the same event.
 
 ++++
 <div class="et-player" data-autoplay>
@@ -375,7 +375,7 @@ Both workflows receive the same `OrderPlaced` event payload, but they run indepe
 </div>
 ++++
 
-For cross-workflow interaction patterns — parent-child workflows, event-based signalling between workflows — see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
+For cross-workflow interaction patterns—parent-child workflows, event-based signalling between workflows—see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
 
 For more orchestration patterns like fan-out/fan-in, saga compensation, scatter-gather, and human-in-the-loop, see xref:common-patterns.adoc[].
 

@@ -1,17 +1,17 @@
 = Waiting for Events
 :navtitle: Waiting for Events
 
-Many business processes need to pause and wait for something external — a payment confirmation, an approval decision, a callback from a third-party system.
+Many business processes need to pause and wait for something external—a payment confirmation, an approval decision, a callback from a third-party system.
 The `awaitEvent` method lets your workflow suspend until a matching event arrives.
 
 [NOTE]
 ====
 The events that `awaitEvent` listens for are standard Axon Framework events.
-They can be published from anywhere — a command handler, an `EventGateway`, a REST controller, a webhook endpoint, or any other component that has access to the event bus.
+They can be published from anywhere—a command handler, an `EventGateway`, a REST controller, a webhook endpoint, or any other component that has access to the event bus.
 For example, a payment provider callback could publish a `PaymentConfirmed` event directly via `eventGateway.publish(...)`, and that will unblock the waiting workflow.
 ====
 
-== The awaitEvent method
+== The `awaitEvent` method
 
 After initiating payment, we need to wait for a `PaymentConfirmed` event before continuing:
 
@@ -123,7 +123,7 @@ try {
 
 [TIP]
 ====
-You can branch on the timeout outcome — cancel the order, retry payment, or escalate to manual review.
+You can branch on the timeout outcome—cancel the order, retry payment, or escalate to manual review.
 The right strategy depends on your business requirements.
 ====
 
@@ -145,10 +145,10 @@ ctx.allMatch(WorkflowStepResult::isCompleted, payment, approval)   // <2>
 
 logger.info("Both payment and approval received — proceeding!");
 ----
-<.> `waitForEvent` returns a `WorkflowStepResult` immediately without blocking — both waits start concurrently.
+<.> `waitForEvent` returns a `WorkflowStepResult` immediately without blocking—both waits start concurrently.
 <.> `allMatch` blocks until both events have arrived. See xref:step-orchestration.adoc[] for more on combinators.
 
-== Sleep — a simple delay
+== Sleep—a simple delay
 
 Sometimes you just need to pause for a while.
 The `sleep` method provides a durable delay:
@@ -159,7 +159,7 @@ ctx.sleep("cooldownPeriod", Duration.ofDays(10)); // <1>
 ----
 
 <.> Pauses the workflow for 10 days.
-Under the hood, this is a `waitFor` with an event condition that never matches — so it always times out after the specified duration.
+Under the hood, this is a `waitFor` with an event condition that never matches—so it always times out after the specified duration.
 
 ++++
 <div class="et-player" data-autoplay>
@@ -170,9 +170,9 @@ Under the hood, this is a `waitFor` with an event condition that never matches �
 </div>
 ++++
 
-`sleep` always produces a STARTED followed by a TIMED_OUT — that's by design, since the "event" it waits for never arrives.
+`sleep` always produces a STARTED followed by a TIMED_OUT—that's by design, since the "event" it waits for never arrives.
 
-=== sleepAsync (non-blocking)
+=== `sleepAsync` (non-blocking)
 
 `sleepAsync` returns a `WorkflowStepResult` immediately, allowing you to compose delays with other steps using combinators:
 
@@ -190,7 +190,7 @@ ctx.anyMatch(WorkflowStepResult::isCompleted, cooldown, approval)
 == Updated workflow
 
 Here's our workflow with the payment step added.
-Notice the order — we subscribe to the event *before* initiating payment, to avoid a race condition where the confirmation arrives before we're listening:
+Notice the order—we subscribe to the event *before* initiating payment, to avoid a race condition where the confirmation arrives before we're listening:
 
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
@@ -226,12 +226,12 @@ public void execute(SimpleWorkflowContext ctx) {
 ----
 
 <.> `waitForEvent` starts listening for `PaymentConfirmed` immediately and returns a `WorkflowStepResult` without blocking.
-<.> `execute` calls the payment service — this may trigger a third-party provider that eventually publishes a `PaymentConfirmed` event.
+<.> `execute` calls the payment service—this may trigger a third-party provider that eventually publishes a `PaymentConfirmed` event.
 <.> `allMatch` blocks until both the payment initiation completes and the confirmation event arrives.
 
 [TIP]
 ====
-By subscribing to the event *before* calling the service that produces it, you guarantee no events are missed — even if the external service responds instantly.
+By subscribing to the event *before* calling the service that produces it, you guarantee no events are missed—even if the external service responds instantly.
 ====
 
 Here's the full event store for this workflow:
@@ -253,7 +253,7 @@ Here's the full event store for this workflow:
 </div>
 ++++
 
-The event subscription (`AwaitPaymentStarted`) appears *before* `InitiatePaymentStarted` — no race condition.
+The event subscription (`AwaitPaymentStarted`) appears *before* `InitiatePaymentStarted`—no race condition.
 The external `PaymentConfirmed` event unblocks the workflow, and its payload is recorded in `AwaitPaymentCompleted`.
 
-Now that we can execute actions and wait for external events, let's dive deeper into xref:understanding-steps.adoc[all the options] you can configure — timeouts, error handling, event naming, payload reducers, and execution semantics.
+Now that we can execute actions and wait for external events, let's dive deeper into xref:understanding-steps.adoc[all the options] you can configure—timeouts, error handling, event naming, payload reducers, and execution semantics.

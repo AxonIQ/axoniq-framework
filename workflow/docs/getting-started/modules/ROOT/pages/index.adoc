@@ -4,7 +4,7 @@
 Welcome to the Axon Workflow Engine Getting Started Guide!
 
 Building reliable business workflows is hard.
-Order fulfillment, loan applications, employee onboarding — these processes need audit trails, crash recovery, and scalability.
+Order fulfillment, loan applications, employee onboarding—these processes need audit trails, crash recovery, and scalability.
 Event sourcing delivers all of that, but comes with significant complexity: command handlers, event handlers, saga patterns, and manual state management.
 
 The Axon Workflow Engine bridges that gap.
@@ -12,36 +12,36 @@ You write simple, imperative business logic, and the engine handles event sourci
 
 The engine is built on *primitives* and *composables*:
 
-*Execution primitives* — the core building blocks for workflows:
+*Execution primitives*—the core building blocks for workflows:
 
-* *Execute* — Run actions and tasks (synchronous or asynchronous)
-* *WaitFor* — Suspend until an external event arrives
+* *Execute*—Run actions and tasks (synchronous or asynchronous)
+* *WaitFor*—Suspend until an external event arrives
 
-*Storage primitives* — manage durable workflow state:
+*Storage primitives*—manage durable workflow state:
 
-* *Payload* — Read and modify the workflow payload across steps
+* *Payload*—Read and modify the workflow payload across steps
 
-*Lifecycle primitives* — control the workflow's lifecycle:
+*Lifecycle primitives*—control the workflow's lifecycle:
 
-* *Terminate* — End a workflow (`fail`, `cancel`) or cancel individual steps (`cancelStep`)
+* *Terminate*—End a workflow (`fail`, `cancel`) or cancel individual steps (`cancelStep`)
 
-*Composables* — higher-level combinators for step orchestration:
+*Composables*—higher-level combinators for step orchestration:
 
-* *allMatch* — Guard ensuring all results match a predicate (e.g., all steps completed successfully)
-* *anyMatch* — Race combinator where the first matching result wins (e.g., the first event to arrive)
-* *noneMatch* — Guard ensuring no results match a predicate (e.g., no steps failed)
+* *allMatch*—Guard ensuring all results match a predicate (for example, all steps completed successfully)
+* *anyMatch*—Race combinator where the first matching result wins (for example, the first event to arrive)
+* *noneMatch*—Guard ensuring no results match a predicate (for example, no steps failed)
 
 == About this tutorial
 
 In this tutorial, you will build an *Order Fulfillment* workflow that reserves stock, initiates payment, and waits for payment confirmation.
-Along the way, you will learn the two core execution primitives — *Execute* and *WaitFor*:
+Along the way, you will learn the two core execution primitives—*Execute* and *WaitFor*:
 
-. *xref:project-setup.adoc[Project Setup]* — Add dependencies and define domain events
-. *xref:first-workflow.adoc[Your First Workflow]* — Create a workflow that executes actions and waits for events
+. *xref:project-setup.adoc[Project Setup]*—Add dependencies and define domain events
+. *xref:first-workflow.adoc[Your First Workflow]*—Create a workflow that executes actions and waits for events
 
 [TIP]
 ====
-Once you've completed the tutorial, the xref:axon-framework-reference:workflows:index.adoc[Reference Guide] covers everything in depth — all overloads, orchestration patterns, lifecycle management, testing, and configuration.
+Once you've completed the tutorial, the xref:axon-framework-reference:workflows:index.adoc[Reference Guide] covers everything in depth—all overloads, orchestration patterns, lifecycle management, testing, and configuration.
 ====
 
 Are you ready?
