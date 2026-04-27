@@ -36,6 +36,13 @@ public final class WorkflowExecutionException extends RuntimeException implement
 
     private final String type;
 
+    /**
+     * Creates a stackless exception carrying the originating throwable's metadata.
+     *
+     * @param type    fully-qualified class name of the originating throwable.
+     * @param message message of the originating throwable, or {@code null}.
+     * @param cause   reconstructed cause, or {@code null}.
+     */
     public WorkflowExecutionException(@Nonnull String type,
                                       @Nullable String message,
                                       @Nullable Throwable cause) {

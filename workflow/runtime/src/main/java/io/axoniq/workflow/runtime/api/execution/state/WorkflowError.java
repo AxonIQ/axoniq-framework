@@ -81,7 +81,9 @@ public record WorkflowError(@Nonnull String type,
         if (rawCause != null && rawCause != throwable && !seen.containsKey(rawCause) && depth + 1 < MAX_CAUSE_DEPTH) {
             compactCause = fromInternal(rawCause, seen, depth + 1);
         }
-        return new WorkflowError(throwable.getClass().getName(), truncate(throwable.getMessage()), compactCause);
+        String typeName = throwable instanceof Cause c ? c.type() : throwable.getClass().getName();
+        String message = throwable instanceof Cause c ? c.message() : throwable.getMessage();
+        return new WorkflowError(typeName, truncate(message), compactCause);
     }
 
     @Nullable
@@ -93,15 +95,14 @@ public record WorkflowError(@Nonnull String type,
     }
 
     /**
-     * Rebuilds a stackless {@link Throwable} chain from this compact representation. The returned throwable is a
-     * {@link WorkflowExecutionException} carrying the original exception class FQN and message; its cause (if any)
-     * is similarly reconstructed.
+     * Rebuilds a stackless {@link WorkflowExecutionException} chain from this compact representation. The returned
+     * exception carries the original exception class FQN and message; its cause (if any) is similarly reconstructed.
      *
-     * @return reconstructed throwable.
+     * @return reconstructed exception.
      */
     @Nonnull
-    public Throwable toThrowable() {
-        Throwable reconstructedCause = cause != null ? cause.toThrowable() : null;
+    public WorkflowExecutionException toThrowable() {
+        WorkflowExecutionException reconstructedCause = cause != null ? cause.toThrowable() : null;
         return new WorkflowExecutionException(type, message, reconstructedCause);
     }
 }

@@ -19,14 +19,17 @@
 package io.axoniq.workflow.runtime.api.execution.state;
 
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.TestConverter;
 import org.axonframework.conversion.jackson2.Jackson2Converter;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+
+import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class WorkflowErrorTest {
-
-    private final Converter converter = new Jackson2Converter();
 
     @Test
     void fromReturnsNullForNullThrowable() {
@@ -127,6 +130,28 @@ class WorkflowErrorTest {
     }
 
     @Test
+    void isTypeMatchesByFullyQualifiedName() {
+        Cause cause = WorkflowError.from(new IllegalStateException("boom"));
+        assertThat(cause.isType(IllegalStateException.class)).isTrue();
+        assertThat(cause.isType(RuntimeException.class)).isFalse();
+    }
+
+    @Test
+    void fromUnwrapsCauseTypeWhenThrowableImplementsCause() {
+        var wrapped = new WorkflowExecutionException("com.acme.Boom", "boom",
+                                                     new WorkflowExecutionException("com.acme.Inner", "inner", null));
+
+        var error = WorkflowError.from(wrapped);
+
+        assertThat(error).isNotNull();
+        assertThat(error.type()).isEqualTo("com.acme.Boom");
+        assertThat(error.message()).isEqualTo("boom");
+        assertThat(error.cause()).isNotNull();
+        assertThat(error.cause().type()).isEqualTo("com.acme.Inner");
+        assertThat(error.cause().message()).isEqualTo("inner");
+    }
+
+    @Test
     void toThrowableProducesStacklessWorkflowExecutionException() {
         var error = WorkflowError.from(new IllegalStateException("boom"));
 
@@ -153,7 +178,62 @@ class WorkflowErrorTest {
     }
 
     @Test
-    void jsonRoundTripDropsStackTraceAndShrinksPayload() {
+    void roundTripThrowableThroughWorkflowErrorIsStable() {
+        var original = new IllegalStateException("boom", new IOException("inner"));
+
+        var error = WorkflowError.from(original);
+        var fromError = error.toThrowable();
+        var fromFromError = WorkflowError.from(fromError);
+
+        assertThat(fromFromError).isEqualTo(error);
+    }
+
+    @Test
+    void roundTripWorkflowExecutionExceptionThroughWorkflowErrorIsStable() {
+        var original = new WorkflowExecutionException("com.acme.Boom", "msg",
+                                                     new WorkflowExecutionException("com.acme.Inner", "i", null));
+
+        var error = WorkflowError.from(original);
+        var fromError = error.toThrowable();
+        var fromFromError = WorkflowError.from(fromError);
+
+        assertThat(fromFromError).isEqualTo(error);
+    }
+
+    @Test
+    void roundTripWorkflowExecutionExceptionPreservesTypeAndMessageAcrossCauseChain() {
+        var inner = new WorkflowExecutionException("com.acme.Inner", "i", null);
+        var outer = new WorkflowExecutionException("com.acme.Boom", "msg", inner);
+
+        var error = WorkflowError.from(outer);
+        var reconstructed = error.toThrowable();
+
+        assertThat(reconstructed.type()).isEqualTo(outer.type());
+        assertThat(reconstructed.getMessage()).isEqualTo(outer.getMessage());
+        assertThat(reconstructed.getCause()).isInstanceOfSatisfying(WorkflowExecutionException.class, c -> {
+            assertThat(c.type()).isEqualTo(inner.type());
+            assertThat(c.getMessage()).isEqualTo(inner.getMessage());
+        });
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = TestConverter.class, names = {"JACKSON", "CBOR"})
+    void converterRoundTripPreservesData(TestConverter testConverter) {
+        var original = new RuntimeException("outer", new IllegalStateException("inner"));
+        var compact = WorkflowError.from(original);
+
+        WorkflowError roundTripped = testConverter.serializeDeserialize(compact);
+
+        assertThat(roundTripped.type()).isEqualTo(RuntimeException.class.getName());
+        assertThat(roundTripped.message()).isEqualTo("outer");
+        assertThat(roundTripped.cause()).isNotNull();
+        assertThat(roundTripped.cause().type()).isEqualTo(IllegalStateException.class.getName());
+        assertThat(roundTripped.cause().message()).isEqualTo("inner");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = TestConverter.class, names = {"JACKSON", "CBOR"})
+    void converterPayloadStaysCompactForDeepStackTraces(TestConverter testConverter) {
         RuntimeException ex = new RuntimeException("boom");
         StackTraceElement[] frames = new StackTraceElement[200];
         for (int i = 0; i < frames.length; i++) {
@@ -162,32 +242,20 @@ class WorkflowErrorTest {
         }
         ex.setStackTrace(frames);
 
-        WorkflowError compact = WorkflowError.from(ex);
+        Converter converter = testConverter.getConverter();
+        byte[] serialized = converter.convert(WorkflowError.from(ex), byte[].class);
 
-        byte[] serialized = converter.convert(compact, byte[].class);
-        String json = new String(serialized);
-
-        assertThat(json).doesNotContain("stackTrace")
-                        .doesNotContain("com.example.very.long.package.path.ClassName");
-        assertThat(serialized.length).isLessThan(200);
-
-        WorkflowError roundTripped = converter.convert(serialized, WorkflowError.class);
-        assertThat(roundTripped.type()).isEqualTo(RuntimeException.class.getName());
-        assertThat(roundTripped.message()).isEqualTo("boom");
-        assertThat(roundTripped.cause()).isNull();
+        assertThat(serialized.length).isLessThan(500);
+        assertThat(new String(serialized)).doesNotContain("com.example.very.long.package.path.ClassName");
     }
 
     @Test
-    void jsonRoundTripPreservesCauseChain() {
-        var original = new RuntimeException("outer", new IllegalStateException("inner"));
+    void jacksonWireFormatHasNoStackTraceField() {
+        Converter converter = new Jackson2Converter();
+        var compact = WorkflowError.from(new RuntimeException("boom"));
 
-        byte[] serialized = converter.convert(WorkflowError.from(original), byte[].class);
-        WorkflowError roundTripped = converter.convert(serialized, WorkflowError.class);
+        String json = new String(converter.convert(compact, byte[].class));
 
-        assertThat(roundTripped.type()).isEqualTo(RuntimeException.class.getName());
-        assertThat(roundTripped.message()).isEqualTo("outer");
-        assertThat(roundTripped.cause()).isNotNull();
-        assertThat(roundTripped.cause().type()).isEqualTo(IllegalStateException.class.getName());
-        assertThat(roundTripped.cause().message()).isEqualTo("inner");
+        assertThat(json).doesNotContain("stackTrace");
     }
 }

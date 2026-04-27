@@ -38,4 +38,14 @@ public interface Cause {
      * Message describing the cause, typically {@link Throwable#getMessage()}.
      */
     String message();
+
+    /**
+     * Returns {@code true} when {@link #type()} matches the fully-qualified name of {@code clazz}.
+     * Use this instead of {@code instanceof} when branching on the originating throwable's class —
+     * {@code instanceof} does not match because the runtime cause is always
+     * {@link WorkflowExecutionException}, regardless of the originating type.
+     */
+    default boolean isType(Class<? extends Throwable> clazz) {
+        return clazz.getName().equals(type());
+    }
 }

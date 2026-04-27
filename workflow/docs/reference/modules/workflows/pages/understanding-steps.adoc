@@ -341,10 +341,23 @@ if (shipping.failure()) { // blocks until shipping reaches a terminal state
 
 [NOTE]
 ====
-Any exception thrown during step execution is wrapped in `StepFailedException`.
-Use `getCause()` to access the reconstructed cause — a `WorkflowExecutionException` that preserves the original class name via `type()` and the message via `getMessage()`.
+Any exception thrown by a step body is converted to a `WorkflowExecutionException` at the runtime boundary, then wrapped in `StepFailedException`.
+The conversion happens immediately — the same `WorkflowExecutionException` is observed during live execution and after event-sourced replay.
+
+Use `getCause()` on `StepFailedException` to access the `WorkflowExecutionException`, which exposes the originating throwable's fully-qualified class name via `type()` and its message via `getMessage()`.
 The original stack trace is written to the application log at the moment of failure but is not stored in the event store, so it is not available after replay.
-Because the cause is always reconstructed as `WorkflowExecutionException`, `instanceof` checks against the original exception class will not match after event-sourced replay — branch on `type()` instead.
+
+Because the cause is always a `WorkflowExecutionException`, `instanceof` checks against the originating exception class never match — neither live nor on replay. Branch on `type()` instead:
+
+[source,java]
+----
+} catch (StepFailedException e) {
+    var cause = (WorkflowExecutionException) e.getCause();
+    if (cause.isType(OutOfStockException.class)) {
+        // ...
+    }
+}
+----
 ====
 
 [[cancelling-a-step]]
