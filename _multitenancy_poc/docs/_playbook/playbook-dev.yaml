@@ -43,3 +43,4 @@ runtime:
 ui:
   bundle:
     url: https://github.com/AxonIQ/axoniq-library-ui/releases/latest/download/ui-bundle.zip
+    snapshot: true

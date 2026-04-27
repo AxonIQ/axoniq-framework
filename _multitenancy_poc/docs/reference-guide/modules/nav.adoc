@@ -1,3 +1,0 @@
-* xref:ROOT:index.adoc[]
-
-include::ROOT:partial$nav.adoc[]
