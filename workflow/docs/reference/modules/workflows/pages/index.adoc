@@ -1,5 +1,6 @@
-= Axon Workflow Engine Reference
-:navtitle: Reference
+[.axoniq-feature]
+= Workflows
+:navtitle: Workflows
 
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
