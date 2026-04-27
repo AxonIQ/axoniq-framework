@@ -2,8 +2,7 @@ name: deadlines-guide
 title: Deadlines guide
 version:
   axoniq-(?<version>+({0..9}).+({0..9})).*: $<version>
-  master: development
-
+  '*': development
 asciidoc:
   attributes:
     component_description: How to use Deadlines to implement time-based constraints
