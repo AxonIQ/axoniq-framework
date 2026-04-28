@@ -1,6 +1,6 @@
 name: Announce release on Slack
 
-#on:
+on:
   # Triggers the workflow on new release
 #  release:
 #    types: [ published ]
