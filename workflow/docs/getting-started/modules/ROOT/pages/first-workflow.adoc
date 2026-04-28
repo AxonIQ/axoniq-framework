@@ -280,4 +280,4 @@ class OrderFulfillmentWorkflow {
 The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support (for example, `30.seconds`).
 
 That's a complete workflow—it executes actions and waits for external events.
-To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:axon-framework-reference:workflows:index.adoc[Reference Guide].
+To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:development@axon-framework-reference:workflows:index.adoc[Reference Guide].
