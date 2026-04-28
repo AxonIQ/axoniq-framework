@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
@@ -82,7 +84,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolveFailedWithThrowable() {
         RuntimeException exception = new RuntimeException("Workflow failed");
         EventMessage eventMessage = new GenericEventMessage(new MessageType("failed"),
-                                                            exception,
+                                                            WorkflowError.from(exception),
                                                             MetadataUtils.create("wfId", WorkflowStatus.FAILED));
 
         state.evolve(eventMessage, processingContext);
@@ -92,7 +94,10 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
         try {
             state.throwTerminalCause();
         } catch (Throwable t) {
-            assertThat(t.getCause()).isSameAs(exception);
+            assertThat(t.getCause()).isInstanceOfSatisfying(WorkflowExecutionException.class, e -> {
+                assertThat(e.type()).isEqualTo(RuntimeException.class.getName());
+                assertThat(e.getMessage()).isEqualTo("Workflow failed");
+            });
             return;
         }
         throw new AssertionError("Expected termination cause to be thrown");
@@ -101,7 +106,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     @Test
     void testEvolveCancelledWithThrowable() {
         RuntimeException exception = new RuntimeException("Workflow cancelled");
-        EventMessage eventMessage = new GenericEventMessage(new MessageType("cancelled"), exception,
+        EventMessage eventMessage = new GenericEventMessage(new MessageType("cancelled"), WorkflowError.from(exception),
                                                             MetadataUtils.create("wfId", WorkflowStatus.CANCELLED));
 
         state.evolve(eventMessage, processingContext);

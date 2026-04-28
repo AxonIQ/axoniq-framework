@@ -129,14 +129,14 @@ if (!reserved) {
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="ctx.fail() — event store">
-1 cancelled ShipOrderCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-2 cancelled NotifyCustomerCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-3 failed OrderFulfillmentWorkflow#ExecuteFailed {"reason": "RuntimeException: Stock unavailable"}
+1 cancelled ShipOrderCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
+2 cancelled NotifyCustomerCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
+3 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
   </div>
 </div>
 ++++
 
-Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception (`RuntimeException` in this case), not the wrapper.
+Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper.
 
 === `cancel`—external termination
 
@@ -168,9 +168,9 @@ execution.cancel("Cancelled by user");
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="execution.cancel() — event store">
-1 cancelled ShipOrderCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-2 cancelled NotifyCustomerCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+1 cancelled ShipOrderCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+2 cancelled NotifyCustomerCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
   </div>
 </div>
 ++++

@@ -30,6 +30,8 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -45,6 +47,8 @@ import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
  */
 @Internal
 public class TerminateDelegate implements TerminatePrimitive {
+
+    private static final Logger logger = LoggerFactory.getLogger(TerminateDelegate.class);
 
     private final WorkflowContext workflowContext;
     private final WorkflowExecution workflowExecution;
@@ -127,6 +131,8 @@ public class TerminateDelegate implements TerminatePrimitive {
         var exception = cause instanceof Exception
                 ? (Exception) cause
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
+
+        logger.error("Workflow '{}' failed", workflowExecution.workflowId(), exception);
 
         ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
