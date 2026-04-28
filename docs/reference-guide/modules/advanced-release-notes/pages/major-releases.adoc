@@ -5,3 +5,111 @@ All the enhancements and features which have been introduced to our major releas
 
 [#release_5_1]
 == Release 5.1
+
+=== Features
+
+- [#3105] Set AxonServerSnapshotStore in the AxonServerConfigurationEnhancer
+- Snapshotting rework to allow snapshots to be part of event stream
+- [#3435] Align MultiStreamableMessageSource with StreamableEventSource interface
+- [#3435] Created the MultiStreamableEventSource implementation
+- [#3517] Revise Dead Letter Queue
+- [#3517] feat: Dead Letter Queue adjusted to AF5 API
+- [#4182] feat(extensions/spring): JdbcAutoConfiguration + JdbcDeadLetterQueueAutoConfiguration
+- [#5] Port PostgreSQL Extension while keeping history
+- [#6] Construct axoniq-server-connector out of axon-server-connector
+- [#7] Move distributed CommandBus logic to axoniq-distributed-messaging
+- [#8] Move distributed QueryBus logic to axoniq-distributed-messaging
+- [#9] Move Sequenced Dead-Letter Queue logic to axoniq-dead-letter
+- [#9] feat(messaging/axoniq-dead-letter): initialize module and move code from Axon Framework 5 archive
+- [#11] Move multi-streamable event source to axoniq-event-streaming
+- [#12] Introduce Spring Autoconfigure and Spring Starter modules
+- [#21] Use of Entitlement Module for DLQ
+- [#21] Register PostgreSQL and DLQ with Entitlement Manager
+- Base for Axoniq Framework
+
+=== Enhancements
+
+- feat(test): AxonServerContainer DCB context support
+- [#3517] JpaSequencedDeadLetterQueue aligned with AF5 APIs
+- [#3517] CachingSequencedDeadLetterQueue per Segment
+- [#3517] Move JPA dead letter classes from stash/todo to messaging module
+- [#3517] JdbcSequencedDeadLetterQueue aligned with AF5 APIs
+- [#3517] JpaSequencedDeadLetterQueue auto configuration
+- [#3517] Add Context context() method to DeadLetter interface
+- [#3517] Remove unused DeadLetterQueueProviderConfigurerModule
+- DistributedQueryBusConfiguration cleanup and support for local shortcut
+- Align DistributedQueryBusConfiguration with DistributedCommandBusConfiguration
+- Move Sequenced Dead-Letter Queue feature to Axoniq Framework
+- Moved MultiSourceTrackingToken and MultiStreamableEventSource to Axoniq Framework
+- Move Axon Server integration to Axoniq Framework
+- Port DistributedCommand- and -QueryBus to Axoniq Framework
+- Remove the final Axon Server mentions
+- [#15] Move (Spring) integration-tests
+- [#17] Align maven module name prefix
+- [#19] Clean up maven modules and build
+- [#42] Move AxonServerContainer and TestFixture Customization facilities to axoniq-test module
+- Restore modules with history - distributed-messaging, server-connector
+- chore(integrationtests): init Maven module for integration tests
+- Move Axon Server specific tests into integration test module
+- Move AxonServerContainer in axoniq-testcontainer module
+- Remove the examples.yml GitHub Action
+- chore: fix code inspections
+- Update Axoniq framework with AbstractMessageStream changes
+- Replace the Slack notify GHA
+- Add missing ArchUnit tests to axoniq-testcontainer
+- chore: improve Logback settings
+- Add tag format settings to release plugin
+- [#9] refactor(messaging/axoniq-dead-letter): change dead-letter addon identifier to framework.dead_letter_queue
+- Disable the Slack release notification
+- Port Axon Server Spring integration
+- Fix all remaining usages of org.axonframework.messaging.*.distributed
+
+=== Bug fixes
+
+- Fix axon server address resolution for AxonServerTestContainerConnectionDetailsFactory
+- Fix race-condition for DistributedQueryBusSubscriptionQueryTest#replayBufferOverflow
+- [#4437] AggregateBasedAxonServerEventStorageEngine returns invalid AggregateSequence
+- [#4474] PostgresqlEventStorageEngine throws AppendEventsTransactionRejectedException when appending >= 2 events from a command handler
+- [#4408] Remove DLQ references from persistence configuration
+- Remove DLQ entity registration in JpaAutoConfiguration
+- Adjust AxonServerAutoConfiguration import for Spring Boot autoconfig classes
+- [#18] Fix AxonServerConfigurationEnhancerTest.enhanceSetsExpectedDefaultsInAbsenceOfTheseComponents
+- Minor licensing adjustments
+- Correct projectKey and organization for Sonar
+- fix(dependency-injection/spring): guard dead-letter autoconfiguration on SequencedDeadLetterQueueFactory classpath presence
+- Correct code owners
+- Fix consistency marker when sourcing an empty stream in the AggregateBasedAxonServerEventStorageEngine
+- Normalize event tags into a table; fix rejection for multi-event batches
+
+=== Documentation
+
+- [#3289] Clarify DLQ Transactionality in the documentation
+- [#4326] Migration path - Sequenced Dead-Letter Queue
+- [#4442] Describe PostgreSQLEventStorageEngine in the documentation
+- [#4484] Fix cross-version references in the framework reference and related guides
+- Migration path for the DLQ
+- Prepare composite Axon Framework / Axoniq Framework documentation
+- Adjust references to AxoniqFramework classes in the reference guide
+- Add Visual indicator for features moved to Axoniq Framework
+- Restructure Antora Setup
+- Include Data Protection documentation in framework reference guide
+- [#14] Create composite Documentation for Axoniq Framework and Axon Framework
+- [#14] Prepare composite Axon Framework / Axoniq Framework documentation
+- [#14] Fix the Antora component version resolution for release branches
+- [#14] Restructure Antora Setup
+- [#60] Add visual indication for Axoniq Framework features to the reference guide
+- [#60] Add Visual indicator Axoniq Framework features
+- [#76] Adjust references to AxoniqFramework code in the documentation
+- [#76] Adjust class references and maven artifact references in the reference guide
+- [#77] Add a mini migration guide for 5.0 -> 5.1
+- Update Copyright Notice
+
+=== Contributors
+
+We'd like to thank all the contributors who worked on this release!
+
+- link:https://github.com/hatzlj[@hatzlj]
+- link:https://github.com/hjohn[@hjohn]
+- link:https://github.com/jangalinski[@jangalinski]
+- link:https://github.com/MateuszNaKodach[@MateuszNaKodach]
+- link:https://github.com/smcvb[@smcvb]
