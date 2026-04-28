@@ -41,7 +41,7 @@ Along the way, you will learn the two core execution primitives—*Execute* and 
 
 [TIP]
 ====
-Once you've completed the tutorial, the xref:axon-framework-reference:workflows:index.adoc[Reference Guide] covers everything in depth—all overloads, orchestration patterns, lifecycle management, testing, and configuration.
+Once you've completed the tutorial, the xref:development@axon-framework-reference:workflows:index.adoc[Reference Guide] covers everything in depth—all overloads, orchestration patterns, lifecycle management, testing, and configuration.
 ====
 
 Are you ready?
