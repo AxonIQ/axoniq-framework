@@ -57,14 +57,14 @@ All the enhancements and features which have been introduced to our major releas
 - Update Axoniq framework with AbstractMessageStream changes
 - Replace the Slack notify GHA
 - Add missing ArchUnit tests to axoniq-testcontainer
-- chore: improve logback settings
+- chore: improve Logback settings
 - Add tag format settings to release plugin
 - [#9] refactor(messaging/axoniq-dead-letter): change dead-letter addon identifier to framework.dead_letter_queue
 - Disable the Slack release notification
 - Port Axon Server Spring integration
 - Fix all remaining usages of org.axonframework.messaging.*.distributed
 
-=== Bug Fixes
+=== Bug fixes
 
 - Fix axon server address resolution for AxonServerTestContainerConnectionDetailsFactory
 - Fix race-condition for DistributedQueryBusSubscriptionQueryTest#replayBufferOverflow
@@ -95,7 +95,7 @@ All the enhancements and features which have been introduced to our major releas
 - Include Data Protection documentation in framework reference guide
 - [#14] Create composite Documentation for Axoniq Framework and Axon Framework
 - [#14] Prepare composite Axon Framework / Axoniq Framework documentation
-- [#14] Fix the antora component version resolution for release branches
+- [#14] Fix the Antora component version resolution for release branches
 - [#14] Restructure Antora Setup
 - [#60] Add visual indication for Axoniq Framework features to the reference guide
 - [#60] Add Visual indicator Axoniq Framework features
