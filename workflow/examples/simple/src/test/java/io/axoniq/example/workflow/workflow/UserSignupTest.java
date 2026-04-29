@@ -37,7 +37,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
@@ -68,7 +68,7 @@ class UserSignupTest {
         }
 
         @Override
-        protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+        protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
             return d -> d
                     .declarative(c -> new UserSignupWorkflow()::execute)
                     .workflowName("MyWorkflow")
@@ -103,9 +103,6 @@ class UserSignupTest {
         }
     }
 
-    /**
-     * Test for autodetection.
-     */
     @Nested
     class AutodetectedTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
@@ -114,11 +111,9 @@ class UserSignupTest {
         }
 
         @Override
-        protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
-            return (d) -> d.autodetected(
-                    c -> new UserSignupWorkflow(),
-                    SimpleWorkflowContext.class
-            );
+        protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
+            return d -> d
+                    .autodetected(c -> new UserSignupWorkflow());
         }
 
         @Test

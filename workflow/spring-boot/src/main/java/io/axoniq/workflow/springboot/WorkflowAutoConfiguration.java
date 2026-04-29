@@ -18,10 +18,14 @@
  */
 package io.axoniq.workflow.springboot;
 
+import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
+
+import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
 
 /**
  * Autoconfiguration for workflow infrastructure.
@@ -41,5 +45,18 @@ public class WorkflowAutoConfiguration {
     @Bean
     public static WorkflowDefinitionLookup workflowDefinitionLookup() {
         return new WorkflowDefinitionLookup();
+    }
+
+    /**
+     * Configures the event handling for the top-level workflow module.
+     *
+     * @return enhancer.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults() {
+        return new WorkflowEventProcessingRegistrationEnhancer(
+                DEFAULT_MODULE_NAME, null, null, true
+        );
     }
 }

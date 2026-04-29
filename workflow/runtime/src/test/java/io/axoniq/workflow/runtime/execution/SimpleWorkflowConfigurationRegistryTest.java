@@ -27,16 +27,20 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -161,6 +165,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     private static class StubWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {
+
         private final WorkflowDefinition<WorkflowContext> definition;
 
         public StubWorkflowConfiguration() {
@@ -169,6 +174,11 @@ class SimpleWorkflowConfigurationRegistryTest {
 
         public StubWorkflowConfiguration(WorkflowDefinition<WorkflowContext> definition) {
             this.definition = definition;
+        }
+
+        @Override
+        public Class<WorkflowContext> getWorkflowContextType() {
+            return WorkflowContext.class;
         }
 
         @Nonnull
@@ -180,13 +190,21 @@ class SimpleWorkflowConfigurationRegistryTest {
         @Nonnull
         @Override
         public WorkflowContextFactory<WorkflowContext> workflowContextFactory() {
-            return null;
+            return new WorkflowContextFactory<>() {
+                @Override
+                public @NonNull WorkflowContext createContext(@NonNull Map<String, Object> initialPayload,
+                                                              @NonNull String workflowId,
+                                                              @NonNull ProcessingContext processingContext,
+                                                              @NonNull WorkflowConfiguration<?> workflowConfiguration) {
+                    throw new UnsupportedOperationException("Stub factory can't create contexts");
+                }
+            };
         }
 
         @Nonnull
         @Override
         public WorkflowExecutionFactory workflowExecutionFactory() {
-            return null;
+            return new DSLAdoptingExecutionFactory<>(getWorkflowContextType());
         }
 
         @Override
@@ -195,8 +213,18 @@ class SimpleWorkflowConfigurationRegistryTest {
         }
 
         @Override
+        public @NonNull String workflowName() {
+            return WorkflowConfiguration.super.workflowName();
+        }
+
+        @Override
         public @NonNull EventNameCustomizer eventNameCustomizer() {
             return defaults();
+        }
+
+        @Override
+        public @NonNull Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+            return WorkflowConfiguration.super.workflowStatusChangeListeners();
         }
     }
 }

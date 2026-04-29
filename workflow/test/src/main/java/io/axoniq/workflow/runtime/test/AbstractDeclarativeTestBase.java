@@ -18,12 +18,14 @@
  */
 package io.axoniq.workflow.runtime.test;
 
+import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.execution.DSLAdoptingExecutionFactory;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
@@ -31,12 +33,12 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
@@ -66,25 +68,36 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     @BeforeEach
     void setUp() {
 
-        var configurer = MessagingConfigurer.create();
+        var configurer = WorkflowConfigurer.create();
 
-        configurer.componentRegistry(r -> r.registerModule(
-                                             WorkflowModule
-                                                     .usingContext(dslType)
-                                                     .workflowContextFactory(builder)
-                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
-                                                     .definitions(getDeclaredDefinitions())
-                                     )
-        );
+        configurer
+                .componentRegistry(r -> r.registerModule(
+                                           WorkflowModule
+                                                   .defaults(getClass().getSimpleName(), dslType)
+                                                   .workflowContextFactory(builder)
+                                                   .definition(
+                                                           getDeclaredDefinition()
+                                                   )
+                                   )
+                );
 
-        configuration = configurer.start();
+        configuration = configure().apply(configurer).start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
         workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         delayedPublisher = configuration.getComponent(DelayedPublisher.class);
         workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
     }
 
-    protected abstract UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
+    /**
+     * Allows further customization before the start of the configurer.
+     *
+     * @return modified configurer
+     */
+    protected UnaryOperator<WorkflowConfigurer> configure() {
+        return UnaryOperator.identity();
+    }
+
+    protected abstract Function<DetectionPhase<T>, FinalizedPhase<T>> getDeclaredDefinition();
 
     @AfterEach
     void shutdown() {

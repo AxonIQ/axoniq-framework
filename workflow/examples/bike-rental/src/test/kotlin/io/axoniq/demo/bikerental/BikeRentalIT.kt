@@ -20,6 +20,7 @@ package io.axoniq.demo.bikerental
 
 import io.axoniq.demo.bikerental.coreapi.rental.BikeStatus
 import io.axoniq.demo.bikerental.coreapi.rental.RentalStatus
+import io.axoniq.framework.testcontainer.AxonServerContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
 import org.junit.jupiter.api.Test
@@ -32,10 +33,8 @@ import org.springframework.http.HttpMethod
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
-import org.testcontainers.containers.GenericContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
 import java.util.concurrent.TimeUnit
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -46,10 +45,10 @@ class BikeRentalIT {
 
     companion object {
         @Container
-        val axonServer = GenericContainer(DockerImageName.parse("docker.axoniq.io/axoniq/axonserver:2025.2.7"))
-            .withExposedPorts(8024, 8124)
-            .withEnv("AXONIQ_AXONSERVER_DEVMODE_ENABLED", "true")
-            .withEnv("AXONIQ_AXONSERVER_STANDALONE-DCB", "true");
+        val axonServer: AxonServerContainer = AxonServerContainer()
+            .withAxonServerHostname("localhost")
+            .withDevMode(true)
+            .withDcbContext(true)
 
         @JvmStatic
         @DynamicPropertySource

@@ -34,6 +34,13 @@ import java.util.Map;
 public interface WorkflowConfiguration<T extends WorkflowContext> {
 
     /**
+     * Returns the type of the workflow context.
+     *
+     * @return type of the workflow context.
+     */
+    Class<T> getWorkflowContextType();
+
+    /**
      * Returns workflow definition.
      *
      * @return workflow definition method expressed using workflow context.
@@ -66,7 +73,7 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     WorkflowIdProvider workflowIdProvider();
 
     /**
-     * Returns workflow name.
+     * Returns the workflow name.
      *
      * @return name of the workflow.
      */
@@ -84,7 +91,7 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     EventNameCustomizer eventNameCustomizer();
 
     /**
-     * List of workflow status listeners registered to this workflow.
+     * Returns workflow status change listeners.
      *
      * @return map of workflow status change listeners.
      */

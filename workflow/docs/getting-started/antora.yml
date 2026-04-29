@@ -1,10 +1,10 @@
 name: axon-workflow-getting-started
-title: Getting Started with Axon Workflow Engine
+title: Getting Started with Axoniq's Workflow Engine
 version: ~
 
 asciidoc:
   attributes:
-    component_description: A step-by-step tutorial for building your first workflow with the Axon Workflow Engine.
+    component_description: A step-by-step tutorial for building your first workflow with Axoniq's Workflow Engine.
     type: tutorial
     group: beginner
 

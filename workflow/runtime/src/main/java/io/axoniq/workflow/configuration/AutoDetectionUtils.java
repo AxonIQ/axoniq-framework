@@ -123,7 +123,7 @@ public class AutoDetectionUtils {
      */
     @Nonnull
     public static <C extends WorkflowContext> Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> statusChangeListeners(
-            @Nonnull Object instance,
+            @Nullable Object instance,
             @Nonnull Class<C> workflowContextType,
             @Nonnull String workflowName) {
 
@@ -131,6 +131,9 @@ public class AutoDetectionUtils {
         Arrays.stream(WorkflowStatus.values()).forEach(workflowStatus -> {
             listeners.put(workflowStatus, new CompositeWorkflowStatusChangeListener(workflowStatus));
         });
+        if (instance == null) {
+            return listeners;
+        }
         var type = instance.getClass();
 
         var mc = ((Collection<Method>) ReflectionUtils.methodsOf(type));

@@ -31,7 +31,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -40,8 +40,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test for {@link NoneMatchGuardWorkflow} — verifies that
- * {@link WorkflowContext#noneMatch} semantics short-circuit on the first failure.
+ * Integration test for {@link NoneMatchGuardWorkflow} — verifies that {@link WorkflowContext#noneMatch} semantics
+ * short-circuit on the first failure.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -53,7 +53,7 @@ class NoneMatchGuardWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new NoneMatchGuardWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)

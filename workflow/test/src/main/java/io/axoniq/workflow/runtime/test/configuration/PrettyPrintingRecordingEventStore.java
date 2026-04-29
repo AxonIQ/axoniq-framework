@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static io.axoniq.workflow.runtime.util.MetadataUtils.METADATA_KEY_WORKFLOW_ID;
+import static java.util.stream.Collectors.groupingBy;
 
 /**
  * Pretty printing event store used for testing.
@@ -72,9 +73,8 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         var eventsByWorkflowId = recorded().stream()
                                            .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
-                                           .collect(Collectors.groupingBy(e -> e.metadata().getOrDefault(
-                                                   METADATA_KEY_WORKFLOW_ID,
-                                                   "none")));
+                                           .collect(groupingBy(e -> e.metadata()
+                                                                     .getOrDefault(METADATA_KEY_WORKFLOW_ID, "none")));
         var events = eventsByWorkflowId.entrySet().stream()
                                        .filter(entry -> !"none".equals(entry.getKey()))
                                        .map(e -> new WorkflowEventDescriptor(e.getKey(), e.getValue()))

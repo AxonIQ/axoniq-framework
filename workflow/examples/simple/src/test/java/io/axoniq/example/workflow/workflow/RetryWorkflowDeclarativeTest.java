@@ -19,7 +19,8 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
-import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
@@ -30,7 +31,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -38,9 +39,10 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+
 /**
- * Integration test exercising all retry scenarios: normal execution, retry-then-succeed,
- * retry handler, cancel during retry, timeout during retry, and retry exhaustion.
+ * Integration test exercising all retry scenarios: normal execution, retry-then-succeed, retry handler, cancel during
+ * retry, timeout during retry, and retry exhaustion.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -54,7 +56,7 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         return d -> d
                 .declarative(c -> workflow::execute)
                 .workflowName("Retry workflow in Java")
@@ -133,7 +135,6 @@ class RetryWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWor
 
             // Step 8: retryWhile — FAILED (predicate stopped retrying after attempt 2)
             assertThat(state.getStep("retryWhileStop").status()).isEqualTo(StepStatus.FAILED);
-
         }
 
         // Retry handler was invoked exactly once, for the retryWithHandler step

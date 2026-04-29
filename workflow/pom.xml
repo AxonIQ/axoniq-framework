@@ -2,32 +2,33 @@
 <!--
   ~ Copyright (c) 2010-2026. AxonIQ B.V.
   ~
-  ~ Licensed under the AXONIQ TERMS OF SERVICE,
-  ~ Version 29 April 2026 (the "License");
+  ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+  ~ Version September 2025 (the "License");
+  ~ The software is available under Non-Production Free License.
+  ~ Production use requires a paid license. See the License for the
+  ~ specific language governing permissions and limitations under
+  ~ the License.
   ~
-  ~ The software is available for evaluation use without registration.
-  ~ Continued use beyond the evaluation period requires registration
-  ~ and a commercial license. See the License for the specific language
-  ~ governing permissions and limitations under the License.
   ~ You may not use this file except in compliance with the License.
-  ~
   ~ You may obtain a copy of the License at:
-  ~  https://www.axoniq.io/legal/terms-of-service
   ~
-  ~ For licensing information and to register, visit:
-  ~  https://www.axoniq.io/pricing
+  ~    https://www.axoniq.io/legal/terms-of-service
+  ~
   -->
 
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.axoniq.framework.workflow</groupId>
     <artifactId>axon-workflow-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.1.1-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>Axon Extension - Workflow - Parent</name>
+
+    <name>Axoniq Framework - Workflow - Parent</name>
+    <description>
+        Workflows provide a durable execution module with a configurable DSL, based on Axon Framework's event sourcing
+        logic.
+    </description>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -36,8 +37,21 @@
         <kotlin.version>2.3.21</kotlin.version>
         <archunit.version>1.4.2</archunit.version>
         <axon.version>5.1.0</axon.version>
+        <junit.version>6.0.3</junit.version>
+        <!-- Build / Plugin -->
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
         <checkstyle.version>13.4.1</checkstyle.version>
+        <maven-clean.version>3.5.0</maven-clean.version>
+        <maven-compiler.version>3.15.0</maven-compiler.version>
+        <maven-enforcer.version>3.6.2</maven-enforcer.version>
+        <maven-failsafe.version>3.5.5</maven-failsafe.version>
+        <maven-gpg.version>3.2.8</maven-gpg.version>
+        <maven-install.version>3.1.4</maven-install.version>
+        <maven-javadoc.version>3.12.0</maven-javadoc.version>
+        <maven-release.version>3.3.1</maven-release.version>
+        <maven-source.version>3.4.0</maven-source.version>
+        <maven-surefire.version>3.5.5</maven-surefire.version>
     </properties>
 
     <modules>
@@ -47,28 +61,28 @@
         <module>test</module>
     </modules>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.junit</groupId>
-                <artifactId>junit-bom</artifactId>
-                <version>6.0.3</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.axonframework</groupId>
-                <artifactId>axon-framework-bom</artifactId>
-                <version>${axon.version}</version>
-                <scope>import</scope>
-                <type>pom</type>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+    <inceptionYear>2026</inceptionYear>
+    <url>https://axoniq.io/</url>
+    <licenses>
+        <license>
+            <name>Axoniq Terms of Service</name>
+            <url>https://www.axoniq.io/legal/terms-of-service</url>
+        </license>
+    </licenses>
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/AxonIQ/extension-workflow/issues</url>
+    </issueManagement>
+    <organization>
+        <name>AxonIQ B.V.</name>
+        <url>https://axoniq.io</url>
+    </organization>
+
     <dependencies>
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
+            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>io.axoniq.license</groupId>
@@ -78,6 +92,7 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-eventsourcing</artifactId>
+            <version>${axon.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -95,6 +110,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -105,6 +121,7 @@
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-test</artifactId>
+            <version>${axon.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -128,8 +145,52 @@
     </dependencies>
 
     <build>
+        <defaultGoal>clean package</defaultGoal>
         <pluginManagement>
             <plugins>
+                <!-- clean -->
+                <plugin>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>${maven-clean.version}</version>
+                </plugin>
+                <!-- compile -->
+                <plugin>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler.version}</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                        <encoding>UTF-8</encoding>
+                        <showWarnings>true</showWarnings>
+                        <showDeprecation>true</showDeprecation>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
+                <!-- test -->
+                <plugin>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire.version}</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${maven-failsafe.version}</version>
+                    <executions>
+                        <execution>
+                            <id>integration-tests</id>
+                            <phase>integration-test</phase>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <!-- install -->
+                <plugin>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven-install.version}</version>
+                </plugin>
+
                 <plugin>
                     <!-- KAPT is optional and has to be configured in modules using it -->
                     <groupId>org.jetbrains.kotlin</groupId>
@@ -142,6 +203,7 @@
                         <compilerPlugins>
                             <plugin>no-arg</plugin>
                             <plugin>all-open</plugin>
+                            <plugin>spring</plugin>
                         </compilerPlugins>
                     </configuration>
 
@@ -157,32 +219,6 @@
                             <version>${kotlin.version}</version>
                         </dependency>
                     </dependencies>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.15.0</version>
-                    <configuration>
-                        <parameters>true</parameters>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.5</version>
-                </plugin>
-                <plugin>
-                    <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>3.5.5</version>
-                    <executions>
-                        <execution>
-                            <id>integration-tests</id>
-                            <phase>integration-test</phase>
-                            <goals>
-                                <goal>integration-test</goal>
-                                <goal>verify</goal>
-                            </goals>
-                        </execution>
-                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -202,19 +238,85 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
         <plugins>
             <plugin>
-                <artifactId>maven-failsafe-plugin</artifactId>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer.version}</version>
                 <executions>
                     <execution>
-                        <id>run-checkstyle</id>
-                        <phase>verify</phase>
+                        <id>enforce-java</id>
+                        <phase>deploy</phase>
                         <goals>
-                            <goal>check</goal>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>21</version>
+                                </requireJavaVersion>
+                                <requireMavenVersion>
+                                    <version>3.9</version>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- deploy -->
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>${maven-release.version}</version>
+                <configuration>
+                    <!-- prepare goal configuration -->
+                    <mavenExecutorId>forked-path</mavenExecutorId>
+                    <pushChanges>false</pushChanges>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <!-- perform goal configuration -->
+                    <mavenExecutorId>forked-path</mavenExecutorId>
+                    <localCheckout>true</localCheckout>
+                    <releaseProfiles>javadoc,sources,sign</releaseProfiles>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>${central-publishing-maven-plugin.version}</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <excludeArtifacts>
+                        axon-workflow-examples,axon-workflow-example-bike-rental,axon-workflow-example-simple
+                    </excludeArtifacts>
+                </configuration>
+            </plugin>
+
+            <!--
+                Flattens the effective POM before deployment so that CI-friendly version placeholders
+                (such as ${revision}) are resolved to concrete values.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.5.0</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
                         </goals>
                     </execution>
                 </executions>
@@ -235,6 +337,92 @@
                 <module>examples</module>
             </modules>
         </profile>
+        <profile>
+            <id>javadoc</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven-javadoc.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadoc</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <legacyMode>true</legacyMode>
+                            <skippedModules>axon-todo,axon-legacy,axon-legacy-aggregate,axon-legacy-saga,axon-migration,axon-integrationtests</skippedModules>
+                            <!-- These parameters are in preparation for resolution of this issue: -->
+                            <!-- https://bugs.openjdk.java.net/browse/JDK-8068562 -->
+                            <tags>
+                                <tag>
+                                    <name>apiNote</name>
+                                    <placement>a</placement>
+                                    <head>API Note:</head>
+                                </tag>
+                                <tag>
+                                    <name>implSpec</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Requirements:</head>
+                                </tag>
+                                <tag>
+                                    <name>implNote</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Note:</head>
+                                </tag>
+                            </tags>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>sign</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>sources</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven-source.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <repositories>
@@ -250,6 +438,13 @@
             </snapshots>
         </repository>
     </repositories>
+
+    <scm>
+        <connection>scm:git:git://github.com/AxonIQ/extension-workflow.git</connection>
+        <developerConnection>scm:git:git@github.com:AxonIQ/extension-workflow.git</developerConnection>
+        <url>https://github.com/AxonIQ/extension-workflow</url>
+        <tag>axoniq-workflow-0.1.0</tag>
+    </scm>
 
     <developers>
         <developer>

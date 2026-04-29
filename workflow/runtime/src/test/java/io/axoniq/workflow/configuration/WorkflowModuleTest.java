@@ -35,6 +35,7 @@ import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -44,6 +45,8 @@ import org.junit.jupiter.api.*;
 import org.mockito.*;
 
 import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -53,6 +56,7 @@ import static org.mockito.Mockito.*;
  * Test for {@link WorkflowModule} and {@link SimpleWorkflowModule}.
  *
  * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class WorkflowModuleTest {
 
@@ -64,7 +68,7 @@ class WorkflowModuleTest {
 
     @BeforeEach
     void setUp() {
-        module = new SimpleWorkflowModule<>(TestWorkflowContext.class);
+        module = new SimpleWorkflowModule<>(UUID.randomUUID().toString(), TestWorkflowContext.class);
         configuration = mock(Configuration.class);
         registry = mock(WorkflowConfigurationRegistry.class);
         messageTypeResolver = mock(MessageTypeResolver.class);
@@ -72,10 +76,9 @@ class WorkflowModuleTest {
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(registry);
         when(configuration.getComponent(MessageTypeResolver.class)).thenReturn(messageTypeResolver);
         when(configuration.getComponent(EventConverter.class)).thenReturn(converter);
-
-        when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(java.util.function.Supplier.class))).thenAnswer(
-                invocation -> {
-                    java.util.function.Supplier<ValueComparisonOperatorRegistry> defaultSupplier = invocation.getArgument(1);
+        when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class)))
+                .thenAnswer(invocation -> {
+                    Supplier<ValueComparisonOperatorRegistry> defaultSupplier = invocation.getArgument(1);
                     return defaultSupplier.get();
                 });
     }
@@ -89,18 +92,13 @@ class WorkflowModuleTest {
         EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
 
-        var myModule = WorkflowModule.usingContext(TestWorkflowContext.class)
+        var myModule = WorkflowModule.defaults(UUID.randomUUID().toString(), TestWorkflowContext.class)
                                      .workflowContextFactory(c -> contextFactory)
-                                     .workflowExecutionFactory(c -> stateFactory)
-                                     .definitions(d -> d.declarative(
-                                                                c -> definition
-                                                        ).workflowName("name")
-                                                        .on(c -> startCondition)
-                                                        .notCustomized()
-                                     );
+                                     .definition(d -> d.declarative(c -> definition).workflowName("name")
+                                                       .on(c -> startCondition).notCustomized());
         assertThat(myModule).isNotNull();
         assertThat(myModule).isInstanceOf(SimpleWorkflowModule.class);
-        assertThat(myModule.getContextType()).isEqualTo(TestWorkflowContext.class);
+        assertThat(myModule.getWorkflowContextType()).isEqualTo(TestWorkflowContext.class);
     }
 
     @Test
@@ -112,12 +110,10 @@ class WorkflowModuleTest {
         WorkflowContextFactory<TestWorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
         WorkflowExecutionFactory stateFactory = mock(WorkflowExecutionFactory.class);
 
-        module.workflowContextFactory(c -> contextFactory)
-              .workflowExecutionFactory(c -> stateFactory)
-              .definitions(dsl -> dsl.declarative(c -> definition)
-                                     .workflowName("testWorkflow")
-                                     .on(c -> startCondition)
-                                     .notCustomized());
+        module.workflowContextFactory(c -> contextFactory).definition(dsl -> dsl.declarative(c -> definition)
+                                                                                .workflowName("testWorkflow")
+                                                                                .on(c -> startCondition)
+                                                                                .notCustomized());
 
         module.registerWorkflowDefinitions(configuration);
 
@@ -129,7 +125,6 @@ class WorkflowModuleTest {
         assertThat(config.workflowName()).isEqualTo("testWorkflow");
         assertThat(config.workflowDefinition()).isSameAs(definition);
         assertThat(config.workflowContextFactory()).isSameAs(contextFactory);
-        assertThat(config.workflowExecutionFactory()).isSameAs(stateFactory);
     }
 
     @Test
@@ -138,22 +133,21 @@ class WorkflowModuleTest {
         EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
         WorkflowContextFactory<TestWorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        WorkflowExecutionFactory stateFactory = mock(WorkflowExecutionFactory.class);
         EventNameCustomizer customizer = mock(EventNameCustomizer.class);
         WorkflowIdProvider idProvider = mock(WorkflowIdProvider.class);
 
         module.workflowContextFactory(c -> contextFactory)
-              .workflowExecutionFactory(c -> stateFactory)
-              .definitions(dsl -> dsl.declarative(c -> definition)
-                                     .workflowName("testWorkflow")
-                                     .on(c -> startCondition)
-                                     .customized((c, config) -> config.eventNameCustomizer(customizer)
-                                                                      .workflowIdProvider(idProvider)));
+              .definition(dsl -> dsl
+                      .declarative(c -> definition)
+                      .workflowName("testWorkflow")
+                      .on(c -> startCondition)
+                      .customized((c, config) -> config.eventNameCustomizer(
+                              customizer).workflowIdProvider(
+                              idProvider)));
 
         module.registerWorkflowDefinitions(configuration);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<WorkflowConfiguration<TestWorkflowContext>> configCaptor = ArgumentCaptor.forClass(
+        @SuppressWarnings("unchecked") ArgumentCaptor<WorkflowConfiguration<TestWorkflowContext>> configCaptor = ArgumentCaptor.forClass(
                 WorkflowConfiguration.class);
         verify(registry).register(any(EventCondition.class), configCaptor.capture());
 
@@ -164,44 +158,13 @@ class WorkflowModuleTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void testMultipleWorkflows() {
-        EventCondition startCondition1 = EventConditions.fromQualifiedName(new QualifiedName("startEvent1"));
-        EventCondition startCondition2 = EventConditions.fromQualifiedName(new QualifiedName("startEvent2"));
-        WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
-
-        module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
-              .workflowExecutionFactory(c -> mock(WorkflowExecutionFactory.class))
-              .definitions(dsl ->
-                                   ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
-                                           .declarative(c -> definition)
-                                           .workflowName("workflow 1")
-                                           .on(c -> startCondition1)
-                                           .notCustomized()
-                                           .declarative(c -> definition)
-                                           .workflowName("workflow 2")
-                                           .on(c -> startCondition2)
-                                           .notCustomized()
-              );
-
-        module.registerWorkflowDefinitions(configuration);
-
-        verify(registry).register(eq(startCondition1), any());
-        verify(registry).register(eq(startCondition2), any());
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
     void testAutodetectedWorkflowDefinition() {
         QualifiedName startEventName = new QualifiedName("startEvent");
         when(messageTypeResolver.resolve(String.class)).thenReturn(Optional.of(new MessageType(startEventName)));
-
-        module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
-              .workflowExecutionFactory(c -> mock(WorkflowExecutionFactory.class))
-              .definitions(dsl ->
-                                   ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
-                                           .autodetected(
-                                                   c -> new TestAutodetectedWorkflow(),
-                                                   TestWorkflowContext.class)
+        WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);
+        module.workflowContextFactory(c -> ctxFactory)
+              .definition(dsl -> dsl
+                      .autodetected(c -> new TestAutodetectedWorkflow())
               );
 
         module.registerWorkflowDefinitions(configuration);
@@ -222,16 +185,16 @@ class WorkflowModuleTest {
         EventCondition startCondition = EventConditions.fromQualifiedName(new QualifiedName("startEvent"));
         WorkflowDefinition<TestWorkflowContext> definition = mock(WorkflowDefinition.class);
         WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
-
-        module.workflowContextFactory(c -> mock(WorkflowContextFactory.class))
-              .workflowExecutionFactory(c -> mock(WorkflowExecutionFactory.class))
-              .definitions(dsl -> ((WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<TestWorkflowContext>) dsl)
+        WorkflowContextFactory<TestWorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
+        module.workflowContextFactory(c -> contextFactory)
+              .definition(dsl -> dsl
                       .declarative(c -> definition)
                       .workflowName("testWorkflow")
                       .on(c -> startCondition)
-                      .customized((c, config) -> config.registerWorkflowStatusChangeListener(
-                              WorkflowStatus.STARTED,
-                              listener)));
+                      .customized(
+                              (c, config) -> config.registerWorkflowStatusChangeListener(
+                                      WorkflowStatus.STARTED,
+                                      listener)));
 
         module.registerWorkflowDefinitions(configuration);
 
@@ -252,7 +215,7 @@ class WorkflowModuleTest {
     public static class TestAutodetectedWorkflow {
 
         @Workflow(workflowName = "autodetectedWorkflow", startOnEvent = "java.lang.String", idProperty = "id")
-        public void myWorkflow(TestWorkflowContext context) {
+        void myWorkflow(@Nonnull TestWorkflowContext context) {
             // some workflow logic
         }
     }

@@ -14,5 +14,4 @@
 #
 # For licensing information and to register, visit:
 #  https://www.axoniq.io/pricing
-io.axoniq.workflow.configuration.WorkflowEnhancer
-io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer
+io.axoniq.workflow.configuration.WorkflowConfigurationDefaults

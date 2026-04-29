@@ -41,7 +41,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
@@ -63,7 +63,7 @@ class WaitForCombineResultIntegrationTest
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WaitForCombineWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WaitForCombineWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<WaitForCombineWorkflowContext>> getDeclaredDefinition() {
         return d -> d
                 .declarative(c -> new WaitForCombineWorkflow()::execute)
                 .workflowName("WaitForCombineWorkflow")
