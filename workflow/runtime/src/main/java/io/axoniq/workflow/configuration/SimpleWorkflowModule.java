@@ -83,8 +83,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     /**
      * Constructs a new workflow module with a given name.
      *
-     * @param name name of the workflow module.
-     */
+     * @param name name of the workflow module
+     * @param workflowContextType the type of {@link WorkflowContext} of the workflow module being constructred
+    */
     @Internal
     SimpleWorkflowModule(@Nonnull String name, @Nonnull Class<C> workflowContextType) {
         this(name, workflowContextType, false);
