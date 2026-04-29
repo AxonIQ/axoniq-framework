@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -36,6 +37,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Clock;
@@ -89,6 +91,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowConfigurationRegistry(componentRegistry);
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
+        registerWorkflowStateParameterResolverFactory(componentRegistry);
     }
 
     void registerEventNameCustomizer(@Nonnull ComponentRegistry componentRegistry) {
@@ -143,6 +146,14 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerWorkflowConfigurationRegistry(@Nonnull ComponentRegistry componentRegistry) {
         componentRegistry.registerComponent(WorkflowConfigurationRegistry.class,
                                             cfg -> new SimpleWorkflowConfigurationRegistry());
+    }
+
+    void registerWorkflowStateParameterResolverFactory(@Nonnull ComponentRegistry componentRegistry) {
+        ParameterResolverFactoryUtils.registerToComponentRegistry(
+                componentRegistry,
+                WorkflowStateParameterResolverFactory::new
+        );
+
     }
 
     @Override
