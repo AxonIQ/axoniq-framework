@@ -6,11 +6,11 @@ The engine records each execution as durable events, giving you crash recovery a
 
 There are two variants:
 
-* *`awaitExecute`* — blocks until the action finishes and returns a typed result
-* *`execute`* — starts the action without waiting and returns a `WorkflowStepResult`
+* *`awaitExecute`*—blocks until the action finishes and returns a typed result
+* *`execute`*—starts the action without waiting and returns a `WorkflowStepResult`
 
 [[awaitexecute]]
-== awaitExecute (blocking)
+== `awaitExecute` (blocking)
 
 `awaitExecute` calls an action, waits for it to finish, and returns the typed result.
 The engine records a STARTED and COMPLETED event for this step automatically.
@@ -25,7 +25,7 @@ var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
                                  InventoryService::reserveStock);
 ----
 
-That's it — one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
+That's it—one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
 
 === With payload
 
@@ -48,7 +48,7 @@ if (!reserved) {
 
 <.> The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event.
 <.> If stock reservation fails, we fail the workflow.
-Standard Java control flow — `if`, loops, try/catch — all work exactly as you'd expect.
+Standard Java control flow—`if`, loops, try/catch—all work exactly as you'd expect.
 
 Here's the event store after a successful run:
 
@@ -61,7 +61,7 @@ Here's the event store after a successful run:
 </div>
 ++++
 
-Each `awaitExecute` produces a STARTED/COMPLETED pair — the STARTED event captures the input payload, the COMPLETED event captures the result.
+Each `awaitExecute` produces a STARTED/COMPLETED pair—the STARTED event captures the input payload, the COMPLETED event captures the result.
 
 === With timeout and event name customizer
 
@@ -76,11 +76,11 @@ ctx.awaitExecute("initiatePayment",
                  baseName("InitiatingPaymentForCustomer")); // <1>
 ----
 
-<.> `baseName(...)` replaces the step name in the event name — its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
+<.> `baseName(...)` replaces the step name in the event name—its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
 
 [NOTE]
 ====
-The step name's first letter is automatically uppercased in event names (e.g., `reserveStock` becomes `ReserveStock`).
+The step name's first letter is automatically uppercased in event names (for example, `reserveStock` becomes `ReserveStock`).
 For full details on naming rules, see xref:understanding-steps.adoc#event-name-customization[Event name customization].
 ====
 
@@ -110,7 +110,7 @@ For full details on naming rules, see xref:understanding-steps.adoc#event-name-c
 |===
 
 [[execute]]
-== execute (non-blocking)
+== `execute` (non-blocking)
 
 `execute` starts a step without waiting and returns a `WorkflowStepResult` you can compose later.
 Use this when you want to run multiple steps concurrently, or when you need to combine an execute with a `waitForEvent`.
@@ -183,10 +183,10 @@ fun Kontext.fulfillOrder() {
 }
 ----
 
-Kotlin's named parameters and default values mean you only specify what you need — everything else falls back to sensible defaults.
+Kotlin's named parameters and default values mean you only specify what you need—everything else falls back to sensible defaults.
 
 == What's next
 
-For cross-cutting configuration that applies to all step types — timeouts, payload reducers, error handling, event naming, and execution semantics — see xref:understanding-steps.adoc[].
+For cross-cutting configuration that applies to all step types—timeouts, payload reducers, error handling, event naming, and execution semantics—see xref:understanding-steps.adoc[].
 
 For waiting on external events, see xref:waiting-for-events.adoc[].

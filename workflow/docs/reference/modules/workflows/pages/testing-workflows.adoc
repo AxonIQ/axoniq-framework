@@ -2,7 +2,7 @@
 :navtitle: Testing
 
 The Axon Workflow Engine provides a dedicated `test` module with infrastructure that uses the same configuration as production code.
-No mocking needed — your tests run real workflows with real event sourcing.
+No mocking needed—your tests run real workflows with real event sourcing.
 
 == Test setup
 
@@ -33,7 +33,7 @@ class OrderFulfillmentTest extends AbstractDeclarativeTestBase<SimpleWorkflowCon
 ----
 
 <.> Specify the DSL type and context factory.
-<.> Provide the workflow definition — a method reference to your workflow class.
+<.> Provide the workflow definition—a method reference to your workflow class.
 <.> Trigger the workflow when an `OrderPlaced` event is received.
 <.> Extract the workflow ID from the event's `orderId` field.
 
@@ -86,8 +86,8 @@ delayedPublisher.addSchedules(List.of(
 delayedPublisher.start();
 ----
 
-<.> Published after 500ms — triggers the workflow.
-<.> Published 3 seconds later — the `awaitPayment` step picks it up via the `orderId` association.
+<.> Published after 500ms—triggers the workflow.
+<.> Published 3 seconds later—the `awaitPayment` step picks it up via the `orderId` association.
 
 == Running and asserting
 
@@ -134,12 +134,12 @@ void shouldFulfillOrderEndToEnd() {
 
 <.> Starts workflow execution after events are loaded.
 <.> Uses Awaitility to wait until the workflow reaches a terminal state.
-<.> Asserts the workflow completed successfully — not failed, cancelled, or timed out.
+<.> Asserts the workflow completed successfully—not failed, cancelled, or timed out.
 <.> Verifies all six steps executed in the correct order.
 
 == Related topics
 
-* xref:understanding-steps.adoc[Understanding Steps] — timeouts, error handling, payload reducers, event naming
-* xref:workflow-lifecycle.adoc[Workflow Lifecycle] — fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
-* xref:common-patterns.adoc[Common Patterns] — saga, fan-out/fan-in, retry, and more
-* xref:configuration.adoc[Configuration] — declarative setup, custom contexts, event naming customization
+* xref:understanding-steps.adoc[Understanding Steps]—timeouts, error handling, payload reducers, event naming
+* xref:workflow-lifecycle.adoc[Workflow Lifecycle]—fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
+* xref:common-patterns.adoc[Common Patterns]—saga, fan-out/fan-in, retry, and more
+* xref:configuration.adoc[Configuration]—declarative setup, custom contexts, event naming customization

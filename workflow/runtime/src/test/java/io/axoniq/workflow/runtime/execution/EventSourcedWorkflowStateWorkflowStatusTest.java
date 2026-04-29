@@ -18,16 +18,19 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.jackson2.Jackson2Converter;
-import org.axonframework.messaging.core.Metadata;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;
@@ -37,7 +40,7 @@ import static org.mockito.Mockito.*;
 
 class EventSourcedWorkflowStateWorkflowStatusTest {
 
-    private final Converter converter = new Jackson2Converter();
+    private final EventConverter converter = new DelegatingEventConverter(new JacksonConverter());
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
 
@@ -45,13 +48,14 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void setUp() {
         state = new EventSourcedWorkflowState(Map.of("initialKey", "initialValue"));
         processingContext = mock(ProcessingContext.class);
-        when(processingContext.component(Converter.class)).thenReturn(converter);
+        when(processingContext.component(EventConverter.class)).thenReturn(converter);
     }
 
     @Test
     void testEvolvePayloadSuccess() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
-                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             Map.of("newKey", "newValue"),
                                                             metadata);
@@ -65,7 +69,8 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     @Test
     void testEvolvePayloadWithNonMapPayloadDoesNotThrow() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
-                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
         // String payload cannot be converted to Map<String, Object> via Jackson as a root object if it is not a JSON object
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             "Not a Map",
@@ -82,7 +87,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolveFailedWithThrowable() {
         RuntimeException exception = new RuntimeException("Workflow failed");
         EventMessage eventMessage = new GenericEventMessage(new MessageType("failed"),
-                                                            exception,
+                                                            WorkflowError.from(exception),
                                                             MetadataUtils.create("wfId", WorkflowStatus.FAILED));
 
         state.evolve(eventMessage, processingContext);
@@ -92,7 +97,10 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
         try {
             state.throwTerminalCause();
         } catch (Throwable t) {
-            assertThat(t.getCause()).isSameAs(exception);
+            assertThat(t.getCause()).isInstanceOfSatisfying(WorkflowExecutionException.class, e -> {
+                assertThat(e.type()).isEqualTo(RuntimeException.class.getName());
+                assertThat(e.getMessage()).isEqualTo("Workflow failed");
+            });
             return;
         }
         throw new AssertionError("Expected termination cause to be thrown");
@@ -101,7 +109,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     @Test
     void testEvolveCancelledWithThrowable() {
         RuntimeException exception = new RuntimeException("Workflow cancelled");
-        EventMessage eventMessage = new GenericEventMessage(new MessageType("cancelled"), exception,
+        EventMessage eventMessage = new GenericEventMessage(new MessageType("cancelled"), WorkflowError.from(exception),
                                                             MetadataUtils.create("wfId", WorkflowStatus.CANCELLED));
 
         state.evolve(eventMessage, processingContext);

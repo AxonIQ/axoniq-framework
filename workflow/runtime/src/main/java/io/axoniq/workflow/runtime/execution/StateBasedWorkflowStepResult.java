@@ -25,7 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -70,7 +70,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     public <T> Optional<T> result() {
         return Optional.of(workflowExecution.state().getStep(stepName))
                        .map(WorkflowStep::result)
-                       .map(o -> workflowExecution.processingContext().component(Converter.class)
+                       .map(o -> workflowExecution.processingContext().component(EventConverter.class)
                                                       .convert(o, PAYLOAD_TYPE.getType()));
     }
 

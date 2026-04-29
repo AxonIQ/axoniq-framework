@@ -2,18 +2,18 @@
 :navtitle: Understanding Steps
 
 In the previous sections you saw `awaitExecute` and `awaitEvent` in action.
-This section covers the full configuration available across all step types — timeouts, payload mapping, event naming, error handling, and execution semantics.
+This section covers the full configuration available across all step types—timeouts, payload mapping, event naming, error handling, and execution semantics.
 
 [NOTE]
 ====
-Everything in this section applies to all step primitives — unless noted otherwise.
+Everything in this section applies to all step primitives—unless noted otherwise.
 ====
 
 [IMPORTANT]
 ====
 Primitives cannot be nested.
 Do not call `execute`, `awaitExecute`, `awaitEvent`, `sleep`, `fail`, or `cancel` from *inside* an action passed to another primitive.
-Each primitive must be called directly from the workflow method — the engine tracks execution through the top-level call sequence, and nesting would break event ordering and replay.
+Each primitive must be called directly from the workflow method—the engine tracks execution through the top-level call sequence, and nesting would break event ordering and replay.
 
 [source,java]
 ----
@@ -32,16 +32,16 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 [sidebar]
 .In this section
 --
-* <<step-primitives>> — all primitives at a glance
-* <<workflow-step-result>> — inspecting, waiting for, and cancelling async results
-* <<timeouts>> — defaults, per-step overrides, crash recovery
-* <<payload-reducers>> — controlling data flow in and out of steps
-* <<error-handling>> — try/catch, checking results, compensating actions
-* <<cancelling-a-step>> — cancelling individual steps
-* <<execution-semantics>> — at-least-once, exactly-once (planned)
-* <<retries>> — retry policies, backoff, crash recovery
-* <<event-name-customization>> — namespaces, suffixes, inheritance, builders
-* <<kotlin-dsl-equivalents>> — Kotlin syntax for all of the above
+* <<step-primitives>>—all primitives at a glance
+* <<workflow-step-result>>—inspecting, waiting for, and cancelling async results
+* <<timeouts>>—defaults, per-step overrides, crash recovery
+* <<payload-reducers>>—controlling data flow in and out of steps
+* <<error-handling>>—try/catch, checking results, compensating actions
+* <<cancelling-a-step>>—cancelling individual steps
+* <<execution-semantics>>—at least once, exactly once (planned)
+* <<retries>>—retry policies, backoff, crash recovery
+* <<event-name-customization>>—namespaces, suffixes, inheritance, builders
+* <<kotlin-dsl-equivalents>>—Kotlin syntax for all of the above
 --
 
 [[step-primitives]]
@@ -85,11 +85,11 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 For `awaitExecute` and `execute` overloads, usage examples, and Kotlin equivalents, see xref:execute-steps.adoc[Execute Steps].
 
 [[workflow-step-result]]
-== WorkflowStepResult
+== `WorkflowStepResult`
 
 The `WorkflowStepResult` returned by `execute` and `waitForEvent` lets you inspect, wait for, or cancel a running step.
 
-.Blocking methods — wait until the step reaches a terminal state
+.Blocking methods—wait until the step reaches a terminal state
 [cols="2,3"]
 |===
 |Method |Description
@@ -110,7 +110,7 @@ The `WorkflowStepResult` returned by `execute` and `waitForEvent` lets you inspe
 |Blocks, then returns `true` if the step was cancelled.
 |===
 
-.Non-blocking methods — return immediately
+.Non-blocking methods—return immediately
 [cols="2,3"]
 |===
 |Method |Description
@@ -163,7 +163,7 @@ Every step has a timeout. If the action doesn't complete in time, the engine rec
 This applies to `awaitExecute`, `execute`, and `awaitEvent` alike.
 
 [horizontal]
-Default:: **5 seconds** — used when you don't pass an explicit `Duration`.
+Default:: **5 seconds**—used when you don't pass an explicit `Duration`.
 Override per step:: Pass a `Duration` parameter to `awaitExecute`, `execute`, or `awaitEvent`.
 
 [source,java]
@@ -183,7 +183,7 @@ ctx.awaitEvent("awaitPayment", PaymentConfirmed.class,
 
 [IMPORTANT]
 ====
-The timeout is measured from the timestamp of the STARTED event — that is the step's start time.
+The timeout is measured from the timestamp of the STARTED event—that is the step's start time.
 On replay after a crash, the remaining timeout is recalculated: `startTime + timeout - now`.
 If the remaining time is already negative, the step times out immediately.
 ====
@@ -191,8 +191,8 @@ If the remaining time is already negative, the step times out immediately.
 [[payload-reducers]]
 == Payload reducers
 
-Every workflow has a *global payload* — the shared state that lives for the entire workflow.
-When you call a step, you can also pass a *local payload* — data specific to that step.
+Every workflow has a *global payload*—the shared state that lives for the entire workflow.
+When you call a step, you can also pass a *local payload*—data specific to that step.
 
 The question is: what does the step's action actually receive as input, and what happens to the step's result?
 That's what payload reducers control.
@@ -202,8 +202,8 @@ That's what payload reducers control.
 Each step has two reducers:
 
 [horizontal]
-`parameterMapping`:: Controls the *input* — what payload the step's action receives.
-`resultMapping`:: Controls the *output* — what happens to the step's result after it completes.
+`parameterMapping`:: Controls the *input*—what payload the step's action receives.
+`resultMapping`:: Controls the *output*—what happens to the step's result after it completes.
 
 === Available options
 
@@ -220,15 +220,15 @@ Each step has two reducers:
 |The step's result is discarded. The global payload stays as-is.
 
 |`COMBINE_GLOBAL_AND_LOCAL`
-|The action receives both merged — local values overwrite global values with the same key.
+|The action receives both merged—local values overwrite global values with the same key.
 |The step's result is merged back into the global payload.
 |===
 
 === Why does this matter?
 
-With the defaults (`LOCAL_ONLY` input, `GLOBAL_ONLY` output), steps are isolated — they only see what you explicitly pass them, and their results don't leak into the global state. This keeps things predictable.
+With the defaults (`LOCAL_ONLY` input, `GLOBAL_ONLY` output), steps are isolated—they only see what you explicitly pass them, and their results don't leak into the global state. This keeps things predictable.
 
-But sometimes you want a step to see the full workflow context, or you want the result to update the global payload for subsequent steps. That's when you change the reducer.
+Sometimes you want a step to see the full workflow context, or you want the result to update the global payload for subsequent steps. That's when you change the reducer.
 
 === Example
 
@@ -241,7 +241,7 @@ ctx.awaitExecute("reserveStock",
         payload("customerId", customerId).getValues(), // <1>
         InventoryService::reserveStock);
 ----
-<.> The action receives `{customerId=456}` only — it can't see `orderId` or `email`.
+<.> The action receives `{customerId=456}` only—it can't see `orderId` or `email`.
 
 [source,kotlin]
 ----
@@ -268,7 +268,7 @@ In Java, the full-form `awaitExecute` with `PayloadProcessor` uses `LOCAL_ONLY` 
 When a step fails, you need to decide: recover with a compensating action, or terminate the workflow?
 The approach depends on whether you're using blocking (`awaitExecute`) or non-blocking (`execute`) steps.
 
-=== Blocking steps — try/catch
+=== Blocking steps—try/catch
 
 `awaitExecute` throws a `StepFailedException` when a step fails.
 Catch it to run a compensating action, or let it propagate to fail the workflow:
@@ -290,7 +290,7 @@ try {
 ----
 <.> After the compensating action, explicitly fail the workflow. Without this, the workflow would continue to the next step.
 
-=== Non-blocking steps — check the result
+=== Non-blocking steps—check the result
 
 With `execute` and `waitForEvent`, steps run asynchronously. Check the result to handle errors:
 
@@ -341,8 +341,23 @@ if (shipping.failure()) { // blocks until shipping reaches a terminal state
 
 [NOTE]
 ====
-Any exception thrown during step execution is wrapped in `StepFailedException`.
-Use `getCause()` to access the original exception.
+Any exception thrown by a step body is converted to a `WorkflowExecutionException` at the runtime boundary, then wrapped in `StepFailedException`.
+The conversion happens immediately — the same `WorkflowExecutionException` is observed during live execution and after event-sourced replay.
+
+Use `getCause()` on `StepFailedException` to access the `WorkflowExecutionException`, which exposes the originating throwable's fully-qualified class name via `type()` and its message via `getMessage()`.
+The original stack trace is written to the application log at the moment of failure but is not stored in the event store, so it is not available after replay.
+
+Because the cause is always a `WorkflowExecutionException`, `instanceof` checks against the originating exception class never match — neither live nor on replay. Branch on `type()` instead:
+
+[source,java]
+----
+} catch (StepFailedException e) {
+    var cause = (WorkflowExecutionException) e.getCause();
+    if (cause.isType(OutOfStockException.class)) {
+        // ...
+    }
+}
+----
 ====
 
 [[cancelling-a-step]]
@@ -359,7 +374,7 @@ var approval = ctx.waitForEvent("awaitApproval",
 // later — manager rejected, no longer need approval
 approval.cancel("Manager rejected the request"); // <1>
 ----
-<.> Cancels the wait. The workflow continues executing — only this step is affected.
+<.> Cancels the wait. The workflow continues executing—only this step is affected.
 
 *Via the context:*
 [source,java]
@@ -377,7 +392,7 @@ Both approaches produce a CANCELLED event in the event store:
 1 cancelled AwaitApprovalCancelled
   </div>
   <div class="et-src" data-title="With reason">
-1 cancelled AwaitApprovalCancelled {"reason": "StepCancellationException: Manager rejected"}
+1 cancelled AwaitApprovalCancelled {"type": "...StepCancellationException", "message": "Manager rejected"}
   </div>
 </div>
 ++++
@@ -385,7 +400,7 @@ Both approaches produce a CANCELLED event in the event store:
 [IMPORTANT]
 ====
 Step cancellation only affects the individual step.
-The workflow keeps running — other steps are not touched.
+The workflow keeps running—other steps are not touched.
 This is different from `ctx.cancel()` or `ctx.fail()`, which terminate the entire workflow and cancel _all_ running steps.
 ====
 
@@ -409,22 +424,22 @@ For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, 
 
 [IMPORTANT]
 ====
-Steps currently execute with **at-least-once** semantics.
+Steps currently execute with **at least once** semantics.
 If the application crashes after a step's action completes but _before_ the COMPLETED event is persisted, the action may be re-executed on recovery.
 
-Design your step actions to be **idempotent** — safe to run more than once with the same input.
+Design your step actions to be **idempotent**—safe to run more than once with the same input.
 ====
 
 [NOTE]
 ====
-**Exactly-once semantics** are planned for a future version.
+**Exactly once semantics** are planned for a future version.
 The engine will use consistency markers to guarantee that each step action executes exactly once, even across crashes and replays.
 ====
 
 [[retries]]
 == Retries
 
-The `RetryPolicy` API lets you configure retries per step — max attempts, backoff strategy, and programmatic control:
+The `RetryPolicy` API lets you configure retries per step—max attempts, backoff strategy, and programmatic control:
 
 [source,java]
 ----
@@ -459,10 +474,10 @@ ctx.awaitExecute("validateAddress",
                 .retryWhile(retryCtx -> isTransient(retryCtx.error())));          // <3>
 ----
 <.> If the step fails, the engine retries up to 3 times before marking it as FAILED. `maxRetries=3` means up to 4 total executions (1 initial + 3 retries).
-<.> `onRetry` is called before each retry — use it for logging, metrics, or alerts.
-<.> `retryWhile` continues retrying as long as the predicate returns true — here, only transient errors are retried (e.g., a 404 is not retried).
+<.> `onRetry` is called before each retry—use it for logging, metrics, or alerts.
+<.> `retryWhile` continues retrying as long as the predicate returns true—here, only transient errors are retried (for example, a 404 is not retried).
 
-The `reserveInventory` step with `RetryPolicy.maxRetries(3)` — fails twice, succeeds on the third attempt:
+The `reserveInventory` step with `RetryPolicy.maxRetries(3)`—fails twice, succeeds on the third attempt:
 
 ++++
 <div class="et-player" data-autoplay>
@@ -498,14 +513,14 @@ The `reserveInventory` step with `RetryPolicy.maxRetries(3)` — fails twice, su
 
 [NOTE]
 ====
-If a step throws `StepCancellationException` during any retry attempt, the step immediately transitions to `CANCELLED` — remaining retries are skipped.
+If a step throws `StepCancellationException` during any retry attempt, the step immediately transitions to `CANCELLED`—remaining retries are skipped.
 Cancellation always takes precedence over the retry policy.
-This also applies when the step is cancelled externally via `ctx.cancelStep()` or when the workflow itself is cancelled — any in-flight backoff delay is interrupted and the step moves to a terminal state.
+This also applies when the step is cancelled externally via `ctx.cancelStep()` or when the workflow itself is cancelled—any in-flight backoff delay is interrupted and the step moves to a terminal state.
 ====
 
 === Crash recovery
 
-Retries are event-sourced — on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
+Retries are event-sourced—on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
 If the process restarts while a step is in `RETRYING` state, the engine resumes from the correct attempt number with the remaining backoff delay.
 
 [[event-name-customization]]
@@ -530,9 +545,9 @@ public void execute(SimpleWorkflowContext ctx) {
 }
 ----
 <.> Sets the namespace for all events in this workflow.
-<.> This step's events will be `io.myapp.orders.ReserveStockStarted` and `io.myapp.orders.ReserveStockCompleted` — no per-step configuration needed.
+<.> This step's events will be `io.myapp.orders.ReserveStockStarted` and `io.myapp.orders.ReserveStockCompleted`—no per-step configuration needed.
 
-For more control (e.g., custom suffixes), use the declarative configuration:
+For more control (for example, custom suffixes), use the declarative configuration:
 
 [source,java]
 ----
@@ -549,9 +564,9 @@ return d -> d
         );
 ----
 
-With this configuration, all steps produce events like `io.myapp.orders.ReserveStockDone` — without having to specify the namespace or suffix on every step.
+With this configuration, all steps produce events like `io.myapp.orders.ReserveStockDone`—without having to specify the namespace or suffix on every step.
 
-For the full declarative configuration API — workflow modules, start conditions, ID providers, and more — see xref:configuration.adoc[Configuration].
+For the full declarative configuration API—workflow modules, start conditions, ID providers, and more—see xref:configuration.adoc[Configuration].
 
 === Step-level customizer
 
@@ -593,11 +608,11 @@ If you don't pass a customizer (or pass `defaults()`), the step inherits from th
 === Defaults and Inheritance
 
 Axon Workflows defines sensible defaults for naming workflow events. The workflow-level customizer propagates selected properties to steps via `forStepInheritance()`.
-When a step also has its own customizer, the two are merged — **step-level wins** when it differs from defaults, otherwise the workflow-level value is used.
+When a step also has its own customizer, the two are merged—**step-level wins** when it differs from defaults, otherwise the workflow-level value is used.
 The table below explains the naming settings defaults and inheritance in detail.
 
 The workflow-level customizer propagates selected properties to steps via `forStepInheritance()`.
-When a step also has its own customizer, the two are merged — **step-level wins** when it differs from defaults, otherwise the workflow-level value is used.
+When a step also has its own customizer, the two are merged—**step-level wins** when it differs from defaults, otherwise the workflow-level value is used.
 
 .What steps inherit from the workflow customizer
 [cols="1,2,1,1"]
@@ -605,9 +620,9 @@ When a step also has its own customizer, the two are merged — **step-level win
 |Property |Description |Default |Inherited?
 
 |`namespace`
-|The prefix for all event names (e.g., `io.myapp.orders`)
+|The prefix for all event names (for example, `io.myapp.orders`)
 |`io.axoniq.workflow`
-|Yes — set it once, all steps use it
+|Yes—set it once, all steps use it
 
 |`capitalizeSimpleName`
 |Whether step names are capitalized in event names (`reserveStock` -> `ReserveStock`)
@@ -622,27 +637,27 @@ When a step also has its own customizer, the two are merged — **step-level win
 |`baseName`
 |Replaces the step name in the event name
 |The step name itself
-|No — each step uses its own step name
+|No—each step uses its own step name
 
 |`workflowBaseName`
-|Base name for workflow-level events (e.g., `OrderFulfillmentWorkflow#ExecuteStarted`, `OrderFulfillmentWorkflow#ExecuteCompleted`)
+|Base name for workflow-level events (for example, `OrderFulfillmentWorkflow#ExecuteStarted`, `OrderFulfillmentWorkflow#ExecuteCompleted`)
 |The workflow name
-|No — workflow-specific
+|No—workflow-specific
 
 |`appendToBaseName`
 |Whether to include the step name before the suffix
 |`true`
-|No — resets to default per step
+|No—resets to default per step
 
 |Workflow status suffixes
 |Suffixes for workflow-level events (`workflowStarted`, `workflowCompleted`, etc.)
 |`Started`, `Completed`, `Failed`, `TimedOut`, `Cancelled`
-|No — workflow-specific
+|No—workflow-specific
 
 |`payloadCustomization`
 |Dynamic event naming based on payload content
 |None
-|No — workflow-specific
+|No—workflow-specific
 |===
 
 *Example:* Set the namespace and suffix globally, then override one step:
@@ -680,7 +695,7 @@ io.payments.InitiatePaymentDone    // <3>
 ----
 <.> Inherited `io.myapp` namespace and `Done` suffix from the workflow customizer.
 <.> Step-level `namespace("io.payments")` overrides the workflow namespace.
-<.> The `Done` suffix is still inherited — only the namespace was overridden.
+<.> The `Done` suffix is still inherited—only the namespace was overridden.
 
 === Builder methods
 
@@ -779,4 +794,4 @@ val result = awaitExecute(
 )
 ----
 
-Kotlin's named parameters and default values mean you only specify what you need — everything else falls back to sensible defaults.
+Kotlin's named parameters and default values mean you only specify what you need—everything else falls back to sensible defaults.

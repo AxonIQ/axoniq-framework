@@ -20,8 +20,12 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
@@ -40,6 +44,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -148,7 +153,15 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                                                                 .context(),
                                                                                processingContext);
                         var payload = parameterPayloadReducer.apply(workflowContext.workflowPayload(), local);
-                        return CompletableFuture.completedFuture(action.apply(procContext, payload));
+                        try {
+                            return CompletableFuture.completedFuture(action.apply(procContext, payload));
+                        } catch (StepCancellationException | WorkflowCancelledException | WorkflowFailedException t) {
+                            // Framework control-flow signals must keep their original type
+                            // — runtime dispatch downstream (e.g. isCancellation) relies on it.
+                            throw t;
+                        } catch (Throwable t) {
+                            throw WorkflowError.from(t).toThrowable();
+                        }
                     });
 
             workflowExecution.registerRunningStep(stepName, result);
@@ -188,8 +201,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                     });
                                 } else {
                                     // FIXME - This is where we should publish using an append condition
+                                    Throwable failure = e instanceof CompletionException && e.getCause() != null
+                                            ? e.getCause() : e;
                                     workflowExecution.appendTask(
-                                            i -> failureHandler.onFailure(stepName, e, eventNameCustomizer));
+                                            i -> failureHandler.onFailure(stepName, failure, eventNameCustomizer));
                                 }
                             }
                         });

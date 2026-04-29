@@ -7,7 +7,7 @@ If the application crashes, the engine replays those events and resumes exactly 
 
 == Defining a workflow
 
-Here's the simplest possible workflow — a single durable step:
+Here's the simplest possible workflow—a single durable step:
 
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
@@ -26,7 +26,7 @@ public class OrderFulfillmentWorkflow {
 <.> `awaitExecute` calls the action, waits for it to finish, and returns the typed result.
 The engine records a STARTED and COMPLETED event for this step automatically.
 
-That's it — one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
+That's it—one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
 
 Now let's make it more realistic by handling the result and passing payload:
 
@@ -60,7 +60,7 @@ public class OrderFulfillmentWorkflow {
 <.> `awaitExecute` runs the action synchronously and returns the typed result.
 The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event.
 <.> If stock reservation fails, we fail the workflow.
-Standard Java control flow — `if`, loops, try/catch — all work exactly as you'd expect.
+Standard Java control flow—`if`, loops, try/catch—all work exactly as you'd expect.
 
 When this workflow executes successfully, the engine records the following events in the event store:
 
@@ -77,13 +77,13 @@ When this workflow executes successfully, the engine records the following event
 ++++
 
 The triggering `OrderPlaced` event's `orderId` becomes the workflow instance ID (from `idProperty`).
-Each `awaitExecute` produces a STARTED/COMPLETED pair — the STARTED event captures the input payload, the COMPLETED event captures the result.
+Each `awaitExecute` produces a STARTED/COMPLETED pair—the STARTED event captures the input payload, the COMPLETED event captures the result.
 The `__reserveStock` key stores the typed return value (`true`).
 
 Every primitive call becomes a pair of durable events.
-This is what gives you audit trails, crash recovery, and replay — with zero extra code.
+This is what gives you audit trails, crash recovery, and replay—with zero extra code.
 
-== The @Workflow annotation
+== The `@Workflow` annotation
 
 The `@Workflow` annotation tells the engine how to wire up your workflow:
 
@@ -103,13 +103,13 @@ For example, `startOnConditions = {"amount>100"}` would only process high-value 
 Each `awaitExecute` call produces two durable events: a STARTED event when the step begins, and a COMPLETED (or FAILED, TIMED_OUT) event when it finishes.
 
 The engine records everything.
-On crash recovery, it replays those events and resumes execution from where it left off — no manual state management needed.
+On crash recovery, it replays those events and resumes execution from where it left off—no manual state management needed.
 
 [NOTE]
 ====
 You write simple imperative code.
 The engine translates each primitive call into durable events.
-This gives you event sourcing, audit trails, and crash recovery for free.
+This gives you event sourcing, audit trails, and crash recovery without additional effort.
 ====
 
 == Adding more steps
@@ -144,7 +144,7 @@ public void execute(SimpleWorkflowContext ctx) {
 ----
 
 <.> A second step that initiates payment processing, passing `customerId` and `amount` as input.
-<.> `baseName(...)` replaces the step name in the event name — its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
+<.> `baseName(...)` replaces the step name in the event name—its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
 
 Here's the event store after a successful run:
 
@@ -232,7 +232,7 @@ When the external `PaymentConfirmed` event arrives, it unblocks the workflow and
 [NOTE]
 ====
 The events that `awaitEvent` listens for are standard Axon Framework events.
-They can be published from anywhere — a command handler, an `EventGateway`, a REST controller, or any component with access to the event bus.
+They can be published from anywhere—a command handler, an `EventGateway`, a REST controller, or any component with access to the event bus.
 ====
 
 == Kotlin DSL
@@ -240,7 +240,7 @@ They can be published from anywhere — a command handler, an `EventGateway`, a 
 If you prefer Kotlin, the same workflow looks like this:
 
 [source,kotlin]
-.src/main/kotlin/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
+.src/main/kt/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
 ----
 class OrderFulfillmentWorkflow {
 
@@ -277,7 +277,7 @@ class OrderFulfillmentWorkflow {
 }
 ----
 
-The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support (e.g., `30.seconds`).
+The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support (for example, `30.seconds`).
 
-That's a complete workflow — it executes actions and waits for external events.
-To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:axon-workflow-reference::index.adoc[Reference Guide].
+That's a complete workflow—it executes actions and waits for external events.
+To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:development@axon-framework-reference:workflows:index.adoc[Reference Guide].

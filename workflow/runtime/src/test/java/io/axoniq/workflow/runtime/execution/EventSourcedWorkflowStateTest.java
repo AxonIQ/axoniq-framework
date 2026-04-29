@@ -19,39 +19,38 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class EventSourcedWorkflowStateTest {
 
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
-    private Converter converter;
+    private EventConverter converter;
 
     @BeforeEach
     void setUp() {
         state = new EventSourcedWorkflowState();
         processingContext = mock(ProcessingContext.class);
-        converter = mock(Converter.class);
-        when(processingContext.component(Converter.class)).thenReturn(converter);
+        converter = mock(EventConverter.class);
+        when(processingContext.component(EventConverter.class)).thenReturn(converter);
     }
 
     @Test
@@ -126,7 +125,7 @@ class EventSourcedWorkflowStateTest {
     @Test
     void testEvolveStepRetrying() {
         String stepName = "testStep";
-        Throwable error = new RuntimeException("retry error");
+        WorkflowError error = WorkflowError.from(new RuntimeException("retry error"));
         StepRetryInfo retryInfo = mock(StepRetryInfo.class);
         when(retryInfo.error()).thenReturn(error);
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.RETRYING);
@@ -141,7 +140,11 @@ class EventSourcedWorkflowStateTest {
         WorkflowStep step = state.getStep(stepName);
         assertThat(step.status()).isEqualTo(StepStatus.RETRYING);
         assertThat(step.result()).isEqualTo(retryInfo);
-        assertThat(step.error()).isEqualTo(error);
+        assertThat(step.error()).isInstanceOfSatisfying(WorkflowExecutionException.class, e -> {
+            assertThat(e.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(e.getMessage()).isEqualTo("retry error");
+            assertThat(e.getStackTrace()).isEmpty();
+        });
     }
 
     @Test
@@ -152,7 +155,8 @@ class EventSourcedWorkflowStateTest {
 
         Map<String, Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
-                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
@@ -171,21 +175,25 @@ class EventSourcedWorkflowStateTest {
     @Test
     void testEvolveStepFailed() {
         String stepName = "testStep";
-        Throwable error = new RuntimeException("Test error");
+        WorkflowError error = WorkflowError.from(new RuntimeException("Test error"));
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.FAILED);
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         when(eventMessage.timestamp()).thenReturn(Instant.now());
-        // Verify that the payload is retrieved as Throwable before accessing it.
-        // Even if payloadAs(Object.class) returns something else, payloadAs(Throwable.class) must be used.
+        // Verify that the payload is retrieved as WorkflowError before accessing it.
+        // Even if payloadAs(Object.class) returns something else, payloadAs(WorkflowError.class) must be used.
         when(eventMessage.payloadAs(eq(Object.class), any())).thenReturn("not-an-error");
-        when(eventMessage.payloadAs(eq(Throwable.class), any())).thenReturn(error);
+        when(eventMessage.payloadAs(eq(WorkflowError.class), any())).thenReturn(error);
 
         state.evolve(eventMessage, processingContext);
 
         assertThat(state.containsStep(stepName)).isTrue();
         WorkflowStep step = state.getStep(stepName);
         assertThat(step.status()).isEqualTo(StepStatus.FAILED);
-        assertThat(step.error()).isEqualTo(error);
+        assertThat(step.error()).isInstanceOfSatisfying(WorkflowExecutionException.class, e -> {
+            assertThat(e.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(e.getMessage()).isEqualTo("Test error");
+            assertThat(e.getStackTrace()).isEmpty();
+        });
     }
 }

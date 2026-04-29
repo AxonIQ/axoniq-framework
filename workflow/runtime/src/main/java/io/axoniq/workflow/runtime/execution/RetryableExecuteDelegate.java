@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
@@ -188,7 +189,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
         if (retryPolicy.shouldRetry(retryContext)) {
             retryPolicy.onRetryHandler().onRetry(retryContext);
 
-            var retryInfo = new StepRetryInfo(attempt, retryPolicy.maxRetries(), error);
+            var retryInfo = new StepRetryInfo(attempt, retryPolicy.maxRetries(), WorkflowError.from(error));
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
             try {
                 workflowExecution.awaitStateChange(s -> {

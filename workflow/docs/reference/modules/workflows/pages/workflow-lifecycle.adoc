@@ -2,12 +2,12 @@
 :navtitle: Workflow Lifecycle
 
 A workflow moves through a series of states during its lifetime.
-This section covers how workflows terminate — both intentionally and unexpectedly — and how to react to state changes with lifecycle listeners.
+This section covers how workflows terminate—both intentionally and unexpectedly—and how to react to state changes with lifecycle listeners.
 
 [NOTE]
 ====
 Each workflow instance runs on a **virtual thread**.
-Virtual threads are lightweight — a suspended workflow (e.g., waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
+Virtual threads are lightweight—a suspended workflow (for example, waiting for an event) consumes almost no memory or OS resources, so you can run thousands of concurrent workflow instances without issue.
 In a future version, the engine will support offloading long-running suspended workflows to disk, freeing memory entirely until they are resumed.
 ====
 
@@ -23,7 +23,7 @@ A workflow is always in one of these states:
 |The workflow is actively executing steps.
 
 |`COMPLETED`
-|The workflow method returned normally — all work is done.
+|The workflow method returned normally—all work is done.
 Any async steps (started via `execute(...)` without a follow-up `await()`) that are still running are cancelled before the workflow transitions to `COMPLETED`.
 
 |`FAILED`
@@ -36,7 +36,7 @@ Any async steps (started via `execute(...)` without a follow-up `await()`) that 
 |The workflow exceeded its overall timeout.
 |===
 
-`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states** — the workflow will not be retried or resumed.
+`COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states**—the workflow will not be retried or resumed.
 
 == The workflow context
 
@@ -47,33 +47,33 @@ The `SimpleWorkflowContext` passed to your workflow method is your single entry 
 |Category |What you can do
 
 |*Workflow data*
-|`workflowId()` — the unique workflow instance ID +
-`workflowPayload()` — the current workflow payload +
-`workflowStatus()` — the current status (STARTED, COMPLETED, FAILED, ...) +
-`workflowStepNames()` — names of all steps executed so far
+|`workflowId()`—the unique workflow instance ID +
+`workflowPayload()`—the current workflow payload +
+`workflowStatus()`—the current status (STARTED, COMPLETED, FAILED, ...) +
+`workflowStepNames()`—names of all steps executed so far
 
 |*Execute actions*
-|`awaitExecute(...)` — run an action and wait for the result +
-`execute(...)` — run an action without waiting (returns `WorkflowStepResult`)
+|`awaitExecute(...)`—run an action and wait for the result +
+`execute(...)`—run an action without waiting (returns `WorkflowStepResult`)
 
 |*Wait for events*
-|`awaitEvent(...)` — block until an external event arrives +
-`waitForEvent(...)` — wait without blocking (returns `WorkflowStepResult`) +
-`sleep(...)` — pause the workflow for a duration
+|`awaitEvent(...)`—block until an external event arrives +
+`waitForEvent(...)`—wait without blocking (returns `WorkflowStepResult`) +
+`sleep(...)`—pause the workflow for a duration
 
 |*Manage state*
-|`setPayload(...)` — durably update the workflow payload
+|`setPayload(...)`—durably update the workflow payload
 
 |*Terminate*
-|`fail(...)` — terminate the workflow with a failure +
-`cancel(...)` — cancel the workflow +
-`cancelStep(...)` — cancel a single step
+|`fail(...)`—terminate the workflow with a failure +
+`cancel(...)`—cancel the workflow +
+`cancelStep(...)`—cancel a single step
 
 |*Orchestrate*
-|`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)` — combine multiple non-blocking results
+|`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)`—combine multiple non-blocking results
 |===
 
-In Kotlin, the equivalent is `Kontext`, which provides the same capabilities with idiomatic Kotlin syntax — `payload` as a property, named parameters with defaults, and `kotlin.time.Duration` support.
+In Kotlin, the equivalent is `Kontext`, which provides the same capabilities with idiomatic Kotlin syntax—`payload` as a property, named parameters with defaults, and `kotlin.time.Duration` support.
 
 [TIP]
 ====
@@ -81,7 +81,7 @@ You can also build your own custom workflow context with domain-specific methods
 ====
 
 [[fail-vs-cancel]]
-== fail() vs cancel()
+== `fail()` v.s. `cancel()`
 
 Both terminate the workflow, but they signal different intent and are called from different places:
 
@@ -100,11 +100,11 @@ Both terminate the workflow, but they signal different intent and are called fro
 |An external action (user, admin, API) wants to stop a running workflow.
 |===
 
-=== fail — internal termination
+=== `fail`—internal termination
 
 Use `fail` inside your workflow code when the business logic determines the workflow should stop.
 
-If the workflow has running steps (e.g., parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
+If the workflow has running steps (for example, parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
 
 [source,java]
 ----
@@ -129,18 +129,18 @@ if (!reserved) {
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="ctx.fail() — event store">
-1 cancelled ShipOrderCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-2 cancelled NotifyCustomerCancelled {"reason": "WorkflowFailedException: Stock unavailable"}
-3 failed OrderFulfillmentWorkflow#ExecuteFailed {"reason": "RuntimeException: Stock unavailable"}
+1 cancelled ShipOrderCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
+2 cancelled NotifyCustomerCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
+3 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
   </div>
 </div>
 ++++
 
-Running steps are cancelled first — each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception (`RuntimeException` in this case), not the wrapper.
+Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper.
 
-=== cancel — external termination
+=== `cancel`—external termination
 
-Use `cancel` from outside the workflow — for example, when a user or API wants to stop a running workflow.
+Use `cancel` from outside the workflow—for example, when a user or API wants to stop a running workflow.
 Like `fail`, `cancel` first cancels all running steps, then terminates the workflow.
 
 Given a workflow with parallel steps running:
@@ -168,9 +168,9 @@ execution.cancel("Cancelled by user");
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="execution.cancel() — event store">
-1 cancelled ShipOrderCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-2 cancelled NotifyCustomerCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
-3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"reason": "WorkflowCancelledException: Cancelled by user"}
+1 cancelled ShipOrderCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+2 cancelled NotifyCustomerCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
   </div>
 </div>
 ++++
@@ -205,7 +205,7 @@ public void execute(SimpleWorkflowContext ctx) {
 </div>
 ++++
 
-This guarantees that every started step has a terminal event in the log — no silent losses from a step that would have failed after the workflow had already completed.
+This guarantees that every started step has a terminal event in the log—no silent losses from a step that would have failed after the workflow had already completed.
 
 [TIP]
 ====
@@ -217,10 +217,10 @@ See xref:execute-steps.adoc[] and xref:step-orchestration.adoc[].
 
 [IMPORTANT]
 ====
-If a workflow exits due to an *unhandled* exception — one where you didn't explicitly call `fail` or `cancel` — it is **not** in a terminal state.
+If a workflow exits due to an *unhandled* exception—one where you didn't explicitly call `fail` or `cancel`—it is **not** in a terminal state.
 The engine will retry it on the next restart.
 
-Always ensure your workflow has explicit terminal paths — call `fail` or `cancel` for every error condition, or let the workflow complete normally.
+Always ensure your workflow has explicit terminal paths—call `fail` or `cancel` for every error condition, or let the workflow complete normally.
 ====
 
 == Lifecycle listeners
@@ -273,7 +273,7 @@ Each listener method receives the `WorkflowStatus` and the `WorkflowContext`, gi
 ====
 Lifecycle listeners must be defined in the same class as the `@Workflow` method.
 Only methods on the workflow instance's class (and its type hierarchy) are scanned for listener annotations.
-Use the `workflowName` attribute (e.g., `@OnSuccess(workflowName = "myWorkflow")`) to bind a listener to a specific workflow when multiple workflows are defined in the same class.
+Use the `workflowName` attribute (for example, `@OnSuccess(workflowName = "myWorkflow")`) to bind a listener to a specific workflow when multiple workflows are defined in the same class.
 ====
 
 === Programmatic listeners

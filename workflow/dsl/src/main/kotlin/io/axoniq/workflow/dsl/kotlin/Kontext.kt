@@ -26,9 +26,9 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
-import org.axonframework.conversion.Converter
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
+import org.axonframework.messaging.eventhandling.conversion.EventConverter
 import java.util.function.Predicate
 import kotlin.reflect.KClass
 import kotlin.time.Duration
@@ -86,7 +86,7 @@ class Kontext(
     class TypeConvertingWaitForCommand<T : Any>(
         command: PrimitiveCommands.WorkflowStepResultWaitForCommand,
         val type: Class<T>,
-        val converter: Converter
+        val converter: EventConverter
     ) :
         PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
@@ -174,7 +174,7 @@ class Kontext(
                     eventNameCustomizer
                 ),
                 type.java,
-                workflowKontext.processingContext().component(Converter::class.java)
+                workflowKontext.processingContext().component(EventConverter::class.java)
             )
         )
     }

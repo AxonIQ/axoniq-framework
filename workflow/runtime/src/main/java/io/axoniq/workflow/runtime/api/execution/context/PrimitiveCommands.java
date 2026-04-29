@@ -25,7 +25,7 @@ import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
 import java.util.Map;
@@ -61,7 +61,7 @@ public class PrimitiveCommands {
             @Nonnull PayloadProcessor action,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
-            @Nonnull Converter converter,
+            @Nonnull EventConverter converter,
             @Nonnull EventNameCustomizer eventNameCustomizer) {
         return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
                                                                    payload,
@@ -76,7 +76,7 @@ public class PrimitiveCommands {
             @Nonnull PayloadProcessor action,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
-            @Nonnull Converter converter,
+            @Nonnull EventConverter converter,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             @Nonnull RetryPolicy retryPolicy) {
         return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
@@ -105,7 +105,7 @@ public class PrimitiveCommands {
             @Nonnull PayloadReducer resultReducer,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
-            @Nonnull Converter converter,
+            @Nonnull EventConverter converter,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
         return new BlockingWaitForCommand<>(
@@ -396,14 +396,14 @@ public class PrimitiveCommands {
     @Internal
     public static class BlockingExecuteWithResultCommand<T> extends PrimitiveCommands.DelegatingExecuteCommand<T> {
 
-        private final Converter converter;
+        private final EventConverter converter;
         private final TypeReference<T> type;
 
 
         @Internal
         BlockingExecuteWithResultCommand(
                 @Nonnull PrimitiveCommands.WorkflowStepResultExecuteCommand command,
-                @Nonnull Converter converter,
+                @Nonnull EventConverter converter,
                 @Nonnull TypeReference<T> type) {
             super(command);
             this.converter = converter;
@@ -431,14 +431,14 @@ public class PrimitiveCommands {
     @Internal
     public static class BlockingWaitForCommand<T> extends PrimitiveCommands.DelegatingWaitForCommand<T> {
 
-        private final Converter converter;
+        private final EventConverter converter;
         private final TypeReference<T> type;
 
         @Internal
         BlockingWaitForCommand(
                 @Nonnull PrimitiveCommands.WorkflowStepResultWaitForCommand command,
                 @Nonnull TypeReference<T> type,
-                @Nonnull Converter converter
+                @Nonnull EventConverter converter
         ) {
             super(command);
             this.converter = converter;

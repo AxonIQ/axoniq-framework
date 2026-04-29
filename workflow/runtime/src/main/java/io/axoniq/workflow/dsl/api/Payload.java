@@ -21,7 +21,7 @@ package io.axoniq.workflow.dsl.api;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import jakarta.annotation.Nonnull;
-import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -65,7 +65,7 @@ public class Payload {
             @Nonnull Object value
     ) {
         var converter = Objects.requireNonNull(context, "Workflow context must not be null")
-                               .processingContext().component(Converter.class);
+                               .processingContext().component(EventConverter.class);
         Map<String, Object> map = Objects.requireNonNull(converter.convert(value, PAYLOAD_TYPE.getType()),
                                                          "Payload converted to null");
         return payload(map);

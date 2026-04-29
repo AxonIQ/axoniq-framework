@@ -22,8 +22,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.configuration.Configuration;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +39,7 @@ import java.util.function.UnaryOperator;
  */
 public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
 
-    private final Converter converter;
+    private final EventConverter converter;
     private final String attributeName;
     private final Function<String, String> idProcessor;
 
@@ -48,7 +48,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
             @Nonnull String attributeName,
             @Nonnull UnaryOperator<String> customizer) {
         return new PayloadPropertyWorkflowIdProvider(
-                configuration.getComponent(Converter.class),
+                configuration.getComponent(EventConverter.class),
                 attributeName,
                 customizer
         );
@@ -61,7 +61,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
      * @param attributeName name of the payload attribute.
      */
     public PayloadPropertyWorkflowIdProvider(
-            @Nonnull Converter converter,
+            @Nonnull EventConverter converter,
             @Nonnull String attributeName) {
         this(converter, attributeName, UnaryOperator.identity());
     }
@@ -74,7 +74,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
      * @param idProcessor   processor called on the result of attribute extractor.
      */
     public PayloadPropertyWorkflowIdProvider(
-            @Nonnull Converter converter,
+            @Nonnull EventConverter converter,
             @Nonnull String attributeName,
             @Nonnull UnaryOperator<String> idProcessor
     ) {

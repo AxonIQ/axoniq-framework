@@ -2,9 +2,9 @@
 :navtitle: Configuration
 
 Throughout this tutorial, workflows have been defined using the `@Workflow` annotation.
-This section covers the declarative (programmatic) configuration API, which gives you full control over how workflows are wired up — and how to customize the context, event naming, ID resolution, and more.
+This section covers the declarative (programmatic) configuration API, which gives you full control over how workflows are wired up—and how to customize the context, event naming, ID resolution, and more.
 
-== Annotation vs declarative
+== Annotation v.s. declarative configuration
 
 The `@Workflow` annotation is the simplest way to define a workflow:
 
@@ -17,7 +17,7 @@ public void execute(SimpleWorkflowContext ctx) { /* ... */ }
 ----
 
 The declarative API offers the same capabilities plus additional options not available via annotations.
-The configuration is the same whether you use Java or Kotlin — the API is identical in both languages.
+The configuration is the same whether you use Java or Kotlin—the API is identical in both languages.
 Here's a complete example showing how to set up the Axon configuration with a workflow module:
 
 [source,java]
@@ -47,7 +47,7 @@ var configuration = configurer.start(); // <1>
 ----
 <.> `start()` initializes the Axon configuration and makes the workflow engine ready to receive events.
 
-== The WorkflowModule builder
+== The `WorkflowModule` builder
 
 The builder follows a step-by-step flow:
 
@@ -93,7 +93,7 @@ Provides a factory that creates new context instances for each workflow executio
 
 You can define workflows in two ways:
 
-**Declarative** — full control:
+**Declarative**—full control:
 [source,java]
 ----
 .definitions(d -> d
@@ -104,7 +104,7 @@ You can define workflows in two ways:
 )
 ----
 
-**Autodetected** — convention-based, reads `@Workflow` annotations:
+**Autodetected**—convention-based, reads `@Workflow` annotations:
 [source,java]
 ----
 .definitions(d -> d
@@ -141,10 +141,10 @@ The `.on(...)` method defines which events trigger a new workflow instance.
 |Start on any event of this type.
 
 |`EventConditions.fromType(MyEvent.class, predicate)`
-|Start on events of this type that match a predicate (e.g., association filtering).
+|Start on events of this type that match a predicate (for example, association filtering).
 |===
 
-Example with association filtering — only start for VIP customers:
+Example with association filtering—only start for VIP customers:
 
 [source,java]
 ----
@@ -218,7 +218,7 @@ If you don't need any customizations, use `.notCustomized()`.
 [[metadata-and-correlation-data]]
 == Metadata and correlation data
 
-Every workflow event carries metadata — key-value pairs attached to the event message alongside the payload.
+Every workflow event carries metadata—key-value pairs attached to the event message alongside the payload.
 The engine manages a set of internal metadata keys automatically, and Axon Framework's `CorrelationDataProvider` mechanism lets you propagate additional metadata from triggering events through the entire workflow.
 
 === Engine-managed metadata
@@ -242,17 +242,17 @@ The engine attaches the following metadata to every workflow and step event:
 |The workflow status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (workflow events only).
 
 |`modifyPayload`
-|The payload reducer name, if one was configured on a completed step (e.g., `COMBINE_GLOBAL_AND_LOCAL`).
+|The payload reducer name, if one was configured on a completed step (for example, `COMBINE_GLOBAL_AND_LOCAL`).
 |===
 
 These keys are managed by the engine and cannot be overridden.
 
 === Correlation data propagation
 
-When a workflow is triggered by an incoming event, Axon Framework's `CorrelationDataProvider` mechanism can automatically propagate metadata from that event to all events published by the workflow — including step events.
+When a workflow is triggered by an incoming event, Axon Framework's `CorrelationDataProvider` mechanism can automatically propagate metadata from that event to all events published by the workflow—including step events.
 
 This works because the workflow engine propagates the `ProcessingContext` from the triggering event through the entire workflow execution.
-Resources attached to the `ProcessingContext` — including correlation data — are copied to child contexts at each step boundary via `ProcessingContextUtils.copyResources()`.
+Resources attached to the `ProcessingContext`—including correlation data—are copied to child contexts at each step boundary via `ProcessingContextUtils.copyResources()`.
 
 NOTE: Axon Framework automatically registers a `MessageOriginProvider` by default, so `correlationId` and `causationId` are propagated out of the box. The example below shows how to register it explicitly or add custom providers.
 
@@ -285,7 +285,7 @@ configurer.eventProcessing(ep -> ep
 );
 ----
 
-With this configuration, if the triggering event (e.g., `OrderPlaced`) carries `tenantId` and `userId` in its metadata, every step event (`ReserveStockStarted`, `ReserveStockCompleted`, etc.) will also carry those values — automatically, with no changes to your workflow code.
+With this configuration, if the triggering event (for example, `OrderPlaced`) carries `tenantId` and `userId` in its metadata, every step event (`ReserveStockStarted`, `ReserveStockCompleted`, etc.) will also carry those values—automatically, with no changes to your workflow code.
 
 === How it works
 
@@ -297,12 +297,12 @@ The propagation path:
 4. When a step publishes events, the engine creates a child `UnitOfWork` and copies all resources from the parent context.
 5. The correlation data flows through to the published event's metadata.
 
-This means correlation data propagation is *transparent* — workflow code does not need to know about it.
+This means correlation data propagation is *transparent*—workflow code does not need to know about it.
 
 [NOTE]
 ====
 Correlation data propagation carries metadata that originates from the *triggering event*.
-If you need to attach metadata that doesn't come from the triggering event (e.g., computed values, workflow-specific tags), a dedicated `MetadataCustomizer` API is planned — see https://github.com/AxonIQ/extension-workflow/issues/103[#103].
+If you need to attach metadata that doesn't come from the triggering event (for example, computed values, workflow-specific tags), a dedicated `MetadataCustomizer` API is planned—see https://github.com/AxonIQ/extension-workflow/issues/103[#103].
 ====
 
 [[custom-workflow-context]]
@@ -386,7 +386,7 @@ WorkflowModule
     );
 ----
 
-Your workflow then reads like plain business logic — no engine primitives in sight:
+Your workflow then reads like plain business logic—no engine primitives in sight:
 
 [source,java]
 ----
@@ -398,4 +398,4 @@ public void execute(ApprovalWorkflowContext ctx) {
 }
 ----
 
-The engine still records every step as durable events, handles crash recovery, and provides audit trails — but the workflow code speaks the language of your domain.
+The engine still records every step as durable events, handles crash recovery, and provides audit trails—but the workflow code speaks the language of your domain.

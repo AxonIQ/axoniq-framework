@@ -35,9 +35,9 @@ import io.axoniq.workflow.runtime.association.EqualsComparison;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
 import java.util.Map;
@@ -172,7 +172,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
-                super.processingContext().component(Converter.class),
+                super.processingContext().component(EventConverter.class),
                 defaults()
         ));
     }
@@ -199,7 +199,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
-                super.processingContext().component(Converter.class),
+                super.processingContext().component(EventConverter.class),
                 defaults()
         ));
     }
@@ -417,7 +417,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                        duration,
                                                        new TypeReference<>() {
                                                        },
-                                                       super.processingContext().component(Converter.class),
+                                                       super.processingContext().component(EventConverter.class),
                                                        eventNameCustomizer
                 )
         );
@@ -466,7 +466,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                        duration,
                                                        new TypeReference<>() {
                                                        },
-                                                       super.processingContext().component(Converter.class),
+                                                       super.processingContext().component(EventConverter.class),
                                                        eventNameCustomizer,
                                                        retryPolicy
                 )
@@ -518,7 +518,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                              defaultTimeout,
                                                              new TypeReference<Map<String, Object>>() {
                                                              },
-                                                             super.processingContext().component(Converter.class),
+                                                             super.processingContext().component(EventConverter.class),
                                                              eventNameCustomizer
         );
         //noinspection unchecked

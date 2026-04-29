@@ -18,18 +18,34 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
- * Payload for the RETRYING event. Contains retry state for event sourcing and crash recovery.
- *
- * @param attempt    current retry attempt number (1-based).
- * @param maxRetries maximum number of retries configured.
- * @param error      the error that triggered the retry.
+ * Contract describing the cause of a workflow or step failure.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
 @Internal
-public record StepRetryInfo(int attempt, int maxRetries, @Nonnull WorkflowError error) {}
+public interface Cause {
+
+    /**
+     * Fully-qualified class name of the originating {@link Throwable}.
+     */
+    String type();
+
+    /**
+     * Message describing the cause, typically {@link Throwable#getMessage()}.
+     */
+    String message();
+
+    /**
+     * Returns {@code true} when {@link #type()} matches the fully-qualified name of {@code clazz}.
+     * Use this instead of {@code instanceof} when branching on the originating throwable's class —
+     * {@code instanceof} does not match because the runtime cause is always
+     * {@link WorkflowExecutionException}, regardless of the originating type.
+     */
+    default boolean isType(Class<? extends Throwable> clazz) {
+        return clazz.getName().equals(type());
+    }
+}

@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -111,9 +112,26 @@ class EventMessageUtilsTest {
         Exception ex = new RuntimeException("fail");
         EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", ex, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.FAILED");
-        assertThat(message.payload()).isEqualTo(ex);
+        assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
+            assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(err.message()).isEqualTo("fail");
+            assertThat(err.cause()).isNull();
+        });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.FAILED);
+    }
+
+    @Test
+    void testFailedWorkflowCompactsCauseChain() {
+        Throwable root = new IllegalStateException("root");
+        Throwable wrapped = new RuntimeException("wrap", root);
+        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", (Exception) wrapped, customizer);
+        WorkflowError err = (WorkflowError) message.payload();
+        assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+        assertThat(err.cause()).isNotNull();
+        assertThat(err.cause().type()).isEqualTo(IllegalStateException.class.getName());
+        assertThat(err.cause().message()).isEqualTo("root");
+        assertThat(err.cause().cause()).isNull();
     }
 
     @Test
@@ -140,7 +158,10 @@ class EventMessageUtilsTest {
         Throwable cause = new RuntimeException("cancelled");
         EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", cause, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
-        assertThat(message.payload()).isEqualTo(cause);
+        assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
+            assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(err.message()).isEqualTo("cancelled");
+        });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
     }
 
@@ -179,7 +200,10 @@ class EventMessageUtilsTest {
         Throwable ex = new RuntimeException("step fail");
         EventMessage message = EventMessageUtils.failStep(context, "step1", ex, customizer);
         assertThat(message.type().toString()).startsWith("step1.FAILED");
-        assertThat(message.payload()).isEqualTo(ex);
+        assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
+            assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(err.message()).isEqualTo("step fail");
+        });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
         assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.FAILED);
@@ -200,7 +224,10 @@ class EventMessageUtilsTest {
         Throwable cause = new RuntimeException("step cancelled");
         EventMessage message = EventMessageUtils.cancelledStep(context, "step1", cause, customizer);
         assertThat(message.type().toString()).startsWith("step1.CANCELLED");
-        assertThat(message.payload()).isEqualTo(cause);
+        assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
+            assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(err.message()).isEqualTo("step cancelled");
+        });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
     }
 

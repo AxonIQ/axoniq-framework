@@ -68,6 +68,7 @@ public record WorkflowStep(
     }
 
     public static WorkflowStep retrying(String name, StepRetryInfo retryInfo, Instant timestamp, Context context) {
-        return new WorkflowStep(name, StepStatus.RETRYING, retryInfo, retryInfo.error(), timestamp, context);
+        Throwable error = retryInfo.error() != null ? retryInfo.error().toThrowable() : null;
+        return new WorkflowStep(name, StepStatus.RETRYING, retryInfo, error, timestamp, context);
     }
 }

@@ -1,12 +1,3 @@
-name: axon-workflow-reference
-title: Axon Workflow Engine Reference
-version: ~
-
-asciidoc:
-  attributes:
-    component_description: Complete reference for all Axon Workflow Engine primitives, orchestration, patterns, and configuration.
-    type: reference
-    group: intermediate
-
-nav:
-  - modules/ROOT/nav.adoc
+name: axon-framework-reference
+version:
+  '*': development # only delivering development for now
