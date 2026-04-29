@@ -20,10 +20,10 @@ package io.axoniq.workflow.runtime.test.utils;
 
 import io.axoniq.workflow.dsl.api.Payload;
 import jakarta.annotation.Nonnull;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,12 +42,12 @@ public class DelayedPublisher {
     private final Executor executor;
     private final List<Schedule> schedules = new ArrayList<>();
     private final MessageTypeResolver messageTypeResolver;
-    private final Converter converter;
+    private final EventConverter converter;
 
     public DelayedPublisher(@Nonnull EventSink eventSink,
                             @Nonnull Executor executor,
                             @Nonnull MessageTypeResolver messageTypeResolver,
-                            @Nonnull Converter converter) {
+                            @Nonnull EventConverter converter) {
         this.eventSink = eventSink;
         this.executor = executor;
         this.messageTypeResolver = messageTypeResolver;

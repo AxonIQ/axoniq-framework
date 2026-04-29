@@ -19,8 +19,8 @@
 package io.axoniq.workflow.runtime.association;
 
 import jakarta.annotation.Nonnull;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -46,7 +46,7 @@ public record AssociationValue(
      * @return predicate to be applied on the message using the association value retriever and comparing the value
      * using the specified operator.
      */
-    public Predicate<EventMessage> asEventMessagePredicate(@Nonnull Converter converter) {
+    public Predicate<EventMessage> asEventMessagePredicate(@Nonnull EventConverter converter) {
         return eventMessage ->
                 operator.apply(associationValueSupplier.get(),
                                associationValueRetriever.apply(eventMessage, converter));

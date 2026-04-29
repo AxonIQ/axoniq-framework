@@ -24,13 +24,14 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
-import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
@@ -117,7 +118,9 @@ class TerminalStateGuardTest {
                     return action.apply(processingContext);
                 });
 
-        when(processingContext.component(Converter.class)).thenReturn(new JacksonConverter());
+        when(processingContext.component(EventConverter.class)).thenReturn(
+                new DelegatingEventConverter(new JacksonConverter())
+        );
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());

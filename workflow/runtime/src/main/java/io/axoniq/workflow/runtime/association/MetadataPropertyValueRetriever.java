@@ -20,8 +20,8 @@ package io.axoniq.workflow.runtime.association;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Objects;
 
@@ -57,7 +57,7 @@ public class MetadataPropertyValueRetriever implements ValueRetriever {
     }
 
     @Override
-    public Object apply(@Nonnull EventMessage eventMessage, @Nonnull Converter converter) {
+    public Object apply(@Nonnull EventMessage eventMessage, @Nonnull EventConverter converter) {
         return eventMessage.metadata().get(metadataPropertyName);
     }
 }

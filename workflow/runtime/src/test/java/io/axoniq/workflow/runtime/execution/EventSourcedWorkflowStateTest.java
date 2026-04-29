@@ -26,34 +26,31 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class EventSourcedWorkflowStateTest {
 
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
-    private Converter converter;
+    private EventConverter converter;
 
     @BeforeEach
     void setUp() {
         state = new EventSourcedWorkflowState();
         processingContext = mock(ProcessingContext.class);
-        converter = mock(Converter.class);
-        when(processingContext.component(Converter.class)).thenReturn(converter);
+        converter = mock(EventConverter.class);
+        when(processingContext.component(EventConverter.class)).thenReturn(converter);
     }
 
     @Test
@@ -158,7 +155,8 @@ class EventSourcedWorkflowStateTest {
 
         Map<String, Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
-                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);

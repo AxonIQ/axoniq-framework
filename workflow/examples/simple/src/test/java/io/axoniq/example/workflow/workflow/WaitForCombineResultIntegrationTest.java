@@ -30,9 +30,9 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,12 +101,13 @@ class WaitForCombineResultIntegrationTest
     public static class WaitForCombineWorkflow {
 
         static final Logger logger = LoggerFactory.getLogger(WaitForCombineWorkflow.class);
+
         public void execute(WaitForCombineWorkflowContext ctx) {
             // Using the new overload of awaitEvent with COMBINE
             var event = ctx.awaitEvent("waitStep",
-                           RegistrationReceivedEvent.class,
-                           associate(payloadProperty("status"), equalsTo("arrived")),
-                           Duration.ofSeconds(5)
+                                       RegistrationReceivedEvent.class,
+                                       associate(payloadProperty("status"), equalsTo("arrived")),
+                                       Duration.ofSeconds(5)
             );
         }
     }
@@ -133,7 +134,7 @@ class WaitForCombineResultIntegrationTest
                     COMBINE_GLOBAL_AND_LOCAL,
                     timeout,
                     TypeReference.fromType(eventType),
-                    super.processingContext().component(Converter.class),
+                    super.processingContext().component(EventConverter.class),
                     defaults()
             ));
         }

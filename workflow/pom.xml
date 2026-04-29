@@ -36,7 +36,6 @@
         <kotlin.version>2.3.21</kotlin.version>
         <archunit.version>1.4.2</archunit.version>
         <axon.version>5.1.0</axon.version>
-        <axon-server-connector.version>5.1.0-RC3</axon-server-connector.version>
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
         <checkstyle.version>13.4.1</checkstyle.version>
     </properties>
@@ -64,12 +63,6 @@
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
-            <dependency>
-                <groupId>org.axonframework</groupId>
-                <artifactId>axon-server-connector</artifactId>
-                <version>${axon-server-connector.version}</version>
-            </dependency>
-
         </dependencies>
     </dependencyManagement>
     <dependencies>

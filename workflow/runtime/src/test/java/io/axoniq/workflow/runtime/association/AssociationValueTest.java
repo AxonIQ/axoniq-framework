@@ -18,8 +18,8 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -40,7 +40,7 @@ class AssociationValueTest {
 
     private final ValueRetriever retriever = Mockito.mock(ValueRetriever.class);
     private final ValueComparisonOperator operator = new EqualsComparison();
-    private final Converter converter = Mockito.mock(Converter.class);
+    private final EventConverter converter = Mockito.mock(EventConverter.class);
     private final EventMessage eventMessage = Mockito.mock(EventMessage.class);
 
     @BeforeEach
