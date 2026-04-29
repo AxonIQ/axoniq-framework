@@ -127,6 +127,7 @@ if (!reserved) {
 <.> Cancels `shipOrder` and `notifyCustomer` first, then terminates the workflow with FAILED status.
 
 ++++
+<!-- vale off -->
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="ctx.fail() — event store">
 1 cancelled ShipOrderCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
@@ -134,6 +135,7 @@ if (!reserved) {
 3 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
   </div>
 </div>
+<!-- vale on -->
 ++++
 
 Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper.
@@ -166,6 +168,7 @@ execution.cancel("Cancelled by user");
 ----
 
 ++++
+<!-- vale off -->
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="execution.cancel() — event store">
 1 cancelled ShipOrderCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
@@ -173,6 +176,7 @@ execution.cancel("Cancelled by user");
 3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
   </div>
 </div>
+<!-- vale on -->
 ++++
 
 All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
