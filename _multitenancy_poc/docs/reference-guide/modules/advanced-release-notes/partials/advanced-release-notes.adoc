@@ -7,3 +7,9 @@
 |**Major** |xref:major-releases.adoc#release_5_1[5.1]
 |**Minor** |xref:minor-releases.adoc#release_5_1[5.1]
 |===
+
+ifdef::data-protection[]
+include::data-protection-release-notes:partial$data-protection-release-notes.adoc[]
+endif::[]
+
+
