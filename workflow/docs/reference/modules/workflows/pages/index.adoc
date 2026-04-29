@@ -2,6 +2,12 @@
 = Workflows
 :navtitle: Workflows
 
+[IMPORTANT]
+====
+Axoniq Workflow is in *Preview*. APIs and behavior may change without notice, and it is not intended for production use.
+====
+
+
 This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
 
 [TIP]
