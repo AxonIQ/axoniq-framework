@@ -25,8 +25,8 @@ import io.axoniq.workflow.runtime.association.PredicateBuilder;
 import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.association.ValueRetriever;
 import jakarta.annotation.Nonnull;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -137,7 +137,7 @@ public class AssociationsUtils implements PredicateBuilder {
 
     @Nonnull
     @Override
-    public Predicate<EventMessage> build(@Nonnull Converter converter) {
+    public Predicate<EventMessage> build(@Nonnull EventConverter converter) {
         return (eventMessage) -> this.values.stream().allMatch(av ->
                                                                        av.asEventMessagePredicate(converter)
                                                                          .test(eventMessage));

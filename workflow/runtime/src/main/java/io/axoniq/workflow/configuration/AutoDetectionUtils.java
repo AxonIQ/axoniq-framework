@@ -40,8 +40,8 @@ import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -230,7 +230,7 @@ public class AutoDetectionUtils {
                 getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
                         .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
                         .orElseGet(
-                                () -> new PayloadPropertyWorkflowIdProvider(c.getComponent(Converter.class),
+                                () -> new PayloadPropertyWorkflowIdProvider(c.getComponent(EventConverter.class),
                                                                             (String) attributes.get(
                                                                                     ATTR_ID_PROPERTY))
                         );
@@ -271,8 +271,8 @@ public class AutoDetectionUtils {
     }
 
     /**
-     * Creates a predicate to check if the method has at least one parameter of given type
-     * or a parameter that can wrap it.
+     * Creates a predicate to check if the method has at least one parameter of given type or a parameter that can wrap
+     * it.
      *
      * @param expectedType type to check for.
      * @return predicate.
@@ -422,7 +422,8 @@ public class AutoDetectionUtils {
     static boolean isWrapper(@Nonnull Class<?> type) {
         try {
             return Arrays.stream(type.getConstructors())
-                         .anyMatch(c -> c.getParameterCount() == 1 && WorkflowContext.class.isAssignableFrom(c.getParameterTypes()[0]));
+                         .anyMatch(c -> c.getParameterCount() == 1
+                                 && WorkflowContext.class.isAssignableFrom(c.getParameterTypes()[0]));
         } catch (NoClassDefFoundError e) {
             return false;
         }

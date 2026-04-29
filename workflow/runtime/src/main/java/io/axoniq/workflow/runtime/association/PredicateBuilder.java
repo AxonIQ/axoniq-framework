@@ -21,9 +21,9 @@ package io.axoniq.workflow.runtime.association;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.function.Predicate;
 
@@ -42,7 +42,7 @@ public interface PredicateBuilder extends ComponentBuilder<Predicate<EventMessag
      * @return predicate on a message.
      */
     @Nonnull
-    Predicate<EventMessage> build(@Nonnull Converter converter);
+    Predicate<EventMessage> build(@Nonnull EventConverter converter);
 
     /**
      * Build a predicate for a message.
@@ -52,7 +52,7 @@ public interface PredicateBuilder extends ComponentBuilder<Predicate<EventMessag
      */
     @Nonnull
     default Predicate<EventMessage> build(@Nonnull ProcessingContext processingContext) {
-        return build(processingContext.component(Converter.class));
+        return build(processingContext.component(EventConverter.class));
     }
 
     /**
@@ -63,6 +63,6 @@ public interface PredicateBuilder extends ComponentBuilder<Predicate<EventMessag
      */
     @Nonnull
     default Predicate<EventMessage> build(@Nonnull Configuration configuration) {
-        return build(configuration.getComponent(Converter.class));
+        return build(configuration.getComponent(EventConverter.class));
     }
 }

@@ -24,12 +24,12 @@ import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
@@ -200,7 +200,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                  var payload = Objects.requireNonNull(eventMessage.payloadAs(
                                          new TypeReference<Map<String, Object>>() {
                                          },
-                                         processingContext.component(Converter.class)
+                                         processingContext.component(EventConverter.class)
                                  ), "Error converting initial payload");
 
                                  var workflowContext = workflowConfiguration

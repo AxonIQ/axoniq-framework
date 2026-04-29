@@ -18,12 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.TestConverter;
-import org.axonframework.conversion.jackson2.Jackson2Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 
@@ -216,13 +212,13 @@ class WorkflowErrorTest {
         });
     }
 
-    @ParameterizedTest
-    @EnumSource(value = TestConverter.class, names = {"JACKSON", "CBOR"})
-    void converterRoundTripPreservesData(TestConverter testConverter) {
+    @Test
+    void converterRoundTripPreservesData() {
         var original = new RuntimeException("outer", new IllegalStateException("inner"));
         var compact = WorkflowError.from(original);
+        var converter = new JacksonConverter();
 
-        WorkflowError roundTripped = testConverter.serializeDeserialize(compact);
+        WorkflowError roundTripped = converter.convert(converter.convert(compact, compact.getClass()), WorkflowError.class);
 
         assertThat(roundTripped.type()).isEqualTo(RuntimeException.class.getName());
         assertThat(roundTripped.message()).isEqualTo("outer");
@@ -231,9 +227,9 @@ class WorkflowErrorTest {
         assertThat(roundTripped.cause().message()).isEqualTo("inner");
     }
 
-    @ParameterizedTest
-    @EnumSource(value = TestConverter.class, names = {"JACKSON", "CBOR"})
-    void converterPayloadStaysCompactForDeepStackTraces(TestConverter testConverter) {
+    @Test
+    void converterPayloadStaysCompactForDeepStackTraces() {
+        var converter = new JacksonConverter();
         RuntimeException ex = new RuntimeException("boom");
         StackTraceElement[] frames = new StackTraceElement[200];
         for (int i = 0; i < frames.length; i++) {
@@ -242,7 +238,6 @@ class WorkflowErrorTest {
         }
         ex.setStackTrace(frames);
 
-        Converter converter = testConverter.getConverter();
         byte[] serialized = converter.convert(WorkflowError.from(ex), byte[].class);
 
         assertThat(serialized.length).isLessThan(500);
@@ -251,7 +246,7 @@ class WorkflowErrorTest {
 
     @Test
     void jacksonWireFormatHasNoStackTraceField() {
-        Converter converter = new Jackson2Converter();
+        var converter = new JacksonConverter();
         var compact = WorkflowError.from(new RuntimeException("boom"));
 
         String json = new String(converter.convert(compact, byte[].class));

@@ -18,9 +18,9 @@
  */
 package io.axoniq.workflow.dsl.api;
 
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -41,11 +41,11 @@ import static org.mockito.Mockito.*;
  */
 class AssociationsUtilsTest {
 
-    private Converter converter;
+    private EventConverter converter;
 
     @BeforeEach
     void setUp() {
-        converter = Mockito.mock(Converter.class);
+        converter = Mockito.mock(EventConverter.class);
     }
 
     @Test
@@ -90,7 +90,7 @@ class AssociationsUtilsTest {
     @Test
     void testBuildWithProcessingContext() {
         ProcessingContext processingContext = Mockito.mock(ProcessingContext.class);
-        when(processingContext.component(Converter.class)).thenReturn(converter);
+        when(processingContext.component(EventConverter.class)).thenReturn(converter);
 
         Predicate<EventMessage> predicate = AssociationsUtils
                 .associate(payloadProperty("orderId"), "=", "123")
