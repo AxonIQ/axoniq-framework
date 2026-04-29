@@ -31,6 +31,12 @@
     <name>Axoniq Framework - Workflow - Examples</name>
     <description>Collection of examples used for demonstration and test purposes.</description>
 
+    <properties>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <gpg.skip>true</gpg.skip>
+    </properties>
+
     <modules>
         <module>simple</module>
         <module>bike-rental</module>
