@@ -21,7 +21,7 @@
 
     <groupId>io.axoniq.framework.workflow</groupId>
     <artifactId>axon-workflow-parent</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Axoniq Framework - Workflow - Parent</name>
@@ -261,7 +261,7 @@
         <connection>scm:git:git://github.com/AxonIQ/extension-workflow.git</connection>
         <developerConnection>scm:git:git@github.com:AxonIQ/extension-workflow.git</developerConnection>
         <url>https://github.com/AxonIQ/extension-workflow</url>
-        <tag>axoniq-workflow-0.1.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <developers>
