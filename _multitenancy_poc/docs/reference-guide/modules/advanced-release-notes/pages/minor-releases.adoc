@@ -1,5 +1,5 @@
 = Axoniq Framework Minor Releases
-:navtitle: Axoniq Framework Minor Releases
+:navtitle: Minor Releases
 
 Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for Axoniq Framework features.
 
