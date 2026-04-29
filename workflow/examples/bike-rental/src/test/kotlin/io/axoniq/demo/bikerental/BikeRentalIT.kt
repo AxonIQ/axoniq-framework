@@ -20,9 +20,9 @@ package io.axoniq.demo.bikerental
 
 import io.axoniq.demo.bikerental.coreapi.rental.BikeStatus
 import io.axoniq.demo.bikerental.coreapi.rental.RentalStatus
+import io.axoniq.framework.testcontainer.AxonServerContainer
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.Awaitility.await
-import org.axonframework.test.server.AxonServerContainer
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.resttestclient.TestRestTemplate

@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
-
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;

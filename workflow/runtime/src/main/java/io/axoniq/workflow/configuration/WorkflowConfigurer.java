@@ -28,6 +28,7 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -82,9 +83,8 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
     static WorkflowConfigurer enhance(EventSourcingConfigurer eventSourcingConfigurer) {
         return new WorkflowConfigurer(eventSourcingConfigurer)
                 .componentRegistry(cr -> cr
-                        .registerEnhancer(new WorkflowConfigurationDefaults())
                         .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
-                                                  "Workflow",
+                                                  DEFAULT_MODULE_NAME,
                                                   null,
                                                   null,
                                                   true

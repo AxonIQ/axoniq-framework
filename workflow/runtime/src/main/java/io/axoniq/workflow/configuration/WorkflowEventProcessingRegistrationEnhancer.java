@@ -41,6 +41,12 @@ import static io.axoniq.workflow.configuration.AllEventEventHandlingComponent.AN
 @Internal
 public class WorkflowEventProcessingRegistrationEnhancer implements ConfigurationEnhancer {
 
+
+    /**
+     * Name of the top-level workflow module.
+     */
+    public static final String DEFAULT_MODULE_NAME = "Workflow";
+
     private final String engineComponentName;
     private final String projectorComponentName;
     private final String moduleName;
@@ -50,9 +56,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * Creates a workflow event processing registration enhancer, responsible for registering the workflow engine and
      * history projector components to the event processing module.
      *
-     * @param moduleName name of the event processing module.
-     * @param engineComponentName name of the workflow engine component.
-     * @param projectorComponentName name of the workflow history projector component.
+     * @param moduleName               name of the event processing module.
+     * @param engineComponentName      name of the workflow engine component.
+     * @param projectorComponentName   name of the workflow history projector component.
      * @param registerHistoryProjector flag indicating whether to register the history projector component.
      */
     public WorkflowEventProcessingRegistrationEnhancer(
@@ -85,7 +91,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                             .declarative(
                                                     engineComponentName != null
                                                             ? engineComponentName + "ExecutionEventing"
-                                                            : "WorkflowExecutionEventing",
+                                                            : DEFAULT_MODULE_NAME + "ExecutionEventing",
                                                     cfg -> {
                                                         if (engineComponentName != null) {
                                                             return new AllEventEventHandlingComponent(
@@ -104,7 +110,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                 declarative(
                                                         projectorComponentName != null ?
                                                                 projectorComponentName + "Eventing"
-                                                                : "WorkflowHistoryEventing",
+                                                                : DEFAULT_MODULE_NAME + "HistoryEventing",
                                                         cfg -> {
                                                             if (projectorComponentName != null) {
                                                                 return new AllEventEventHandlingComponent(

@@ -46,7 +46,9 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     /**
      * Creates a new workflow module with default settings.
      *
-     * @param <C> type of the workflow context.
+     * @param name        name of the workflow module.
+     * @param contextType workflow context class.
+     * @param <C>         type of the workflow context.
      * @return module builder.
      */
     static <C extends WorkflowContext> LanguagePhase.WorkflowContextFactoryPhase<C> defaults(
@@ -58,7 +60,9 @@ public interface WorkflowModule<C extends WorkflowContext> extends Module {
     /**
      * Creates a new workflow module with default settings.
      *
-     * @param <C> type of the workflow context.
+     * @param name        name of the workflow module.
+     * @param contextType workflow context class.
+     * @param <C>         type of the workflow context.
      * @return module builder.
      */
     static <C extends WorkflowContext> ConfigurationPhase.WorkflowConfigurationRegistryPhase<C> configure(

@@ -32,6 +32,7 @@
     <properties>
         <spring.boot.version>4.0.6</spring.boot.version>
         <testcontainers.version>2.0.5</testcontainers.version>
+        <axoniq.framework.version>5.1.0</axoniq.framework.version>
     </properties>
 
     <artifactId>axon-workflow-example-bike-rental</artifactId>
@@ -50,6 +51,13 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring.boot.version}</version>
+                <scope>import</scope>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-framework-bom</artifactId>
+                <version>${axoniq.framework.version}</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
@@ -123,7 +131,10 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axon-server-connector</artifactId>
-            <version>5.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-testcontainer</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -150,13 +161,6 @@
             <artifactId>testcontainers-junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-        <!--
-        <dependency>
-            <groupId>org.axonframework.extensions.spring</groupId>
-            <artifactId>axon-spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        -->
     </dependencies>
 
 </project>

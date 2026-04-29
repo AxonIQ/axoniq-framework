@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeList
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.DSLAdoptingExecutionFactory;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.Assert;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
@@ -85,7 +86,7 @@ class DeclarativeWorkflowBuilder<C extends WorkflowContext> implements
 
     @Override
     public WorkflowModule.WorkflowDefinitionPhase.OnPhase<C> workflowName(@Nonnull String workflowName) {
-        this.workflowName = Objects.requireNonNull(workflowName, "Workflow name must not be null");
+        this.workflowName = Assert.nonEmpty(workflowName, "Workflow name must not be null or blank");
         return this;
     }
 
