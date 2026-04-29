@@ -1,9 +1,12 @@
 site:
   title: Axon Workflow Engine docs PREVIEW
-  start_page: axon-workflow-getting-started::index.adoc
+  start_page: axon-framework-reference::index.adoc
 
 content:
   sources:
+  - url: https://github.com/AxonIQ/AxonFramework.git   # include docs from Axon Framework repo
+    start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']                      # from every folder in `docs` except those starting with underscore
+    branches: [ 'main' ]
   - url: ../..
     start_paths: ['docs/*', '!docs/_*']
 
@@ -13,6 +16,7 @@ asciidoc:
     page-pagination: true
     kroki-fetch-diagram: true
     primary-site-manifest-url: https://library.axoniq.io/site-manifest.json
+    workflows: true
   extensions:
   - asciidoctor-kroki
   - '@asciidoctor/tabs'
@@ -32,7 +36,7 @@ antora:
     require: '@antora/atlas-extension'
 
 runtime:
-  fetch: false
+  fetch: true
   log:
     level: info
     failure_level: error
@@ -40,4 +44,4 @@ runtime:
 ui:
   bundle:
     url: https://github.com/AxonIQ/axoniq-library-ui/releases/latest/download/ui-bundle.zip
-  supplemental_files: supplemental-ui
+    snapshot: true

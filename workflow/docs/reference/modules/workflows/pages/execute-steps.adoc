@@ -1,0 +1,192 @@
+= Execute Steps
+:navtitle: Execute Steps
+
+Execute steps are the type of execution primitives that allow calling services, performing computations and triggering side effects in workflows.
+The engine records each execution as durable events, giving you crash recovery and audit trails automatically.
+
+There are two variants:
+
+* *`awaitExecute`*—blocks until the action finishes and returns a typed result
+* *`execute`*—starts the action without waiting and returns a `WorkflowStepResult`
+
+[[awaitexecute]]
+== `awaitExecute` (blocking)
+
+`awaitExecute` calls an action, waits for it to finish, and returns the typed result.
+The engine records a STARTED and COMPLETED event for this step automatically.
+
+=== Basic usage
+
+The simplest form takes a step name, return type, and a supplier:
+
+[source,java]
+----
+var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
+                                 InventoryService::reserveStock);
+----
+
+That's it—one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
+
+=== With payload
+
+Pass data into the step and use the result for control flow:
+
+[source,java]
+----
+var customerId = ctx.workflowPayload().get("customerId");
+var amount = ctx.workflowPayload().get("amount");
+
+var reserved = ctx.awaitExecute("reserveStock",
+        payload("customerId", customerId, "amount", amount).getValues(),
+        Boolean.class,
+        InventoryService::reserveStock); // <1>
+if (!reserved) {
+    ctx.fail(new RuntimeException("Stock unavailable")); // <2>
+    return;
+}
+----
+
+<.> The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event.
+<.> If stock reservation fails, we fail the workflow.
+Standard Java control flow—`if`, loops, try/catch—all work exactly as you'd expect.
+
+Here's the event store after a successful run:
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="awaitExecute — reserveStock">
+1 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
+2 completed ReserveStockCompleted {"__reserveStock": true}
+  </div>
+</div>
+++++
+
+Each `awaitExecute` produces a STARTED/COMPLETED pair—the STARTED event captures the input payload, the COMPLETED event captures the result.
+
+=== With timeout and event name customizer
+
+The full form adds an explicit timeout and event name customizer:
+
+[source,java]
+----
+ctx.awaitExecute("initiatePayment",
+                 payload("customerId", customerId, "amount", amount).getValues(),
+                 PaymentService::initiatePayment,
+                 Duration.ofSeconds(30),
+                 baseName("InitiatingPaymentForCustomer")); // <1>
+----
+
+<.> `baseName(...)` replaces the step name in the event name—its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
+
+[NOTE]
+====
+The step name's first letter is automatically uppercased in event names (for example, `reserveStock` becomes `ReserveStock`).
+For full details on naming rules, see xref:understanding-steps.adoc#event-name-customization[Event name customization].
+====
+
+=== All overloads
+
+[cols="1,3"]
+|===
+|Overload |Description
+
+|`awaitExecute(stepName, returnType, supplier)`
+|Simplest form. No input payload, no timeout override, no customizer. Calls a `Supplier<T>` and returns the result.
+
+|`awaitExecute(stepName, returnType, function)`
+|Like above, but the action receives the (empty) payload map as input.
+
+|`awaitExecute(stepName, payload, returnType, function)`
+|Passes a payload map to the action. The payload is recorded in the STARTED event.
+
+|`awaitExecute(stepName, payload, returnType, function, eventNameCustomizer)`
+|Adds an event name customizer to control how events are named.
+
+|`awaitExecute(stepName, payload, consumer)`
+|The action receives payload but returns nothing.
+
+|`awaitExecute(stepName, payload, action, duration, eventNameCustomizer)`
+|Full form. The `action` is a `PayloadProcessor` (receives `ProcessingContext` + payload, returns a payload map). Explicit timeout and customizer.
+|===
+
+[[execute]]
+== `execute` (non-blocking)
+
+`execute` starts a step without waiting and returns a `WorkflowStepResult` you can compose later.
+Use this when you want to run multiple steps concurrently, or when you need to combine an execute with a `waitForEvent`.
+
+[cols="1,3"]
+|===
+|Overload |Description
+
+|`execute(stepName, payload, action)`
+|Starts the step with default timeout and default event names.
+
+|`execute(stepName, payload, action, duration, eventNameCustomizer)`
+|Full form with explicit timeout and event name customizer.
+|===
+
+[source,java]
+----
+var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
+        ShippingService::shipOrder,
+        Duration.ofMinutes(5), defaults());
+----
+
+See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitForEvent` results with `allMatch`, `anyMatch`, and `noneMatch`.
+
+[IMPORTANT]
+====
+If your workflow body returns while an async step started with `execute(...)` is still running, the engine cancels that step and writes its `CANCELLED` event before the workflow transitions to `COMPLETED`.
+If you need the workflow to wait for the step's real result, call `.await()` on the returned `WorkflowStepResult` (or use `awaitExecute` / `allMatch` / `anyMatch`).
+See xref:workflow-lifecycle.adoc#complete-with-running-steps[Normal completion with running steps].
+====
+
+== Kotlin DSL
+
+The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support:
+
+[source,kotlin]
+----
+fun Kontext.fulfillOrder() {
+    // Blocking awaitExecute
+    val reserved = awaitExecute(
+        "reserveStock",
+        { InventoryService.reserveStock() },
+        local = mapOf("customerId" to customerId, "amount" to amount)
+    )
+    if (!reserved) {
+        fail(RuntimeException("Stock unavailable"))
+        return
+    }
+
+    // Blocking awaitExecute with all options
+    val result = awaitExecute(
+        "reserveStock",
+        action = { InventoryService.reserveStock() },
+        local = mapOf("customerId" to customerId),
+        timeout = 10.seconds,
+        eventNameCustomizer = baseName("ReservingStock")
+    )
+
+    // Non-blocking execute with all options
+    execute(
+        "shipOrder",
+        action = { pc, p -> ShippingService.shipOrder(pc, p) },
+        local = mapOf("address" to address),
+        parameterMapping = PayloadReducer.LOCAL_ONLY,
+        resultMapping = PayloadReducer.GLOBAL_ONLY,
+        timeout = 5.minutes,
+        eventNameCustomizer = namespace("io.shipping")
+    )
+
+}
+----
+
+Kotlin's named parameters and default values mean you only specify what you need—everything else falls back to sensible defaults.
+
+== What's next
+
+For cross-cutting configuration that applies to all step types—timeouts, payload reducers, error handling, event naming, and execution semantics—see xref:understanding-steps.adoc[].
+
+For waiting on external events, see xref:waiting-for-events.adoc[].

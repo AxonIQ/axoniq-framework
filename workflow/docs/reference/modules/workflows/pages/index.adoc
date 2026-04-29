@@ -1,0 +1,43 @@
+[.axoniq-feature]
+= Workflows
+:navtitle: Workflows
+
+[IMPORTANT]
+====
+Workflows are in *Preview*. APIs and behavior may change without notice, and it is not intended for production use.
+====
+
+
+This reference covers every primitive, configuration option, and pattern available in the Axon Workflow Engine.
+
+[TIP]
+====
+New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc[Getting Started tutorial] first.
+====
+
+== Steps
+
+* *xref:execute-steps.adoc[Execute Steps]*—Run actions synchronously (`awaitExecute`) or asynchronously (`execute`)
+* *xref:waiting-for-events.adoc[Waiting for Events]*—Suspend until external events arrive (`awaitEvent`, `waitForEvent`, `sleep`)
+* *xref:understanding-steps.adoc[Understanding Steps]*—Cross-cutting concerns: timeouts, payload reducers, error handling, event naming, execution semantics
+
+== Workflow lifecycle
+
+* *xref:workflow-lifecycle.adoc[Workflow Lifecycle]*—States, fail vs cancel, lifecycle listeners
+
+== Orchestration
+
+* *xref:step-orchestration.adoc[Step Orchestration]*—Combinators: allMatch, anyMatch, noneMatch
+
+== Patterns
+
+* *xref:common-patterns.adoc[Common Patterns]*—Fan-out/fan-in, saga, scatter-gather, human-in-the-loop, circuit breaker, sub-workflows
+
+== Data & configuration
+
+* *xref:payload-and-state.adoc[Payload & State]*—Reading, setting, and managing durable workflow state
+* *xref:configuration.adoc[Configuration]*—Declarative setup, workflow modules, metadata propagation, custom contexts
+
+== Testing
+
+* *xref:testing-workflows.adoc[Testing Workflows]*—Integration tests with AbstractDeclarativeTestBase

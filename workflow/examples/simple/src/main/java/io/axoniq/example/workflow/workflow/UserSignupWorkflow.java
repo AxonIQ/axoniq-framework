@@ -1,19 +1,20 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.example.workflow.workflow;
 
@@ -23,7 +24,7 @@ import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.engine.execution.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,11 +32,11 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 
-import static io.axoniq.workflow.dsl.Payload.payload;
+import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
+import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.engine.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.engine.util.AssociationsUtils.associate;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Sample user registration.

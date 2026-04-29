@@ -1,24 +1,26 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,11 +29,11 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 
 /**
- * Demonstrates {@link io.axoniq.workflow.runtime.api.WorkflowContext#noneMatch} semantics:
+ * Demonstrates {@link WorkflowContext#noneMatch} semantics:
  * two steps are launched in parallel — a fast one that fails (~500 ms) and a slow one (5 min).
  * The guard verifies that none of them fail; the fast failure short-circuits.
  *

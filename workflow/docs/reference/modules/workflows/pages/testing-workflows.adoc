@@ -1,0 +1,145 @@
+= Testing Workflows
+:navtitle: Testing
+
+The Axon Workflow Engine provides a dedicated `test` module with infrastructure that uses the same configuration as production code.
+No mocking needed—your tests run real workflows with real event sourcing.
+
+== Test setup
+
+To test a workflow, extend `AbstractDeclarativeTestBase` and implement the `getDeclaredDefinitions` method:
+
+[source,java]
+.src/test/java/io/axoniq/example/order/OrderFulfillmentTest.java
+----
+class OrderFulfillmentTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+
+    public OrderFulfillmentTest() {
+        super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory()); // <1>
+    }
+
+    @Override
+    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>>
+    getDeclaredDefinitions() {
+        return d -> d
+                .declarative(c -> new OrderFulfillmentWorkflow()::execute)  // <2>
+                .workflowName("OrderFulfillment")
+                .on(EventConditions.fromType(OrderPlaced.class))            // <3>
+                .customized((c, w) -> w
+                        .eventNameCustomizer(namespace("io.axoniq.order.workflow"))
+                        .workflowIdProvider(fromPayloadAttribute(c, "orderId")) // <4>
+                );
+    }
+}
+----
+
+<.> Specify the DSL type and context factory.
+<.> Provide the workflow definition—a method reference to your workflow class.
+<.> Trigger the workflow when an `OrderPlaced` event is received.
+<.> Extract the workflow ID from the event's `orderId` field.
+
+The base class provides several components you can use in your tests:
+
+[cols="<,<"]
+|===
+|Field |Purpose
+
+|`delayedPublisher` |Schedule events to be published at specific time offsets
+|`workflowEngine` |Start and manage workflow executions
+|`workflowHistoryRepository` |Query workflow execution history and assert on final state
+|===
+
+== Autodetected registration
+
+If your workflow class uses the `@Workflow` annotation (like ours does), you can use autodetection instead of declarative registration:
+
+[source,java]
+----
+@Override
+protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>>
+getDeclaredDefinitions() {
+    return d -> d.autodetected(
+            c -> new OrderFulfillmentWorkflow(),
+            SimpleWorkflowContext.class
+    );
+}
+----
+
+[TIP]
+====
+Use autodetected when your workflow class has `@Workflow` annotations.
+Use declarative when you want full programmatic control over triggering conditions and customization.
+====
+
+== Scheduling events
+
+The `DelayedPublisher` lets you schedule events to be published at specific time offsets.
+This simulates the real-world flow of events arriving over time:
+
+[source,java]
+----
+delayedPublisher.addSchedules(List.of(
+        ofMillis(500,  new OrderPlaced("order-1", "cust-42",
+                                        "alice@shop.com", 99.99)),  // <1>
+        ofMillis(3000, new PaymentConfirmed("order-1",
+                                             "txn-abc-123"))         // <2>
+));
+delayedPublisher.start();
+----
+
+<.> Published after 500ms—triggers the workflow.
+<.> Published 3 seconds later—the `awaitPayment` step picks it up via the `orderId` association.
+
+== Running and asserting
+
+Here's a complete test that verifies our order fulfillment workflow end to end:
+
+[source,java]
+.src/test/java/io/axoniq/example/order/OrderFulfillmentTest.java
+----
+@Test
+void shouldFulfillOrderEndToEnd() {
+    delayedPublisher.addSchedules(List.of(
+            ofMillis(500,  new OrderPlaced("order-1", "cust-42",
+                                            "alice@shop.com", 99.99)),
+            ofMillis(3000, new PaymentConfirmed("order-1", "txn-abc-123"))
+    ));
+    delayedPublisher.start();
+
+    await().untilAsserted(() ->
+        assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
+    );
+    workflowEngine.runWorkflows(false); // <1>
+
+    await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
+        assertThat(workflowHistoryRepository.findAll())
+                .allMatch(h -> h.state().workflowStatus().isTerminal()) // <2>
+    );
+
+    for (WorkflowHistory history : workflowHistoryRepository.findAll()) {
+        var state = history.state();
+        assertThat(state.workflowStatus())
+                .isEqualTo(WorkflowStatus.COMPLETED); // <3>
+        assertThat(state.workflowStepNames())
+                .containsExactly(                      // <4>
+                        "reserveStock",
+                        "initiatePayment",
+                        "awaitPayment",
+                        "storePaymentDetails",
+                        "shipOrder",
+                        "notifyCustomer"
+                );
+    }
+}
+----
+
+<.> Starts workflow execution after events are loaded.
+<.> Uses Awaitility to wait until the workflow reaches a terminal state.
+<.> Asserts the workflow completed successfully—not failed, cancelled, or timed out.
+<.> Verifies all six steps executed in the correct order.
+
+== Related topics
+
+* xref:understanding-steps.adoc[Understanding Steps]—timeouts, error handling, payload reducers, event naming
+* xref:workflow-lifecycle.adoc[Workflow Lifecycle]—fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
+* xref:common-patterns.adoc[Common Patterns]—saga, fan-out/fan-in, retry, and more
+* xref:configuration.adoc[Configuration]—declarative setup, custom contexts, event naming customization

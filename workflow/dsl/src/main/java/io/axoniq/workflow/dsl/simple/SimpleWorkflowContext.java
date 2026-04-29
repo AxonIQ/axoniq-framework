@@ -1,39 +1,43 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext;
-import io.axoniq.workflow.dsl.Payload;
-import io.axoniq.workflow.runtime.api.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.PayloadReducer;
-import io.axoniq.workflow.runtime.api.PrimitiveCommands;
-import io.axoniq.workflow.runtime.api.WorkflowCancelledException;
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.WorkflowStepResult;
-import io.axoniq.workflow.runtime.engine.association.EqualsComparison;
-import io.axoniq.workflow.runtime.engine.execution.EventConditions;
-import io.axoniq.workflow.runtime.engine.util.AssociationsUtils;
+import io.axoniq.workflow.dsl.api.AssociationsUtils;
+import io.axoniq.workflow.dsl.api.Payload;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.association.EqualsComparison;
+import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
-import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
 import java.util.Map;
@@ -43,9 +47,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static io.axoniq.workflow.dsl.Payload.payload;
-import static io.axoniq.workflow.runtime.api.PayloadReducer.*;
-import static io.axoniq.workflow.runtime.engine.impl.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.dsl.api.Payload.payload;
+import static io.axoniq.workflow.runtime.api.payload.PayloadReducer.*;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Simple workflow DSL providing synchronous versions of step primitives.
@@ -71,6 +75,15 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
 
+    /**
+     * Constructs the simple context. This parameter is called by the corresponding workflow context factory, see
+     * {@link SimpleWorkflowContextFactory}.
+     *
+     * @param workflowId            workflow id.
+     * @param payload               initial payload.
+     * @param processingContext     processing context.
+     * @param workflowConfiguration workflow configuration.
+     */
     public SimpleWorkflowContext(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
@@ -81,6 +94,73 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         defaultTimeout = Duration.ofSeconds(5);
     }
 
+    /**
+     * Asynchronous wait for an event to be published.
+     *
+     * @param stepName  name of the step.
+     * @param eventType type of event.
+     * @param predicate condition on event.
+     * @param timeout   maximum time to wait.
+     * @param <T>       type of the event.
+     * @return workflow step result.
+     */
+    public <T> WorkflowStepResult waitFor(
+            String stepName,
+            Class<T> eventType,
+            Predicate<T> predicate,
+            Duration timeout) {
+        return waitFor(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                             .qualifiedName(),
+                        e -> predicate.test(e.payloadAs(eventType))
+                ),
+                GLOBAL_ONLY,
+                timeout,
+                defaults()
+        );
+    }
+
+    /**
+     * Asynchronous wait for an event to be published.
+     *
+     * @param stepName          name of the step.
+     * @param eventType         event type.
+     * @param associationsUtils condition on event encapsulated in an {@link AssociationsUtils} instance.
+     * @param timeout           maximum time to wait.
+     * @param <T>               type of the event.
+     * @return workflow step result.
+     */
+    public <T> WorkflowStepResult waitFor(
+            String stepName,
+            Class<T> eventType,
+            AssociationsUtils associationsUtils,
+            Duration timeout) {
+        return waitFor(
+                stepName,
+                EventConditions.fromQualifiedName(
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
+                        e -> associationsUtils.build(super.processingContext()).test(e)
+                ),
+                GLOBAL_ONLY,
+                timeout,
+                defaults()
+        );
+    }
+
+
+    /**
+     * Synchronous (blocking) wait for an event to be published.
+     *
+     * @param stepName  step name.
+     * @param eventType event type.
+     * @param predicate condition on event.
+     * @param timeout   maximum time to wait.
+     * @param <T>       type of the event.
+     * @return event payload.
+     */
     public <T> T awaitEvent(String stepName, Class<T> eventType, Predicate<T> predicate, Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
                 stepName,
@@ -92,11 +172,21 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
-                super.processingContext().component(Converter.class),
+                super.processingContext().component(EventConverter.class),
                 defaults()
         ));
     }
 
+    /**
+     * Synchronous (blocking) wait for an event to be published.
+     *
+     * @param stepName          step name.
+     * @param eventType         event type.
+     * @param associationsUtils condition on event encapsulated in an {@link AssociationsUtils} instance.
+     * @param timeout           maximum time to wait.
+     * @param <T>               type of the event.
+     * @return event payload.
+     */
     public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
                             Duration timeout) {
         return waitFor(PrimitiveCommands.blockingWait(
@@ -109,11 +199,20 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 GLOBAL_ONLY,
                 timeout,
                 TypeReference.fromType(eventType),
-                super.processingContext().component(Converter.class),
+                super.processingContext().component(EventConverter.class),
                 defaults()
         ));
     }
 
+    /**
+     * Synchronous (blocking) wait for an event to be published.
+     *
+     * @param stepName  step name.
+     * @param eventType event type.
+     * @param timeout   maximum time to wait.
+     * @param <T>       type of the event.
+     * @return event payload.
+     */
     public <T> T awaitEvent(String stepName, Class<T> eventType, Duration timeout) {
         return this.awaitEvent(stepName, eventType, e -> true, timeout);
     }
@@ -248,6 +347,48 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, defaultTimeout, defaults());
     }
 
+    /**
+     * Execute a step asynchronously with retry support.
+     *
+     * @param stepName            name of the step.
+     * @param payload             payload to be passed to a step.
+     * @param action              action to be executed.
+     * @param duration            maximum time of execution.
+     * @param eventNameCustomizer event name customizer.
+     * @param retryPolicy         retry policy for the step.
+     * @return workflow step result.
+     */
+    public WorkflowStepResult execute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull Duration duration,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy
+    ) {
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, duration, eventNameCustomizer,
+                       retryPolicy);
+    }
+
+    /**
+     * Execute a step asynchronously with retry support using default timeout and event names.
+     *
+     * @param stepName    name of the step.
+     * @param payload     payload to be passed to a step.
+     * @param action      action to be executed.
+     * @param retryPolicy retry policy for the step.
+     * @return workflow step result.
+     */
+    public WorkflowStepResult execute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull RetryPolicy retryPolicy
+    ) {
+        return execute(stepName, payload, action, LOCAL_ONLY, GLOBAL_ONLY, defaultTimeout, defaults(),
+                       retryPolicy);
+    }
+
 
     /**
      * Executes the step synchronously.
@@ -276,7 +417,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                        duration,
                                                        new TypeReference<>() {
                                                        },
-                                                       super.processingContext().component(Converter.class),
+                                                       super.processingContext().component(EventConverter.class),
                                                        eventNameCustomizer
                 )
         );
@@ -300,7 +441,67 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return this.awaitExecute(stepName, payload, action, defaultTimeout, defaults());
     }
 
+    /**
+     * Executes the step synchronously with retry support.
+     *
+     * @param stepName            name of the step.
+     * @param payload             payload to be passed to a step.
+     * @param action              action to be executed.
+     * @param duration            maximum time of execution.
+     * @param eventNameCustomizer event name customizer.
+     * @param retryPolicy         retry policy for the step.
+     * @return successful result of processing.
+     */
+    public Map<String, Object> awaitExecute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull Duration duration,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull RetryPolicy retryPolicy) {
+        return execute(
+                PrimitiveCommands.blockingLocalExecute(stepName,
+                                                       payload,
+                                                       action,
+                                                       duration,
+                                                       new TypeReference<>() {
+                                                       },
+                                                       super.processingContext().component(EventConverter.class),
+                                                       eventNameCustomizer,
+                                                       retryPolicy
+                )
+        );
+    }
 
+    /**
+     * Executes the step synchronously with retry support using default duration and event names.
+     *
+     * @param stepName    name of the step.
+     * @param payload     payload to be passed to a step.
+     * @param action      action to be executed.
+     * @param retryPolicy retry policy for the step.
+     * @return successful result of processing.
+     */
+    public Map<String, Object> awaitExecute(
+            @Nonnull String stepName,
+            @Nonnull Map<String, Object> payload,
+            @Nonnull PayloadProcessor action,
+            @Nonnull RetryPolicy retryPolicy) {
+        return this.awaitExecute(stepName, payload, action, defaultTimeout, defaults(), retryPolicy);
+    }
+
+
+    /**
+     * Synchronous (blocking) execute a step.
+     *
+     * @param stepName            name of the step.
+     * @param payload             payload to be passed to a step.
+     * @param returnType          type of the result.
+     * @param action              action to be executed.
+     * @param eventNameCustomizer event name customizer.
+     * @param <T>                 type of result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Map<String, Object> payload, Class<T> returnType,
                               Function<Map<String, Object>, T> action, EventNameCustomizer eventNameCustomizer) {
         var stepSpecificName = "__" + stepName;
@@ -317,13 +518,20 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                              defaultTimeout,
                                                              new TypeReference<Map<String, Object>>() {
                                                              },
-                                                             super.processingContext().component(Converter.class),
+                                                             super.processingContext().component(EventConverter.class),
                                                              eventNameCustomizer
         );
         //noinspection unchecked
         return (T) execute(command).get(stepSpecificName);
     }
 
+    /**
+     * Synchronous (blocking) execute a step (without a result).
+     *
+     * @param stepName step name.
+     * @param payload  payload to pass
+     * @param action   action to execute.
+     */
     public void awaitExecute(String stepName, Map<String, Object> payload, Consumer<Map<String, Object>> action) {
         this.awaitExecute(stepName, payload, (pc, p) -> {
             action.accept(p);
@@ -331,15 +539,43 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         });
     }
 
+    /**
+     * Synchronous (blocking) execute a step (with a result).
+     *
+     * @param stepName   name of the step.
+     * @param payload    payload to pass to the step.
+     * @param returnType return type of the result.
+     * @param action     action to execute.
+     * @param <T>        type of the result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Map<String, Object> payload, Class<T> returnType,
                               Function<Map<String, Object>, T> action) {
         return this.awaitExecute(stepName, payload, returnType, action, defaults());
     }
 
+    /**
+     * Synchronous (blocking) execute a step (with a result).
+     *
+     * @param stepName   name of the step.
+     * @param returnType return type of the result.
+     * @param action     action to execute.
+     * @param <T>        type of the result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Class<T> returnType, Function<Map<String, Object>, T> action) {
         return this.awaitExecute(stepName, Map.of(), returnType, action);
     }
 
+    /**
+     * Synchronous (blocking) execute a step (without a result).
+     *
+     * @param stepName   name of the step.
+     * @param returnType return type of the result.
+     * @param action     action to execute.
+     * @param <T>        type of the result.
+     * @return result of the step.
+     */
     public <T> T awaitExecute(String stepName, Class<T> returnType, Supplier<T> action) {
         return this.awaitExecute(stepName, Map.of(), returnType, (p) -> action.get());
     }
@@ -349,7 +585,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * Terminates the entire workflow with an error, publishing a failure event and cancelling all running steps.
      *
      * @param cause the exception that caused the failure
-     * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
+     * @throws WorkflowFailedException always, after the failure event is published
      */
     public void fail(Throwable cause) {
         terminate(TerminateCommand.fail(cause, defaults()));
@@ -360,7 +596,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param cause               the exception that caused the failure
      * @param eventNameCustomizer customizer for the published failure event name
-     * @throws io.axoniq.workflow.runtime.api.WorkflowFailedException always, after the failure event is published
+     * @throws WorkflowFailedException always, after the failure event is published
      */
     public void fail(Throwable cause, EventNameCustomizer eventNameCustomizer) {
         terminate(TerminateCommand.fail(cause, eventNameCustomizer));
@@ -420,7 +656,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with a {@link io.axoniq.workflow.runtime.api.StepCancellationException}.
+     * exceptionally with a {@link StepCancellationException}.
      *
      * @param stepName the name of the step to cancel
      */
@@ -430,7 +666,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with the given cause, wrapped in a {@link io.axoniq.workflow.runtime.api.StepCancellationException}
+     * exceptionally with the given cause, wrapped in a {@link StepCancellationException}
      * if it isn't one already.
      *
      * @param stepName the name of the step to cancel
@@ -442,14 +678,14 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with a {@link io.axoniq.workflow.runtime.api.StepCancellationException} carrying the given reason.
+     * exceptionally with a {@link StepCancellationException} carrying the given reason.
      *
      * @param stepName the name of the step to cancel
      * @param reason   descriptive reason for the step cancellation
      */
     public void cancelStep(String stepName, String reason) {
         terminate(TerminateCommand.cancelledStep(stepName,
-                                                 new io.axoniq.workflow.runtime.api.StepCancellationException(reason),
+                                                 new StepCancellationException(reason),
                                                  defaults()));
     }
 
@@ -490,6 +726,11 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                       eventNameCustomizer);
     }
 
+    /**
+     * Sets default timeout for all steps.
+     *
+     * @param defaultTimeout default timeout for all steps, if not specified explicitly
+     */
     public void setDefaultTimeout(@Nonnull Duration defaultTimeout) {
         this.defaultTimeout = Objects.requireNonNull(defaultTimeout, "Default timeout must not be null.");
     }

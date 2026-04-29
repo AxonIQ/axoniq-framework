@@ -1,41 +1,44 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.runtime.test;
 
-import io.axoniq.workflow.runtime.api.WorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.api.WorkflowContext;
-import io.axoniq.workflow.runtime.api.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.engine.configuration.WorkflowModule;
-import io.axoniq.workflow.runtime.engine.execution.DSLAdoptingExecutionFactory;
-import io.axoniq.workflow.runtime.engine.history.MutableWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.history.WorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.engine.impl.WorkflowEngine;
+import io.axoniq.workflow.configuration.WorkflowConfigurer;
+import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.workflow.history.api.WorkflowHistoryRepository;
+import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
@@ -65,25 +68,36 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     @BeforeEach
     void setUp() {
 
-        var configurer = MessagingConfigurer.create();
+        var configurer = WorkflowConfigurer.create();
 
-        configurer.componentRegistry(r -> r.registerModule(
-                                             WorkflowModule
-                                                     .usingContext(dslType)
-                                                     .workflowContextFactory(builder)
-                                                     .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(dslType))
-                                                     .definitions(getDeclaredDefinitions())
-                                     )
-        );
+        configurer
+                .componentRegistry(r -> r.registerModule(
+                                           WorkflowModule
+                                                   .defaults(getClass().getSimpleName(), dslType)
+                                                   .workflowContextFactory(builder)
+                                                   .definition(
+                                                           getDeclaredDefinition()
+                                                   )
+                                   )
+                );
 
-        configuration = configurer.start();
+        configuration = configure().apply(configurer).start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
         workflowRegistry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         delayedPublisher = configuration.getComponent(DelayedPublisher.class);
         workflowHistoryRepository = configuration.getComponent(MutableWorkflowHistoryRepository.class);
     }
 
-    protected abstract UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<T>> getDeclaredDefinitions();
+    /**
+     * Allows further customization before the start of the configurer.
+     *
+     * @return modified configurer
+     */
+    protected UnaryOperator<WorkflowConfigurer> configure() {
+        return UnaryOperator.identity();
+    }
+
+    protected abstract Function<DetectionPhase<T>, FinalizedPhase<T>> getDeclaredDefinition();
 
     @AfterEach
     void shutdown() {

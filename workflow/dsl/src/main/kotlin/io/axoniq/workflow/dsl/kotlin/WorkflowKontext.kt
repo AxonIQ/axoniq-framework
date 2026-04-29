@@ -1,30 +1,35 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 package io.axoniq.workflow.dsl.kotlin
 
-import io.axoniq.workflow.dsl.AbstractDSLWorkflowContext
-import io.axoniq.workflow.runtime.api.EventNameCustomizer
-import io.axoniq.workflow.runtime.api.WorkflowConfiguration
-import io.axoniq.workflow.runtime.api.WorkflowDefinition
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition
+import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
 /**
- * Kotlin Workflow Context.
+ * Kotlin Workflow Context used for workflow definition via DSL.
+ *
+ * @param workflowId unique identifier of the workflow instance.
+ * @param initialPayload initial payload of the workflow.
+ * @param processingContext processing context of the message.
+ * @param workflowConfiguration workflow configuration.
  * @since 1.0.0
  * @author Simon Zambrovski
  */
@@ -40,11 +45,22 @@ class WorkflowKontext(
     workflowConfiguration
 ) {
 
+    /**
+     * Executes the block with the workflow context.
+     *
+     * @param block block to be executed.
+     */
     fun runWorkflow(block: Kontext.() -> Unit) {
         Kontext(this).apply(block)
     }
 
     companion object {
+        /**
+         * Creates a workflow definition from the block.
+         *
+         * @param block block to be executed.
+         * @return workflow definition.
+         */
         @JvmStatic
         fun from(block: Kontext.() -> Unit): WorkflowDefinition<WorkflowKontext> {
             return WorkflowDefinition { it.runWorkflow(block) }

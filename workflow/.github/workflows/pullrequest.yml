@@ -19,6 +19,8 @@ jobs:
       matrix:
         include:
           - java-version: 21
+            sonar-enabled: true
+          - java-version: 25
             sonar-enabled: false
 
     steps:
@@ -50,7 +52,7 @@ jobs:
         run: |
           ./mvnw -B -ntp -Dstyle.color=always sonar:sonar \
           -Dsonar.projectKey=AxonIQ_extension-workflow \
-          -Dsonar.organization=AxonIQ \
+          -Dsonar.organization=axoniq \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.login=${{ secrets.SONAR_TOKEN }}
         env:

@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+package io.axoniq.workflow.configuration;
+
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/**
+ * Composite Workflow status change listener responsible for one status change.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
+@Internal
+public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChangeListener {
+
+    private final WorkflowStatus workflowStatus;
+    private final List<WorkflowStatusChangeListener> listeners = new CopyOnWriteArrayList<>();
+
+    /**
+     * Creates a new workflow status listener for certain workflow status.
+     *
+     * @param workflowStatus workflow status the listener will be propagating.
+     */
+    CompositeWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus) {
+        this.workflowStatus = workflowStatus;
+    }
+
+    /**
+     * Adds a new listener.
+     *
+     * @param listener listener to add.
+     */
+    public void addListener(@Nonnull WorkflowStatusChangeListener listener) {
+        this.listeners.add(listener);
+    }
+
+    /**
+     * Removes a listener.
+     *
+     * @param listener listener to remove.
+     */
+    public void removeListener(@Nonnull WorkflowStatusChangeListener listener) {
+        this.listeners.remove(listener);
+    }
+
+    /**
+     * Checks if any listeners are present.
+     *
+     * @return false if at least one listener is present.
+     */
+    public boolean isEmpty() {
+        return listeners.isEmpty();
+    }
+
+    @Override
+    public void onWorkflowStatus(@Nonnull WorkflowStatus workflowStatus, @Nonnull WorkflowContext workflowContext) {
+        if (this.workflowStatus == workflowStatus) {
+            this.listeners.forEach(l -> l.onWorkflowStatus(workflowStatus, workflowContext));
+        }
+    }
+}

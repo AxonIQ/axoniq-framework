@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
+  ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
+  ~ You may not use this file except in compliance with the License.
+  ~
+  ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
+  -->
+
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+
+    <module name="TreeWalker">
+        <!-- Enforce JSpecify as the single nullness annotation system. -->
+        <!-- TODO as part of #115 activate those -->
+        <!--
+        <module name="IllegalImport">
+            <property name="illegalClasses"
+                      value="jakarta.annotation.Nonnull,
+                             jakarta.annotation.Nullable,
+                             org.jetbrains.annotations.NotNull,
+                             org.jetbrains.annotations.Nullable,
+                             org.springframework.lang.NonNull"
+            />
+        </module>
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="format"
+                      value="import\s+static\s+org\.junit\.jupiter\.api\.Assertions\..*"/>
+            <property name="message"
+                      value="Use AssertJ instead of JUnit Assertions"/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+    </module>
+    <module name="RegexpSingleline">
+        <property name="format" value="System\.out"/>
+        <property name="message" value="Use Logger instead of System.out."/>
+    </module>
+</module>
