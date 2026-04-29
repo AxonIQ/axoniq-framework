@@ -4,7 +4,7 @@
 
 [IMPORTANT]
 ====
-Axoniq Workflow is in *Preview*. APIs and behavior may change without notice, and it is not intended for production use.
+Workflows are in *Preview*. APIs and behavior may change without notice, and it is not intended for production use.
 ====
 
 
