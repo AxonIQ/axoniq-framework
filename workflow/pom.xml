@@ -2,20 +2,18 @@
 <!--
   ~ Copyright (c) 2010-2026. AxonIQ B.V.
   ~
-  ~ Licensed under the AXONIQ TERMS OF SERVICE,
-  ~ Version 29 April 2026 (the "License");
+  ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
+  ~ Version September 2025 (the "License");
+  ~ The software is available under Non-Production Free License.
+  ~ Production use requires a paid license. See the License for the
+  ~ specific language governing permissions and limitations under
+  ~ the License.
   ~
-  ~ The software is available for evaluation use without registration.
-  ~ Continued use beyond the evaluation period requires registration
-  ~ and a commercial license. See the License for the specific language
-  ~ governing permissions and limitations under the License.
   ~ You may not use this file except in compliance with the License.
-  ~
   ~ You may obtain a copy of the License at:
-  ~  https://www.axoniq.io/legal/terms-of-service
   ~
-  ~ For licensing information and to register, visit:
-  ~  https://www.axoniq.io/pricing
+  ~    https://www.axoniq.io/legal/terms-of-service
+  ~
   -->
 
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -27,7 +25,12 @@
     <artifactId>axon-workflow-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>Axon Extension - Workflow - Parent</name>
+
+    <name>Axoniq Framework - Workflow - Parent</name>
+    <description>
+        Workflows provide a durable execution module with a configurable DSL, based on Axon Framework's event sourcing
+        logic.
+    </description>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -47,6 +50,23 @@
         <module>runtime</module>
         <module>test</module>
     </modules>
+
+    <inceptionYear>2026</inceptionYear>
+    <url>https://axoniq.io/</url>
+    <licenses>
+        <license>
+            <name>Axoniq Terms of Service</name>
+            <url>https://www.axoniq.io/legal/terms-of-service</url>
+        </license>
+    </licenses>
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/AxonIQ/extension-workflow/issues</url>
+    </issueManagement>
+    <organization>
+        <name>AxonIQ B.V.</name>
+        <url>https://axoniq.io</url>
+    </organization>
 
     <dependencies>
         <dependency>
@@ -238,6 +258,13 @@
             </snapshots>
         </repository>
     </repositories>
+
+    <scm>
+        <connection>scm:git:git://github.com/AxonIQ/extension-workflow.git</connection>
+        <developerConnection>scm:git:git@github.com:AxonIQ/extension-workflow.git</developerConnection>
+        <url>https://github.com/AxonIQ/extension-workflow</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <developers>
         <developer>
