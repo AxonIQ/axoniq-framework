@@ -17,6 +17,10 @@ jobs:
       matrix:
         include:
           - java-version: 21
+            sonar-enabled: true
+            deploy-enabled: true
+            slack-notifications-enabled: false
+          - java-version: 25
             sonar-enabled: false
             deploy-enabled: false
             slack-notifications-enabled: false
