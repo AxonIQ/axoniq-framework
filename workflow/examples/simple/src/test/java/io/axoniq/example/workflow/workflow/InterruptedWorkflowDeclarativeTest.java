@@ -19,7 +19,8 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
-import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.history.api.WorkflowHistory;
@@ -29,7 +30,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -38,8 +39,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that an {@link InterruptedException} occurring during workflow execution does not put
- * the workflow into any terminal state. The workflow should remain in a non-terminal state.
+ * Verifies that an {@link InterruptedException} occurring during workflow execution does not put the workflow into any
+ * terminal state. The workflow should remain in a non-terminal state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -51,7 +52,7 @@ class InterruptedWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Sim
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new InterruptedWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
@@ -80,7 +81,7 @@ class InterruptedWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Sim
 
         // Wait for execution to be cleaned up
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(workflowEngine.workflowExecutions()).isEmpty()
+                                                                   assertThat(workflowEngine.workflowExecutions()).isEmpty()
         );
 
         assertThat(workflowHistoryRepository.findAll()).hasSize(1);

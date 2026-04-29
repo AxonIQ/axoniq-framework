@@ -19,6 +19,7 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.OrderPlacedEvent;
+import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.*;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
@@ -40,9 +42,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Mirrors the "Parallel workflows" example from the reference docs:
- * a single {@link OrderPlacedEvent} starts two independent workflows, one keyed
- * by {@code orderId} and the other by {@code customerId}.
+ * Mirrors the "Parallel workflows" example from the reference docs: a single {@link OrderPlacedEvent} starts two
+ * independent workflows, one keyed by {@code orderId} and the other by {@code customerId}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -54,7 +55,7 @@ class ParallelWorkflowsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         return d -> d
                 .declarative(c -> ctx -> ctx.awaitExecute(
                         "reserveStock",
@@ -66,18 +67,36 @@ class ParallelWorkflowsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
                 .customized((c, w) -> w
                         .eventNameCustomizer(namespace("io.axoniq.dsl.parallel.fulfillment").workflowBaseName("Workflow"))
                         .workflowIdProvider(fromPayloadAttribute(c, "orderId", id -> "order-" + id))
-                )
-                .declarative(c -> ctx -> ctx.awaitExecute(
-                        "sendConfirmationEmail",
-                        Map.of(),
-                        p -> Map.of("sent", true)
-                ))
-                .workflowName("CustomerNotificationWorkflow")
-                .on(EventConditions.fromType(OrderPlacedEvent.class))
-                .customized((c, w) -> w
-                        .eventNameCustomizer(namespace("io.axoniq.dsl.parallel.notification").workflowBaseName("Workflow"))
-                        .workflowIdProvider(fromPayloadAttribute(c, "customerId", id -> "customer-" + id))
                 );
+    }
+
+    @Override
+    protected UnaryOperator<WorkflowConfigurer> configure() {
+        return c -> c.componentRegistry(r -> r.registerModule(
+                                                WorkflowModule
+                                                        .defaults("another", SimpleWorkflowContext.class)
+                                                        .workflowContextFactory(conf -> new SimpleWorkflowContextFactory())
+                                                        .definition(
+                                                                d -> d.declarative(c0 -> ctx -> ctx.awaitExecute(
+                                                                              "sendConfirmationEmail",
+                                                                              Map.of(),
+                                                                              p -> Map.of("sent", true)
+                                                                      ))
+                                                                      .workflowName("CustomerNotificationWorkflow")
+                                                                      .on(EventConditions.fromType(OrderPlacedEvent.class))
+                                                                      .customized((c1, w) -> w
+                                                                              .eventNameCustomizer(namespace(
+                                                                                      "io.axoniq.dsl.parallel.notification").workflowBaseName(
+                                                                                      "Workflow"))
+                                                                              .workflowIdProvider(fromPayloadAttribute(c1,
+                                                                                                                       "customerId",
+                                                                                                                       id -> "customer-"
+                                                                                                                               + id))
+                                                                      )
+
+                                                        )
+                                        )
+        );
     }
 
     @Test

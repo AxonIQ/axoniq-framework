@@ -21,14 +21,13 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.execution.DSLAdoptingExecutionFactory;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -50,7 +49,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
 
     private final Map<Class<? extends WorkflowContext>, List<String>> workflowDefinitionBeanRefs;
     private final Map<Class<? extends WorkflowContext>, String> workflowContextFactoryBeanRefs;
-    private @Nullable ApplicationContext applicationContext;
+    private ApplicationContext applicationContext;
 
 
     /**
@@ -67,41 +66,39 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
 
     @Override
     public void enhance(@NonNull ComponentRegistry registry) {
-
         Objects.requireNonNull(applicationContext, "ApplicationContext must not be null");
-        workflowDefinitionBeanRefs.forEach((workflowContextType, workflowBeanNames) -> {
+        workflowDefinitionBeanRefs
+                .forEach((workflowContextType, workflowBeanNames) -> register(registry,
+                                                                              workflowContextType,
+                                                                              workflowBeanNames));
+    }
 
-            var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
-            if (factoryName != null) {
-                @SuppressWarnings("unchecked")
-                var dslPhase = WorkflowModule
-                        .usingContext((Class<WorkflowContext>) workflowContextType)
-                        .workflowContextFactory(
-                                c -> (WorkflowContextFactory<WorkflowContext>) applicationContext.getBean(factoryName))
-                        .workflowExecutionFactory(
-                                c -> new DSLAdoptingExecutionFactory<>(workflowContextType));
-
-                if (!workflowBeanNames.isEmpty()) {
-                    WorkflowModule<?> module = null;
-                    for (var beanName : workflowBeanNames) {
-                        //noinspection unchecked
-                        module = dslPhase
-                                .definitions(d -> d.autodetected(
-                                                     c -> applicationContext.getBean(beanName),
-                                                     ((Class<WorkflowContext>) workflowContextType)
-                                             )
-                                );
-                    }
-                    registry.registerModule(module); // FIXME: move towards one module per workflow definition
-                }
-            } else {
-                throw new BadWorkflowConfigurationException(String.format(
-                        "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
-                        String.join(",", workflowBeanNames.stream().toList()),
-                        workflowContextType.getSimpleName()
-                ));
+    @SuppressWarnings("unchecked")
+    private <C extends WorkflowContext> void register(
+            @Nonnull ComponentRegistry registry,
+            @Nonnull Class<C> workflowContextType,
+            @Nonnull List<String> workflowBeanNames) {
+        var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
+        if (factoryName != null) {
+            var workflowContextFactory = (WorkflowContextFactory<C>) applicationContext.getBean(factoryName);
+            for (var beanName : workflowBeanNames) {
+                ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanName);
+                registry.registerModule(
+                        WorkflowModule
+                                .defaults(beanName, workflowContextType)
+                                .workflowContextFactory(c -> workflowContextFactory)
+                                .definition(d -> d
+                                        .autodetected(builder)
+                                )
+                );
             }
-        });
+        } else {
+            throw new BadWorkflowConfigurationException(String.format(
+                    "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
+                    String.join(",", workflowBeanNames.stream().toList()),
+                    workflowContextType.getSimpleName()
+            ));
+        }
     }
 
     @Override

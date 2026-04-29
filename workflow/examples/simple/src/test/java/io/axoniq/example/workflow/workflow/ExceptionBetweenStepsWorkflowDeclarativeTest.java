@@ -19,7 +19,8 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
-import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.history.api.WorkflowHistory;
@@ -29,13 +30,14 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+
 
 /**
  * Verifies that a {@link RuntimeException} thrown in user code between steps does not put the workflow into any
@@ -51,7 +53,7 @@ class ExceptionBetweenStepsWorkflowDeclarativeTest extends AbstractDeclarativeTe
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new ExceptionBetweenStepsWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)

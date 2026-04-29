@@ -19,7 +19,8 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
-import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.history.api.WorkflowHistory;
@@ -32,7 +33,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -41,8 +42,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test for {@link AnyRaceWorkflow} — verifies that
- * {@link WorkflowContext#anyMatch} semantics resolve the fast step as winner.
+ * Integration test for {@link AnyRaceWorkflow} — verifies that {@link WorkflowContext#anyMatch} semantics resolve the
+ * fast step as winner.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -54,7 +55,7 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new AnyRaceWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)
@@ -94,7 +95,7 @@ class AnyRaceWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<SimpleW
         assertThat(workflowEngine.workflowExecutions()).isEmpty();
 
         for (WorkflowState state : workflowHistoryRepository.findAll().stream()
-                                                              .map(WorkflowHistory::state).toList()) {
+                                                            .map(WorkflowHistory::state).toList()) {
             assertThat(state.workflowStatus().isTerminal()).isTrue();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
             assertThat(state.workflowStepNames()).containsExactlyInAnyOrder("fastStep", "slowStep");

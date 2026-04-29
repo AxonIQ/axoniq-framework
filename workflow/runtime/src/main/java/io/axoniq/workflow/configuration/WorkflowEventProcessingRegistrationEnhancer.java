@@ -21,6 +21,7 @@ package io.axoniq.workflow.configuration;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -40,18 +41,36 @@ import static io.axoniq.workflow.configuration.AllEventEventHandlingComponent.AN
 @Internal
 public class WorkflowEventProcessingRegistrationEnhancer implements ConfigurationEnhancer {
 
+
     /**
-     * Name of the event handling module used for workflow.
+     * Name of the top-level workflow module.
      */
-    public static final String MODULE_EVENT_WORKFLOW_ENGINE = "WorkflowEngine";
+    public static final String DEFAULT_MODULE_NAME = "Workflow";
+
+    private final String engineComponentName;
+    private final String projectorComponentName;
+    private final String moduleName;
+    private final boolean registerHistoryProjector;
+
     /**
-     * Name of the event handling component used for workflow history projector.
+     * Creates a workflow event processing registration enhancer, responsible for registering the workflow engine and
+     * history projector components to the event processing module.
+     *
+     * @param moduleName               name of the event processing module.
+     * @param engineComponentName      name of the workflow engine component.
+     * @param projectorComponentName   name of the workflow history projector component.
+     * @param registerHistoryProjector flag indicating whether to register the history projector component.
      */
-    public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "workflowHistoryProjector";
-    /**
-     * Name of the event handling component used for workflow engine.
-     */
-    public static final String COMPONENT_WORKFLOW_ENGINE = "workflowEngineComponent";
+    public WorkflowEventProcessingRegistrationEnhancer(
+            @Nonnull String moduleName,
+            @Nullable String engineComponentName,
+            @Nullable String projectorComponentName,
+            boolean registerHistoryProjector) {
+        this.moduleName = moduleName;
+        this.engineComponentName = engineComponentName;
+        this.projectorComponentName = projectorComponentName;
+        this.registerHistoryProjector = registerHistoryProjector;
+    }
 
     /**
      * Order for this enhancer.
@@ -65,15 +84,51 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     public void enhance(@Nonnull ComponentRegistry componentRegistry) {
         componentRegistry.registerModule(
                 EventProcessorModule
-                        .pooledStreaming(MODULE_EVENT_WORKFLOW_ENGINE)
-                        .eventHandlingComponents(req -> req
-                                .declarative(COMPONENT_WORKFLOW_ENGINE, cfg -> new AllEventEventHandlingComponent(
-                                                     cfg.getComponent(WorkflowEngine.class)
-                                             )
-                                ).declarative(COMPONENT_WORKFLOW_HISTORY_PROJECTOR,
-                                              cfg -> new AllEventEventHandlingComponent(
-                                                      cfg.getComponent(WorkflowHistoryProjector.class)
-                                              ))
+                        .pooledStreaming(moduleName)
+                        .eventHandlingComponents(
+                                req -> {
+                                    var engineRegistration = req
+                                            .declarative(
+                                                    engineComponentName != null
+                                                            ? engineComponentName + "ExecutionEventing"
+                                                            : DEFAULT_MODULE_NAME + "ExecutionEventing",
+                                                    cfg -> {
+                                                        if (engineComponentName != null) {
+                                                            return new AllEventEventHandlingComponent(
+                                                                    cfg.getComponent(WorkflowEngine.class,
+                                                                                     engineComponentName)
+                                                            );
+                                                        } else {
+                                                            return new AllEventEventHandlingComponent(
+                                                                    cfg.getComponent(WorkflowEngine.class)
+                                                            );
+                                                        }
+                                                    }
+                                            );
+                                    if (registerHistoryProjector) {
+                                        engineRegistration = engineRegistration.
+                                                declarative(
+                                                        projectorComponentName != null ?
+                                                                projectorComponentName + "Eventing"
+                                                                : DEFAULT_MODULE_NAME + "HistoryEventing",
+                                                        cfg -> {
+                                                            if (projectorComponentName != null) {
+                                                                return new AllEventEventHandlingComponent(
+                                                                        cfg.getComponent(
+                                                                                WorkflowHistoryProjector.class,
+                                                                                projectorComponentName
+                                                                        )
+                                                                );
+                                                            } else {
+                                                                return new AllEventEventHandlingComponent(
+                                                                        cfg.getComponent(WorkflowHistoryProjector.class)
+                                                                );
+                                                            }
+                                                        }
+                                                );
+                                    }
+                                    return engineRegistration;
+                                }
                         )
                         .customized(ANY_EVENT_IN_ONE_SEGMENT)
                         .build()

@@ -39,6 +39,7 @@ import static org.mockito.Mockito.*;
  * Tests for {@link WorkflowCustomization}.
  *
  * @author Simon Zambrovski
+ * @since 1.0.0
  */
 class WorkflowCustomizationTest {
 
@@ -139,7 +140,8 @@ class WorkflowCustomizationTest {
     void testRegisterWorkflowStatusChangeListenerThrowsOnNull() {
         WorkflowCustomization config = new WorkflowCustomization(WORKFLOW_NAME, null);
 
-        assertThatThrownBy(() -> config.registerWorkflowStatusChangeListener(null, mock(WorkflowStatusChangeListener.class)))
+        assertThatThrownBy(() -> config.registerWorkflowStatusChangeListener(null,
+                                                                             mock(WorkflowStatusChangeListener.class)))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("Workflow status must not be null");
 

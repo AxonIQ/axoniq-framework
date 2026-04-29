@@ -29,6 +29,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
@@ -36,6 +37,9 @@ import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProv
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+
 
 /**
  * Integration test for {@link SleepAsyncWorkflow} — verifies that
@@ -51,7 +55,7 @@ class SleepAsyncWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         var workflow = new SleepAsyncWorkflow();
         return d -> d
                 .declarative(c -> workflow::execute)

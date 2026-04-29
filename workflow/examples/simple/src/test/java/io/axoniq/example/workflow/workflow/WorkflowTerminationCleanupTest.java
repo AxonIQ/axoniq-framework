@@ -29,7 +29,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.UnaryOperator;
+import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
@@ -47,7 +47,7 @@ class WorkflowExecutionTerminationCleanupTest extends AbstractDeclarativeTestBas
     }
 
     @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>> getDeclaredDefinitions() {
+    protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         return d -> d
                 .declarative(c -> this::workflowDefinition)
                 .workflowName("CleanupTestWorkflow")

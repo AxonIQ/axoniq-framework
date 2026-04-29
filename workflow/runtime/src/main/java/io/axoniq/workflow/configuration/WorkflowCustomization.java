@@ -141,7 +141,7 @@ public class WorkflowCustomization {
     }
 
     /**
-     * Un-Registers a workflow status change listener for given status.
+     * Un-Registers a workflow status change listener for the given status.
      *
      * @param workflowStatus               workflow status to register for.
      * @param workflowStatusChangeListener workflow status change listener to register.

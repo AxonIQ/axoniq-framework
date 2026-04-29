@@ -20,7 +20,8 @@ package io.axoniq.example.workflow.kotlin.workflow
 
 
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
-import io.axoniq.workflow.configuration.WorkflowModule
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions
@@ -35,8 +36,8 @@ import org.awaitility.Awaitility
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
+import java.util.function.Function
 import java.util.function.Predicate
-import java.util.function.UnaryOperator
 
 /**
  * @author Stefan Dragisic
@@ -47,18 +48,18 @@ class CancelWorkflowDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontex
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
+    override fun getDeclaredDefinition(): Function<DetectionPhase<WorkflowKontext>, FinalizedPhase<WorkflowKontext>> {
         val workflow = CancelWorkflow()
-        return UnaryOperator { d ->
-            d.declarative({ c -> WorkflowKontext.from(workflow::execute) })
+        return { d ->
+            d.declarative { WorkflowKontext.from(workflow::execute) }
                 .workflowName("Cancel workflow in Kotlin")
                 .on(EventConditions.fromType(RegistrationReceivedEvent::class.java))
                 .customized { c, wc ->
                     wc.eventNameCustomizer(namespace("io.axoniq.dsl.cancel").workflowBaseName("Workflow"))
                         .workflowIdProvider(
                             fromPayloadAttribute(
-                                c, "id",
-                                UnaryOperator { id: String? -> "cancel-$id" })
+                                c, "id"
+                            ) { id: String? -> "cancel-$id" }
                         )
                 }
         }

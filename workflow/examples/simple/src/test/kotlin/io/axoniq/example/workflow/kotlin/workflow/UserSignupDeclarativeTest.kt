@@ -20,7 +20,8 @@ package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.example.workflow.kotlin.fixture.MagicHappenedEvent
 import io.axoniq.example.workflow.kotlin.fixture.RegistrationReceivedEvent
-import io.axoniq.workflow.configuration.WorkflowModule
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
 import io.axoniq.workflow.history.api.WorkflowHistory
@@ -35,25 +36,30 @@ import org.awaitility.Awaitility.await
 import org.awaitility.core.ThrowingRunnable
 import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
+import java.util.function.Function
 import java.util.function.Predicate
-import java.util.function.UnaryOperator
 
+/**
+ * User signup test using the declarative workflow API kotlin DSL.
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 class UserSignupDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
     { WorkflowKontextFactory() }
 ) {
 
-    override fun getDeclaredDefinitions(): UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<WorkflowKontext>> {
-        return UnaryOperator { d ->
-            d.declarative({ c -> WorkflowKontext.from(UserSignupWorkflow()::execute) })
+    override fun getDeclaredDefinition(): Function<DetectionPhase<WorkflowKontext>, FinalizedPhase<WorkflowKontext>> {
+        return { d ->
+            d.declarative { WorkflowKontext.from(UserSignupWorkflow()::execute) }
                 .workflowName("User signup workflow in Kotlin")
                 .on(EventConditions.fromType(RegistrationReceivedEvent::class.java))
                 .customized { c, wc ->
                     wc.eventNameCustomizer(namespace("io.axoniq.dsl.wf"))
                         .workflowIdProvider(
                             fromPayloadAttribute(
-                                c, "id",
-                                UnaryOperator { id: String? -> "signup-$id" })
+                                c, "id"
+                            ) { id: String? -> "signup-$id" }
                         )
                 }
         }
