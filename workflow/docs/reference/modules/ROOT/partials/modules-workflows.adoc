@@ -1,0 +1,4 @@
+=== Axoniq Workflow Engine
+
+This module provides the xref:workflows:index.adoc[Axoniq Workflow Engine], which allows users to express complex, long-running business processes in simple, imperative code.
+
