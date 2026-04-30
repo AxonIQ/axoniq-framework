@@ -625,7 +625,7 @@ class WorkPackageTest {
             List<TrackingToken> capturedBatchEndTokens = new ArrayList<>();
             WorkPackage subject = testSubjectBuilder
                     .batchSize(3)
-                    .batchProcessor((events, ctx) -> {
+                    .batchProcessor((entries, ctx) -> {
                         capturedBatchEndTokens.add(ctx.getResource(TrackingToken.BATCH_END_RESOURCE_KEY));
                         return MessageStream.empty();
                     })

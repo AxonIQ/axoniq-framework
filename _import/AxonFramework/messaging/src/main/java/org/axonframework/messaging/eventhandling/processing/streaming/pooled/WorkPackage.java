@@ -582,13 +582,13 @@ class WorkPackage {
     interface BatchProcessor {
 
         /**
-         * Processes a batch of events in the processing context.
+         * Processes a batch of entries in the processing context.
          *
-         * @param events  The batch of event messages to be processed.
+         * @param entries  The batch of event messages to be processed.
          * @param context The processing context in which the event messages are processed.
          * @return A stream of messages resulting from the processing of the event messages.
          */
-        MessageStream.Empty<Message> process(List<MessageStream.Entry<? extends EventMessage>> events,
+        MessageStream.Empty<Message> process(List<MessageStream.Entry<? extends EventMessage>> entries,
                                              ProcessingContext context);
     }
 
