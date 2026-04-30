@@ -6,3 +6,8 @@ ifdef::data-protection[]
 *** xref:data-protection-release-notes:major-releases.adoc[]
 *** xref:data-protection-release-notes:minor-releases.adoc[]
 endif::[]
+ifdef::workflows[]
+** Axoniq Workflow Engine
+*** xref:workflows-release-notes:major-releases.adoc[]
+*** xref:workflows-release-notes:minor-releases.adoc[]
+endif::[]

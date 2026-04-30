@@ -8,6 +8,8 @@ content:
     start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']
   - url: localLinks/extension-data-protection # include docs from Axon Framework repo
     start_paths: [ 'docs/*', '!docs/_*' ]
+  - url: localLinks/extension-workflow # include docs from Axon Framework repo
+    start_paths: [ 'docs/*', '!docs/_*' ]
   - url: ../..
     start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']
 
@@ -19,6 +21,7 @@ asciidoc:
     primary-site-manifest-url: https://library.axoniq.io/site-manifest.json
     advanced-framework: true
     data-protection: true
+    workflows: true
   extensions:
   - asciidoctor-kroki
   - '@asciidoctor/tabs'

@@ -12,4 +12,8 @@ ifdef::data-protection[]
 include::data-protection-release-notes:partial$data-protection-release-notes.adoc[]
 endif::[]
 
+ifdef::workflows[]
+include::workflows-release-notes:partial$workflows-release-notes.adoc[]
+endif::[]
+
 
