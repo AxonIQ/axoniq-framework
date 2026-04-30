@@ -47,7 +47,6 @@ public class UserSignupWorkflow {
 
     @Workflow(
             idProperty = "id",
-            startOnEvent = "my.custom.RegistrationReceived",
             startOnConditions = {"status=vip"}
     )
     public void execute(
