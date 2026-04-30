@@ -1,5 +1,5 @@
 = Axoniq Framework Major Releases
-:navtitle: Axoniq Framework Major Releases
+:navtitle: Major Releases
 
 All the enhancements and features which have been introduced to our major releases of the Axoniq Framework are noted here.
 
