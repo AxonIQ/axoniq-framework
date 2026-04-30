@@ -7,6 +7,9 @@ content:
   - url: https://github.com/AxonIQ/AxonFramework.git   # include docs from Axon Framework repo
     start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']                      # from every folder in `docs` except those starting with underscore
     branches: [ 'main' ]
+  - url: https://github.com/AxonIQ/AxoniqFramework.git   # include docs from Axoniq Framework repo
+    start_paths: [ 'docs/*', '!docs/_*', '!docs/reference/*' ]                      # from every folder in `docs` except those starting with underscore
+    branches: [ 'main' ]
   - url: ../..
     start_paths: ['docs/*', '!docs/_*']
 
@@ -16,6 +19,7 @@ asciidoc:
     page-pagination: true
     kroki-fetch-diagram: true
     primary-site-manifest-url: https://library.axoniq.io/site-manifest.json
+    advanced-framework: true
     workflows: true
   extensions:
   - asciidoctor-kroki
