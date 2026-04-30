@@ -82,19 +82,21 @@ public class ProcessorEventHandlingComponents implements DescribableComponent {
     /**
      * Processes a batch of events in the given processing context.
      * <p>
-     * For each entry, a per-event sub-{@link ProcessingContext} is derived by reading the
-     * {@link TrackingToken} stored in the entry's {@link org.axonframework.messaging.core.Context} under
-     * {@link TrackingToken#RESOURCE_KEY} and overriding that key on the batch context via
-     * {@link ProcessingContext#withResource}. This ensures that per-event replay detection (
-     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken#isReplay} and
-     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken#concludesReplay}) observes
-     * the correct position for each individual event rather than the shared batch-end token. The batch-end token
-     * remains accessible under {@link TrackingToken#BATCH_END_RESOURCE_KEY} on the parent context.
+     * Each entry carries its own {@link TrackingToken} in its {@link org.axonframework.messaging.core.Context} under
+     * {@link TrackingToken#RESOURCE_KEY}. Before invoking the event handling components for a given entry, that
+     * per-event token is written into the shared {@code context} under the same key, overriding the batch-end token
+     * that the caller placed there. The {@code context} itself — including its transaction lifecycle and all other
+     * resources — is the same object for every event in the batch; only {@link TrackingToken#RESOURCE_KEY} is
+     * temporarily overridden for the duration of each event's handling. The batch-end token remains accessible under
+     * {@link TrackingToken#BATCH_END_RESOURCE_KEY} throughout.
      * <p>
-     * The sub-context delegates all {@link ProcessingContext} lifecycle hooks (commit, rollback, etc.) to the parent,
-     * so transaction semantics are unaffected. When an entry carries no per-event token (e.g. from a
+     * This ensures that per-event replay detection (
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken#isReplay(TrackingToken)} and
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken#concludesReplay(TrackingToken)}) observes
+     * the correct position for each individual event rather than the shared batch-end token. When an entry carries no
+     * per-event token (e.g. from a
      * {@link org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessor} which has no
-     * stream position), the parent context is used as-is.
+     * stream position), the context is used as-is.
      * <p>
      * The result of handling is an {@link MessageStream.Empty empty stream}. It's guaranteed that events with the same
      * {@link #sequenceIdentifiersFor(EventMessage, ProcessingContext)} value are processed by a single component in the
