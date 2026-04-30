@@ -24,7 +24,7 @@ ifdef::data-protection[]
 |<<Axoniq Data Protection>> |`axoniq-data-protection`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-data-protection[available]
 endif::[]
 ifdef::workflows[]
-|<<Axoniq Workflow Engine>> |`axon-workflow-runtime`    |`io.axoniq.framework.workflow` |https://central.sonatype.com/search?q=a:axon-workflow-runtime[available]
+include::modules-table-workflows.adoc[]
 endif::[]
 |===
 
