@@ -477,10 +477,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                   CACHE 1
                   OWNED BY events.global_index;
 
-                -- BRIN index on global_index
-                CREATE INDEX IF NOT EXISTS events_global_index_brin
-                  ON events USING BRIN (global_index);
-
                 -- BTREE index on global_index in consistency_tags (for faster finalizations)
                 CREATE INDEX IF NOT EXISTS consistency_tags_global_index_idx
                   ON consistency_tags (global_index);
