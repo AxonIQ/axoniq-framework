@@ -20,18 +20,18 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.axoniq.framework.workflow</groupId>
-        <artifactId>axon-workflow-parent</artifactId>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-workflow-parent</artifactId>
         <version>0.1.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>axon-workflow-dsl</artifactId>
+    <artifactId>axoniq-workflow-dsl</artifactId>
     <name>Axoniq Framework - Workflow - Standard DSL</name>
 
     <dependencies>
         <dependency>
-            <groupId>io.axoniq.framework.workflow</groupId>
-            <artifactId>axon-workflow-runtime</artifactId>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
