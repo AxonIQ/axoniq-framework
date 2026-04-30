@@ -1,0 +1,9 @@
+== Axoniq Workflow Engine
+
+[cols="<,<"]
+|===
+|Release Type |Version
+
+|**Major** |xref:workflows-release-notes:major-releases.adoc#release_0_1[0.1]
+|**Minor** |xref:workflows-release-notes:minor-releases.adoc#release_0_1[0.1]
+|===
