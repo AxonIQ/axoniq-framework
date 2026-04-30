@@ -17,6 +17,7 @@
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -559,6 +560,90 @@ class WorkPackageTest {
         });
     }
 
+
+    @Nested
+    class WhenProcessingBatch {
+
+        @Test
+        void processBatchSurfacesPerEventTokenInEntryContext() {
+            // given
+            WorkPackage subject = testSubjectBuilder.batchSize(3).build();
+
+            // when
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
+
+            await().atMost(TIMEOUT).untilAsserted(() -> assertEquals(3, batchProcessor.getProcessedEvents().size()));
+
+            // then — each entry's context must carry its own token, not the batch-end token
+            assertThat(TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(0).context()))
+                    .hasValue(new GlobalSequenceTrackingToken(1L));
+            assertThat(TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(1).context()))
+                    .hasValue(new GlobalSequenceTrackingToken(2L));
+            assertThat(TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(2).context()))
+                    .hasValue(new GlobalSequenceTrackingToken(3L));
+        }
+
+        @Test
+        void processBatchSurfacesPerEventReplayTokenInEntryContext() {
+            // given — reset at position 3, so events at 1, 2, 3 are all replay events
+            TrackingToken tokenAtReset = new GlobalSequenceTrackingToken(3L);
+            WorkPackage subject = testSubjectBuilder
+                    .initialToken(ReplayToken.createReplayToken(tokenAtReset))
+                    .batchSize(3)
+                    .build();
+
+            // when
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
+
+            await().atMost(TIMEOUT).untilAsserted(() -> assertEquals(3, batchProcessor.getProcessedEvents().size()));
+
+            // then — each entry's context must carry a ReplayToken advanced to its own position
+            TrackingToken t0 = TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(0).context()).get();
+            TrackingToken t1 = TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(1).context()).get();
+            TrackingToken t2 = TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(2).context()).get();
+
+            assertInstanceOf(ReplayToken.class, t0);
+            assertEquals(new GlobalSequenceTrackingToken(1L), ((ReplayToken) t0).getCurrentToken());
+            assertEquals(tokenAtReset, ((ReplayToken) t0).getTokenAtReset());
+
+            assertInstanceOf(ReplayToken.class, t1);
+            assertEquals(new GlobalSequenceTrackingToken(2L), ((ReplayToken) t1).getCurrentToken());
+            assertEquals(tokenAtReset, ((ReplayToken) t1).getTokenAtReset());
+
+            assertInstanceOf(ReplayToken.class, t2);
+            assertEquals(new GlobalSequenceTrackingToken(3L), ((ReplayToken) t2).getCurrentToken());
+            assertEquals(tokenAtReset, ((ReplayToken) t2).getTokenAtReset());
+        }
+
+        @Test
+        void processBatchExposesBatchEndTokenViaResourceKey() {
+            // given
+            List<TrackingToken> capturedBatchEndTokens = new ArrayList<>();
+            WorkPackage subject = testSubjectBuilder
+                    .batchSize(3)
+                    .batchProcessor((events, ctx) -> {
+                        capturedBatchEndTokens.add(ctx.getResource(TrackingToken.BATCH_END_RESOURCE_KEY));
+                        return MessageStream.empty();
+                    })
+                    .build();
+
+            // when
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
+
+            // then — regardless of how many batches the events span, the final batch-end token must equal the last event's token
+            await().atMost(TIMEOUT).untilAsserted(() -> {
+                assertThat(capturedBatchEndTokens.getLast())
+                        .isEqualTo(new GlobalSequenceTrackingToken(3L));
+            });
+        }
+    }
+
     private static Context globalTrackingTokenContext(long globalIndex) {
         return trackingTokenContext(new GlobalSequenceTrackingToken(globalIndex));
     }
@@ -589,9 +674,10 @@ class WorkPackageTest {
         private final List<ContextMessage> processedEvents = new ArrayList<>();
 
         @Override
-        public MessageStream.Empty<Message> process(@NonNull List<? extends EventMessage> events, @NonNull ProcessingContext context) {
-            if (batchProcessorPredicate.test(events, TrackingToken.fromContext(context).orElse(null))) {
-                processedEvents.addAll(events.stream().map(m -> new ContextMessage(m, context)).toList());
+        public MessageStream.Empty<Message> process(@NonNull List<MessageStream.Entry<? extends EventMessage>> entries, @NonNull ProcessingContext context) {
+            List<? extends EventMessage> events = entries.stream().map(MessageStream.Entry::message).toList();
+            if (batchProcessorPredicate.test(events, TrackingToken.batchEndFromContext(context).orElse(null))) {
+                processedEvents.addAll(entries.stream().map(e -> new ContextMessage(e.message(), e)).toList());
             }
             return MessageStream.empty();
         }

@@ -435,13 +435,13 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
                           .build();
     }
 
-    private MessageStream.Empty<Message> processWithErrorHandling(List<? extends EventMessage> events,
+    private MessageStream.Empty<Message> processWithErrorHandling(List<MessageStream.Entry<? extends EventMessage>> entries,
                                                                   ProcessingContext context) {
-        return eventHandlingComponents.handle(events, context)
+        return eventHandlingComponents.handle(entries, context)
                                       .onErrorContinue(ex -> {
                                           try {
                                               configuration.errorHandler()
-                                                           .handleError(new ErrorContext(name, ex, events, context));
+                                                           .handleError(new ErrorContext(name, ex, entries.stream().map(MessageStream.Entry::message).toList(), context));
                                           } catch (RuntimeException re) {
                                               return MessageStream.failed(re);
                                           } catch (Exception e) {

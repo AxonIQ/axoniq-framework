@@ -31,11 +31,23 @@ import java.util.OptionalLong;
  * @since 3.0.0
  */
 public interface TrackingToken {
-
     /**
-     * The {@link ResourceKey} used whenever a {@link Context} would contain a {@link TrackingToken}.
+     * The {@link ResourceKey} used to store the per-event {@link TrackingToken} in a {@link Context}.
+     * <p>
+     * During batch processing, each event's handler receives a {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}
+     * with this key set to the token of that specific event.
      */
     ResourceKey<TrackingToken> RESOURCE_KEY = ResourceKey.withLabel("trackingToken");
+
+    /**
+     * The {@link ResourceKey} used to expose the batch-end {@link TrackingToken} in a batch
+     * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
+     * <p>
+     * This key holds the token of the <em>last</em> event in the current batch, i.e. the position that will be stored
+     * in the {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore} when the
+     * batch commits. Per-event tokens are available under {@link #RESOURCE_KEY}.
+     */
+    ResourceKey<TrackingToken> BATCH_END_RESOURCE_KEY = ResourceKey.withLabel("batchEndTrackingToken");
 
     /**
      * Adds the given {@code token} to the given {@code context} using the {@link #RESOURCE_KEY}.
@@ -58,6 +70,28 @@ public interface TrackingToken {
      */
     static Optional<TrackingToken> fromContext(Context context) {
         return Optional.ofNullable(context.getResource(RESOURCE_KEY));
+    }
+
+    /**
+     * Adds the given {@code token} to the given {@code context} using the {@link #BATCH_END_RESOURCE_KEY}.
+     *
+     * @param context The {@link Context} to add the batch-end {@code token} to.
+     * @param token   The {@link TrackingToken} representing the position of the last event in the batch.
+     * @return The resulting context.
+     */
+    static Context addBatchEndToContext(Context context, TrackingToken token) {
+        return context.withResource(BATCH_END_RESOURCE_KEY, token);
+    }
+
+    /**
+     * Returns an {@link Optional} of {@link TrackingToken} keyed under {@link #BATCH_END_RESOURCE_KEY} in the given
+     * {@code context}, representing the token of the last event in the current batch.
+     *
+     * @param context The {@link Context} to retrieve the batch-end {@link TrackingToken} from, if present.
+     * @return An {@link Optional} of {@link TrackingToken} representing the last position in the current batch.
+     */
+    static Optional<TrackingToken> batchEndFromContext(Context context) {
+        return Optional.ofNullable(context.getResource(BATCH_END_RESOURCE_KEY));
     }
 
     /**
