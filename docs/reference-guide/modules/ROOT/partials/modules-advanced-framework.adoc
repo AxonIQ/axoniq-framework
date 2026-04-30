@@ -23,6 +23,9 @@ include::partial$advanced-modules.excalidraw[]
 ifdef::data-protection[]
 |<<Axoniq Data Protection>> |`axoniq-data-protection`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-data-protection[available]
 endif::[]
+ifdef::workflows[]
+|<<Axoniq Workflow Engine>> |`axon-workflow-runtime`    |`io.axoniq.framework.workflow` |https://central.sonatype.com/search?q=a:axon-workflow-runtime[available]
+endif::[]
 |===
 
 === Axoniq PostgreSQL
@@ -48,4 +51,8 @@ This extension contains the components needed to xref:tracing:index.adoc[enable 
 
 ifdef::data-protection[]
 include::modules-dataprotection.adoc[]
+endif::[]
+
+ifdef::workflows[]
+include::modules-workflows.adoc[]
 endif::[]
