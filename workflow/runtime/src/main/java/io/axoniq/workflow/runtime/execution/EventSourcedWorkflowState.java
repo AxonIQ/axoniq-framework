@@ -27,7 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -143,7 +143,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             var stepName = getStepName(metadata);
             if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
                 logger.debug("Ignoring step status {} for step '{}' — already in terminal state {}",
-                            stepStatus, stepName, getStep(stepName).status());
+                             stepStatus, stepName, getStep(stepName).status());
                 return;
             }
             switch (stepStatus) {
@@ -156,7 +156,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 case FAILED:
                     Throwable stepCause;
                     try {
-                        WorkflowError err = eventMessage.payloadAs(WorkflowError.class, processingContext.component(EventConverter.class));
+                        WorkflowError err = eventMessage.payloadAs(WorkflowError.class,
+                                                                   processingContext.component(EventConverter.class));
                         stepCause = err != null ? err.toThrowable() : null;
                     } catch (Exception e) {
                         stepCause = null;
@@ -202,14 +203,15 @@ public class EventSourcedWorkflowState implements WorkflowState {
                      ifPresent(status -> {
                          if (workflowStatus().isTerminal()) {
                              logger.debug("Ignoring workflow status {} — already in terminal state {}",
-                                         status, workflowStatus());
+                                          status, workflowStatus());
                              return;
                          }
                          final Throwable terminationCause;
                          if (status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED) {
                              Throwable cause;
                              try {
-                                 WorkflowError err = eventMessage.payloadAs(WorkflowError.class, processingContext.component(EventConverter.class));
+                                 WorkflowError err = eventMessage.payloadAs(WorkflowError.class,
+                                                                            processingContext.component(EventConverter.class));
                                  cause = err != null ? err.toThrowable() : null;
                              } catch (Exception e) {
                                  // payload is not a WorkflowError
@@ -237,22 +239,30 @@ public class EventSourcedWorkflowState implements WorkflowState {
     void evolvePayload(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         // set payload if desired
         MetadataUtils.payloadReducer(eventMessage.metadata()).ifPresent(reducerName -> {
-            if (PayloadReducer.isDefault(reducerName)) {
-                var resultReducer = PayloadReducer.byName(reducerName);
-                Map<String, Object> stepPayload;
-                try {
-                    stepPayload = eventMessage.payloadAs(new TypeReference<>() {
-                    }, processingContext.component(EventConverter.class));
-                } catch (Exception e) {
-                    logger.debug("Could not convert payload to map for reducer {}. Skipping payload update.", reducerName, e);
-                    stepPayload = null;
-                }
-                if (stepPayload != null) {
-                    var result = resultReducer.apply(this.payload, stepPayload);
-                    logger.trace("Evolving payload: ({}, {}) -> {}", this.payload(), stepPayload, result);
-                    this.payload = result;
-                }
-            }
+            processingContext
+                    .component(PayloadReducerRegistry.class)
+                    .get(reducerName)
+                    .ifPresent(resultReducer -> {
+                        Map<String, Object> stepPayload;
+                        try {
+                            stepPayload = eventMessage.payloadAs(new TypeReference<>() {
+                            }, processingContext.component(EventConverter.class));
+                        } catch (Exception e) {
+                            logger.debug(
+                                    "Could not convert payload to map for reducer {}. Skipping payload update.",
+                                    reducerName,
+                                    e);
+                            stepPayload = null;
+                        }
+                        if (stepPayload != null) {
+                            var result = resultReducer.apply(this.payload, stepPayload);
+                            logger.trace("Evolving payload: ({}, {}) -> {}",
+                                         this.payload(),
+                                         stepPayload,
+                                         result);
+                            this.payload = result;
+                        }
+                    });
         });
     }
 

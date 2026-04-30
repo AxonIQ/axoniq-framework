@@ -36,6 +36,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.function.Predicate;
 
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.util.MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD;
 
 /**
@@ -77,7 +78,7 @@ public class EventMessageUtils {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
         return new GenericEventMessage(new MessageType(name), context.workflowPayload(),
                                        MetadataUtils.create(context.workflowId(), WorkflowStatus.STARTED)
-                                               .and(METADATA_KEY_MODIFY_PAYLOAD, PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL)
+                                               .and(METADATA_KEY_MODIFY_PAYLOAD, NAME_COMBINE_GLOBAL_AND_LOCAL)
         );
     }
 

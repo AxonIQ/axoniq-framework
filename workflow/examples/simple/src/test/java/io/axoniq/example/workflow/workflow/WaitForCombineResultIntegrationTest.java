@@ -45,9 +45,9 @@ import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.api.payload.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -131,7 +131,7 @@ class WaitForCombineResultIntegrationTest
                                  .orElseThrow().qualifiedName(),
                             e -> associationsUtils.build(super.processingContext()).test(e)
                     ),
-                    COMBINE_GLOBAL_AND_LOCAL,
+                    registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL).orElseThrow(),
                     timeout,
                     TypeReference.fromType(eventType),
                     super.processingContext().component(EventConverter.class),

@@ -41,10 +41,10 @@ import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.api.payload.PayloadReducer.COMBINE_GLOBAL_AND_LOCAL;
-import static io.axoniq.workflow.runtime.api.payload.PayloadReducer.LOCAL_ONLY;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
+import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME_LOCAL_ONLY;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -119,8 +119,14 @@ class CombineResultIntegrationTest
                 @Nonnull Map<String, Object> payload,
                 @Nonnull PayloadProcessor action
         ) {
-            return super.execute(stepName, payload, action, LOCAL_ONLY,
-                                 COMBINE_GLOBAL_AND_LOCAL, Duration.ofMinutes(5), defaults());
+            return super.execute(stepName,
+                                 payload,
+                                 action,
+                                 registry.get(NAME_LOCAL_ONLY).orElseThrow(),
+                                 registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL).orElseThrow(),
+                                 Duration.ofMinutes(5),
+                                 defaults()
+            );
         }
 
         @Override
@@ -134,8 +140,13 @@ class CombineResultIntegrationTest
         ) {
             // Force COMBINE_LOCAL_AND_CONTEXT as result reducer
             // Note: SimpleWorkflowContext.execute delegates to the internal delegate which is a WorkflowContextDelegation
-            return super.execute(stepName, payload, action, LOCAL_ONLY,
-                                 COMBINE_GLOBAL_AND_LOCAL, duration, eventNameCustomizer);
+            return super.execute(stepName,
+                                 payload,
+                                 action,
+                                 registry.get(NAME_LOCAL_ONLY).orElseThrow(),
+                                 registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL).orElseThrow(),
+                                 duration,
+                                 eventNameCustomizer);
         }
     }
 

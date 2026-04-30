@@ -23,7 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Metadata;
@@ -35,6 +35,7 @@ import org.junit.jupiter.api.*;
 import java.time.Instant;
 import java.util.Map;
 
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -51,6 +52,7 @@ class EventSourcedWorkflowStateTest {
         processingContext = mock(ProcessingContext.class);
         converter = mock(EventConverter.class);
         when(processingContext.component(EventConverter.class)).thenReturn(converter);
+        when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
     }
 
     @Test
@@ -156,7 +158,7 @@ class EventSourcedWorkflowStateTest {
         Map<String, Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                              NAME_COMBINE_GLOBAL_AND_LOCAL);
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
