@@ -78,7 +78,7 @@ The `EventStorageEngine` is the interface responsible for the actual storage and
 Axon Framework provides several implementations, each suited to different use cases and deployment scenarios:
 
 ifdef::advanced-framework[]
-include::axoniq-server-connector:partial$event-storage-engines-listing.adoc[]
+include::connector:partial$event-storage-engines-listing.adoc[]
 endif::[]
 * **`AggregateBasedJpaEventStorageEngine`** - Stores events in a JPA-compatible database.
 Organizes events by aggregate identifier and sequence number.
@@ -88,7 +88,7 @@ Ideal for testing and short-lived tools.
 Not suitable for production use.
 
 ifdef::advanced-framework[]
-include::axoniq-server-connector:partial$event-storage-engines.adoc[]
+include::connector:partial$event-storage-engines.adoc[]
 endif::[]
 
 [#aggregatebasedjpaeventstorageengine]
@@ -342,6 +342,6 @@ If no explicit `EventConverter` is configured, events are converted using the me
 For more details on different converter options and layers, see xref:ROOT:conversion.adoc#converter_configuration_levels[here]
 
 ifdef::advanced-framework[]
-include::axoniq-server-connector:partial$distributing-events.adoc[]
+include::connector:partial$distributing-events.adoc[]
 endif::[]
 
