@@ -16,9 +16,6 @@
 
 package org.axonframework.messaging.core;
 
-import org.axonframework.messaging.core.MessageStream.Entry;
-import org.jspecify.annotations.Nullable;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
@@ -47,7 +44,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
      *
      * @param entry The {@link Entry entry} which is the singular value contained in this {@link MessageStream stream}.
      */
-    SingleValueMessageStream(@Nullable Entry<M> entry) {
+    SingleValueMessageStream(Entry<M> entry) {
         this(CompletableFuture.completedFuture(entry));
     }
 
