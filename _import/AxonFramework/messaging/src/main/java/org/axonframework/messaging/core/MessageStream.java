@@ -25,6 +25,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -186,7 +187,7 @@ public interface MessageStream<M extends Message> {
      * @param <M>    The type of {@link Message} contained in the {@link Entry entries} of this stream.
      * @return A stream containing at most one {@link Entry entry} from the given {@code future}.
      */
-    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends M> future) {
+    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends @Nullable M> future) {
         return fromFuture(future, message -> Context.empty());
     }
 
@@ -206,10 +207,12 @@ public interface MessageStream<M extends Message> {
      * @return A stream containing at most one {@link Entry entry} from the given {@code future} with a {@link Context}
      * provided by the {@code contextSupplier}.
      */
-    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends M> future,
+    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends @Nullable M> future,
                                                     Function<M, Context> contextSupplier) {
+        //noinspection NullableProblems - null values are properly converted to empty streams.
         return new DelayedMessageStream.Single<>(
-                future.thenApply(message -> MessageStream.just(message, contextSupplier))
+                future.thenApply(message -> message == null ? MessageStream.empty() : MessageStream.just(message,
+                                                                                                         contextSupplier))
         );
     }
 
@@ -516,6 +519,21 @@ public interface MessageStream<M extends Message> {
     }
 
     /**
+     * Returns a stream that concatenates this stream with a stream created lazily by the given {@code next} supplier,
+     * if this stream completes successfully.
+     * <p>
+     * The supplier is invoked at most once, and only when a consumer first requests messages from the continuation
+     * stream. If this stream completes with an error the supplier is never called.
+     *
+     * @param next a supplier producing the {@code MessageStream} to append; invoked lazily on first access
+     * @return a stream concatenating this stream with the lazily-created stream from {@code next}
+     * @throws UnsupportedOperationException if this stream is unbounded
+     */
+    default MessageStream<M> concatWith(Supplier<MessageStream<M>> next) {
+        return concatWith(new LazyMessageStream<>(next));
+    }
+
+    /**
      * Returns a stream that invokes the given {@code completeHandler} when the stream completes normally.
      * Throws an exception if this stream is unbounded.
      *
@@ -664,7 +682,7 @@ public interface MessageStream<M extends Message> {
          * {@code null} if none were produced, or completed exceptionally if the stream fails.
          * @throws UnsupportedOperationException if this stream is unbounded
          */
-        default CompletableFuture<Entry<M>> asCompletableFuture() {
+        default CompletableFuture<@Nullable Entry<M>> asCompletableFuture() {
 
             /*
              * NOTE: We intentionally use full reduce-based consumption instead of a single next()

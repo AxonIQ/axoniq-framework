@@ -35,8 +35,6 @@ class IgnoredEntriesMessageStream<M extends Message>
         extends DelegatingMessageStream<M, Message>
         implements MessageStream.Empty<Message> {
 
-    private final Empty<Message> empty;
-
     /**
      * Constructs the IgnoreMessageStream with given {@code delegate} to receive and ignore entries from.
      *
@@ -44,22 +42,62 @@ class IgnoredEntriesMessageStream<M extends Message>
      */
     IgnoredEntriesMessageStream(MessageStream<M> delegate) {
         super(delegate);
-        this.empty = MessageStream.empty();
     }
 
     @Override
     public Optional<Entry<Message>> next() {
-        return delegate().next().flatMap(r -> Optional.empty());
-    }
-
-    @Override
-    public Optional<Entry<Message>> peek() {
+        consumeAvailable();
         return Optional.empty();
     }
 
     @Override
+    public Optional<Entry<Message>> peek() {
+        consumeAvailable();
+        return Optional.empty();
+    }
+
+    private void consumeAvailable() {
+        var d = delegate();
+        while (d.hasNextAvailable()) {
+            d.next();
+        }
+    }
+
+    @Override
     public Empty<Message> onNext(Consumer<Entry<Message>> onNext) {
-        return empty.onNext(onNext);
+        return this;
+    }
+
+    @Override
+    public Empty<Message> ignoreEntries() {
+        return this;
+    }
+
+    @Override
+    public boolean isCompleted() {
+        consumeAvailable();
+        return delegate().isCompleted();
+    }
+
+    @Override
+    public Optional<Throwable> error() {
+        consumeAvailable();
+        return delegate().error();
+    }
+
+    @Override
+    public boolean hasNextAvailable() {
+        consumeAvailable();
+        return delegate().hasNextAvailable();
+    }
+
+    @Override
+    public MessageStream<Message> concatWith(MessageStream<? extends Message> other) {
+        // Empty.concatWith() short-circuits to 'return other', skipping any pending async
+        // work in the delegate (e.g. a CompletableFuture returned by an async interceptor).
+        // Always create a ConcatenatingMessageStream that waits for this stream to complete
+        // before switching to 'other'.
+        return new ConcatenatingMessageStream<>(this, other);
     }
 
 }
