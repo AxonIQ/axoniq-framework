@@ -28,6 +28,8 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Represents a stream of {@link Entry entries} containing {@link Message Messages} of type {@code M} that can be
  * consumed as they become available.
@@ -186,7 +188,7 @@ public interface MessageStream<M extends Message> {
      * @param <M>    The type of {@link Message} contained in the {@link Entry entries} of this stream.
      * @return A stream containing at most one {@link Entry entry} from the given {@code future}.
      */
-    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends M> future) {
+    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends @Nullable M> future) {
         return fromFuture(future, message -> Context.empty());
     }
 
@@ -206,7 +208,7 @@ public interface MessageStream<M extends Message> {
      * @return A stream containing at most one {@link Entry entry} from the given {@code future} with a {@link Context}
      * provided by the {@code contextSupplier}.
      */
-    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends M> future,
+    static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends @Nullable M> future,
                                                     Function<M, Context> contextSupplier) {
         return DelayedMessageStream.createSingle(
                 future.thenApply(message -> MessageStream.just(message, contextSupplier))
@@ -216,11 +218,14 @@ public interface MessageStream<M extends Message> {
     /**
      * Create a stream containing the single given {@code message}, automatically wrapped in an {@link Entry}.
      * <p>
-     * Once the {@code Entry} is consumed, the stream is considered completed.
+     * Once the {@code Entry} is consumed, the stream is considered completed. If {@code message} is {@code null}, the
+     * returned stream contains no entries and behaves like {@link #empty()}.
      *
-     * @param message The {@link Message} to wrap in an {@link Entry} and return in the stream.
+     * @param message The {@link Message} to wrap in an {@link Entry} and return in the stream, or {@code null} to
+     *                produce an empty stream.
      * @param <M>     The type of {@link Message} given.
-     * @return A stream consisting of a single {@link Entry entry} wrapping the given {@code message}.
+     * @return A stream consisting of a single {@link Entry entry} wrapping the given {@code message}, or an
+     * {@link Empty empty stream} if {@code message} is {@code null}.
      */
     static <M extends Message> Single<M> just(@Nullable M message) {
         return just(message, m -> Context.empty());
@@ -229,21 +234,26 @@ public interface MessageStream<M extends Message> {
     /**
      * Create a stream containing the single given {@code message}, automatically wrapped in an {@link Entry}.
      * <p>
-     * Once the {@code Entry} is consumed, the stream is considered completed.
+     * Once the {@code Entry} is consumed, the stream is considered completed. If {@code message} is {@code null}, the
+     * returned stream contains no entries and behaves like {@link #empty()}; the {@code contextSupplier} is not
+     * invoked in that case.
      *
-     * @param message         The {@link Message} to wrap in an {@link Entry} and return in the stream.
+     * @param message         The {@link Message} to wrap in an {@link Entry} and return in the stream, or {@code null}
+     *                        to produce an empty stream.
      * @param contextSupplier A {@link Function} ingesting the given {@code message} returning the {@link Context} to
      *                        set for the {@link Entry} the {@code message} is wrapped in.
      * @param <M>             The type of {@link Message} given.
      * @return A stream consisting of a single {@link Entry entry} wrapping the given {@code message} with a
-     * {@link Context} provided by the {@code contextSupplier}.
+     * {@link Context} provided by the {@code contextSupplier}, or an {@link Empty empty stream} if {@code message}
+     * is {@code null}.
      */
     static <M extends Message> Single<M> just(@Nullable M message,
                                               Function<M, Context> contextSupplier) {
         if (message == null) {
             return empty().cast();
         }
-        return new SingleValueMessageStream<>(new SimpleEntry<>(message, contextSupplier.apply(message)));
+        var safeMsg = requireNonNull(message);
+        return new SingleValueMessageStream<>(new SimpleEntry<>(safeMsg, contextSupplier.apply(message)));
     }
 
     /**
