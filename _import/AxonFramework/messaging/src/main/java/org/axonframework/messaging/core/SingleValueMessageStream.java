@@ -76,7 +76,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
             return FetchResult.error(source.exceptionNow());
         }
 
-        Entry<M> current = source.getNow(null);
+        Entry<M> current = source.resultNow();
 
         return read.compareAndSet(false, true) ? FetchResult.of(current) : FetchResult.completed();
     }

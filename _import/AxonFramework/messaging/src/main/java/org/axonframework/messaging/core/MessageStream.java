@@ -112,9 +112,9 @@ public interface MessageStream<M extends Message> {
     static <M extends Message> MessageStream<M> fromIterable(Iterable<? extends M> iterable,
                                                              Function<? super M, ? extends Context> contextSupplier) {
         return new IteratorMessageStream<>(StreamSupport.stream(iterable.spliterator(), false)
-                                                        .<Entry<M>>map(message -> new SimpleEntry<M>(
-                                                            message,
-                                                            contextSupplier.apply(message)
+                                                        .<Entry<M>>map(message -> new SimpleEntry<>(
+                                                                message,
+                                                                contextSupplier.apply(message)
                                                         ))
                                                         .iterator());
     }
@@ -354,7 +354,7 @@ public interface MessageStream<M extends Message> {
      * The callback is called on an arbitrary thread, and it should keep work performed on this thread to a minimum
      * as this may interfere with other callbacks handled by the same thread. Any exception thrown by the callback
      * will result in the stream completing with this exception as the error, unless the callback was called to
-     * indicate completition.
+     * indicate completion.
      *
      * @param callback The callback to invoke when {@link Entry entries} are available for reading, or the stream
      *                 completes.
@@ -469,7 +469,8 @@ public interface MessageStream<M extends Message> {
      * stream.
      * @throws UnsupportedOperationException if this stream is unbounded
      */
-    default <R> CompletableFuture<R> reduce(R identity, BiFunction<R, ? super Entry<M>, R> accumulator) {
+    default <R> CompletableFuture<@Nullable R> reduce(@Nullable R identity,
+                                                      BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
         return MessageStreamUtils.reduce(this, identity, accumulator);
     }
 
@@ -682,7 +683,7 @@ public interface MessageStream<M extends Message> {
              * value-suppressing (ignoreEntries). This ensures correct lifecycle execution
              * regardless of stream transformations.
              */
-
+            //noinspection NullableProblems
             return reduce(null, (accumulator, entry) -> accumulator != null ? accumulator : entry);
         }
     }
