@@ -188,9 +188,11 @@ public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefin
             MessageHandlerInterceptorChain<Message> chain =
                     InterceptorChainParameterResolverFactory.currentInterceptorChain(context);
             if (chain == null) {
-                logger.error("No interceptor chain found in context for before-interceptor [{}]. "
-                                     + "The handler was invoked outside a properly configured interceptor chain.",
-                             signature());
+                if (logger.isErrorEnabled()) {
+                    logger.error("No interceptor chain found in context for before-interceptor [{}]. "
+                                         + "The handler was invoked outside a properly configured interceptor chain.",
+                                 signature());
+                }
                 return MessageStream.failed(new IllegalStateException(
                         "No interceptor chain found in context for before-interceptor [" + signature() + "]"
                 ));

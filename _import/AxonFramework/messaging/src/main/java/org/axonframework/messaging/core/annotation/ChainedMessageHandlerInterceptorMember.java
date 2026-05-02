@@ -78,6 +78,9 @@ public class ChainedMessageHandlerInterceptorMember<T> implements MessageHandler
                 : next.handle(message, context, target, handler);
     }
 
+    /**
+     * @deprecated in favor of {@link #handle(Message, ProcessingContext, Object, MessageHandlingMember)}
+     */
     @Override
     @Deprecated(forRemoval = true, since = "5.2.0")
     public Object handleSync(Message message,

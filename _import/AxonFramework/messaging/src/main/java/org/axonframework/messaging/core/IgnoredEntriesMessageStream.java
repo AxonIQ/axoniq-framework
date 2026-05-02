@@ -45,15 +45,14 @@ class IgnoredEntriesMessageStream<M extends Message>
     }
 
     @Override
-    public Optional<Entry<Message>> next() {
+    public final Optional<Entry<Message>> next() {
         consumeAvailable();
         return Optional.empty();
     }
 
     @Override
-    public Optional<Entry<Message>> peek() {
-        consumeAvailable();
-        return Optional.empty();
+    public final Optional<Entry<Message>> peek() {
+        return next();
     }
 
     private void consumeAvailable() {

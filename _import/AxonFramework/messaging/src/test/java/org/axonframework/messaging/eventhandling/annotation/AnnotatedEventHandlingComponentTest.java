@@ -57,7 +57,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1059,8 +1058,8 @@ class AnnotatedEventHandlingComponentTest {
             drainStream(result);
 
             // then - interceptor was skipped; handler ran normally
-            assertThat(log).doesNotContain("interceptor");
-            assertThat(log).contains("handler");
+            assertThat(log).doesNotContain("interceptor")
+                           .contains("handler");
         }
 
         @Test
@@ -1070,7 +1069,9 @@ class AnnotatedEventHandlingComponentTest {
                 @EventHandlerInterceptor
                 String intercept() { return "not void"; }
                 @EventHandler
-                void handle(Integer payload) { }
+                void handle(Integer payload) {
+                    // no-op; component needs a handler but invocation is never tested
+                }
             };
 
             // when / then
@@ -1084,9 +1085,13 @@ class AnnotatedEventHandlingComponentTest {
             // given - @ExceptionHandler is a result handler; combining it with a chain parameter is illegal
             var handler = new Object() {
                 @ExceptionHandler
-                void handleException(Exception e, MessageHandlerInterceptorChain<?> chain) { }
+                void handleException(Exception e, MessageHandlerInterceptorChain<?> chain) {
+                    // no-op; component needs a handler but invocation is never tested
+                }
                 @EventHandler
-                void handle(Integer payload) { }
+                void handle(Integer payload) {
+                    // no-op; component needs a handler but invocation is never tested
+                }
             };
 
             // when / then
@@ -1174,9 +1179,13 @@ class AnnotatedEventHandlingComponentTest {
 
         private static class BeforeInterceptorHandlerFixture {
             @EventHandlerInterceptor
-            void intercept() { }
+            void intercept() {
+                // no-op; interceptor framework exits before the body runs when no chain is in context
+            }
             @EventHandler
-            void handle(Integer payload) { }
+            void handle(Integer payload) {
+                // no-op; handler is never invoked in this test
+            }
         }
     }
 }
