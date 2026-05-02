@@ -208,7 +208,7 @@ public interface MessageStream<M extends Message> {
      */
     static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends M> future,
                                                     Function<M, Context> contextSupplier) {
-        return new DelayedMessageStream.Single<>(
+        return DelayedMessageStream.createSingle(
                 future.thenApply(message -> MessageStream.just(message, contextSupplier))
         );
     }
