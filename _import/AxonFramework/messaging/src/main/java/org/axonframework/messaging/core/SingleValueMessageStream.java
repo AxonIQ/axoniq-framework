@@ -16,6 +16,8 @@
 
 package org.axonframework.messaging.core;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
@@ -75,7 +77,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
             return FetchResult.error(source.exceptionNow());
         }
 
-        Entry<M> current = source.getNow(null);
+        Entry<M> current = source.resultNow();
 
         return read.compareAndSet(false, true) ? FetchResult.of(current) : FetchResult.completed();
     }
@@ -93,8 +95,8 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
     }
 
     @Override
-    public <R> CompletableFuture<R> reduce(R identity,
-                                           BiFunction<R, ? super Entry<M>, R> accumulator) {
+    public <R> CompletableFuture<@Nullable R> reduce(@Nullable R identity,
+                                           BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
         return source.thenApply(message -> accumulator.apply(identity, message));
     }
 
