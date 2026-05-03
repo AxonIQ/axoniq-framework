@@ -24,6 +24,7 @@ import org.axonframework.common.configuration.ModuleBuilder;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.CommandHandler;
 import org.axonframework.messaging.commandhandling.CommandHandlingComponent;
+import org.axonframework.messaging.commandhandling.CommandHandlingExceptionHandler;
 import org.axonframework.messaging.commandhandling.annotation.AnnotatedCommandHandlingComponent;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
@@ -205,5 +206,20 @@ public interface CommandHandlingModule extends Module, ModuleBuilder<CommandHand
                     c.getComponent(MessageConverter.class)
             ));
         }
+
+        /**
+         * Wraps the command handling component with the given {@code exceptionHandler}. When a command handler throws,
+         * the exception handler is invoked. Return {@link org.axonframework.messaging.core.MessageStream#empty()} to
+         * suppress the error, {@link org.axonframework.messaging.core.MessageStream#failed(Throwable)} to propagate
+         * it, or a stream with a {@link org.axonframework.messaging.commandhandling.CommandResultMessage} to substitute
+         * a result.
+         * <p>
+         * Multiple calls accumulate handlers in registration order: the first registered handler sees the exception
+         * first.
+         *
+         * @param exceptionHandler the exception handler to apply to the command handling component
+         * @return this phase for further configuration
+         */
+        CommandHandlerPhase withExceptionHandler(CommandHandlingExceptionHandler exceptionHandler);
     }
 }

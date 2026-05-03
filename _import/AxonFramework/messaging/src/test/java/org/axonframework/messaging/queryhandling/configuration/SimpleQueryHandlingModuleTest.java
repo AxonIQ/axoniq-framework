@@ -23,17 +23,24 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.StubLifecycleRegistry;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.correlation.CorrelationDataProviderRegistry;
 import org.axonframework.messaging.core.correlation.DefaultCorrelationDataProviderRegistry;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryHandlingComponent;
 import org.junit.jupiter.api.*;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -206,5 +213,135 @@ class SimpleQueryHandlingModuleTest {
     void commandHandlingThrowsNullPointerExceptionForNullQueryHandlerPhaseConsumer() {
         //noinspection DataFlowIssue
         assertThrows(NullPointerException.class, () -> setupPhase.queryHandlers(null));
+    }
+
+    @Nested
+    class WithExceptionHandlerTest {
+
+        private static final QualifiedName QUERY_NAME_LOCAL = new QualifiedName("test-query");
+        private static final GenericQueryMessage SAMPLE_QUERY =
+                new GenericQueryMessage(new MessageType("test-query"), "payload");
+        private static final StubProcessingContext STUB_PROCESSING_CONTEXT = new StubProcessingContext();
+
+        private static QueryHandlingComponent buildComponent(QueryHandlingModule.QueryHandlerPhase phase) {
+            var moduleName = "test-ex";
+            Configuration config = phase.build()
+                                        .build(MessagingConfigurer.create().build(), new StubLifecycleRegistry());
+            return config.getOptionalComponent(QueryHandlingComponent.class,
+                                               "QueryHandlingComponent[" + moduleName + "]")
+                         .orElseThrow();
+        }
+
+        @Test
+        void exceptionHandlerIsInvokedWhenHandlerThrows() {
+            // given
+            List<String> invocationLog = new ArrayList<>();
+            var component = buildComponent(
+                    QueryHandlingModule.named("test-ex")
+                                       .queryHandlers()
+                                       .queryHandler(QUERY_NAME_LOCAL,
+                                                     (q, ctx) -> MessageStream.failed(new RuntimeException("handler failed")))
+                                       .withExceptionHandler((q, ctx, error) -> {
+                                           invocationLog.add("exceptionHandler");
+                                           return MessageStream.empty();
+                                       })
+            );
+
+            // when
+            var result = component.handle(SAMPLE_QUERY, STUB_PROCESSING_CONTEXT);
+            result.peek(); // force lazy evaluation of the onErrorContinue chain
+
+            // then
+            assertThat(invocationLog).containsExactly("exceptionHandler");
+        }
+
+        @Test
+        void exceptionHandlerCanSuppressException() {
+            // given
+            var component = buildComponent(
+                    QueryHandlingModule.named("test-ex")
+                                       .queryHandlers()
+                                       .queryHandler(QUERY_NAME_LOCAL,
+                                                     (q, ctx) -> MessageStream.failed(new RuntimeException("handler failed")))
+                                       .withExceptionHandler((q, ctx, error) -> MessageStream.empty())
+            );
+
+            // when - exception handler returns empty, suppressing the error
+            var result = component.handle(SAMPLE_QUERY, STUB_PROCESSING_CONTEXT);
+            result.peek(); // force lazy evaluation of the onErrorContinue chain
+
+            // then
+            assertThat(result.error()).isEmpty();
+        }
+
+        @Test
+        void exceptionHandlerCanPropagateError() {
+            // given
+            var component = buildComponent(
+                    QueryHandlingModule.named("test-ex")
+                                       .queryHandlers()
+                                       .queryHandler(QUERY_NAME_LOCAL,
+                                                     (q, ctx) -> MessageStream.failed(new RuntimeException("original")))
+                                       .withExceptionHandler((q, ctx, error) -> MessageStream.failed(new IOException("wrapped")))
+            );
+
+            // when - exception handler returns a failed stream, the error propagates
+            var result = component.handle(SAMPLE_QUERY, STUB_PROCESSING_CONTEXT);
+            result.peek(); // force lazy evaluation of the onErrorContinue chain
+
+            // then
+            assertThat(result.error()).isPresent();
+            assertThat(result.error().get()).isInstanceOf(IOException.class).hasMessage("wrapped");
+        }
+
+        @Test
+        void exceptionHandlerUnexpectedThrowIsWrappedInFailedStream() {
+            // given
+            var component = buildComponent(
+                    QueryHandlingModule.named("test-ex")
+                                       .queryHandlers()
+                                       .queryHandler(QUERY_NAME_LOCAL,
+                                                     (q, ctx) -> MessageStream.failed(new RuntimeException("original")))
+                                       .withExceptionHandler((q, ctx, error) -> {
+                                           throw new RuntimeException("unexpected");
+                                       })
+            );
+
+            // when - exception handler throws unexpectedly, the thrown exception propagates as a failed stream
+            var result = component.handle(SAMPLE_QUERY, STUB_PROCESSING_CONTEXT);
+            result.peek(); // force lazy evaluation of the onErrorContinue chain
+
+            // then
+            assertThat(result.error()).isPresent();
+            assertThat(result.error().get()).isInstanceOf(RuntimeException.class).hasMessage("unexpected");
+        }
+
+        @Test
+        void firstRegisteredHandlerSeesExceptionFirst() {
+            // given
+            List<String> invocationLog = new ArrayList<>();
+            var component = buildComponent(
+                    QueryHandlingModule.named("test-ex")
+                                       .queryHandlers()
+                                       .queryHandler(QUERY_NAME_LOCAL,
+                                                     (q, ctx) -> MessageStream.failed(new RuntimeException("handler failed")))
+                                       .withExceptionHandler((q, ctx, error) -> {
+                                           // first registered: logs and propagates so second can also run
+                                           invocationLog.add("first");
+                                           return MessageStream.failed(error);
+                                       })
+                                       .withExceptionHandler((q, ctx, error) -> {
+                                           invocationLog.add("second");
+                                           return MessageStream.empty();
+                                       })
+            );
+
+            // when
+            var result = component.handle(SAMPLE_QUERY, STUB_PROCESSING_CONTEXT);
+            result.peek(); // force lazy evaluation of the onErrorContinue chain
+
+            // then - first registered handler runs first
+            assertThat(invocationLog).containsExactly("first", "second");
+        }
     }
 }

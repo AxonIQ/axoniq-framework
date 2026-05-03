@@ -30,6 +30,7 @@ import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.axonframework.messaging.queryhandling.QueryHandlingComponent;
+import org.axonframework.messaging.queryhandling.QueryHandlingExceptionHandler;
 import org.axonframework.messaging.queryhandling.annotation.AnnotatedQueryHandlingComponent;
 
 import java.util.function.Consumer;
@@ -207,5 +208,20 @@ public interface QueryHandlingModule extends Module, ModuleBuilder<QueryHandling
                     c.getComponent(MessageConverter.class)
             ));
         }
+
+        /**
+         * Wraps the query handling component with the given {@code exceptionHandler}. When a query handler throws, the
+         * exception handler is invoked. Return {@link org.axonframework.messaging.core.MessageStream#empty()} to
+         * suppress the error, {@link org.axonframework.messaging.core.MessageStream#failed(Throwable)} to propagate
+         * it, or a stream of {@link org.axonframework.messaging.queryhandling.QueryResponseMessage} items to substitute
+         * results.
+         * <p>
+         * Multiple calls accumulate handlers in registration order: the first registered handler sees the exception
+         * first.
+         *
+         * @param exceptionHandler the exception handler to apply to the query handling component
+         * @return this phase for further configuration
+         */
+        QueryHandlerPhase withExceptionHandler(QueryHandlingExceptionHandler exceptionHandler);
     }
 }

@@ -19,7 +19,9 @@ package org.axonframework.messaging.commandhandling.configuration;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.CommandHandler;
 import org.axonframework.messaging.commandhandling.CommandHandlingComponent;
+import org.axonframework.messaging.commandhandling.CommandHandlingExceptionHandler;
 import org.axonframework.messaging.commandhandling.SimpleCommandHandlingComponent;
+import org.axonframework.messaging.commandhandling.interception.ErrorHandlingCommandHandlingComponent;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -52,12 +54,14 @@ class SimpleCommandHandlingModule extends BaseModule<SimpleCommandHandlingModule
     private final String commandHandlingComponentName;
     private final Map<QualifiedName, ComponentBuilder<CommandHandler>> handlerBuilders;
     private final List<ComponentBuilder<CommandHandlingComponent>> handlingComponentBuilders;
+    private final List<CommandHandlingExceptionHandler> exceptionHandlers;
 
     SimpleCommandHandlingModule(String moduleName) {
         super(requireNonNull(moduleName, "The module name cannot be null."));
         this.commandHandlingComponentName = "CommandHandlingComponent[" + moduleName + "]";
         this.handlerBuilders = new HashMap<>();
         this.handlingComponentBuilders = new ArrayList<>();
+        this.exceptionHandlers = new ArrayList<>();
     }
 
     @Override
@@ -84,6 +88,12 @@ class SimpleCommandHandlingModule extends BaseModule<SimpleCommandHandlingModule
     }
 
     @Override
+    public CommandHandlerPhase withExceptionHandler(CommandHandlingExceptionHandler exceptionHandler) {
+        exceptionHandlers.add(requireNonNull(exceptionHandler, "The exception handler must not be null."));
+        return this;
+    }
+
+    @Override
     public CommandHandlingModule build() {
         registerCommandHandlingComponent();
         return this;
@@ -102,7 +112,11 @@ class SimpleCommandHandlingModule extends BaseModule<SimpleCommandHandlingModule
                     handlingComponentBuilders.forEach(handlingComponent -> commandHandlingComponent.subscribe(
                             handlingComponent.build(c)));
                     handlerBuilders.forEach((key, value) -> commandHandlingComponent.subscribe(key, value.build(c)));
-                    return commandHandlingComponent;
+                    CommandHandlingComponent result = commandHandlingComponent;
+                    for (CommandHandlingExceptionHandler handler : exceptionHandlers) {
+                        result = new ErrorHandlingCommandHandlingComponent(result, handler);
+                    }
+                    return result;
                 })
                 .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (configuration, component) -> {
                     configuration.getComponent(CommandBus.class)

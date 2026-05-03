@@ -25,7 +25,9 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.axonframework.messaging.queryhandling.QueryHandlingComponent;
+import org.axonframework.messaging.queryhandling.QueryHandlingExceptionHandler;
 import org.axonframework.messaging.queryhandling.SimpleQueryHandlingComponent;
+import org.axonframework.messaging.queryhandling.interception.ErrorHandlingQueryHandlingComponent;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,12 +51,14 @@ class SimpleQueryHandlingModule extends BaseModule<SimpleQueryHandlingModule>
     private final String queryHandlingComponentName;
     private final Map<QualifiedName, ComponentBuilder<QueryHandler>> handlerBuilders;
     private final List<ComponentBuilder<QueryHandlingComponent>> handlingComponentBuilders;
+    private final List<QueryHandlingExceptionHandler> exceptionHandlers;
 
     SimpleQueryHandlingModule(String moduleName) {
         super(requireNonNull(moduleName, "The module name cannot be null."));
         this.queryHandlingComponentName = "QueryHandlingComponent[" + moduleName + "]";
         this.handlerBuilders = new HashMap<>();
         this.handlingComponentBuilders = new ArrayList<>();
+        this.exceptionHandlers = new ArrayList<>();
     }
 
     @Override
@@ -81,6 +85,12 @@ class SimpleQueryHandlingModule extends BaseModule<SimpleQueryHandlingModule>
     }
 
     @Override
+    public QueryHandlerPhase withExceptionHandler(QueryHandlingExceptionHandler exceptionHandler) {
+        exceptionHandlers.add(requireNonNull(exceptionHandler, "The exception handler must not be null."));
+        return this;
+    }
+
+    @Override
     public QueryHandlingModule build() {
         registerQueryHandlingComponent();
         return this;
@@ -99,7 +109,11 @@ class SimpleQueryHandlingModule extends BaseModule<SimpleQueryHandlingModule>
                     handlingComponentBuilders.forEach(handlingComponent -> queryHandlingComponent.subscribe(
                             handlingComponent.build(c)));
                     handlerBuilders.forEach((key, value) -> queryHandlingComponent.subscribe(key, value.build(c)));
-                    return queryHandlingComponent;
+                    QueryHandlingComponent result = queryHandlingComponent;
+                    for (QueryHandlingExceptionHandler handler : exceptionHandlers) {
+                        result = new ErrorHandlingQueryHandlingComponent(result, handler);
+                    }
+                    return result;
                 })
                 .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (configuration, component) -> {
                     configuration.getComponent(QueryBus.class)
