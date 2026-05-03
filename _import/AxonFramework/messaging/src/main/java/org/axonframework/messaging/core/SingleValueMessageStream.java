@@ -99,7 +99,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
 
     @Override
     public <R> CompletableFuture<@Nullable R> reduce(@Nullable R identity,
-                                                     BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
+                                           BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
         return source.thenApply(message -> accumulator.apply(identity, message));
     }
 
