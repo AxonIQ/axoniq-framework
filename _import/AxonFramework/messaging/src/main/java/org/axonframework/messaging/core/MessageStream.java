@@ -675,7 +675,7 @@ public interface MessageStream<M extends Message> {
          * {@code null} if none were produced, or completed exceptionally if the stream fails.
          * @throws UnsupportedOperationException if this stream is unbounded
          */
-        default CompletableFuture<Entry<M>> asCompletableFuture() {
+        default CompletableFuture<@Nullable Entry<M>> asCompletableFuture() {
 
             /*
              * NOTE: We intentionally use full reduce-based consumption instead of a single next()
@@ -683,7 +683,6 @@ public interface MessageStream<M extends Message> {
              * value-suppressing (ignoreEntries). This ensures correct lifecycle execution
              * regardless of stream transformations.
              */
-            //noinspection NullableProblems
             return reduce(null, (accumulator, entry) -> accumulator != null ? accumulator : entry);
         }
     }
