@@ -937,9 +937,7 @@ class AnnotatedEventHandlingComponentTest {
             // when
             var result = component.handle(event, simpleContext(event));
 
-            // then - interceptor ran eagerly during handle(), handler not yet
-            assertThat(log).containsExactly("interceptor");
-            drainStream(result);
+            // then
             assertThat(log).containsExactly("interceptor", "handler");
         }
 
@@ -1152,7 +1150,7 @@ class AnnotatedEventHandlingComponentTest {
             interceptorFuture.completeExceptionally(new RuntimeException("interceptor failed"));
 
             // then - the error propagates through the stream and the handler is never called
-            assertThat(result.reduce("null", (acc, e) -> "null")).isCompletedExceptionally();
+            assertThat(result.reduce(null, (acc, e) -> null)).isCompletedExceptionally();
             assertThat(log).isEmpty();
         }
 
@@ -1172,6 +1170,7 @@ class AnnotatedEventHandlingComponentTest {
             // then
             assertThat(result.isCompleted()).isTrue();
             assertThat(result.error()).isPresent();
+            //noinspection OptionalGetWithoutIsPresent
             assertThat(result.error().get())
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("No interceptor chain found in context for before-interceptor");
