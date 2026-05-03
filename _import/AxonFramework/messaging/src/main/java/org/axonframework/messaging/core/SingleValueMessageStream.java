@@ -67,11 +67,11 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
         this.source = Objects.requireNonNull(source, "The source parameter must not be null.");
 
         source.thenApply(e -> Objects.requireNonNull(e, "SingleValueMessageStream source completed with null entry"))
-            .whenComplete((e, t) -> signalProgress());
+              .whenComplete((e, t) -> signalProgress());
     }
 
     @Override
-    public CompletableFuture<@Nullable Entry<M>> asCompletableFuture() {
+    public CompletableFuture<Entry<M>> asCompletableFuture() {
         return source;
     }
 
