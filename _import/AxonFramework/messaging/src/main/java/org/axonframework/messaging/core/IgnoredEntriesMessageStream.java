@@ -16,8 +16,7 @@
 
 package org.axonframework.messaging.core;
 
-import java.util.Optional;
-import java.util.function.Consumer;
+import org.axonframework.messaging.core.MessageStream.Entry;
 
 /**
  * Implementation of the {@link MessageStream} that ignores all {@link Entry entries} of the {@code delegate} stream and
@@ -29,11 +28,13 @@ import java.util.function.Consumer;
  *
  * @param <M> The type of {@link Message} from the delegate stream that will be ignored.
  * @author Mateusz Nowak
+ * @author John Hendrikx
  * @since 5.0.0
  */
-class IgnoredEntriesMessageStream<M extends Message>
-        extends DelegatingMessageStream<M, Message>
+class IgnoredEntriesMessageStream<M extends Message> extends AbstractMessageStream<Message>
         implements MessageStream.Empty<Message> {
+
+    private final MessageStream<M> delegate;
 
     /**
      * Constructs the IgnoreMessageStream with given {@code delegate} to receive and ignore entries from.
@@ -41,53 +42,45 @@ class IgnoredEntriesMessageStream<M extends Message>
      * @param delegate The instance to delegate calls to.
      */
     IgnoredEntriesMessageStream(MessageStream<M> delegate) {
-        super(delegate);
-    }
+        this.delegate = delegate;
 
-    @Override
-    public final Optional<Entry<Message>> next() {
-        consumeAvailable();
-        return Optional.empty();
-    }
+        delegate.setCallback(this::onDelegateProgress);
 
-    @Override
-    public final Optional<Entry<Message>> peek() {
-        return next();
-    }
-
-    private void consumeAvailable() {
-        var d = delegate();
-        while (d.hasNextAvailable()) {
-            d.next();
+        if (delegate.isCompleted()) {
+            initialize(delegate.error()
+                               .map(FetchResult::<Entry<Message>>error)
+                               .orElse(FetchResult.completed())
+            );
         }
     }
 
-    @Override
-    public Empty<Message> onNext(Consumer<Entry<Message>> onNext) {
-        return this;
+    private void onDelegateProgress() {
+        while (delegate.hasNextAvailable()) {
+            delegate.next();
+        }
+
+        signalProgress();
     }
 
     @Override
-    public Empty<Message> ignoreEntries() {
-        return this;
+    protected FetchResult<Entry<Message>> fetchNext() {
+        if (delegate.isCompleted()) {
+            return delegate.error()
+                           .map(FetchResult::<Entry<Message>>error)
+                           .orElse(FetchResult.completed());
+        }
+
+        return FetchResult.notReady();
     }
 
     @Override
-    public boolean isCompleted() {
-        consumeAvailable();
-        return delegate().isCompleted();
+    protected void onCompleted() {
+        delegate.close();
     }
 
     @Override
-    public Optional<Throwable> error() {
-        consumeAvailable();
-        return delegate().error();
-    }
-
-    @Override
-    public boolean hasNextAvailable() {
-        consumeAvailable();
-        return delegate().hasNextAvailable();
+    protected String describeDelegates() {
+        return delegate.toString();
     }
 
     @Override

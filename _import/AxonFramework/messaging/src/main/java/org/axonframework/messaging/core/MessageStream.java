@@ -29,6 +29,8 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Represents a stream of {@link Entry entries} containing {@link Message Messages} of type {@code M} that can be
  * consumed as they become available.
@@ -111,7 +113,7 @@ public interface MessageStream<M extends Message> {
     static <M extends Message> MessageStream<M> fromIterable(Iterable<? extends M> iterable,
                                                              Function<? super M, ? extends Context> contextSupplier) {
         return new IteratorMessageStream<>(StreamSupport.stream(iterable.spliterator(), false)
-                                                        .<Entry<M>>map(message -> new SimpleEntry<M>(
+                                                        .<Entry<M>>map(message -> new SimpleEntry<>(
                                                                 message,
                                                                 contextSupplier.apply(message)
                                                         ))
@@ -209,21 +211,22 @@ public interface MessageStream<M extends Message> {
      */
     static <M extends Message> Single<M> fromFuture(CompletableFuture<? extends @Nullable M> future,
                                                     Function<M, Context> contextSupplier) {
-        //noinspection NullableProblems - null values are properly converted to empty streams.
-        return new DelayedMessageStream.Single<>(
-                future.thenApply(message -> message == null ? MessageStream.empty() : MessageStream.just(message,
-                                                                                                         contextSupplier))
+        return DelayedMessageStream.createSingle(
+                future.thenApply(message -> MessageStream.just(message, contextSupplier))
         );
     }
 
     /**
      * Create a stream containing the single given {@code message}, automatically wrapped in an {@link Entry}.
      * <p>
-     * Once the {@code Entry} is consumed, the stream is considered completed.
+     * Once the {@code Entry} is consumed, the stream is considered completed. If {@code message} is {@code null}, the
+     * returned stream contains no entries and behaves like {@link #empty()}.
      *
-     * @param message The {@link Message} to wrap in an {@link Entry} and return in the stream.
+     * @param message The {@link Message} to wrap in an {@link Entry} and return in the stream, or {@code null} to
+     *                produce an empty stream.
      * @param <M>     The type of {@link Message} given.
-     * @return A stream consisting of a single {@link Entry entry} wrapping the given {@code message}.
+     * @return A stream consisting of a single {@link Entry entry} wrapping the given {@code message}, or an
+     * {@link Empty empty stream} if {@code message} is {@code null}.
      */
     static <M extends Message> Single<M> just(@Nullable M message) {
         return just(message, m -> Context.empty());
@@ -232,21 +235,26 @@ public interface MessageStream<M extends Message> {
     /**
      * Create a stream containing the single given {@code message}, automatically wrapped in an {@link Entry}.
      * <p>
-     * Once the {@code Entry} is consumed, the stream is considered completed.
+     * Once the {@code Entry} is consumed, the stream is considered completed. If {@code message} is {@code null}, the
+     * returned stream contains no entries and behaves like {@link #empty()}; the {@code contextSupplier} is not
+     * invoked in that case.
      *
-     * @param message         The {@link Message} to wrap in an {@link Entry} and return in the stream.
+     * @param message         The {@link Message} to wrap in an {@link Entry} and return in the stream, or {@code null}
+     *                        to produce an empty stream.
      * @param contextSupplier A {@link Function} ingesting the given {@code message} returning the {@link Context} to
      *                        set for the {@link Entry} the {@code message} is wrapped in.
      * @param <M>             The type of {@link Message} given.
      * @return A stream consisting of a single {@link Entry entry} wrapping the given {@code message} with a
-     * {@link Context} provided by the {@code contextSupplier}.
+     * {@link Context} provided by the {@code contextSupplier}, or an {@link Empty empty stream} if {@code message}
+     * is {@code null}.
      */
     static <M extends Message> Single<M> just(@Nullable M message,
                                               Function<M, Context> contextSupplier) {
         if (message == null) {
             return empty().cast();
         }
-        return new SingleValueMessageStream<>(new SimpleEntry<>(message, contextSupplier.apply(message)));
+        var safeMsg = requireNonNull(message);
+        return new SingleValueMessageStream<>(new SimpleEntry<>(safeMsg, contextSupplier.apply(message)));
     }
 
     /**
@@ -347,7 +355,7 @@ public interface MessageStream<M extends Message> {
      * The callback is called on an arbitrary thread, and it should keep work performed on this thread to a minimum
      * as this may interfere with other callbacks handled by the same thread. Any exception thrown by the callback
      * will result in the stream completing with this exception as the error, unless the callback was called to
-     * indicate completition.
+     * indicate completion.
      *
      * @param callback The callback to invoke when {@link Entry entries} are available for reading, or the stream
      *                 completes.
@@ -462,7 +470,8 @@ public interface MessageStream<M extends Message> {
      * stream.
      * @throws UnsupportedOperationException if this stream is unbounded
      */
-    default <R> CompletableFuture<R> reduce(R identity, BiFunction<R, ? super Entry<M>, R> accumulator) {
+    default <R> CompletableFuture<@Nullable R> reduce(@Nullable R identity,
+                                                      BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
         return MessageStreamUtils.reduce(this, identity, accumulator);
     }
 
@@ -690,7 +699,6 @@ public interface MessageStream<M extends Message> {
              * value-suppressing (ignoreEntries). This ensures correct lifecycle execution
              * regardless of stream transformations.
              */
-
             return reduce(null, (accumulator, entry) -> accumulator != null ? accumulator : entry);
         }
     }
