@@ -67,6 +67,8 @@ public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefin
             extends WrappedMessageHandlingMember<T>
             implements MessageInterceptingMember<T> {
 
+        private static final Logger logger =
+                LoggerFactory.getLogger(ResultHandlingInterceptorMember.class);
         private final Class<?> expectedResultType;
 
         public ResultHandlingInterceptorMember(MessageHandlingMember<T> original, Class<?> expectedResultType) {
@@ -114,12 +116,11 @@ public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefin
                 if (!expectedResultType.isInstance(e)) {
                     throw e;
                 }
-                return ResultParameterResolverFactory.callWithResult(e, () -> {
-                    if (super.canHandle(message, context)) {
-                        return super.handleSync(message, context, target);
-                    }
-                    throw e;
-                });
+                ProcessingContext contextWithException = ResultParameterResolverFactory.withResult(e, context);
+                if (super.canHandle(message, contextWithException)) {
+                    return super.handleSync(message, contextWithException, target);
+                }
+                throw e;
             }
         }
 
@@ -127,9 +128,19 @@ public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefin
         public MessageStream<?> handle(Message message,
                                        ProcessingContext context,
                                        @Nullable T target) {
-            return InterceptorChainParameterResolverFactory.currentInterceptorChain(context)
-                                                           .proceed(message, context)
-                                                           .onErrorContinue(error -> {
+            MessageHandlerInterceptorChain<Message> chain = InterceptorChainParameterResolverFactory.currentInterceptorChain(
+                    context);
+            if (chain == null) {
+                if (logger.isErrorEnabled()) {
+                    logger.error("No interceptor chain found in context for exception handler [{}]. "
+                                         + "The handler was invoked outside a properly configured interceptor chain.",
+                                 signature());
+                }
+                return MessageStream.failed(new IllegalStateException(
+                        "No interceptor chain found in context for exception handler [" + signature() + "]"
+                ));
+            }
+            return chain.proceed(message, context).onErrorContinue(error -> {
                       if (!expectedResultType.isInstance(error)) {
                           return MessageStream.failed(error);
                       }

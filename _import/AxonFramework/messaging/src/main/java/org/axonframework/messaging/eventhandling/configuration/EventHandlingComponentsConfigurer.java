@@ -24,9 +24,11 @@ import org.axonframework.messaging.core.annotation.ClasspathHandlerDefinition;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
+import org.axonframework.messaging.eventhandling.EventHandlingExceptionHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.AnnotatedEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventhandling.interception.ErrorHandlingEventHandlingComponent;
 
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -166,6 +168,23 @@ public interface EventHandlingComponentsConfigurer {
         CompletePhase intercepted(
                 ComponentBuilder<MessageHandlerInterceptor<? super EventMessage>> interceptorBuilder
         );
+
+        /**
+         * Wraps all event handling components with the given {@code exceptionHandler}. When a handler throws, the
+         * exception handler is invoked. Return normally from the handler to suppress the exception; throw to let it
+         * propagate to the event processor.
+         * <p>
+         * Multiple calls accumulate handlers in registration order: the first registered handler sees the exception
+         * first.
+         *
+         * @param exceptionHandler the exception handler to apply to all components
+         * @return this phase for further configuration
+         */
+        default CompletePhase withExceptionHandler(EventHandlingExceptionHandler exceptionHandler) {
+            requireNonNull(exceptionHandler, "The exception handler must not be null.");
+            return decorated((config, component) -> new ErrorHandlingEventHandlingComponent(component,
+                                                                                            exceptionHandler));
+        }
 
         /**
          * Returns the configured map of event handling components.

@@ -33,6 +33,7 @@ import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.interception.InterceptingEventHandlingComponent;
 import org.junit.jupiter.api.*;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -255,6 +256,126 @@ class DefaultEventHandlingComponentsConfigurerTest {
 
             // then
             assertThat(invocationLog).containsExactly("interceptor");
+        }
+    }
+
+    @Nested
+    class WithExceptionHandlerTest {
+
+        private final EventMessage sampleEvent = EventTestUtils.asEventMessage("payload");
+        private final MessagingConfigurer configurer = MessagingConfigurer.create();
+
+        @Test
+        void exceptionHandlerIsInvokedWhenHandlerThrows() {
+            // given
+            List<String> invocationLog = new ArrayList<>();
+            var component = SimpleEventHandlingComponent.create("comp");
+            component.subscribe(new QualifiedName(String.class),
+                                (e, c) -> MessageStream.failed(new RuntimeException("handler failed")));
+
+            var builtComponent = new DefaultEventHandlingComponentsConfigurer()
+                    .declarative("comp", cfg -> component)
+                    .withExceptionHandler((event, context, error) -> { invocationLog.add("exceptionHandler"); return MessageStream.empty(); })
+                    .toMap()
+                    .get("comp")
+                    .build(configurer.build());
+
+            // when
+            builtComponent.handle(sampleEvent, STUB_PROCESSING_CONTEXT);
+
+            // then
+            assertThat(invocationLog).containsExactly("exceptionHandler");
+        }
+
+        @Test
+        void exceptionHandlerCanSuppressException() {
+            // given
+            var component = SimpleEventHandlingComponent.create("comp");
+            component.subscribe(new QualifiedName(String.class),
+                                (e, c) -> MessageStream.failed(new RuntimeException("handler failed")));
+
+            var builtComponent = new DefaultEventHandlingComponentsConfigurer()
+                    .declarative("comp", cfg -> component)
+                    .withExceptionHandler((event, context, error) -> MessageStream.empty())
+                    .toMap()
+                    .get("comp")
+                    .build(configurer.build());
+
+            // when - exception handler returns normally, suppressing the error
+            var result = builtComponent.handle(sampleEvent, STUB_PROCESSING_CONTEXT);
+
+            // then
+            assertThat(result.error()).isEmpty();
+        }
+
+        @Test
+        void exceptionHandlerCanPropagateError() {
+            // given
+            var component = SimpleEventHandlingComponent.create("comp");
+            component.subscribe(new QualifiedName(String.class),
+                                (e, c) -> MessageStream.failed(new RuntimeException("original")));
+
+            var builtComponent = new DefaultEventHandlingComponentsConfigurer()
+                    .declarative("comp", cfg -> component)
+                    .withExceptionHandler((event, context, error) -> MessageStream.failed(new IOException("wrapped")))
+                    .toMap()
+                    .get("comp")
+                    .build(configurer.build());
+
+            // when - exception handler returns a failed stream, the error propagates
+            var result = builtComponent.handle(sampleEvent, STUB_PROCESSING_CONTEXT);
+
+            // then
+            assertThat(result.error()).isPresent();
+            assertThat(result.error().get()).isInstanceOf(IOException.class).hasMessage("wrapped");
+        }
+
+        @Test
+        void exceptionHandlerUnexpectedThrowIsWrappedInFailedStream() {
+            // given
+            var component = SimpleEventHandlingComponent.create("comp");
+            component.subscribe(new QualifiedName(String.class),
+                                (e, c) -> MessageStream.failed(new RuntimeException("original")));
+
+            var builtComponent = new DefaultEventHandlingComponentsConfigurer()
+                    .declarative("comp", cfg -> component)
+                    .withExceptionHandler((event, context, error) -> { throw new RuntimeException("unexpected"); })
+                    .toMap()
+                    .get("comp")
+                    .build(configurer.build());
+
+            // when - exception handler throws unexpectedly, the thrown exception propagates as a failed stream
+            var result = builtComponent.handle(sampleEvent, STUB_PROCESSING_CONTEXT);
+
+            // then
+            assertThat(result.error()).isPresent();
+            assertThat(result.error().get()).isInstanceOf(RuntimeException.class).hasMessage("unexpected");
+        }
+
+        @Test
+        void exceptionHandlerIsAppliedToAllComponents() {
+            // given
+            List<String> invocationLog = new ArrayList<>();
+            var comp1 = SimpleEventHandlingComponent.create("comp1");
+            comp1.subscribe(new QualifiedName(String.class),
+                            (e, c) -> MessageStream.failed(new RuntimeException("fail1")));
+            var comp2 = SimpleEventHandlingComponent.create("comp2");
+            comp2.subscribe(new QualifiedName(String.class),
+                            (e, c) -> MessageStream.failed(new RuntimeException("fail2")));
+
+            var built = new DefaultEventHandlingComponentsConfigurer()
+                    .declarative("comp1", cfg -> comp1)
+                    .declarative("comp2", cfg -> comp2)
+                    .withExceptionHandler((event, context, error) -> { invocationLog.add(error.getMessage()); return MessageStream.empty(); })
+                    .toMap();
+            var cfg = configurer.build();
+
+            // when
+            built.get("comp1").build(cfg).handle(sampleEvent, STUB_PROCESSING_CONTEXT);
+            built.get("comp2").build(cfg).handle(sampleEvent, STUB_PROCESSING_CONTEXT);
+
+            // then
+            assertThat(invocationLog).containsExactly("fail1", "fail2");
         }
     }
 

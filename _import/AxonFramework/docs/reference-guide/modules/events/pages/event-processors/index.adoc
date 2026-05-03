@@ -306,6 +306,26 @@ public class AxonConfig {
 }
 ----
 
+Use `withExceptionHandler()` to handle exceptions thrown by event handlers in all components managed by the configurer.
+Return `MessageStream.empty()` to suppress the exception and allow event processing to continue.
+Return `MessageStream.failed(error)` (with the same or a different exception) to propagate the error to the event processor:
+
+[source,java]
+----
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer;
+
+private EventHandlingComponentsConfigurer.CompletePhase configureHandlingComponents(
+        EventHandlingComponentsConfigurer.RequiredComponentPhase componentConfigurer
+) {
+    return componentConfigurer.autodetected("orderHandler", cfg -> new OrderEventHandler())
+                              .withExceptionHandler((event, context, error) -> {
+                                  log.warn("Handler failed for {}: {}", event.qualifiedName(), error.getMessage());
+                                  return MessageStream.empty(); // suppress; use MessageStream.failed(error) to propagate
+                              });
+}
+----
+
 ==== Annotated interceptors on the handler class
 
 Methods on the handler class itself can be annotated with `@EventHandlerInterceptor`.
@@ -375,6 +395,38 @@ public class TenantScopedEventHandler {
 
     @EventHandler
     void on(OrderPlaced event) { ... }
+}
+----
+
+`@ExceptionHandler` methods handle exceptions thrown by `@EventHandler` methods on the same component.
+When an event handler throws, the framework looks for a matching `@ExceptionHandler` on the same component before propagating the error.
+If the method returns normally, the exception is suppressed and event processing continues; if the method throws (or re-throws), the exception propagates.
+
+Use the `resultType` attribute to narrow the handler to a specific exception type.
+Without it, the method is eligible for any exception that matches its declared parameter type (or any exception if there are no parameters).
+
+[source,java]
+----
+import org.axonframework.messaging.eventhandling.annotation.EventHandler;
+import org.axonframework.messaging.core.interception.annotation.ExceptionHandler;
+
+public class MyEventHandler {
+
+    @EventHandler
+    void on(OrderPlaced event) {
+        // may throw
+    }
+
+    @ExceptionHandler
+    void onException(RuntimeException ex) {
+        log.error("Handler failed: {}", ex.getMessage());
+        // return normally to suppress the exception and continue processing
+    }
+
+    @ExceptionHandler(resultType = OptimisticLockingFailureException.class)
+    void onConcurrencyFailure(OptimisticLockingFailureException ex) {
+        // handle a specific exception type; other exceptions are not affected
+    }
 }
 ----
 

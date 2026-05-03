@@ -56,6 +56,19 @@ public class ResultParameterResolverFactory implements ParameterResolverFactory 
     }
 
     /**
+     * Returns a {@link ProcessingContext} with the given {@code result} available for injection via
+     * {@link ResultHandler}-annotated parameters. Use this when the caller needs to perform multiple operations
+     * (e.g., {@code canHandle} followed by {@code handleSync}) with the same wrapped context.
+     *
+     * @param result  the result value to expose for parameter injection
+     * @param context the base processing context to wrap
+     * @return a processing context that exposes {@code result} to result-typed parameters
+     */
+    public static ProcessingContext withResult(Object result, ProcessingContext context) {
+        return new ResourceOverridingProcessingContext<>(context, RESOURCE_KEY, result);
+    }
+
+    /**
      * Calls the given {@code action} (typically a handler invocation) such that the given {@code result} is available
      * for injection as parameter
      *
@@ -115,14 +128,12 @@ public class ResultParameterResolverFactory implements ParameterResolverFactory 
 
         @Override
         public CompletableFuture<Object> resolveParameterValue(ProcessingContext context) {
-            return CompletableFuture.completedFuture(REGISTERED_RESULT.get());
+            return CompletableFuture.completedFuture(context.getResource(RESOURCE_KEY));
         }
 
         @Override
         public boolean matches(ProcessingContext context) {
-            // we must always match, because this parameter is based on execution result
-            Object registeredResult = REGISTERED_RESULT.get();
-
+            Object registeredResult = context != null ? context.getResource(RESOURCE_KEY) : null;
             return IGNORE_RESULT_PARAMETER_MARKER.equals(registeredResult)
                     || parameterType.isInstance(registeredResult);
         }
