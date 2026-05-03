@@ -21,12 +21,13 @@ import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
 /**
  * A {@link MessageStream} implementation using a single {@link Entry entry} or {@link CompletableFuture} completing to
  * an entry as the source.
+ * <p>
+ * This stream does not permit {@code null} entries. Passing a {@code null} entry directly or providing a
+ * {@link CompletableFuture} that resolves to {@code null} will result in a {@link NullPointerException}.
  *
  * @param <M> The type of {@link Message} contained in the singular {@link Entry} of this stream.
  * @author Allard Buijze
@@ -45,7 +46,9 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
      * {@link CompletableFuture#completedFuture(Object) completed CompletableFuture} as the single entry in this
      * stream.
      *
-     * @param entry The {@link Entry entry} which is the singular value contained in this {@link MessageStream stream}.
+     * @param entry The {@link Entry entry} which is the singular value contained in this {@link MessageStream stream};
+     *              must not be {@code null}.
+     * @throws NullPointerException If {@code entry} is {@code null}.
      */
     SingleValueMessageStream(Entry<M> entry) {
         this(CompletableFuture.completedFuture(Objects.requireNonNull(entry, "The entry parameter must not be null.")));
@@ -54,9 +57,13 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
     /**
      * Constructs a {@link MessageStream stream} with the given {@code source} as the provider of the single
      * {@link Entry entry} in this stream.
+     * <p>
+     * The {@code source} future must not resolve to {@code null}. If it does, the stream will complete exceptionally
+     * with a {@link NullPointerException}.
      *
      * @param source The {@link CompletableFuture} resulting in the singular {@link Entry entry} contained in this
-     *               {@link MessageStream stream}.
+     *               {@link MessageStream stream}; must not be {@code null} and must not resolve to {@code null}.
+     * @throws NullPointerException If {@code source} is {@code null}.
      */
     SingleValueMessageStream(CompletableFuture<Entry<M>> source) {
         this.source = Objects.requireNonNull(source, "The source parameter must not be null.");
@@ -66,7 +73,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
     }
 
     @Override
-    public CompletableFuture<Entry<M>> asCompletableFuture() {
+    public CompletableFuture<@Nullable Entry<M>> asCompletableFuture() {
         return source;
     }
 
@@ -90,17 +97,6 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
         if (!source.isDone()) {
             source.cancel(false);
         }
-    }
-
-    @Override
-    public <RM extends Message> Single<RM> map(Function<Entry<M>, Entry<RM>> mapper) {
-        return new SingleValueMessageStream<>(source.thenApply(mapper));
-    }
-
-    @Override
-    public <R> CompletableFuture<@Nullable R> reduce(@Nullable R identity,
-                                           BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
-        return source.thenApply(message -> accumulator.apply(identity, message));
     }
 
     @Override
