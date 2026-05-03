@@ -18,6 +18,7 @@ package org.axonframework.messaging.core;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
@@ -47,7 +48,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
      * @param entry The {@link Entry entry} which is the singular value contained in this {@link MessageStream stream}.
      */
     SingleValueMessageStream(Entry<M> entry) {
-        this(CompletableFuture.completedFuture(entry));
+        this(CompletableFuture.completedFuture(Objects.requireNonNull(entry, "The entry parameter must not be null.")));
     }
 
     /**
@@ -58,8 +59,10 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
      *               {@link MessageStream stream}.
      */
     SingleValueMessageStream(CompletableFuture<Entry<M>> source) {
-        this.source = source;
-        this.source.whenComplete((e, t) -> signalProgress());
+        this.source = Objects.requireNonNull(source, "The source parameter must not be null.");
+
+        source.thenApply(e -> Objects.requireNonNull(e, "SingleValueMessageStream source completed with null entry"))
+              .whenComplete((e, t) -> signalProgress());
     }
 
     @Override
@@ -96,7 +99,7 @@ class SingleValueMessageStream<M extends Message> extends AbstractMessageStream<
 
     @Override
     public <R> CompletableFuture<@Nullable R> reduce(@Nullable R identity,
-                                           BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
+                                                     BiFunction<@Nullable R, ? super Entry<M>, @Nullable R> accumulator) {
         return source.thenApply(message -> accumulator.apply(identity, message));
     }
 
