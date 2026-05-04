@@ -21,6 +21,7 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.Module;
 import org.axonframework.common.configuration.ModuleBuilder;
+import org.axonframework.messaging.core.MessageHandlerInterceptor;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.annotation.ClasspathHandlerDefinition;
@@ -30,6 +31,8 @@ import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.axonframework.messaging.queryhandling.QueryHandlingComponent;
+import org.axonframework.messaging.queryhandling.QueryHandlingExceptionHandler;
+import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.annotation.AnnotatedQueryHandlingComponent;
 
 import java.util.function.Consumer;
@@ -183,6 +186,17 @@ public interface QueryHandlingModule extends Module, ModuleBuilder<QueryHandling
         );
 
         /**
+         * Registers an interceptor to be applied to the query handling component assembled by this module. Multiple
+         * calls accumulate interceptors in registration order.
+         *
+         * @param interceptorBuilder builder for the interceptor to apply
+         * @return the query handler phase of this builder, for a fluent API
+         */
+        QueryHandlerPhase intercepted(
+                ComponentBuilder<MessageHandlerInterceptor<? super QueryMessage>> interceptorBuilder
+        );
+
+        /**
          * Registers the given {@code handlingComponentBuilder} as an {@link AnnotatedQueryHandlingComponent} within
          * this module.
          * <p>
@@ -207,5 +221,20 @@ public interface QueryHandlingModule extends Module, ModuleBuilder<QueryHandling
                     c.getComponent(MessageConverter.class)
             ));
         }
+
+        /**
+         * Wraps the query handling component with the given {@code exceptionHandler}. When a query handler throws, the
+         * exception handler is invoked. Return {@link org.axonframework.messaging.core.MessageStream#empty()} to
+         * suppress the error, {@link org.axonframework.messaging.core.MessageStream#failed(Throwable)} to propagate
+         * it, or a stream of {@link org.axonframework.messaging.queryhandling.QueryResponseMessage} items to substitute
+         * results.
+         * <p>
+         * Multiple calls accumulate handlers in registration order: the first registered handler sees the exception
+         * first.
+         *
+         * @param exceptionHandler the exception handler to apply to the query handling component
+         * @return this phase for further configuration
+         */
+        QueryHandlerPhase withExceptionHandler(QueryHandlingExceptionHandler exceptionHandler);
     }
 }
