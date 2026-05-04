@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.eventhandling.annotation;
+package org.axonframework.messaging.eventhandling.interception.annotation;
 
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptor;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.annotation.AnnotatedEventHandlingComponent;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -31,10 +32,11 @@ import java.lang.annotation.Target;
  * An annotated interceptor is invoked before every {@link org.axonframework.messaging.eventhandling.EventHandler
  * @EventHandler} method on the same component instance. Two styles are supported:
  * <ul>
- *   <li><strong>Before-interceptor</strong> — a {@code void} method with no
- *       {@link org.axonframework.messaging.core.MessageHandlerInterceptorChain} parameter. The method runs before
- *       the handler; the chain is automatically proceeded after the method returns normally. If it throws, the handler
- *       is not invoked.</li>
+ *   <li><strong>Before-interceptor</strong> — a method with no
+ *       {@link org.axonframework.messaging.core.MessageHandlerInterceptorChain} parameter that returns either
+ *       {@code void} or {@code CompletableFuture<Void>}. The method runs before the handler; the chain is
+ *       automatically proceeded after the method returns (or the future completes) normally. If it throws (or the
+ *       future completes exceptionally), the handler is not invoked.</li>
  *   <li><strong>Surround-interceptor</strong> — a method that declares a
  *       {@link org.axonframework.messaging.core.MessageHandlerInterceptorChain} parameter and returns a
  *       {@link org.axonframework.messaging.core.MessageStream}. The method controls whether and when the chain is
@@ -42,13 +44,10 @@ import java.lang.annotation.Target;
  *       calling proceed.</li>
  * </ul>
  * <p>
- * The {@link #payloadType()} attribute narrows the interceptor to events whose payload is assignable to that type.
- * When not specified, the interceptor applies to all events handled by the component.
- * <p>
  * Example before-interceptor:
  * <pre>{@code
  * @EventHandlerInterceptor
- * void audit(EventMessage<?> event) {
+ * void audit(EventMessage event) {
  *     auditLog.record(event.qualifiedName());
  * }
  * }</pre>
@@ -57,8 +56,8 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * @EventHandlerInterceptor
  * MessageStream<?> filterByTenant(
- *         EventMessage<?> event,
- *         MessageHandlerInterceptorChain<EventMessage<?>> chain,
+ *         EventMessage event,
+ *         MessageHandlerInterceptorChain<EventMessage> chain,
  *         ProcessingContext ctx
  * ) {
  *     if (!tenantId.equals(event.metaData().get("tenantId"))) {
@@ -77,12 +76,4 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 public @interface EventHandlerInterceptor {
-
-    /**
-     * The payload type to narrow this interceptor to; only events whose payload is assignable to this type will trigger
-     * the interceptor. Defaults to any payload.
-     *
-     * @return the payload type this interceptor applies to
-     */
-    Class<?> payloadType() default Object.class;
 }

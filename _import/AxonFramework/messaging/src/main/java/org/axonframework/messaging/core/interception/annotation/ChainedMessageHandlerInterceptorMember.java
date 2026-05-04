@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.core.annotation;
+package org.axonframework.messaging.core.interception.annotation;
 
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptorMemberChain;
-import org.axonframework.messaging.core.interception.annotation.NoMoreInterceptors;
+import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Iterator;
@@ -40,20 +39,17 @@ public class ChainedMessageHandlerInterceptorMember<T> implements MessageHandler
     private final MessageHandlerInterceptorMemberChain<T> next;
 
     /**
-     * Constructs a chained message handling interceptor for the given {@code handlerType}, constructing a chain from
-     * the given {@code iterator}.
+     * Constructs a chained message handling interceptor, building a chain from the given {@code iterator}.
      * <p>
      * The {@code iterator} should <em>at least</em>> have a single {@link MessageHandlingMember}. If there are more
      * {@code MessageHandlingMembers} present in the given {@code iterator}, this constructor will be invoked again.
      *
-     * @param handlerType The type for which to construct a message handler interceptor chain.
-     * @param iterator    The {@code MessageHandlingMembers} from which to construct the chain.
+     * @param iterator the {@code MessageHandlingMembers} from which to construct the chain.
      */
-    public ChainedMessageHandlerInterceptorMember(Class<?> handlerType,
-                                                  Iterator<MessageHandlingMember<? super T>> iterator) {
+    public ChainedMessageHandlerInterceptorMember(Iterator<MessageHandlingMember<? super T>> iterator) {
         this.delegate = iterator.next();
         this.next = iterator.hasNext()
-                ? new ChainedMessageHandlerInterceptorMember<>(handlerType, iterator)
+                ? new ChainedMessageHandlerInterceptorMember<>(iterator)
                 : NoMoreInterceptors.instance();
     }
 

@@ -39,6 +39,7 @@ import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.interception.annotation.QueryHandlerInterceptor;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -930,26 +931,6 @@ class AnnotatedQueryHandlingComponentTest {
 
             // then
             assertThat(log).containsExactly("first", "second", "handler");
-        }
-
-        @Test
-        void interceptorFilteredByPayloadTypeIsSkippedForNonMatchingQueries() {
-            // given - interceptor restricted to Integer payloads; component handles String queries
-            var log = new ArrayList<String>();
-            var handler = new Object() {
-                @QueryHandlerInterceptor(payloadType = Integer.class)
-                void interceptIntegersOnly() { log.add("interceptor"); }
-                @QueryHandler
-                String handle(String payload) { log.add("handler"); return payload; }
-            };
-            var component = annotatedComponent(handler);
-            var query = queryMessage("hello");
-
-            // when
-            drainAndGetPayload(component.handle(query, StubProcessingContext.forMessage(query)));
-
-            // then - interceptor was skipped; handler ran normally
-            assertThat(log).doesNotContain("interceptor").contains("handler");
         }
 
         @Test
