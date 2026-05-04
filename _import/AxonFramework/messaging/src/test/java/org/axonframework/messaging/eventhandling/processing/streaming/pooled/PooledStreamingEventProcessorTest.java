@@ -817,6 +817,39 @@ class PooledStreamingEventProcessorTest {
             assertFalse(coordinatorExecutor.isShutdown());
             assertFalse(workerExecutor.isShutdown());
         }
+
+        @Test
+        void abortFlowWaitsForSegmentChangeListenerBeforeCompleting() {
+            // given - processor with a single segment and a listener that blocks release until a gate is opened
+            CompletableFuture<Void> releaseGate = new CompletableFuture<>();
+            AtomicReference<Segment> releasedSegment = new AtomicReference<>();
+
+            withTestSubject(List.of(), c -> c
+                    .initialSegmentCount(1)
+                    .addSegmentChangeListener(SegmentChangeListener.onRelease(segment -> {
+                        releasedSegment.set(segment);
+                        return releaseGate;
+                    })));
+            startEventProcessor();
+            assertWithin(1, TimeUnit.SECONDS, () -> assertFalse(testSubject.processingStatus().isEmpty()));
+
+            // when - shutdown is triggered while the release listener is still pending
+            CompletableFuture<Void> shutdownFuture = testSubject.shutdown();
+
+            // then - the listener is called with the correct segment before shutdown can proceed
+            await().atMost(1, TimeUnit.SECONDS)
+                   .untilAsserted(() -> assertThat(releasedSegment.get())
+                           .isNotNull()
+                           .extracting(Segment::getSegmentId)
+                           .isEqualTo(0));
+
+            // then - shutdown is blocked as long as the listener future is not completed
+            assertThat(shutdownFuture).isNotCompleted();
+
+            // then - completing the gate unblocks the abort flow and shutdown finishes
+            releaseGate.complete(null);
+            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(shutdownFuture).isCompleted());
+        }
     }
 
     @Nested
