@@ -275,6 +275,29 @@ class Kontext(
 
 
     /**
+     * Non-blocking sleep that returns immediately with a [WorkflowStepResult].
+     * The result completes when the timeout expires.
+     *
+     * @param stepName name of the step.
+     * @param timeout duration to sleep.
+     * @param eventNameCustomizer customizer for event names.
+     * @return workflow step result that completes when the timeout expires.
+     */
+    fun sleep(
+        stepName: String,
+        timeout: Duration,
+        eventNameCustomizer: EventNameCustomizer = defaults()
+    ): WorkflowStepResult {
+        return waitFor(
+            stepName = stepName,
+            qualifiedName = QualifiedName(Void::class.java),
+            timeout = timeout,
+            eventNameCustomizer = eventNameCustomizer
+        )
+    }
+
+
+    /**
      * Blocks until a step is completed or times out.
      *
      * @param stepName name of the step.

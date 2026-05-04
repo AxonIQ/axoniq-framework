@@ -292,6 +292,17 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @param timeout  timeout to wait.
      */
     public void sleep(String stepName, Duration timeout) {
+        sleep(stepName, timeout, defaults());
+    }
+
+    /**
+     * Blocks the execution until the timeout occurs (synchronous call).
+     *
+     * @param stepName            name of the step.
+     * @param timeout             timeout to wait.
+     * @param eventNameCustomizer event name customizer.
+     */
+    public void sleep(String stepName, Duration timeout, EventNameCustomizer eventNameCustomizer) {
         var result = waitFor(stepName,
                              EventConditions.never(),
                              registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
@@ -312,6 +323,19 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @return workflow step result that completes when the timeout expires.
      */
     public WorkflowStepResult sleepAsync(String stepName, Duration timeout) {
+        return sleepAsync(stepName, timeout, defaults());
+    }
+
+    /**
+     * Non-blocking sleep that returns immediately with a {@link WorkflowStepResult}.
+     * The result completes when the timeout expires.
+     *
+     * @param stepName            name of the step.
+     * @param timeout             duration to sleep.
+     * @param eventNameCustomizer event name customizer.
+     * @return workflow step result that completes when the timeout expires.
+     */
+    public WorkflowStepResult sleepAsync(String stepName, Duration timeout, EventNameCustomizer eventNameCustomizer) {
         return waitFor(stepName, EventConditions.never(), registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
     }
 
