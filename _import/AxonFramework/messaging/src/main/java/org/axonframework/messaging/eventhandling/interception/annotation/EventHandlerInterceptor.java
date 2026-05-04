@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.eventhandling.annotation;
+package org.axonframework.messaging.eventhandling.interception.annotation;
 
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptor;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.annotation.AnnotatedEventHandlingComponent;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
