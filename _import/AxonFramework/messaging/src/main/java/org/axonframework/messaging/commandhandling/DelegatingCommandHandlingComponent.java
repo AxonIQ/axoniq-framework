@@ -39,7 +39,7 @@ public abstract class DelegatingCommandHandlingComponent implements CommandHandl
      *
      * @param delegate the instance to delegate calls to
      */
-    public DelegatingCommandHandlingComponent(CommandHandlingComponent delegate) {
+    protected DelegatingCommandHandlingComponent(CommandHandlingComponent delegate) {
         this.delegate = Objects.requireNonNull(delegate, "Delegate CommandHandlingComponent may not be null");
     }
 

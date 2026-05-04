@@ -39,7 +39,7 @@ public abstract class DelegatingQueryHandlingComponent implements QueryHandlingC
      *
      * @param delegate the instance to delegate calls to
      */
-    public DelegatingQueryHandlingComponent(QueryHandlingComponent delegate) {
+    protected DelegatingQueryHandlingComponent(QueryHandlingComponent delegate) {
         this.delegate = Objects.requireNonNull(delegate, "Delegate QueryHandlingComponent may not be null");
     }
 

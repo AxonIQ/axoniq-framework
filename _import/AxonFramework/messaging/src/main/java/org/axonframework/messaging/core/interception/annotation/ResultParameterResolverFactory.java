@@ -26,7 +26,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Executable;
 import java.lang.reflect.Parameter;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -44,10 +43,19 @@ import java.util.function.Function;
 public class ResultParameterResolverFactory implements ParameterResolverFactory {
 
 
-    private static final ThreadLocal<Object> REGISTERED_RESULT = new ThreadLocal<>();
     private static final Object IGNORE_RESULT_PARAMETER_MARKER = new Object();
     private static final ResourceKey<Object> RESOURCE_KEY = ResourceKey.withLabel("Invocation result for interceptors");
 
+    /**
+     * Performs the given {@code action} while making the given {@code result} available for injection into handler
+     * parameters annotated with {@link ResultHandler}.
+     *
+     * @param <R>               the type of result expected from the action
+     * @param result            the result value to make available for parameter injection
+     * @param processingContext the processing context to use when performing the action
+     * @param action            the action to perform
+     * @return the result returned by the given action
+     */
     public static <R> R callWithResult(Object result,
                                        ProcessingContext processingContext,
                                        Function<ProcessingContext, R> action) {
@@ -66,29 +74,6 @@ public class ResultParameterResolverFactory implements ParameterResolverFactory 
      */
     public static ProcessingContext withResult(Object result, ProcessingContext context) {
         return new ResourceOverridingProcessingContext<>(context, RESOURCE_KEY, result);
-    }
-
-    /**
-     * Calls the given {@code action} (typically a handler invocation) such that the given {@code result} is available
-     * for injection as parameter
-     *
-     * @param result The result to make available for parameter injection
-     * @param action The action to take
-     * @return the result of the action
-     * @throws Exception any exception thrown while executing the {@code action}
-     */
-    public static Object callWithResult(Object result, Callable<?> action) throws Exception {
-        Object previous = REGISTERED_RESULT.get();
-        REGISTERED_RESULT.set(result);
-        try {
-            return action.call();
-        } finally {
-            if (previous == null) {
-                REGISTERED_RESULT.remove();
-            } else {
-                REGISTERED_RESULT.set(previous);
-            }
-        }
     }
 
     /**
@@ -133,7 +118,7 @@ public class ResultParameterResolverFactory implements ParameterResolverFactory 
 
         @Override
         public boolean matches(ProcessingContext context) {
-            Object registeredResult = context != null ? context.getResource(RESOURCE_KEY) : null;
+            Object registeredResult = context.getResource(RESOURCE_KEY);
             return IGNORE_RESULT_PARAMETER_MARKER.equals(registeredResult)
                     || parameterType.isInstance(registeredResult);
         }
