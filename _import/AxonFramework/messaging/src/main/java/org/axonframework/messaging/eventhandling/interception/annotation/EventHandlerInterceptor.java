@@ -50,7 +50,7 @@ import java.lang.annotation.Target;
  * Example before-interceptor:
  * <pre>{@code
  * @EventHandlerInterceptor
- * void audit(EventMessage<?> event) {
+ * void audit(EventMessage event) {
  *     auditLog.record(event.qualifiedName());
  * }
  * }</pre>
@@ -59,8 +59,8 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * @EventHandlerInterceptor
  * MessageStream<?> filterByTenant(
- *         EventMessage<?> event,
- *         MessageHandlerInterceptorChain<EventMessage<?>> chain,
+ *         EventMessage event,
+ *         MessageHandlerInterceptorChain<EventMessage> chain,
  *         ProcessingContext ctx
  * ) {
  *     if (!tenantId.equals(event.metaData().get("tenantId"))) {

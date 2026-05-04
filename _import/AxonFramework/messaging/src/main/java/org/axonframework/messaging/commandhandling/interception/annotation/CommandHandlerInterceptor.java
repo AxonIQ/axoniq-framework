@@ -51,7 +51,7 @@ import java.lang.annotation.Target;
  * Example before-interceptor:
  * <pre>{@code
  * @CommandHandlerInterceptor
- * void audit(CommandMessage<?> command) {
+ * void audit(CommandMessage command) {
  *     auditLog.record(command.qualifiedName());
  * }
  * }</pre>
@@ -60,8 +60,8 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * @CommandHandlerInterceptor
  * MessageStream<?> filterByTenant(
- *         CommandMessage<?> command,
- *         MessageHandlerInterceptorChain<CommandMessage<?>> chain,
+ *         CommandMessage command,
+ *         MessageHandlerInterceptorChain<CommandMessage> chain,
  *         ProcessingContext ctx
  * ) {
  *     if (!tenantId.equals(command.metaData().get("tenantId"))) {

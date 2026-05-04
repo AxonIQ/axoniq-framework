@@ -51,7 +51,7 @@ import java.lang.annotation.Target;
  * Example before-interceptor:
  * <pre>{@code
  * @QueryHandlerInterceptor
- * void audit(QueryMessage<?> query) {
+ * void audit(QueryMessage query) {
  *     auditLog.record(query.qualifiedName());
  * }
  * }</pre>
@@ -60,8 +60,8 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * @QueryHandlerInterceptor
  * MessageStream<?> filterByTenant(
- *         QueryMessage<?> query,
- *         MessageHandlerInterceptorChain<QueryMessage<?>> chain,
+ *         QueryMessage query,
+ *         MessageHandlerInterceptorChain<QueryMessage> chain,
  *         ProcessingContext ctx
  * ) {
  *     if (!tenantId.equals(query.metaData().get("tenantId"))) {
