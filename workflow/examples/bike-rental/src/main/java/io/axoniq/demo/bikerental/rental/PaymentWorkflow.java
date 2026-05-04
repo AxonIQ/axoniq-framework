@@ -29,13 +29,14 @@ import io.axoniq.workflow.dsl.api.Payload;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.commandhandling.gateway.CommandDispatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -57,11 +58,6 @@ public class PaymentWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentWorkflow.class);
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
-    private final CommandGateway commandGateway;
-
-    public PaymentWorkflow(CommandGateway commandGateway) {
-        this.commandGateway = commandGateway;
-    }
 
     @Workflow(
             startOnEvent = "io.axoniq.demo.bikerental.coreapi.rental.BikeRequestedEvent",
@@ -177,7 +173,6 @@ public class PaymentWorkflow {
         }
     }
 
-    // helper to send commands
     private WorkflowStepResult sendCommand(
             SimpleWorkflowContext ctx,
             String stepName,
@@ -186,10 +181,12 @@ public class PaymentWorkflow {
                 stepName,
                 ctx.workflowPayload(),
                 (pc, p) -> {
+                    var commandDispatcher = CommandDispatcher.forContext(pc);
                     var payload = payload(p);
-                    this.commandGateway.sendAndWait(
-                            commandSupplier.apply(payload)
-                    );
+                    commandDispatcher.send(commandSupplier.apply(payload))
+                                     .getResultMessage()
+                                     .orTimeout(2, TimeUnit.SECONDS)
+                                     .join();
                     return Map.of();
                 },
                 DEFAULT_TIMEOUT,
