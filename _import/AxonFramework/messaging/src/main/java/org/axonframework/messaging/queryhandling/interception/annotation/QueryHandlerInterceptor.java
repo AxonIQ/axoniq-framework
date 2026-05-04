@@ -45,9 +45,6 @@ import java.lang.annotation.Target;
  *       calling proceed.</li>
  * </ul>
  * <p>
- * The {@link #payloadType()} attribute narrows the interceptor to queries whose payload is assignable to that type.
- * When not specified, the interceptor applies to all queries handled by the component.
- * <p>
  * Example before-interceptor:
  * <pre>{@code
  * @QueryHandlerInterceptor
@@ -80,12 +77,4 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
 public @interface QueryHandlerInterceptor {
-
-    /**
-     * The payload type to narrow this interceptor to; only queries whose payload is assignable to this type will
-     * trigger the interceptor. Defaults to any payload.
-     *
-     * @return the payload type this interceptor applies to
-     */
-    Class<?> payloadType() default Object.class;
 }

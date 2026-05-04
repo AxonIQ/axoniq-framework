@@ -1040,28 +1040,6 @@ class AnnotatedEventHandlingComponentTest {
         }
 
         @Test
-        void interceptorFilteredByPayloadTypeIsSkippedForNonMatchingEvents() {
-            // given - interceptor restricted to String payloads; component handles Integer events
-            var log = new ArrayList<String>();
-            var handler = new Object() {
-                @EventHandlerInterceptor(payloadType = String.class)
-                void interceptStringsOnly() { log.add("interceptor"); }
-                @EventHandler
-                void handle(Integer payload) { log.add("handler"); }
-            };
-            var component = annotatedEventHandlingComponent(handler);
-            var event = eventMessage(0);
-
-            // when
-            var result = component.handle(event, simpleContext(event));
-            drainStream(result);
-
-            // then - interceptor was skipped; handler ran normally
-            assertThat(log).doesNotContain("interceptor")
-                           .contains("handler");
-        }
-
-        @Test
         void nonVoidInterceptorWithoutChainParamIsRejected() {
             // given - @EventHandlerInterceptor on a non-void method with no chain parameter
             var handler = new Object() {

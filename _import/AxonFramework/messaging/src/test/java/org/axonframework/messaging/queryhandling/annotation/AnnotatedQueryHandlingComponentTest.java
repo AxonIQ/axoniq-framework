@@ -933,26 +933,6 @@ class AnnotatedQueryHandlingComponentTest {
         }
 
         @Test
-        void interceptorFilteredByPayloadTypeIsSkippedForNonMatchingQueries() {
-            // given - interceptor restricted to Integer payloads; component handles String queries
-            var log = new ArrayList<String>();
-            var handler = new Object() {
-                @QueryHandlerInterceptor(payloadType = Integer.class)
-                void interceptIntegersOnly() { log.add("interceptor"); }
-                @QueryHandler
-                String handle(String payload) { log.add("handler"); return payload; }
-            };
-            var component = annotatedComponent(handler);
-            var query = queryMessage("hello");
-
-            // when
-            drainAndGetPayload(component.handle(query, StubProcessingContext.forMessage(query)));
-
-            // then - interceptor was skipped; handler ran normally
-            assertThat(log).doesNotContain("interceptor").contains("handler");
-        }
-
-        @Test
         void nonVoidInterceptorWithoutChainParamIsRejected() {
             // given - @QueryHandlerInterceptor on a non-void method with no chain parameter
             var handler = new Object() {

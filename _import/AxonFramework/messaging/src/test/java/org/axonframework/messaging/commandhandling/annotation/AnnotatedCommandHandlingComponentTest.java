@@ -774,25 +774,79 @@ class AnnotatedCommandHandlingComponentTest {
             assertThat(log).containsExactly("first", "second", "handler");
         }
 
-        @Test
-        void interceptorFilteredByPayloadTypeIsSkippedForNonMatchingCommands() {
-            // given - interceptor restricted to String payloads; component handles Integer commands
-            var log = new ArrayList<String>();
-            var handler = new Object() {
-                @CommandHandlerInterceptor(payloadType = String.class)
-                void interceptStringsOnly() { log.add("interceptor"); }
-                @CommandHandler
-                void handle(Integer payload) { log.add("handler"); }
-            };
-            var component = annotatedComponent(handler);
-            var command = commandMessage(42);
+        @Nested
+        class GenericMessageHandlerInterceptor {
 
-            // when
-            component.handle(command, StubProcessingContext.forMessage(command))
-                     .first().asCompletableFuture().join();
+            @Test
+            void interceptorWithoutMessageTypeRunsBeforeCommandHandler() {
+                // given - @MessageHandlerInterceptor with no messageType matches any message on the component
+                var log = new ArrayList<String>();
+                var handler = new Object() {
+                    @MessageHandlerInterceptor
+                    void intercept() { log.add("interceptor"); }
+                    @CommandHandler
+                    void handle(Integer payload) { log.add("handler"); }
+                };
+                var component = annotatedComponent(handler);
+                var command = commandMessage(42);
 
-            // then - interceptor was skipped; handler ran normally
-            assertThat(log).doesNotContain("interceptor").contains("handler");
+                // when
+                component.handle(command, StubProcessingContext.forMessage(command))
+                         .first().asCompletableFuture().join();
+
+                // then
+                assertThat(log).containsExactly("interceptor", "handler");
+            }
+
+            @Test
+            void interceptorWithCommandMessageTypeRunsBeforeCommandHandler() {
+                // given - @MessageHandlerInterceptor(messageType = CommandMessage.class) acts like @CommandHandlerInterceptor
+                var log = new ArrayList<String>();
+                var handler = new Object() {
+                    @MessageHandlerInterceptor(messageType = CommandMessage.class)
+                    void intercept() { log.add("interceptor"); }
+                    @CommandHandler
+                    void handle(Integer payload) { log.add("handler"); }
+                };
+                var component = annotatedComponent(handler);
+                var command = commandMessage(42);
+
+                // when
+                component.handle(command, StubProcessingContext.forMessage(command))
+                         .first().asCompletableFuture().join();
+
+                // then
+                assertThat(log).containsExactly("interceptor", "handler");
+            }
+
+            @Test
+            void surroundInterceptorUsingBaseAnnotationCanWrapHandling() {
+                // given
+                var log = new ArrayList<String>();
+                var handler = new Object() {
+                    @MessageHandlerInterceptor(messageType = CommandMessage.class)
+                    @SuppressWarnings({"rawtypes", "unchecked"})
+                    MessageStream<?> intercept(CommandMessage command,
+                                               MessageHandlerInterceptorChain chain,
+                                               ProcessingContext ctx) {
+                        log.add("before");
+                        MessageStream<?> result = chain.proceed(command, ctx);
+                        log.add("after");
+                        return result;
+                    }
+                    @CommandHandler
+                    void handle(Integer payload) { log.add("handler"); }
+                };
+                var component = annotatedComponent(handler);
+                var command = commandMessage(42);
+
+                // when
+                component.handle(command, StubProcessingContext.forMessage(command))
+                         .first().asCompletableFuture().join();
+
+                // then
+                assertThat(log).containsExactly("before", "handler", "after");
+            }
         }
 
         @Test

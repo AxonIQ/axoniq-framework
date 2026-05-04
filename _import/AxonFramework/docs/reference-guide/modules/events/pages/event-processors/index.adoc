@@ -301,10 +301,14 @@ public class AxonConfig {
     ) {
         return componentConfigurer.autodetected("orderHandler", cfg -> new OrderEventHandler())
                                   .autodetected("inventoryHandler", cfg -> new InventoryEventHandler())
-                                  .intercepted(cfg -> new AuditLoggingInterceptor());
+                                  .intercepted(cfg -> new AuditLoggingInterceptor())
+                                  .intercepted(cfg -> new TenantFilterInterceptor(tenantId));
     }
 }
 ----
+
+Component registration ends when the first `.intercepted(...)` is called.
+Additional interceptors can still be added with further `.intercepted(...)` calls and are applied in registration order.
 
 ==== Annotated interceptors on the handler class
 
@@ -319,8 +323,6 @@ Two styles are supported:
 * A *surround-interceptor* declares a `MessageHandlerInterceptorChain` parameter and returns a `MessageStream`.
   It controls whether the handler is invoked by calling `chain.proceed(event, ctx)`.
   Returning without calling `proceed` short-circuits the chain.
-
-The optional `payloadType` attribute narrows the interceptor to events whose payload is assignable to a specific type.
 
 [source,java]
 ----

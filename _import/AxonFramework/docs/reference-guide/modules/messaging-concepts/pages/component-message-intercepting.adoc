@@ -23,9 +23,6 @@ It can short-circuit processing entirely by returning without calling proceed, o
 The `@CommandHandlerInterceptor` annotation marks a method as an interceptor for command handlers on the same component.
 It is a specialization of `@MessageHandlerInterceptor` scoped to `CommandMessage`.
 
-The `payloadType` attribute narrows the interceptor to commands whose payload is assignable to the given type.
-When omitted, the interceptor applies to all commands handled by the component.
-
 *Before-interceptor (logging all commands):*
 
 [source,java]
@@ -36,7 +33,7 @@ import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 public class OrderCommandHandler {
 
     @CommandHandlerInterceptor
-    void logCommand(CommandMessage<?> command) {
+    void logCommand(CommandMessage command) {
         log.info("Handling command: {}", command.qualifiedName());
     }
 
@@ -59,8 +56,8 @@ public class OrderCommandHandler {
 
     @CommandHandlerInterceptor
     MessageStream<?> authorize(
-            CommandMessage<?> command,
-            MessageHandlerInterceptorChain<CommandMessage<?>> chain,
+            CommandMessage command,
+            MessageHandlerInterceptorChain<CommandMessage> chain,
             ProcessingContext context
     ) {
         if (!securityContext.isAuthorized(command)) {
@@ -76,28 +73,57 @@ public class OrderCommandHandler {
 }
 ----
 
-*Narrowing to a specific payload type:*
+=== `@EventHandlerInterceptor`
+
+The `@EventHandlerInterceptor` annotation marks a method as an interceptor for event handlers on the same component.
+It is a specialization of `@MessageHandlerInterceptor` scoped to `EventMessage`.
+
+*Before-interceptor (tracing):*
 
 [source,java]
 ----
-public class OrderCommandHandler {
+import org.axonframework.messaging.eventhandling.annotation.EventHandlerInterceptor;
+import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 
-    @CommandHandlerInterceptor(payloadType = CancelOrderCommand.class)
-    void validateCancellation(CommandMessage<?> command) {
-        // Only runs before CancelOrderCommand handlers
-        if (!orderIsEligibleForCancellation()) {
-            throw new IllegalStateException("Order cannot be cancelled in its current state");
+public class CardSummaryProjection {
+
+    @EventHandlerInterceptor
+    void trace(EventMessage event) {
+        tracer.startSpan(event.qualifiedName());
+    }
+
+    @EventHandler
+    void on(CardIssuedEvent event, ProcessingContext context) {
+        // Handle event
+    }
+}
+----
+
+*Surround-interceptor (conditional processing):*
+
+[source,java]
+----
+import org.axonframework.messaging.eventhandling.annotation.EventHandlerInterceptor;
+import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
+import org.axonframework.messaging.core.MessageStream;
+
+public class CardSummaryProjection {
+
+    @EventHandlerInterceptor
+    MessageStream<?> filterByTenant(
+            EventMessage event,
+            MessageHandlerInterceptorChain<EventMessage> chain,
+            ProcessingContext context
+    ) {
+        if (!tenantId.equals(event.metadata().get("tenantId"))) {
+            return MessageStream.empty();
         }
+        return chain.proceed(event, context);
     }
 
-    @CommandHandler
-    void handle(PlaceOrderCommand command, ProcessingContext context) {
-        // Handle the command
-    }
-
-    @CommandHandler
-    void handle(CancelOrderCommand command, ProcessingContext context) {
-        // Handle the command
+    @EventHandler
+    void on(CardIssuedEvent event, ProcessingContext context) {
+        // Handle event
     }
 }
 ----
@@ -106,8 +132,6 @@ public class OrderCommandHandler {
 
 The `@QueryHandlerInterceptor` annotation marks a method as an interceptor for query handlers on the same component.
 It is a specialization of `@MessageHandlerInterceptor` scoped to `QueryMessage`.
-
-The `payloadType` attribute narrows the interceptor to queries whose payload is assignable to the given type.
 
 *Before-interceptor (access logging):*
 
@@ -119,7 +143,7 @@ import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 public class CourseQueryHandler {
 
     @QueryHandlerInterceptor
-    void auditQuery(QueryMessage<?> query) {
+    void auditQuery(QueryMessage query) {
         auditLog.record(query.qualifiedName(), securityContext.currentUser());
     }
 
@@ -143,8 +167,8 @@ public class CourseQueryHandler {
 
     @QueryHandlerInterceptor
     MessageStream<?> checkTenant(
-            QueryMessage<?> query,
-            MessageHandlerInterceptorChain<QueryMessage<?>> chain,
+            QueryMessage query,
+            MessageHandlerInterceptorChain<QueryMessage> chain,
             ProcessingContext context
     ) {
         if (!tenantId.equals(query.metadata().get("tenantId"))) {
@@ -161,150 +185,39 @@ public class CourseQueryHandler {
 }
 ----
 
-*Narrowing to a specific payload type:*
-
-[source,java]
-----
-public class CourseQueryHandler {
-
-    @QueryHandlerInterceptor(payloadType = FindCourseQuery.class)
-    void validateCourseAccess(QueryMessage<?> query) {
-        // Only runs before FindCourseQuery handlers
-        if (!securityContext.canAccessCourses()) {
-            throw new AccessDeniedException("Course access not permitted");
-        }
-    }
-
-    @QueryHandler
-    CourseView handle(FindCourseQuery query, ProcessingContext context) {
-        // Handle the query
-        return null;
-    }
-}
-----
-
-=== `@EventHandlerInterceptor`
-
-The `@EventHandlerInterceptor` annotation marks a method as an interceptor for event handlers on the same component.
-It is a specialization of `@MessageHandlerInterceptor` scoped to `EventMessage`.
-
-The `payloadType` attribute narrows the interceptor to events whose payload is assignable to the given type.
-
-*Before-interceptor (tracing):*
-
-[source,java]
-----
-import org.axonframework.messaging.eventhandling.annotation.EventHandlerInterceptor;
-import org.axonframework.messaging.eventhandling.annotation.EventHandler;
-
-public class CardSummaryProjection {
-
-    @EventHandlerInterceptor
-    void trace(EventMessage<?> event) {
-        tracer.startSpan(event.qualifiedName());
-    }
-
-    @EventHandler
-    void on(CardIssuedEvent event, ProcessingContext context) {
-        // Handle event
-    }
-}
-----
-
-*Surround-interceptor (conditional processing):*
-
-[source,java]
-----
-import org.axonframework.messaging.eventhandling.annotation.EventHandlerInterceptor;
-import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
-import org.axonframework.messaging.core.MessageStream;
-
-public class CardSummaryProjection {
-
-    @EventHandlerInterceptor
-    MessageStream<?> filterByTenant(
-            EventMessage<?> event,
-            MessageHandlerInterceptorChain<EventMessage<?>> chain,
-            ProcessingContext context
-    ) {
-        if (!tenantId.equals(event.metadata().get("tenantId"))) {
-            return MessageStream.empty();
-        }
-        return chain.proceed(event, context);
-    }
-
-    @EventHandler
-    void on(CardIssuedEvent event, ProcessingContext context) {
-        // Handle event
-    }
-}
-----
-
-*Narrowing to a specific payload type:*
-
-[source,java]
-----
-public class CardSummaryProjection {
-
-    @EventHandlerInterceptor(payloadType = CardRedeemedEvent.class)
-    void validateRedemption(EventMessage<?> event) {
-        // Only runs before CardRedeemedEvent handlers
-        if (!featureFlags.isRedemptionEnabled()) {
-            throw new IllegalStateException("Redemption processing is currently disabled");
-        }
-    }
-
-    @EventHandler
-    void on(CardIssuedEvent event, ProcessingContext context) {
-        // Handle event
-    }
-
-    @EventHandler
-    void on(CardRedeemedEvent event, ProcessingContext context) {
-        // Handle event
-    }
-}
-----
-
 === Generic `@MessageHandlerInterceptor`
 
 The base `@MessageHandlerInterceptor` annotation is available when you need to cover multiple message types or want to use the annotation directly.
 Specify the `messageType` attribute to limit the interceptor to a particular message type.
 Omitting `messageType` defaults to matching any `Message`.
 
-*Intercepting all event messages explicitly:*
+*Intercepting all messages on a component:*
+
+Omitting `messageType` matches any message, so the interceptor runs before every handler on the component — event handlers and query handlers alike.
+This is useful for cross-cutting concerns such as logging or security checks that should apply regardless of the message type being processed.
 
 [source,java]
 ----
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptor;
-import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.annotation.EventHandler;
+import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 
 public class CardSummaryProjection {
 
-    @MessageHandlerInterceptor(messageType = EventMessage.class)
-    void intercept(EventMessage<?> event) {
-        // Runs before all event handlers on this component
+    @MessageHandlerInterceptor
+    void interceptAll(Message message) {
+        // Runs before every @EventHandler and @QueryHandler on this component
     }
 
     @EventHandler
     void on(CardIssuedEvent event, ProcessingContext context) {
         // Handle event
     }
-}
-----
 
-*Combining message type and payload type filters:*
-
-[source,java]
-----
-public class CardSummaryProjection {
-
-    @MessageHandlerInterceptor(
-        messageType = EventMessage.class,
-        payloadType = CardRedeemedEvent.class
-    )
-    void interceptRedemptions(EventMessage<?> event) {
-        // Runs only before CardRedeemedEvent handlers
+    @QueryHandler
+    CardSummaryView handle(FindCardSummaryQuery query, ProcessingContext context) {
+        // Handle query
     }
 }
 ----
@@ -322,8 +235,8 @@ public class CourseQueryHandler {
 
     @MessageHandlerInterceptor(messageType = QueryMessage.class)
     MessageStream<?> intercept(
-            QueryMessage<?> query,
-            MessageHandlerInterceptorChain<QueryMessage<?>> chain,
+            QueryMessage query,
+            MessageHandlerInterceptorChain<QueryMessage> chain,
             ProcessingContext context
     ) {
         // Logic before handling
