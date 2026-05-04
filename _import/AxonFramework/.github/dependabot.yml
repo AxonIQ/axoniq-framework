@@ -10,7 +10,7 @@ updates:
   labels:
     - "Type: Dependency Upgrade"
     - "Priority 1: Must"
-  milestone: 119
+  milestone: 121
   groups:
     github-dependencies:
       update-types:
@@ -27,7 +27,7 @@ updates:
   labels:
     - "Type: Dependency Upgrade"
     - "Priority 1: Must"
-  milestone: 119
+  milestone: 121
   groups:
     maven-dependencies:
       update-types:
@@ -55,7 +55,7 @@ updates:
   labels:
     - "Type: Dependency Upgrade"
     - "Priority 1: Must"
-  milestone: 119
+  milestone: 121
   groups:
     antora-dependencies:
       update-types:
