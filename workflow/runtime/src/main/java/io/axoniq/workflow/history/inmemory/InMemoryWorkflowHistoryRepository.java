@@ -46,8 +46,8 @@ public class InMemoryWorkflowHistoryRepository implements MutableWorkflowHistory
 
     @Nonnull
     @Override
-    public Optional<WorkflowHistory> findById(@Nonnull String workflowIds) {
-        return Optional.ofNullable(workflowHistoryMap.get(workflowIds));
+    public Optional<WorkflowHistory> findById(@Nonnull String workflowId) {
+        return Optional.ofNullable(workflowHistoryMap.get(workflowId));
     }
 
     @Override

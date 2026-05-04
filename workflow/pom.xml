@@ -19,8 +19,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.axoniq.framework.workflow</groupId>
-    <artifactId>axon-workflow-parent</artifactId>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-workflow-parent</artifactId>
     <version>0.1.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
@@ -41,7 +41,7 @@
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
-        <checkstyle.version>13.4.1</checkstyle.version>
+        <checkstyle.version>13.4.2</checkstyle.version>
         <maven-clean.version>3.5.0</maven-clean.version>
         <maven-compiler.version>3.15.0</maven-compiler.version>
         <maven-enforcer.version>3.6.2</maven-enforcer.version>
@@ -299,7 +299,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.5.0</version>
+                <version>1.7.3</version>
                 <configuration>
                     <updatePomFile>true</updatePomFile>
                     <flattenMode>resolveCiFriendliesOnly</flattenMode>

@@ -43,8 +43,9 @@ public interface WorkflowHistoryRepository {
     /**
      * Returns workflow history by given workflow id.
      *
+     * @param workflowId the id of the workflow to retrieve history for.
      * @return a workflow history or null, if no history exists for the given workflow id.
      */
     @Nonnull
-    Optional<WorkflowHistory> findById(@Nonnull String workflowIds);
+    Optional<WorkflowHistory> findById(@Nonnull String workflowId);
 }
