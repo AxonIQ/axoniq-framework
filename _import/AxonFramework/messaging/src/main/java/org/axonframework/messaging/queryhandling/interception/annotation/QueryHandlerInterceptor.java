@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.queryhandling.annotation;
+package org.axonframework.messaging.queryhandling.interception.annotation;
 
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptor;
 import org.axonframework.messaging.queryhandling.QueryMessage;
+import org.axonframework.messaging.queryhandling.annotation.AnnotatedQueryHandlingComponent;
+import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

@@ -38,6 +38,7 @@ import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.interception.annotation.QueryHandlerInterceptor;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
