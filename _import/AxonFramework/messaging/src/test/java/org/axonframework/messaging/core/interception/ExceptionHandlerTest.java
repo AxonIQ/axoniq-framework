@@ -144,8 +144,6 @@ class ExceptionHandlerTest {
 
         assertEquals(Arrays.asList("handleIllegalStateExceptionForSomeCommand",
                                    "handleExceptionForSomeCommand",
-                                   "handleExceptionForSomeCommandThroughAnnotation",
-                                   "handleIllegalStateExceptionForSomeCommandThroughAnnotation",
                                    "handleIllegalStateException",
                                    "handleIllegalStateExceptionThroughAnnotation",
                                    "leastSpecificExceptionHandler"),
@@ -190,21 +188,6 @@ class ExceptionHandlerTest {
         public void handleIllegalStateException(IllegalStateException exception) {
             invokedExceptionHandlers.add("handleIllegalStateException");
             throw exception;
-        }
-
-        @ExceptionHandler(
-                resultType = IllegalStateException.class,
-                payloadType = SomeCommand.class
-        )
-        public void handleIllegalStateExceptionForSomeCommandThroughAnnotation() {
-            invokedExceptionHandlers.add("handleIllegalStateExceptionForSomeCommandThroughAnnotation");
-            throw new IllegalStateException("handleIllegalStateExceptionForSomeCommandThroughAnnotation");
-        }
-
-        @ExceptionHandler(payloadType = SomeCommand.class)
-        public void handleExceptionForSomeCommandThroughAnnotation() {
-            invokedExceptionHandlers.add("handleExceptionForSomeCommandThroughAnnotation");
-            throw new IllegalStateException("handleExceptionForSomeCommandThroughAnnotation");
         }
 
         @ExceptionHandler

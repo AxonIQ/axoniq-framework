@@ -372,11 +372,6 @@ class OrderCommandHandler {
         // Handles all exceptions from the IssueCardCommand handler
     }
 
-    @ExceptionHandler(payloadType = IssueCardCommand.class)
-    public void handleIssueCardExceptions() {
-        // Handles all exceptions from the IssueCardCommand handler
-    }
-
     @ExceptionHandler
     public void handleIllegalStateExceptions(IllegalStateException exception) {
         // Handles all IllegalStateExceptions thrown within this component
@@ -390,14 +385,6 @@ class OrderCommandHandler {
     @ExceptionHandler
     public void handleSpecificCase(IssueCardCommand command,
                                    IllegalStateException exception) {
-        // Handles IllegalStateExceptions from IssueCardCommand handler
-    }
-
-    @ExceptionHandler(
-        resultType = IllegalStateException.class,
-        payloadType = IssueCardCommand.class
-    )
-    public void handleSpecificCase() {
         // Handles IllegalStateExceptions from IssueCardCommand handler
     }
 }
@@ -430,11 +417,6 @@ class CardSummaryProjection {
         // Handles all exceptions from the FindCardQuery handler
     }
 
-    @ExceptionHandler(payloadType = FindCardQuery.class)
-    public void handleFindCardQueryExceptions() {
-        // Handles all exceptions from the FindCardQuery handler
-    }
-
     @ExceptionHandler
     public void handleIllegalArgumentExceptions(IllegalArgumentException exception) {
         // Handles all IllegalArgumentExceptions within this component
@@ -448,14 +430,6 @@ class CardSummaryProjection {
     @ExceptionHandler
     public void handleSpecificCase(CardIssuedEvent event,
                                    IllegalArgumentException exception) {
-        // Handles IllegalArgumentExceptions from CardIssuedEvent handler
-    }
-
-    @ExceptionHandler(
-        resultType = IllegalArgumentException.class,
-        payloadType = CardIssuedEvent.class
-    )
-    public void handleSpecificCase() {
         // Handles IllegalArgumentExceptions from CardIssuedEvent handler
     }
 }
