@@ -18,7 +18,6 @@ package org.axonframework.messaging.core.interception.annotation;
 
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.AxonConfigurationException;
-import org.axonframework.common.FutureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
@@ -98,30 +97,6 @@ public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefin
         public boolean canHandle(Message message, ProcessingContext context) {
             return ResultParameterResolverFactory.ignoringResultParameters(context,
                                                                            pc -> super.canHandle(message, pc));
-        }
-
-        @Override
-        public Object handleSync(Message message,
-                                 ProcessingContext context,
-                                 @Nullable T target)
-                throws Exception {
-            try {
-                MessageHandlerInterceptorChain<Message> chain =
-                        InterceptorChainParameterResolverFactory.currentInterceptorChain(context);
-                return FutureUtils.joinAndUnwrap(
-                        chain.proceed(message, context)
-                             .reduce(null, (acc, entry) -> entry.message().payload())
-                );
-            } catch (Exception e) {
-                if (!expectedResultType.isInstance(e)) {
-                    throw e;
-                }
-                ProcessingContext contextWithException = ResultParameterResolverFactory.withResult(e, context);
-                if (super.canHandle(message, contextWithException)) {
-                    return super.handleSync(message, contextWithException, target);
-                }
-                throw e;
-            }
         }
 
         @Override
@@ -211,21 +186,6 @@ public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefin
             return super.handle(message, context, target)
                     .ignoreEntries()
                     .concatWith(() -> chain.proceed(message, context).cast());
-        }
-
-        @Override
-        public Object handleSync(Message message, ProcessingContext context, @Nullable T target)
-                throws Exception {
-            Object result = super.handleSync(message, context, target);
-            if (shouldInvokeInterceptorChain) {
-                MessageHandlerInterceptorChain<Message> chain =
-                        InterceptorChainParameterResolverFactory.currentInterceptorChain(context);
-                return FutureUtils.joinAndUnwrap(
-                        chain.proceed(message, context)
-                             .reduce(null, (acc, entry) -> entry.message().payload())
-                );
-            }
-            return result;
         }
     }
 }

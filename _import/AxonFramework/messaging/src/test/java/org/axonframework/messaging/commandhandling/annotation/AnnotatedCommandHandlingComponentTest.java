@@ -210,35 +210,6 @@ class AnnotatedCommandHandlingComponentTest {
         assertInstanceOf(NoHandlerForCommandException.class, exception.getCause());
     }
 
-    @Test
-    @Disabled("TODO #3062 - Exception Handler support")
-    void exceptionHandlerAnnotatedMethodsAreSupportedForCommandHandlingComponents() {
-        CommandMessage testCommandMessage = new GenericCommandMessage(TEST_TYPE, new ArrayList<>());
-        List<Exception> interceptedExceptions = new ArrayList<>();
-        annotatedCommandHandler =
-                new MyInterceptingCommandHandler(new ArrayList<>(), new ArrayList<>(), interceptedExceptions);
-        testSubject = new AnnotatedCommandHandlingComponent<>(
-                annotatedCommandHandler,
-                ClasspathParameterResolverFactory.forClass(annotatedCommandHandler.getClass()),
-                ClasspathHandlerDefinition.forClass(annotatedCommandHandler.getClass()),
-                new AnnotationMessageTypeResolver(),
-                new DelegatingMessageConverter(PassThroughConverter.INSTANCE)
-        );
-
-        try {
-            testSubject.handle(testCommandMessage, mock(ProcessingContext.class));
-            fail("Expected exception to be thrown");
-        } catch (Exception e) {
-
-        }
-
-        assertFalse(interceptedExceptions.isEmpty());
-        assertEquals(1, interceptedExceptions.size());
-        Exception interceptedException = interceptedExceptions.getFirst();
-        assertInstanceOf(RuntimeException.class, interceptedException);
-        assertEquals("Some exception", interceptedException.getMessage());
-    }
-
     @Nested
     class GivenAnAnnotatedInterfaceMethod {
 
