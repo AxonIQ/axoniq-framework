@@ -19,6 +19,6 @@
 *** xref:migration:paths/interceptors.adoc[]
 *** xref:migration:paths/configuration.adoc[]
 *** xref:migration:paths/sequencing-policies.adoc[]
-ifdef::data-protection-migration[]
+ifdef::data-protection[]
 include::data-protection-migration:partial$nav.adoc[]
 endif::[]

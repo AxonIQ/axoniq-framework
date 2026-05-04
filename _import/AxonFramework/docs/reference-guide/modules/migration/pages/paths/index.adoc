@@ -23,7 +23,7 @@ Whether you are performing a straightforward version bump or a deep architectura
 * xref:migration:paths/configuration.adoc[Configuration migration]
 * xref:migration:paths/sequencing-policies.adoc[Sequencing Policy migration]
 * xref:migration:paths/dlq.adoc[Dead-Letter Queue migration]
-ifdef::data-protection-migration[]
+ifdef::data-protection[]
 * include::data-protection-migration:pages$migration-path.adoc[Dead-Letter Queue migration]
 endif::[]
 3. **What is not yet there**
