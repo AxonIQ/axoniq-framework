@@ -38,7 +38,7 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-public class SleepAsyncIntegrationTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+class SleepAsyncIntegrationTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
     public SleepAsyncIntegrationTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());
