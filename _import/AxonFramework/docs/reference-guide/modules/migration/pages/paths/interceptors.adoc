@@ -407,7 +407,7 @@ For full documentation and examples for all three message types, see xref:messag
 === Migration of `@ExceptionHandler`
 
 The `@ExceptionHandler` annotation works in Axon Framework 5 with the same intent as in Axon Framework 4: handling exceptions thrown from message handler methods in the same class.
-The main change is that exception handler methods no longer receive `CommandMessage<?>` as a parameter to identify the command context; instead, use the `payloadType` attribute.
+The main change is that exception handler methods no longer receive `CommandMessage` as a parameter to identify the command context; instead, use the `payloadType` attribute.
 
 [tabs]
 ====
