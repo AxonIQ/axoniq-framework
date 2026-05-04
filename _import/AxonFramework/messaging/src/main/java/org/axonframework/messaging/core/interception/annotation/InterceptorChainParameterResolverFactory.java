@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.core.annotation;
+package org.axonframework.messaging.core.interception.annotation;
 
 import org.axonframework.common.Priority;
 import org.axonframework.messaging.core.Context.ResourceKey;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.annotation.ParameterResolver;
+import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 

@@ -24,7 +24,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageStream.Entry;
 import org.axonframework.messaging.core.annotation.HandlerAttributes;
 import org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition;
-import org.axonframework.messaging.core.annotation.InterceptorChainParameterResolverFactory;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.annotation.WrappedMessageHandlingMember;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;

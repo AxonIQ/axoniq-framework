@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.core.annotation;
+package org.axonframework.messaging.core.interception.annotation;
 
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptorMemberChain;
-import org.axonframework.messaging.core.interception.annotation.NoMoreInterceptors;
+import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Iterator;
