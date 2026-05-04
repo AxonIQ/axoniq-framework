@@ -45,7 +45,7 @@ import java.util.concurrent.CompletableFuture;
  * {@link ResultHandler}.
  *
  * @author Allard Buijze
- * @since 4.4.0, 5.2.0
+ * @since 4.4.0
  */
 public class MessageHandlerInterceptorDefinition implements HandlerEnhancerDefinition {
 

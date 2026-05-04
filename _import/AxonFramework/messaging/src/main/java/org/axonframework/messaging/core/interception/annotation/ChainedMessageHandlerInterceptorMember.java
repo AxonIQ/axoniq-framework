@@ -31,7 +31,7 @@ import java.util.Iterator;
  *
  * @param <T> The type that declares the handlers in this chain.
  * @author Allard Buijze
- * @since 4.4.0, 5.2.0
+ * @since 4.4.0
  */
 public class ChainedMessageHandlerInterceptorMember<T> implements MessageHandlerInterceptorMemberChain<T> {
 
