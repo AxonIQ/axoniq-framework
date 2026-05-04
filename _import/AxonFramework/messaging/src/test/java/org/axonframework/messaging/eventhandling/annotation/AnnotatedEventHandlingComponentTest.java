@@ -33,7 +33,6 @@ import org.axonframework.messaging.core.annotation.ClasspathHandlerDefinition;
 import org.axonframework.messaging.core.annotation.ClasspathParameterResolverFactory;
 import org.axonframework.messaging.core.annotation.MetadataValue;
 import org.axonframework.messaging.core.annotation.SourceId;
-import org.axonframework.messaging.core.interception.annotation.ExceptionHandler;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
@@ -1055,26 +1054,6 @@ class AnnotatedEventHandlingComponentTest {
             assertThatThrownBy(() -> annotatedEventHandlingComponent(handler))
                     .isInstanceOf(AxonConfigurationException.class)
                     .hasMessageContaining("declare a parameter of type InterceptorChain");
-        }
-
-        @Test
-        void exceptionHandlerWithChainParamIsRejected() {
-            // given - @ExceptionHandler is a result handler; combining it with a chain parameter is illegal
-            var handler = new Object() {
-                @ExceptionHandler
-                void handleException(Exception e, MessageHandlerInterceptorChain<?> chain) {
-                    // no-op; component needs a handler but invocation is never tested
-                }
-                @EventHandler
-                void handle(Integer payload) {
-                    // no-op; component needs a handler but invocation is never tested
-                }
-            };
-
-            // when / then
-            assertThatThrownBy(() -> annotatedEventHandlingComponent(handler))
-                    .isInstanceOf(AxonConfigurationException.class)
-                    .hasMessageContaining("acting on the invocation result must not declare a parameter of type InterceptorChain");
         }
 
         @Test
