@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.commandhandling.annotation;
+package org.axonframework.messaging.commandhandling.interception.annotation;
 
 import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.annotation.AnnotatedCommandHandlingComponent;
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptor;
 
 import java.lang.annotation.ElementType;
