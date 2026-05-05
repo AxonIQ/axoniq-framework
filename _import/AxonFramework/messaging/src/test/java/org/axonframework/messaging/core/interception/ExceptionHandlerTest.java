@@ -325,6 +325,136 @@ class ExceptionHandlerTest {
                 exceptionHandlerInvoked = true;
             }
         }
+
+        @Test
+        void exceptionHandlerReceivesEventMessageAsParameter() {
+            // given
+            var handler = new EventHandlerWithEventMessageParameter();
+            var component = annotatedEventHandlingComponent(handler);
+            var event = asEventMessage("test-payload");
+
+            // when
+            var result = component.handle(event, StubProcessingContext.forMessage(event));
+
+            // then - exception handler received the full EventMessage
+            assertSame(event, handler.capturedMessage);
+            assertTrue(result.error().isEmpty());
+        }
+
+        @Test
+        void exceptionHandlerReceivesBothEventMessageAndExceptionAsParameters() {
+            // given
+            var handler = new EventHandlerWithEventMessageAndExceptionParameters();
+            var component = annotatedEventHandlingComponent(handler);
+            var event = asEventMessage("test-payload");
+
+            // when
+            var result = component.handle(event, StubProcessingContext.forMessage(event));
+
+            // then - exception handler received both the full EventMessage and the exception
+            assertSame(event, handler.capturedMessage);
+            assertInstanceOf(RuntimeException.class, handler.capturedException);
+            assertTrue(result.error().isEmpty());
+        }
+
+        @Test
+        void exceptionHandlerWithEventMessageParameterDoesNotMatchWrongMessageType() {
+            // given - a component that only handles CommandMessage in its exception handler
+            var handler = new EventHandlerWithCommandMessageExceptionHandler();
+            var component = annotatedEventHandlingComponent(handler);
+            var event = asEventMessage("test-payload");
+
+            // when - an EventMessage arrives, but the exception handler expects a CommandMessage
+            var result = component.handle(event, StubProcessingContext.forMessage(event));
+
+            // then - exception handler is not invoked; original exception propagates
+            assertFalse(handler.exceptionHandlerInvoked);
+            assertTrue(result.error().isPresent());
+        }
+
+        @Test
+        void exceptionHandlerWithQueryMessageParameterDoesNotMatchEventMessage() {
+            // given - a projection whose exception handler targets only QueryMessage failures
+            var handler = new ProjectionWithQueryMessageExceptionHandler();
+            var component = annotatedEventHandlingComponent(handler);
+            var event = asEventMessage("test-payload");
+
+            // when - an EventMessage arrives and the event handler throws
+            var result = component.handle(event, StubProcessingContext.forMessage(event));
+
+            // then - the QueryMessage-scoped exception handler is not invoked; original exception propagates
+            assertFalse(handler.exceptionHandlerInvoked);
+            assertTrue(result.error().isPresent());
+        }
+
+        @SuppressWarnings("unused")
+        private static class EventHandlerWithEventMessageParameter {
+
+            EventMessage capturedMessage;
+
+            @EventHandler
+            void on(String event) {
+                throw new RuntimeException("event handler failed");
+            }
+
+            @ExceptionHandler
+            void onException(EventMessage message) {
+                capturedMessage = message;
+                // return normally — suppresses the exception
+            }
+        }
+
+        @SuppressWarnings("unused")
+        private static class EventHandlerWithEventMessageAndExceptionParameters {
+
+            EventMessage capturedMessage;
+            RuntimeException capturedException;
+
+            @EventHandler
+            void on(String event) {
+                throw new RuntimeException("event handler failed");
+            }
+
+            @ExceptionHandler
+            void onException(EventMessage message, RuntimeException exception) {
+                capturedMessage = message;
+                capturedException = exception;
+                // return normally — suppresses the exception
+            }
+        }
+
+        @SuppressWarnings("unused")
+        private static class EventHandlerWithCommandMessageExceptionHandler {
+
+            boolean exceptionHandlerInvoked = false;
+
+            @EventHandler
+            void on(String event) {
+                throw new RuntimeException("event handler failed");
+            }
+
+            @ExceptionHandler
+            void onException(CommandMessage message) {
+                exceptionHandlerInvoked = true;
+            }
+        }
+
+        @SuppressWarnings("unused")
+        private static class ProjectionWithQueryMessageExceptionHandler {
+
+            boolean exceptionHandlerInvoked = false;
+
+            @EventHandler
+            void on(String event) {
+                throw new RuntimeException("event handler failed");
+            }
+
+            @ExceptionHandler
+            void onQueryException(QueryMessage message) {
+                // only intended for query-related failures in a projection
+                exceptionHandlerInvoked = true;
+            }
+        }
     }
 
     private record SomeCommand(Supplier<Exception> exceptionSupplier) {

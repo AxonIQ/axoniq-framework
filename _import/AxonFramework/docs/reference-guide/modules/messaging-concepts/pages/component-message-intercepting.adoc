@@ -346,13 +346,13 @@ EventProcessorModule
 
 The `@ExceptionHandler` annotation is a more specific variant of `@MessageHandlerInterceptor`.
 The framework invokes `@ExceptionHandler` annotated methods _only_ for exceptional results of message handling.
-This allows you to throw more domain-specific exceptions or translate technical exceptions to business errors.
+This makes it suitable for cross-cutting exception handling concerns such as logging, translating technical exceptions to business errors, or suppressing recoverable failures.
 
-You can wire all xref:supported-parameters-annotated-handlers.adoc[default parameters] to an exception handler, similar to command, event, and query handlers.
-Hence, you can add the exception, payload, metadata, and other options.
+You can wire the exception and the full message (for example, `CommandMessage` or `EventMessage`) as parameters.
+The framework matches an exception handler based on which parameters it declares: the exception type must be assignable from the thrown exception, and the message type must be assignable from the message being handled.
+Omitting a parameter means it is not used for matching — any value is accepted.
 
 You can introduce `@ExceptionHandler` annotated methods in any message handling component.
-You can choose to react to all exceptions or define specific exception and message combinations.
 
 *Command handler exception handlers:*
 
@@ -368,24 +368,19 @@ class OrderCommandHandler {
     }
 
     @ExceptionHandler
-    public void handleIssueCardExceptions(IssueCardCommand command) {
-        // Handles all exceptions from the IssueCardCommand handler
-    }
-
-    @ExceptionHandler
     public void handleIllegalStateExceptions(IllegalStateException exception) {
         // Handles all IllegalStateExceptions thrown within this component
     }
 
     @ExceptionHandler(resultType = IllegalStateException.class)
     public void handleIllegalStateExceptions(Exception exception) {
-        // Handles all IllegalStateExceptions thrown within this component
+        // Equivalent: handles IllegalStateExceptions using the resultType attribute
     }
 
     @ExceptionHandler
-    public void handleSpecificCase(IssueCardCommand command,
-                                   IllegalStateException exception) {
-        // Handles IllegalStateExceptions from IssueCardCommand handler
+    public void logFailedCommand(CommandMessage command, Exception exception) {
+        // Access the full command message for cross-cutting concerns such as logging
+        log.warn("Command {} failed: {}", command.qualifiedName(), exception.getMessage());
     }
 }
 ----
@@ -413,24 +408,19 @@ class CardSummaryProjection {
     }
 
     @ExceptionHandler
-    public void handleFindCardQueryExceptions(FindCardQuery query) {
-        // Handles all exceptions from the FindCardQuery handler
-    }
-
-    @ExceptionHandler
     public void handleIllegalArgumentExceptions(IllegalArgumentException exception) {
         // Handles all IllegalArgumentExceptions within this component
     }
 
     @ExceptionHandler(resultType = IllegalArgumentException.class)
     public void handleIllegalArgumentExceptions(Exception exception) {
-        // Handles all IllegalArgumentExceptions within this component
+        // Equivalent: handles IllegalArgumentExceptions using the resultType attribute
     }
 
     @ExceptionHandler
-    public void handleSpecificCase(CardIssuedEvent event,
-                                   IllegalArgumentException exception) {
-        // Handles IllegalArgumentExceptions from CardIssuedEvent handler
+    public void logFailedEvent(EventMessage event, Exception exception) {
+        // Access the full event message for cross-cutting concerns such as logging
+        log.warn("Event {} failed: {}", event.qualifiedName(), exception.getMessage());
     }
 }
 ----
