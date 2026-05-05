@@ -183,8 +183,7 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
     @Override
     public CompletableFuture<Void> start() {
         logger.info("Starting PooledStreamingEventProcessor [{}].", name);
-        coordinator.start();
-        return FutureUtils.emptyCompletedFuture();
+        return coordinator.start();
     }
 
     @Override

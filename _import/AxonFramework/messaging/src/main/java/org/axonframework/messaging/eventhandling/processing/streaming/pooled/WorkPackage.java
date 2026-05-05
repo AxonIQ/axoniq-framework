@@ -17,7 +17,6 @@
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
 import org.axonframework.common.Assert;
-import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.LegacyResources;
@@ -42,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.time.Clock;
+import java.util.concurrent.CompletionException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -57,7 +57,6 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * Defines the process of handling {@link EventMessage}s for a specific {@link Segment}. This entails validating if the
@@ -341,23 +340,25 @@ class WorkPackage {
                 return;
             }
 
-            try {
-                processEvents();
-            } catch (Exception e) {
-                logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
-                            segment.getSegmentId(), name, e);
-                abort(e);
-            }
-            scheduled.set(false);
-            if (!processingQueue.isEmpty() || abortFlag.get() != null) {
-                logger.debug("Rescheduling Work Package [{}]-[{}] since there are events left.",
-                             segment.getSegmentId(), name);
-                scheduleWorker();
-            }
+            processEvents().whenCompleteAsync((r, e) -> {
+                processingEvents.set(false);
+                if (e != null) {
+                    Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+                    logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
+                                segment.getSegmentId(), name, cause);
+                    abort(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
+                }
+                scheduled.set(false);
+                if (!processingQueue.isEmpty() || abortFlag.get() != null) {
+                    logger.debug("Rescheduling Work Package [{}]-[{}] since there are events left.",
+                                 segment.getSegmentId(), name);
+                    scheduleWorker();
+                }
+            }, executorService);
         });
     }
 
-    private void processEvents() {
+    private CompletableFuture<Void> processEvents() {
         List<EventMessage> eventBatch = new ArrayList<>();
         while (!isAbortTriggered() && eventBatch.size() < batchSize && !processingQueue.isEmpty()) {
             ProcessingEntry entry = processingQueue.poll();
@@ -371,42 +372,29 @@ class WorkPackage {
         if (!eventBatch.isEmpty()) {
             logger.debug("Work Package [{}]-[{}] is processing a batch of {} events.",
                          segment.getSegmentId(), name, eventBatch.size());
-            try {
-                processingEvents.set(true);
-                var unitOfWork = unitOfWorkFactory.create();
-                unitOfWork.runOnPreInvocation(ctx -> {
-                    ctx.putResource(Segment.RESOURCE_KEY, segment);
-                    ctx.putResource(TrackingToken.RESOURCE_KEY, lastConsumedToken);
-                });
-
-                unitOfWork.onInvocation(ctx -> batchProcessor.process(eventBatch, ctx).asCompletableFuture());
-
-                unitOfWork.runOnPrepareCommit(ctx -> storeToken(lastConsumedToken, ctx));
-                unitOfWork.runOnAfterCommit(
-                        ctx -> {
-                            segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
-                            if (batchProcessedCallback != null) {
-                                batchProcessedCallback.run();
-                            }
-                        }
-                );
-                FutureUtils.joinAndUnwrap(unitOfWork.execute());
-            } finally {
-                processingEvents.set(false);
-            }
+            processingEvents.set(true);
+            var unitOfWork = unitOfWorkFactory.create();
+            unitOfWork.runOnPreInvocation(ctx -> {
+                ctx.putResource(Segment.RESOURCE_KEY, segment);
+                ctx.putResource(TrackingToken.RESOURCE_KEY, lastConsumedToken);
+            });
+            unitOfWork.onInvocation(ctx -> batchProcessor.process(eventBatch, ctx).asCompletableFuture());
+            unitOfWork.onPrepareCommit(ctx -> storeToken(lastConsumedToken, ctx));
+            unitOfWork.runOnAfterCommit(ctx -> {
+                segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
+                if (batchProcessedCallback != null) {
+                    batchProcessedCallback.run();
+                }
+            });
+            return unitOfWork.execute();
         } else {
             segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
             if (lastStoredToken != lastConsumedToken && now() > nextClaimExtension.get()) {
-                joinAndUnwrap(
-                        unitOfWorkFactory
-                                .create()
-                                .executeWithResult(context -> {
-                                    storeToken(lastConsumedToken, context);
-                                    return emptyCompletedFuture();
-                                })
+                return unitOfWorkFactory.create().executeWithResult(
+                        context -> storeToken(lastConsumedToken, context)
                 );
             } else {
-                extendClaimIfThresholdIsMet();
+                return extendClaimIfThresholdIsMet();
             }
         }
     }
@@ -416,21 +404,23 @@ class WorkPackage {
      * {@link PooledStreamingEventProcessorConfiguration#claimExtensionThreshold(long) claim extension threshold} is
      * met.
      */
-    public void extendClaimIfThresholdIsMet() {
+    public CompletableFuture<Void> extendClaimIfThresholdIsMet() {
         if (now() > nextClaimExtension.get()) {
             logger.debug("Work Package [{}]-[{}] will extend its token claim.", name, segment.getSegmentId());
-            joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
+            return unitOfWorkFactory.create().executeWithResult(
                     context -> tokenStore.extendClaim(name, segment.getSegmentId(), context)
-            ));
-            nextClaimExtension.set(now() + claimExtensionThreshold);
+            ).thenRun(() -> nextClaimExtension.set(now() + claimExtensionThreshold));
         }
+        return emptyCompletedFuture();
     }
 
-    private void storeToken(TrackingToken token, ProcessingContext processingContext) {
+    private CompletableFuture<Void> storeToken(TrackingToken token, ProcessingContext processingContext) {
         logger.debug("Work Package [{}]-[{}] will store token [{}].", name, segment.getSegmentId(), token);
-        joinAndUnwrap(tokenStore.storeToken(token, name, segment.getSegmentId(), processingContext));
-        lastStoredToken = token;
-        nextClaimExtension.set(now() + claimExtensionThreshold);
+        return tokenStore.storeToken(token, name, segment.getSegmentId(), processingContext)
+                         .thenRun(() -> {
+                             lastStoredToken = token;
+                             nextClaimExtension.set(now() + claimExtensionThreshold);
+                         });
     }
 
     /**
