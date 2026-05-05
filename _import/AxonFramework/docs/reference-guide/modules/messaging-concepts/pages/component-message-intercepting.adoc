@@ -193,7 +193,7 @@ Omitting `messageType` defaults to matching any `Message`.
 
 *Intercepting all messages on a component:*
 
-Omitting `messageType` matches any message, so the interceptor runs before every handler on the component — event handlers and query handlers alike.
+Omitting `messageType` matches any message, so the interceptor runs before every handler on the component, including event handlers and query handlers.
 This is useful for cross-cutting concerns such as logging or security checks that should apply regardless of the message type being processed.
 
 [source,java]
