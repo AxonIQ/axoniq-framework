@@ -123,3 +123,92 @@ public class AxonConfig {
 ----
 --
 ====
+
+[.axoniq-feature]
+==== `PostgresqlEventStorageEngine`
+
+The `PostgresqlEventStorageEngine` stores events directly in a PostgreSQL 16+ database, fully supporting Dynamic Consistency Boundaries where events may have several tags.
+This is the default storage engine when running without Axon Server.
+
+The engine creates its schema automatically on startup—an `events` table, a `tags` table for DCB tag data, a `consistency_tags` table for concurrent-write safety, and an `events_monotonic_seq` sequence—so no manual DDL is required.
+
+[tabs]
+======
+Configuration API::
++
+--
+
+Declare dependencies:
+
+[source,xml]
+----
+<!--somewhere in the POM file-->
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-postgresql</artifactId>
+    <version>${axoniq.version}</version>
+</dependency>
+----
+
+The `PostgresqlEventStorageEngine` registers itself automatically once a `DataSource` is present in the component registry.
+To register an explicit engine—for example when overriding defaults—use `EventSourcingConfigurer`:
+
+[source,java]
+----
+import io.axoniq.framework.postgresql.PostgresqlEventStorageEngine;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+
+import javax.sql.DataSource;
+
+public class AxonConfig {
+
+    public void configureStorageEngine(EventSourcingConfigurer configurer) {
+        configurer.registerEventStorageEngine(config -> new PostgresqlEventStorageEngine(
+                config.getComponent(DataSource.class),
+                config.getComponent(EventConverter.class)
+        ));
+    }
+}
+----
+
+--
+
+Spring Boot::
++
+--
+
+Declare dependencies:
+
+[source,xml]
+----
+<!--somewhere in the POM file-->
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-postgresql</artifactId>
+    <version>${axoniq.version}</version>
+</dependency>
+----
+
+Configure your PostgreSQL data source using standard Spring Boot properties:
+
+[source,properties]
+----
+spring.datasource.url=jdbc:postgresql://localhost/mydb
+spring.datasource.username=user
+spring.datasource.password=password
+----
+
+The `PostgresqlEventStorageEngine` registers itself automatically once a `DataSource` bean is present.
+
+--
+======
+
+[NOTE]
+.Axon Server takes precedence
+====
+When both `axoniq-postgresql` and `axon-server-connector` are on the classpath, the Axon Server engine takes precedence.
+To use PostgreSQL instead, either remove `axon-server-connector` from your dependencies or register `PostgresqlEventStorageEngine` explicitly as shown above.
+====
+
+For schema details, connection pool sizing, and multi-instance coordination, see xref:tuning:rdbms-tuning.adoc#postgresql_operations[PostgreSQL operations].
