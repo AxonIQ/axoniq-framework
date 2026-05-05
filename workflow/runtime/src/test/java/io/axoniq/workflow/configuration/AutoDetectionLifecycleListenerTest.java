@@ -19,11 +19,13 @@
 
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.annotation.OnCancellation;
-import io.axoniq.workflow.runtime.api.annotation.OnFailure;
-import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
-import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowCancelledHandler;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowFailedHandler;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowStartedHandler;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowTimedOutHandler;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.junit.jupiter.api.*;
@@ -47,7 +49,9 @@ class AutoDetectionLifecycleListenerTest {
     void detectLifecycleListenersWithoutName() {
         var workflow = new WorkflowWithListeners();
         Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
-                AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
+                AutoDetectionUtils.statusChangeListeners(workflow,
+                                                         TestWorkflowContext.class,
+                                                         "workflowName");
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
         var successListeners = listeners.get(WorkflowStatus.COMPLETED);
@@ -105,6 +109,36 @@ class AutoDetectionLifecycleListenerTest {
     }
 
     @Test
+    void detectStatusHandlerListener() {
+        var workflow = new WorkflowWithStatusHandler();
+        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+                AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
+
+        assertThat(listeners).containsKey(WorkflowStatus.STARTED);
+        var successListeners = listeners.get(WorkflowStatus.STARTED);
+
+        TestWorkflowContext context = mock(TestWorkflowContext.class);
+        successListeners.onWorkflowStatus(WorkflowStatus.STARTED, context);
+
+        assertThat(workflow.invoked).containsExactly("onStarted");
+    }
+
+    @Test
+    void detectStartHandlerListener() {
+        var workflow = new WorkflowWithStartHandler();
+        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+                AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
+
+        assertThat(listeners).containsKey(WorkflowStatus.STARTED);
+        var successListeners = listeners.get(WorkflowStatus.STARTED);
+
+        TestWorkflowContext context = mock(TestWorkflowContext.class);
+        successListeners.onWorkflowStatus(WorkflowStatus.STARTED, context);
+
+        assertThat(workflow.invoked).containsExactly("onStart");
+    }
+
+    @Test
     void reproduceArgumentTypeMismatch() {
         var workflow = new WorkflowWithSpecializedContext();
         Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
@@ -120,11 +154,12 @@ class AutoDetectionLifecycleListenerTest {
         assertThat(workflow.invoked).containsExactly("onSuccessSpecialized");
     }
 
-    interface TestWorkflowContext extends WorkflowContext {
+    public interface TestWorkflowContext extends WorkflowContext {
 
     }
 
     interface SpecializedWorkflowContext extends WorkflowContext {
+
         void specializedMethod();
     }
 
@@ -136,13 +171,14 @@ class AutoDetectionLifecycleListenerTest {
         public void myWorkflow(TestWorkflowContext context) {
         }
 
-        @OnSuccess
+        @WorkflowCompletedHandler
         public void onSuccessNoName(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onSuccessNoName");
         }
     }
 
     public static class WorkflowWithNamedListeners {
+
         public List<String> invoked = new ArrayList<>();
 
         @Workflow(workflowName = "workflow-1", startOnEvent = "start", idProperty = "id")
@@ -153,12 +189,12 @@ class AutoDetectionLifecycleListenerTest {
         public void myWorkflow2(TestWorkflowContext context) {
         }
 
-        @OnSuccess(workflowName = "workflow-1")
+        @WorkflowCompletedHandler(workflowName = "workflow-1")
         public void onSuccess1(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onSuccess1");
         }
 
-        @OnSuccess(workflowName = "workflow-2")
+        @WorkflowCompletedHandler(workflowName = "workflow-2")
         public void onSuccess2(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onSuccess2");
         }
@@ -168,33 +204,54 @@ class AutoDetectionLifecycleListenerTest {
 
         public List<String> invoked = new ArrayList<>();
 
-        @OnSuccess
+        @WorkflowCompletedHandler
         public void onSuccess(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onSuccess");
         }
 
-        @OnFailure
+        @WorkflowFailedHandler
         public void onFailure(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onFailure");
         }
 
-        @OnCancellation
+        @WorkflowCancelledHandler
         public void onCancellation(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onCancellation");
         }
 
-        @OnTimeout
+        @WorkflowTimedOutHandler
         public void onTimeout(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onTimeout");
         }
     }
 
     public static class WorkflowWithSpecializedContext {
+
         public List<String> invoked = new ArrayList<>();
 
-        @OnSuccess
+        @WorkflowCompletedHandler
         public void onSuccessSpecialized(WorkflowStatus status, SpecializedWorkflowContext context) {
             invoked.add("onSuccessSpecialized");
+        }
+    }
+
+    public static class WorkflowWithStatusHandler {
+
+        public List<String> invoked = new ArrayList<>();
+
+        @WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.STARTED)
+        public void onStarted(WorkflowStatus status, TestWorkflowContext context) {
+            invoked.add("onStarted");
+        }
+    }
+
+    public static class WorkflowWithStartHandler {
+
+        public List<String> invoked = new ArrayList<>();
+
+        @WorkflowStartedHandler
+        public void onStart(WorkflowStatus status, TestWorkflowContext context) {
+            invoked.add("onStart");
         }
     }
 }

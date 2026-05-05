@@ -19,11 +19,8 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.dsl.api.AssociationsUtils;
-import io.axoniq.workflow.runtime.api.annotation.OnCancellation;
-import io.axoniq.workflow.runtime.api.annotation.OnFailure;
-import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
-import io.axoniq.workflow.runtime.api.annotation.OnTimeout;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -41,7 +38,6 @@ import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -58,7 +54,6 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static io.axoniq.workflow.runtime.api.annotation.Workflow.*;
-import static io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus.*;
 import static org.axonframework.common.annotation.AnnotationUtils.findAnnotationAttributes;
 
 /**
@@ -140,15 +135,11 @@ public class AutoDetectionUtils {
 
         // TODO: consider registration based on workflow name?
         detectAndAddListener(mc,
-                             OnCancellation.class,
+                             WorkflowStatusChangedHandler.class,
                              workflowName,
                              instance,
                              workflowContextType,
-                             CANCELLED,
                              listeners);
-        detectAndAddListener(mc, OnTimeout.class, workflowName, instance, workflowContextType, TIMED_OUT, listeners);
-        detectAndAddListener(mc, OnFailure.class, workflowName, instance, workflowContextType, FAILED, listeners);
-        detectAndAddListener(mc, OnSuccess.class, workflowName, instance, workflowContextType, COMPLETED, listeners);
 
         return listeners;
     }
@@ -159,7 +150,6 @@ public class AutoDetectionUtils {
             @Nonnull String workflowName,
             @Nonnull Object instance,
             @Nonnull Class<C> workflowContextType,
-            @Nonnull WorkflowStatus status,
             @Nonnull ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners) {
         methodCandidates.stream()
                         .filter(hasParameterOfType(WorkflowStatus.class).and(hasContextParameter(workflowContextType)))
@@ -170,6 +160,7 @@ public class AutoDetectionUtils {
                             return !(nameAttr instanceof String s) || s.isEmpty() || s.equals(workflowName);
                         })
                         .forEach(mwa -> {
+                            WorkflowStatus status = (WorkflowStatus) mwa.attributes.get(ATTR_WORKFLOW_STATUS);
                             listeners.get(status).addListener(
                                     new WorkflowStatusChangeListener() {
                                         @Override
@@ -233,9 +224,9 @@ public class AutoDetectionUtils {
                 getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
                         .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
                         .orElseGet(
-                                () -> new PayloadPropertyWorkflowIdProvider(c.getComponent(EventConverter.class),
-                                                                            (String) attributes.get(
-                                                                                    ATTR_ID_PROPERTY))
+                                () -> new PayloadPropertyWorkflowIdProvider(
+                                        (String) attributes.get(ATTR_ID_PROPERTY)
+                                )
                         );
     }
 

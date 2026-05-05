@@ -29,7 +29,6 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
@@ -44,14 +43,11 @@ class EventSourcedWorkflowStateTest {
 
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
-    private EventConverter converter;
 
     @BeforeEach
     void setUp() {
         state = new EventSourcedWorkflowState();
         processingContext = mock(ProcessingContext.class);
-        converter = mock(EventConverter.class);
-        when(processingContext.component(EventConverter.class)).thenReturn(converter);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
     }
 
@@ -63,7 +59,7 @@ class EventSourcedWorkflowStateTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         when(eventMessage.timestamp()).thenReturn(Instant.now());
-        when(eventMessage.payloadAs(eq(Object.class), any())).thenReturn(payload);
+        when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
 
         state.evolve(eventMessage, processingContext);
 
@@ -81,7 +77,7 @@ class EventSourcedWorkflowStateTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         when(eventMessage.timestamp()).thenReturn(Instant.now());
-        when(eventMessage.payloadAs(eq(Object.class), any())).thenReturn(payload);
+        when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
 
         state.evolve(eventMessage, processingContext);
 
@@ -99,7 +95,7 @@ class EventSourcedWorkflowStateTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         when(eventMessage.timestamp()).thenReturn(Instant.now());
-        when(eventMessage.payloadAs(eq(Object.class), any())).thenReturn(payload);
+        when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
 
         state.evolve(eventMessage, processingContext);
 
@@ -134,7 +130,7 @@ class EventSourcedWorkflowStateTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         when(eventMessage.timestamp()).thenReturn(Instant.now());
-        when(eventMessage.payloadAs(eq(StepRetryInfo.class), any())).thenReturn(retryInfo);
+        when(eventMessage.payloadAs(StepRetryInfo.class)).thenReturn(retryInfo);
 
         state.evolve(eventMessage, processingContext);
 
@@ -163,8 +159,8 @@ class EventSourcedWorkflowStateTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         when(eventMessage.timestamp()).thenReturn(Instant.now());
-        when(eventMessage.payloadAs(any(TypeReference.class), any())).thenReturn(stepResult);
-        when(eventMessage.payloadAs(eq(Object.class), any())).thenReturn(stepResult);
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(stepResult);
+        when(eventMessage.payloadAs(Object.class)).thenReturn(stepResult);
 
         state.evolve(eventMessage, processingContext);
 
@@ -184,8 +180,8 @@ class EventSourcedWorkflowStateTest {
         when(eventMessage.timestamp()).thenReturn(Instant.now());
         // Verify that the payload is retrieved as WorkflowError before accessing it.
         // Even if payloadAs(Object.class) returns something else, payloadAs(WorkflowError.class) must be used.
-        when(eventMessage.payloadAs(eq(Object.class), any())).thenReturn("not-an-error");
-        when(eventMessage.payloadAs(eq(WorkflowError.class), any())).thenReturn(error);
+        when(eventMessage.payloadAs(Object.class)).thenReturn("not-an-error");
+        when(eventMessage.payloadAs(WorkflowError.class)).thenReturn(error);
 
         state.evolve(eventMessage, processingContext);
 

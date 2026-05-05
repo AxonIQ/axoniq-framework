@@ -57,9 +57,9 @@ class AnyMatchCombinatorDelegateCompletesTest {
 
     @Test
     void stepNameCombinesAllResultNames() {
-        var r1 = WorkflowStepResults.completed("stepA", null);
-        var r2 = WorkflowStepResults.completed("stepB", null);
-        var r3 = WorkflowStepResults.completed("stepC", null);
+        var r1 = WorkflowStepResults.completed("stepA", null, TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", null, TestEventConverter.INSTANCE);
+        var r3 = WorkflowStepResults.completed("stepC", null, TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted,
                                                                               r1,
@@ -73,25 +73,25 @@ class AnyMatchCombinatorDelegateCompletesTest {
 
     @Test
     void firstCompletedResultBecomesWinner() {
-        var r1 = WorkflowStepResults.completed("stepA", "payload-A");
-        var r2 = WorkflowStepResults.completed("stepB", "payload-B");
+        var r1 = WorkflowStepResults.completed("stepA", "payload-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "payload-B", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         assertThat(race.isCompleted()).isTrue();
         assertThat(race.success()).isTrue();
-        assertThat(race.<String>result()).contains("payload-A");
+        assertThat(race.<String>resultAs(String.class).get()).isEqualTo("payload-A");
     }
 
     @Test
     void singleResultBecomesWinnerImmediately() {
-        var r1 = WorkflowStepResults.completed("onlyStep", "only-value");
+        var r1 = WorkflowStepResults.completed("onlyStep", "only-value", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1);
 
         assertThat(race.isCompleted()).isTrue();
         assertThat(race.success()).isTrue();
-        assertThat(race.<String>result()).contains("only-value");
+        assertThat(race.<String>resultAs(String.class).get()).isEqualTo("only-value");
         assertThat(race.getStepName()).isEqualTo("anyMatch(onlyStep)");
     }
 
@@ -99,8 +99,8 @@ class AnyMatchCombinatorDelegateCompletesTest {
 
     @Test
     void delegatesSuccessToWinner() {
-        var r1 = WorkflowStepResults.completed("winner", "value");
-        var r2 = WorkflowStepResults.completed("loser", "other");
+        var r1 = WorkflowStepResults.completed("winner", "value", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("loser", "other", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
@@ -108,14 +108,14 @@ class AnyMatchCombinatorDelegateCompletesTest {
         assertThat(race.failure()).isFalse();
         assertThat(race.canceled()).isFalse();
         assertThat(race.timeout()).isFalse();
-        assertThat(race.<String>result()).contains("value");
+        assertThat(race.resultAs(String.class).get()).isEqualTo("value");
         assertThat(race.error()).isEmpty();
     }
 
     @Test
     void delegatesFailureToWinner() {
         var failed = WorkflowStepResults.failed("failStep", new RuntimeException("boom"));
-        var success = WorkflowStepResults.completed("successStep", "value");
+        var success = WorkflowStepResults.completed("successStep", "value", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted,
                                                                               failed,
@@ -129,7 +129,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
     @Test
     void delegatesCancelledToWinner() {
         var cancelled = WorkflowStepResults.canceled("cancelStep");
-        var success = WorkflowStepResults.completed("successStep", "value");
+        var success = WorkflowStepResults.completed("successStep", "value", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted,
                                                                               cancelled,
@@ -142,7 +142,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
     @Test
     void delegatesTimeoutToWinner() {
         var timedOut = WorkflowStepResults.timeout("timeoutStep", Duration.ofSeconds(5));
-        var success = WorkflowStepResults.completed("successStep", "value");
+        var success = WorkflowStepResults.completed("successStep", "value", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted,
                                                                               timedOut,
@@ -156,7 +156,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
 
     @Test
     void awaitDelegatesToWinner() {
-        var r1 = WorkflowStepResults.completed("step", "value");
+        var r1 = WorkflowStepResults.completed("step", "value", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1);
 
@@ -273,14 +273,14 @@ class AnyMatchCombinatorDelegateCompletesTest {
 
     @Test
     void winnerIsCachedAcrossMultipleCalls() {
-        var r1 = WorkflowStepResults.completed("stepA", "payload-A");
-        var r2 = WorkflowStepResults.completed("stepB", "payload-B");
+        var r1 = WorkflowStepResults.completed("stepA", "payload-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "payload-B", TestEventConverter.INSTANCE);
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
         // Call multiple times — same winner each time
-        assertThat(race.<String>result()).contains("payload-A");
-        assertThat(race.<String>result()).contains("payload-A");
+        assertThat(race.resultAs(String.class).get()).isEqualTo("payload-A");
+        assertThat(race.resultAs(String.class).get()).isEqualTo("payload-A");
         assertThat(race.success()).isTrue();
     }
 
@@ -288,8 +288,8 @@ class AnyMatchCombinatorDelegateCompletesTest {
 
     @Test
     void anyMatch_terminal_allCompletedGoToMatched() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted,
                                                                                 r1,

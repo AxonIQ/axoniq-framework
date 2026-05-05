@@ -20,19 +20,19 @@ package io.axoniq.workflow.dsl.api;
 
 import io.axoniq.workflow.runtime.association.AssociationValue;
 import io.axoniq.workflow.runtime.association.BadAssociationFormatException;
+import io.axoniq.workflow.runtime.association.EventMessageProcessingPredicateBuilder;
 import io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever;
-import io.axoniq.workflow.runtime.association.PredicateBuilder;
 import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.association.ValueRetriever;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
 /**
@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class AssociationsUtils implements PredicateBuilder {
+public class AssociationsUtils implements EventMessageProcessingPredicateBuilder {
 
     private final ValueComparisonOperatorRegistry registry;
     private final Set<AssociationValue> values;
@@ -137,10 +137,11 @@ public class AssociationsUtils implements PredicateBuilder {
 
     @Nonnull
     @Override
-    public Predicate<EventMessage> build(@Nonnull EventConverter converter) {
-        return (eventMessage) -> this.values.stream().allMatch(av ->
-                                                                       av.asEventMessagePredicate(converter)
-                                                                         .test(eventMessage));
+    public BiPredicate<EventMessage, ProcessingContext> build() {
+        return (eventMessage, pc) -> this.values.stream()
+                                                .allMatch(av ->
+                                                                  av.asEventMessagePredicate()
+                                                                    .test(eventMessage, pc));
     }
 
     /**

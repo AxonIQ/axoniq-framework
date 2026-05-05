@@ -21,8 +21,8 @@ package io.axoniq.workflow.runtime.association;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Map;
 import java.util.Objects;
@@ -65,8 +65,8 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
     }
 
     @Override
-    public Object apply(@Nonnull EventMessage eventMessage, @Nonnull EventConverter converter) {
-        Map<String, Object> payloadMap = eventMessage.payloadAs(PAYLOAD_TYPE.getType(), converter);
+    public Object apply(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+        Map<String, Object> payloadMap = eventMessage.payloadAs(Map.class);
         return Objects.requireNonNull(payloadMap).get(payloadPropertyName);
     }
 }

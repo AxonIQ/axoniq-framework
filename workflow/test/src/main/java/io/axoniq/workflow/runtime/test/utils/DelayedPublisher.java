@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.test.utils;
 
-import io.axoniq.workflow.dsl.api.Payload;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -30,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -68,10 +68,11 @@ public class DelayedPublisher {
                                                  .supplyAsync(() -> {
                                                                   var eventMessage = new GenericEventMessage(
                                                                           messageTypeResolver.resolveOrThrow(schedule.event),
-                                                                          schedule.event);
+                                                                          schedule.event
+                                                                  ).withConverter(converter);
                                                                   logger.info("Publishing Event: {}, {}",
                                                                               eventMessage.type(),
-                                                                              eventMessage.payloadAs(Payload.PAYLOAD_TYPE.getType(), converter)
+                                                                              eventMessage.payloadAs(Map.class)
                                                                   );
                                                                   eventSink.publish(null, eventMessage);
                                                                   return null;

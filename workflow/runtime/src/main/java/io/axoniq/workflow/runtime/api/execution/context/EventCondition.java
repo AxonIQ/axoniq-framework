@@ -20,9 +20,10 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
  * Represents a condition for event receipt.
@@ -30,24 +31,21 @@ import java.util.function.Predicate;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@FunctionalInterface
 public interface EventCondition {
 
 
     /**
-     * Returns the predicate on the event message.
-     *
-     * @return predicate.
+     * Returns the predicate on an {@link EventMessage} and it's accompanying {@link ProcessingContext} through which this condition can be evaluated.
+    *
+    * @return the predicate on an {@link EventMessage} and it's accompanying {@link ProcessingContext} through which this condition can be evaluated.
      */
     @Nonnull
-    default Predicate<EventMessage> predicate() {
-        return eventMessage -> true;
-    }
+    BiPredicate<EventMessage, ProcessingContext> predicate();
 
     /**
      * Returns a qualified name of the event message.
      *
-     * @return qualified name of the event.
+     * @return qualified name of the event
      */
     @Nonnull
     QualifiedName qualifiedName();

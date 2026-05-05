@@ -55,8 +55,8 @@ class NoneMatchCombinatorDelegateTest {
 
     @Test
     void noneMatch_allCompleteWithoutMatch_success() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -69,8 +69,8 @@ class NoneMatchCombinatorDelegateTest {
 
     @Test
     void noneMatch_allCompleteWithoutMatch_resultIsEmpty() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -83,7 +83,7 @@ class NoneMatchCombinatorDelegateTest {
     @Test
     void noneMatch_shortCircuitsOnFirstMatch() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
-        var r2 = WorkflowStepResults.completed("stepB", "ok");
+        var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -95,7 +95,7 @@ class NoneMatchCombinatorDelegateTest {
     @Test
     void noneMatch_shortCircuit_delegatesToViolator() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
-        var r2 = WorkflowStepResults.completed("stepB", "ok");
+        var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -196,8 +196,8 @@ class NoneMatchCombinatorDelegateTest {
 
     @Test
     void noneMatch_stepNameFormat() {
-        var r1 = WorkflowStepResults.completed("stepA", null);
-        var r2 = WorkflowStepResults.completed("stepB", null);
+        var r1 = WorkflowStepResults.completed("stepA", null, TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", null, TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -236,32 +236,32 @@ class NoneMatchCombinatorDelegateTest {
     @Test
     void noneMatch_matched_returnsViolators() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
-        var r2 = WorkflowStepResults.completed("stepB", "ok");
+        var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("stepA");
+                                    .containsExactly("stepA");
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("stepB");
+                                      .containsExactly("stepB");
     }
 
     @Test
     void noneMatch_unmatched_returnsCleanResults() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactlyInAnyOrder("stepA", "stepB");
+                                      .containsExactlyInAnyOrder("stepA", "stepB");
         assertThat(result.matched()).isEmpty();
     }
 
     @Test
     void noneMatch_matched_emptyWhenNoneMatched() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -279,9 +279,9 @@ class NoneMatchCombinatorDelegateTest {
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("failingStep");
+                                    .containsExactly("failingStep");
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("slowStep");
+                                      .containsExactly("slowStep");
     }
 
     @Test
@@ -306,16 +306,16 @@ class NoneMatchCombinatorDelegateTest {
 
         // failingStep1 triggered the predicate → matched
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("failingStep1");
+                                    .containsExactly("failingStep1");
         // failingStep2 not yet completed → unmatched, even though failure()==true
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("failingStep2");
+                                      .containsExactly("failingStep2");
     }
 
     @Test
     void noneMatch_categoriesSortedByTimestamp() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         // Event-sourced order: stepB before stepA
         when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
@@ -324,6 +324,6 @@ class NoneMatchCombinatorDelegateTest {
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("stepB", "stepA");
+                                      .containsExactly("stepB", "stepA");
     }
 }

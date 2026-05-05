@@ -23,46 +23,34 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
- * Builds message predicates.
+ * Builds event message processing bi-predicate.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public interface PredicateBuilder extends ComponentBuilder<Predicate<EventMessage>> {
-
-    /**
-     * Builds predicate for a message using a specified converter.
-     *
-     * @param converter converter to use.
-     * @return predicate on a message.
-     */
-    @Nonnull
-    Predicate<EventMessage> build(@Nonnull EventConverter converter);
+public interface EventMessageProcessingPredicateBuilder
+        extends ComponentBuilder<BiPredicate<EventMessage, ProcessingContext>> {
 
     /**
      * Build a predicate for a message.
      *
-     * @param processingContext message processing context.
-     * @return event message predicate.
+     * @return event message predicate
      */
     @Nonnull
-    default Predicate<EventMessage> build(@Nonnull ProcessingContext processingContext) {
-        return build(processingContext.component(EventConverter.class));
-    }
+    BiPredicate<EventMessage, ProcessingContext> build();
 
     /**
      * Build a predicate for a message.
      *
-     * @param configuration configuration.
-     * @return event message predicate.
+     * @param configuration configuration
+     * @return event message predicate
      */
     @Nonnull
-    default Predicate<EventMessage> build(@Nonnull Configuration configuration) {
-        return build(configuration.getComponent(EventConverter.class));
+    default BiPredicate<EventMessage, ProcessingContext> build(@Nonnull Configuration configuration) {
+        return build();
     }
 }

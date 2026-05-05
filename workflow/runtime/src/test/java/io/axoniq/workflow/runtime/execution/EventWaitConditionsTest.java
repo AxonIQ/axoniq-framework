@@ -27,6 +27,7 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -76,10 +77,11 @@ class EventWaitConditionsTest {
         eventWaitConditions.add("step1", condition, globalOnly, defaults());
 
         EventMessage message = mock(EventMessage.class);
+        ProcessingContext pc = mock(ProcessingContext.class);
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
-        eventWaitConditions.evaluateAndApply(message, awaited -> appliedMessage.set(awaited.eventMessage()));
+        eventWaitConditions.evaluateAndApply(message, pc, awaited -> appliedMessage.set(awaited.eventMessage()));
 
         assertThat(appliedMessage.get()).isEqualTo(message);
 
@@ -94,10 +96,12 @@ class EventWaitConditionsTest {
         eventWaitConditions.add("step1", condition, globalOnly, defaults());
 
         EventMessage message = mock(EventMessage.class);
+        ProcessingContext pc = mock(ProcessingContext.class);
+
         when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
-        eventWaitConditions.evaluateAndApply(message, awaited -> appliedMessage.set(awaited.eventMessage()));
+        eventWaitConditions.evaluateAndApply(message, pc, awaited -> appliedMessage.set(awaited.eventMessage()));
 
         assertThat(appliedMessage.get()).isNull();
 

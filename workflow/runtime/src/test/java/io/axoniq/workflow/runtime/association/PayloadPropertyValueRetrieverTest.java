@@ -18,8 +18,8 @@
  */
 package io.axoniq.workflow.runtime.association;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -28,7 +28,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -39,12 +38,12 @@ import static org.mockito.Mockito.*;
  */
 class PayloadPropertyValueRetrieverTest {
 
-    private final EventConverter converter = Mockito.mock(EventConverter.class);
     private final EventMessage eventMessage = Mockito.mock(EventMessage.class);
+    private final ProcessingContext pc = Mockito.mock(ProcessingContext.class);
 
     @BeforeEach
     void setUp() {
-        Mockito.reset(converter, eventMessage);
+        Mockito.reset(eventMessage);
     }
 
     @Test
@@ -56,12 +55,12 @@ class PayloadPropertyValueRetrieverTest {
 
         ValueRetriever retriever = PayloadPropertyValueRetriever.payloadProperty(propertyName);
 
-        when(eventMessage.payloadAs(any(java.lang.reflect.Type.class), any())).thenReturn(payload);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(payload);
 
-        Object result = retriever.apply(eventMessage, converter);
+        Object result = retriever.apply(eventMessage, pc);
 
         assertThat(result).isEqualTo(expectedValue);
-        verify(eventMessage).payloadAs(any(java.lang.reflect.Type.class), any());
+        verify(eventMessage).payloadAs(Map.class);
     }
 
     @Test
@@ -72,9 +71,9 @@ class PayloadPropertyValueRetrieverTest {
 
         ValueRetriever retriever = PayloadPropertyValueRetriever.payloadProperty(propertyName);
 
-        when(eventMessage.payloadAs(any(java.lang.reflect.Type.class), any())).thenReturn(payload);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(payload);
 
-        Object result = retriever.apply(eventMessage, converter);
+        Object result = retriever.apply(eventMessage, pc);
 
         assertThat(result).isNull();
     }
@@ -84,9 +83,9 @@ class PayloadPropertyValueRetrieverTest {
         String propertyName = "orderId";
         ValueRetriever retriever = PayloadPropertyValueRetriever.payloadProperty(propertyName);
 
-        when(eventMessage.payloadAs(any(java.lang.reflect.Type.class), any())).thenReturn(null);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(null);
 
-        assertThatThrownBy(() -> retriever.apply(eventMessage, converter))
+        assertThatThrownBy(() -> retriever.apply(eventMessage, pc))
                 .isInstanceOf(NullPointerException.class);
     }
 

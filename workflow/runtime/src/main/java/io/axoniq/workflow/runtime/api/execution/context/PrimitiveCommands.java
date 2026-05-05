@@ -433,9 +433,8 @@ public class PrimitiveCommands {
 
         @Override
         public T result(@Nonnull WorkflowStepResult result) {
-            if (result.success() && result.<Map<String, Object>>result().isPresent()) {
-                Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
-                return converter.convert(resultPayload, type.getType());
+            if (result.success() && result.result().isPresent()) {
+                return result.resultAs(type, converter).orElseThrow();
             } else {
                 throw result.error().orElseThrow();
             }
@@ -468,9 +467,8 @@ public class PrimitiveCommands {
 
         @Override
         public T result(@Nonnull WorkflowStepResult result) {
-            if (result.success() && result.<Map<String, Object>>result().isPresent()) {
-                Map<String, Object> resultPayload = result.<Map<String, Object>>result().get();
-                return converter.convert(resultPayload, type.getType());
+            if (result.success() && result.result().isPresent()) {
+                return result.resultAs(type, converter).orElseThrow();
             } else {
                 throw result.error().orElseThrow();
             }

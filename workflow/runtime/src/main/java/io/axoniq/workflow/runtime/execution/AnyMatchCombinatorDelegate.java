@@ -26,9 +26,13 @@ import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.conversion.Converter;
+import org.jspecify.annotations.NonNull;
 
+import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -156,9 +160,20 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
 
             @Override
             @Nonnull
-            public <T> Optional<T> result() {
+            public Optional<Map<String, Object>> result() {
                 return resolveWinner().result();
             }
+
+            @Override
+            public @NonNull <T> Optional<T> resultAs(@NonNull Type type) {
+                return resolveWinner().resultAs(type);
+            }
+
+            @Override
+            public @NonNull <T> Optional<T> resultAs(@NonNull Type type, @NonNull Converter converter) {
+                return resolveWinner().resultAs(type, converter);
+            }
+
 
             @Override
             @Nonnull

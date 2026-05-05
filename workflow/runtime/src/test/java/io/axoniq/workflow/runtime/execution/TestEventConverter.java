@@ -16,20 +16,20 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.runtime.association;
+package io.axoniq.workflow.runtime.execution;
 
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
-
-import java.util.function.BiFunction;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 /**
- * Retrieves association value from the event message.
- *
- * @author Simon Zambrovski
- * @since 1.0.0
+ * Test utility for {@link EventConverter}.
  */
-@FunctionalInterface
-public interface ValueRetriever extends BiFunction<EventMessage, ProcessingContext, Object> {
+public class TestEventConverter {
 
+    public static final EventConverter INSTANCE = new DelegatingEventConverter(new JacksonConverter());
+
+    private TestEventConverter() {
+        // test util
+    }
 }

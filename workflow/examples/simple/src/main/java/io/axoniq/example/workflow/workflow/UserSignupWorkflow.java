@@ -22,7 +22,7 @@ import io.axoniq.example.workflow.fixture.MagicHappenedEvent;
 import io.axoniq.example.workflow.fixture.NotificationService;
 import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.annotation.OnSuccess;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
@@ -86,7 +86,7 @@ public class UserSignupWorkflow {
 
     }
 
-    @OnSuccess
+    @WorkflowCompletedHandler
     public void onFinish(
             @Nonnull WorkflowStatus workflowStatus,
             @Nonnull SimpleWorkflowContext ctx

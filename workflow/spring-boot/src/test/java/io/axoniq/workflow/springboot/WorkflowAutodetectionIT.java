@@ -70,8 +70,14 @@ public class WorkflowAutodetectionIT {
         assertThat(configurations).hasSize(1);
         var conf = configurations.getFirst();
         assertThat(conf.predicate()
-                       .test(new GenericEventMessage(new MessageType(new QualifiedName("io.namespace.TestEvent")),
-                                                     null))).isTrue();
+                       .test(
+                               new GenericEventMessage(
+                                       new MessageType(new QualifiedName("io.namespace.TestEvent")),
+                                       null
+                               ),
+                               mock()
+                       )
+        ).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
         var ctx = mock(WorkflowContext.class);

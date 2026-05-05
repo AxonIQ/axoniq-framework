@@ -116,9 +116,10 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return waitFor(
                 stepName,
                 EventConditions.fromQualifiedName(
-                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
                              .qualifiedName(),
-                        e -> predicate.test(e.payloadAs(eventType))
+                        (em, pc) -> predicate.test(em.payloadAs(eventType))
                 ),
                 registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
                 timeout,
@@ -146,7 +147,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 EventConditions.fromQualifiedName(
                         super.processingContext()
                              .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
-                        e -> associationsUtils.build(super.processingContext()).test(e)
+                        (em, pc) -> associationsUtils.build().test(em, pc)
                 ),
                 registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
                 timeout,
@@ -171,7 +172,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 EventConditions.fromQualifiedName(
                         super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
                              .qualifiedName(),
-                        e -> predicate.test(e.payloadAs(eventType))
+                        (em, pc) -> predicate.test(em.payloadAs(eventType))
                 ),
                 registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
                 timeout,
@@ -198,7 +199,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 EventConditions.fromQualifiedName(
                         super.processingContext()
                              .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
-                        e -> associationsUtils.build(super.processingContext()).test(e)
+                        (em, pc) -> associationsUtils.build().test(em, pc)
                 ),
                 registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
                 timeout,
@@ -258,7 +259,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                super.processingContext().component(MessageTypeResolver.class).resolve(eventType)
                                     .orElseThrow()
                                     .qualifiedName(),
-                               e -> predicate.test(e.payloadAs(eventType))
+                               (em, pc) -> predicate.test(em.payloadAs(eventType))
                        ),
                        registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
     }
@@ -280,7 +281,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                super.processingContext().component(MessageTypeResolver.class).resolve(eventType)
                                     .orElseThrow()
                                     .qualifiedName(),
-                               e -> associationsUtils.build(super.processingContext()).test(e)
+                               (em, pc) -> associationsUtils.build().test(em, pc)
                        ),
                        registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
     }

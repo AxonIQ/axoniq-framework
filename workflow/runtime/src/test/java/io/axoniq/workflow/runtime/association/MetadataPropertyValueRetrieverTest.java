@@ -19,8 +19,8 @@
 package io.axoniq.workflow.runtime.association;
 
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -36,16 +36,15 @@ import static org.mockito.Mockito.*;
  */
 class MetadataPropertyValueRetrieverTest {
 
-    private final EventConverter converter = Mockito.mock(EventConverter.class);
     private final EventMessage eventMessage = Mockito.mock(EventMessage.class);
+    private final ProcessingContext pc = Mockito.mock(ProcessingContext.class);
 
     @BeforeEach
     void setUp() {
-        Mockito.reset(converter, eventMessage);
+        Mockito.reset(eventMessage);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void shouldRetrieveValueFromMetadata() {
         String propertyName = "orderId";
         String expectedValue = "12345";
@@ -55,13 +54,12 @@ class MetadataPropertyValueRetrieverTest {
 
         when(eventMessage.metadata()).thenReturn(metadata);
 
-        Object result = retriever.apply(eventMessage, converter);
+        Object result = retriever.apply(eventMessage, pc);
 
         assertThat(result).isEqualTo(expectedValue);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void shouldReturnNullWhenMetadataPropertyIsMissing() {
         String propertyName = "missingProperty";
         Metadata metadata = Metadata.with("someOtherProperty", "value");
@@ -70,7 +68,7 @@ class MetadataPropertyValueRetrieverTest {
 
         when(eventMessage.metadata()).thenReturn(metadata);
 
-        Object result = retriever.apply(eventMessage, converter);
+        Object result = retriever.apply(eventMessage, pc);
 
         assertThat(result).isNull();
     }
