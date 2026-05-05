@@ -66,8 +66,8 @@ class Kontext(
     ) :
         PrimitiveCommands.DelegatingExecuteCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
-            if (result.success() && result.result<Any>().isPresent) {
-                val map = result.result<Map<String, Any?>>().get()
+            if (result.success() && result.result().isPresent) {
+                val map = result.result().get()
                 @Suppress("UNCHECKED_CAST")
                 return map[resultPropertyName] as T
             } else {
@@ -90,8 +90,8 @@ class Kontext(
     ) :
         PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
         override fun result(result: WorkflowStepResult): T {
-            if (result.success() && result.result<Any>().isPresent) {
-                val map = result.result<Map<String, Any?>>().get()
+            if (result.success() && result.result().isPresent) {
+                val map = result.result().get()
                 return converter.convert(map, type)!!
             } else {
                 throw result.error().get()
@@ -160,6 +160,7 @@ class Kontext(
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
+        val converter = workflowKontext.processingContext().component(EventConverter::class.java)
         return workflowKontext.waitFor(
             TypeConvertingWaitForCommand(
                 PrimitiveCommands.WorkflowStepResultWaitForCommand(
@@ -174,7 +175,7 @@ class Kontext(
                     eventNameCustomizer
                 ),
                 type.java,
-                workflowKontext.processingContext().component(EventConverter::class.java)
+                converter
             )
         )
     }

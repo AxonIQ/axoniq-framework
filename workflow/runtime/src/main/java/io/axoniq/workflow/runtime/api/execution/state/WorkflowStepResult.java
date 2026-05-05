@@ -19,7 +19,11 @@
 package io.axoniq.workflow.runtime.api.execution.state;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
 
+import java.lang.reflect.Type;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -40,16 +44,83 @@ public interface WorkflowStepResult {
     /**
      * Retrieves optional result.
      *
-     * @param <T> type of result.
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished.
      */
     @Nonnull
-    <T> Optional<T> result();
+    Optional<Map<String, Object>> result();
+
+    /**
+     * Retrieves an optional result as a specific type.
+     *
+     * @param type the type to convert the result to
+     * @param <T>  the type of the result
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
+     */
+    @Nonnull
+    default <T> Optional<T> resultAs(@Nonnull Class<T> type) {
+        return resultAs((Type) type);
+    }
+
+    /**
+     * Retrieves an optional result as a specific type.
+     *
+     * @param type the type to convert the result to
+     * @param <T>  the type of the result
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
+     */
+    @Nonnull
+    default <T> Optional<T> resultAs(@Nonnull TypeReference<T> type) {
+        return resultAs(type.getType());
+    }
+
+    /**
+     * Retrieves an optional result as a specific type.
+     *
+     * @param type the type to convert the result to
+     * @param <T>  the type of the result
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
+     */
+    @Nonnull
+    <T> Optional<T> resultAs(@Nonnull Type type);
+
+    /**
+     * Retrieves an optional result as a specific type using a converter.
+     *
+     * @param type      the type to convert the result to
+     * @param converter the converter to use
+     * @param <T>       the type of the result
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
+     */
+    @Nonnull
+    default <T> Optional<T> resultAs(@Nonnull Class<T> type, @Nonnull Converter converter) {
+        return resultAs((Type) type, converter);
+    }
+
+    /**
+     * Retrieves an optional result as a specific type.
+     *
+     * @param type the type to convert the result to
+     * @param <T>  the type of the result
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
+     */
+    @Nonnull
+    default <T> Optional<T> resultAs(@Nonnull TypeReference<T> type, @Nonnull Converter converter) {
+        return resultAs(type.getType(), converter);
+    }
+
+    /**
+     * Retrieves an optional result as a specific type.
+     *
+     * @param type the type to convert the result to
+     * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
+     */
+    @Nonnull
+    <T> Optional<T> resultAs(@Nonnull Type type, @Nonnull Converter converter);
 
     /**
      * Retrieves an optional error.
      *
-     * @return error if the step has finished with an error. Will return empty optional, if the step is not finished.
+     * @return error if the step has finished with an error. Will return empty optional, if the step is not finished
      */
     @Nonnull
     Optional<StepFailedException> error();
@@ -57,28 +128,28 @@ public interface WorkflowStepResult {
     /**
      * Blocks until step execution reaches a terminal state.
      *
-     * @return true, if the operation completed successfully.
+     * @return true, if the operation completed successfully
      */
     boolean success();
 
     /**
      * Blocks until step execution reaches a terminal state.
      *
-     * @return true, if the operation completed with an exception.
+     * @return true, if the operation completed with an exception
      */
     boolean failure();
 
     /**
      * Blocks until step execution reaches a terminal state.
      *
-     * @return true, if the operation was interrupted by external party.
+     * @return true, if the operation was interrupted by an external party
      */
     boolean canceled();
 
     /**
      * Blocks until step execution reaches a terminal state.
      *
-     * @return true, if the operation was interrupted by timeout specified on start.
+     * @return true, if the operation was interrupted by timeout specified on start
      */
     boolean timeout();
 

@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -45,8 +46,9 @@ public class WorkflowStepResults {
      * @return completed step result.
      */
     @Nonnull
-    public static WorkflowStepResult completed(@Nonnull String stepName, @Nullable Object payload) {
-        return new CompletedWorkflowStepResult(stepName, payload, null, null, false);
+    public static WorkflowStepResult completed(@Nonnull String stepName, @Nullable Object payload,
+                                               @Nonnull EventConverter converter) {
+        return new CompletedWorkflowStepResult(stepName, payload, null, null, false, converter);
     }
 
     /**
@@ -61,7 +63,8 @@ public class WorkflowStepResults {
                                                null,
                                                Objects.requireNonNull(error, "Error must be provided"),
                                                null,
-                                               false);
+                                               false,
+                                               null);
     }
 
     /**
@@ -71,7 +74,7 @@ public class WorkflowStepResults {
      */
     @Nonnull
     public static WorkflowStepResult canceled(@Nonnull String stepName) {
-        return new CompletedWorkflowStepResult(stepName, null, null, null, true);
+        return new CompletedWorkflowStepResult(stepName, null, null, null, true, null);
     }
 
     /**
@@ -86,6 +89,7 @@ public class WorkflowStepResults {
                                                null,
                                                null,
                                                Objects.requireNonNull(timeout, "Timeout must be provided"),
-                                               false);
+                                               false,
+                                               null);
     }
 }

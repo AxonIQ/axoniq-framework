@@ -55,8 +55,8 @@ class AllMatchCombinatorDelegateTest {
 
     @Test
     void allMatch_allCompleteAndAllMatch_success() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -69,8 +69,8 @@ class AllMatchCombinatorDelegateTest {
 
     @Test
     void allMatch_allCompleteAndAllMatch_resultIsEmpty() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -83,7 +83,7 @@ class AllMatchCombinatorDelegateTest {
     @Test
     void allMatch_shortCircuitsOnFirstNonMatch() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
-        var r2 = WorkflowStepResults.completed("stepB", "ok");
+        var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -95,7 +95,7 @@ class AllMatchCombinatorDelegateTest {
     @Test
     void allMatch_shortCircuit_delegatesToViolator() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
-        var r2 = WorkflowStepResults.completed("stepB", "ok");
+        var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -196,8 +196,8 @@ class AllMatchCombinatorDelegateTest {
 
     @Test
     void allMatch_stepNameFormat() {
-        var r1 = WorkflowStepResults.completed("stepA", null);
-        var r2 = WorkflowStepResults.completed("stepB", null);
+        var r1 = WorkflowStepResults.completed("stepA", null, TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", null, TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -235,33 +235,33 @@ class AllMatchCombinatorDelegateTest {
 
     @Test
     void allMatch_matched_returnsSuccessfulSteps() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactlyInAnyOrder("stepA", "stepB");
+                                    .containsExactlyInAnyOrder("stepA", "stepB");
         assertThat(result.unmatched()).isEmpty();
     }
 
     @Test
     void allMatch_unmatched_returnsViolatorOnShortCircuit() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
-        var r2 = WorkflowStepResults.completed("stepB", "ok");
+        var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("stepA");
+                                      .containsExactly("stepA");
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("stepB");
+                                    .containsExactly("stepB");
     }
 
     @Test
     void allMatch_unmatched_emptyWhenAllMatch() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -282,32 +282,35 @@ class AllMatchCombinatorDelegateTest {
         assertThat(result.matched()).isEmpty();
         // Both the violator and the still-running step are in unmatched
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("failingStep", "slowStep");
+                                      .containsExactly("failingStep", "slowStep");
     }
 
     @Test
     void allMatch_unmatched_includesViolatorAndRunningStep() {
-        var r1 = WorkflowStepResults.completed("successStep", "ok");
+        var r1 = WorkflowStepResults.completed("successStep", "ok", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
         var r3 = mock(WorkflowStepResult.class);
         when(r3.getStepName()).thenReturn("slowStep");
         when(r3.isCompleted()).thenReturn(false);
         when(r3.success()).thenReturn(false);
 
-        var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2, r3);
+        var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success,
+                                                                                r1,
+                                                                                r2,
+                                                                                r3);
 
         // successStep completed and matched success → matched
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("successStep");
+                                    .containsExactly("successStep");
         // failingStep (violator) and slowStep (still running) → unmatched
         assertThat(result.unmatched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("failingStep", "slowStep");
+                                      .containsExactly("failingStep", "slowStep");
     }
 
     @Test
     void allMatch_categoriesSortedByEventSourcedTimestamp() {
-        var r1 = WorkflowStepResults.completed("stepA", "ok-A");
-        var r2 = WorkflowStepResults.completed("stepB", "ok-B");
+        var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
+        var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
         // Event-sourced order: stepB before stepA
         when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
@@ -316,6 +319,6 @@ class AllMatchCombinatorDelegateTest {
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
         assertThat(result.matched()).extracting(WorkflowStepResult::getStepName)
-                .containsExactly("stepB", "stepA");
+                                    .containsExactly("stepB", "stepA");
     }
 }
