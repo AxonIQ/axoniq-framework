@@ -4,3 +4,5 @@ Recommended for production use.
 * **`AggregateBasedAxonServerEventStorageEngine`** - Uses Axon Server's aggregate-oriented APIs.
 Compatible with Axon Server versions that do not support DCB.
 Events are organized by aggregate identifier and sequence number.
+* **`PostgresqlEventStorageEngine`** - Stores events directly in a PostgreSQL 16+ database with full DCB support.
+Use this engine when running without Axon Server.
