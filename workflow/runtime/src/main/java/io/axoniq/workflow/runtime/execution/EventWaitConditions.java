@@ -27,6 +27,7 @@ import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -98,21 +99,24 @@ public class EventWaitConditions implements DescribableComponent {
      * passed to the action.
      * </p>
      *
-     * @param eventMessage event message to execute evaluation on.
-     * @param action       action executed on an event message, step name and condition if the condition is met.
+     * @param eventMessage      the event message to evaluate existing conditions against
+     * @param processingContext the processing context within which the {@code eventMessage} is being handled
+     * @param action            the action executed on an event message, step name and condition, when it is met
      *
      */
     public void evaluateAndApply(@Nonnull EventMessage eventMessage,
+                                 @Nonnull ProcessingContext processingContext,
                                  @Nonnull Consumer<Awaited> action) {
         // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
             var stepName = entry.getKey();
-            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName()) && condition.predicate().test(
-                    eventMessage)) {
+            if (eventMessage.type().qualifiedName().equals(condition.qualifiedName())
+                    && condition.predicate().test(eventMessage, processingContext)) {
                 remove(stepName);
                 action.accept(
                         new Awaited(eventMessage,
+                                    processingContext,
                                     stepName,
                                     entry.getValue().resultPayloadReducer(),
                                     entry.getValue().eventNameCustomizer())
@@ -122,15 +126,18 @@ public class EventWaitConditions implements DescribableComponent {
     }
 
     /**
-     * Expresses the arrival of the event message passed to the {@link #evaluateAndApply(EventMessage, Consumer)}.
+     * Expresses the arrival of the event message passed to the
+     * {@link #evaluateAndApply(EventMessage, ProcessingContext, Consumer)}.
      *
      * @param eventMessage        event message.
+     * @param processingContext   processing context.
      * @param payloadReducer      payload reducer.
      * @param stepName            step name.
      * @param eventNameCustomizer event name customizer.
      */
     public record Awaited(
             @Nonnull EventMessage eventMessage,
+            @Nonnull ProcessingContext processingContext,
             @Nonnull String stepName,
             @Nonnull PayloadReducer payloadReducer,
             @Nonnull EventNameCustomizer eventNameCustomizer

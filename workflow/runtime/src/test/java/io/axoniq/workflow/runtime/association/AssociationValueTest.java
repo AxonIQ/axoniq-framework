@@ -18,12 +18,12 @@
  */
 package io.axoniq.workflow.runtime.association;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,12 +40,12 @@ class AssociationValueTest {
 
     private final ValueRetriever retriever = Mockito.mock(ValueRetriever.class);
     private final ValueComparisonOperator operator = new EqualsComparison();
-    private final EventConverter converter = Mockito.mock(EventConverter.class);
     private final EventMessage eventMessage = Mockito.mock(EventMessage.class);
+    private final ProcessingContext pc = Mockito.mock(ProcessingContext.class);
 
     @BeforeEach
     void setUp() {
-        reset(retriever, converter, eventMessage);
+        reset(retriever, eventMessage);
     }
 
     @Test
@@ -53,12 +53,12 @@ class AssociationValueTest {
         String expectedValue = "123";
         AssociationValue associationValue = new AssociationValue(retriever, operator, () -> expectedValue);
 
-        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("123");
+        when(retriever.apply(eq(eventMessage), eq(pc))).thenReturn("123");
 
-        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+        BiPredicate<EventMessage, ProcessingContext> predicate = associationValue.asEventMessagePredicate();
 
-        assertThat(predicate.test(eventMessage)).isTrue();
-        verify(retriever).apply(eventMessage, converter);
+        assertThat(predicate.test(eventMessage, pc)).isTrue();
+        verify(retriever).apply(eventMessage, pc);
     }
 
     @Test
@@ -66,22 +66,22 @@ class AssociationValueTest {
         String expectedValue = "123";
         AssociationValue associationValue = new AssociationValue(retriever, operator, () -> expectedValue);
 
-        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("456");
+        when(retriever.apply(eq(eventMessage), eq(pc))).thenReturn("456");
 
-        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+        BiPredicate<EventMessage, ProcessingContext> predicate = associationValue.asEventMessagePredicate();
 
-        assertThat(predicate.test(eventMessage)).isFalse();
+        assertThat(predicate.test(eventMessage, pc)).isFalse();
     }
 
     @Test
     void shouldMatchWhenBothAreNull() {
         AssociationValue associationValue = new AssociationValue(retriever, operator, () -> null);
 
-        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn(null);
+        when(retriever.apply(eq(eventMessage), eq(pc))).thenReturn(null);
 
-        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+        BiPredicate<EventMessage, ProcessingContext> predicate = associationValue.asEventMessagePredicate();
 
-        assertThat(predicate.test(eventMessage)).isTrue();
+        assertThat(predicate.test(eventMessage, pc)).isTrue();
     }
 
     @Test
@@ -90,16 +90,16 @@ class AssociationValueTest {
         Supplier<Object> supplier = () -> valueHolder[0];
 
         AssociationValue associationValue = new AssociationValue(retriever, operator, supplier);
-        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("first");
+        when(retriever.apply(eq(eventMessage), eq(pc))).thenReturn("first");
 
-        Predicate<EventMessage> predicate = associationValue.asEventMessagePredicate(converter);
+        BiPredicate<EventMessage, ProcessingContext> predicate = associationValue.asEventMessagePredicate();
 
-        assertThat(predicate.test(eventMessage)).withFailMessage("Should match 'first'").isTrue();
+        assertThat(predicate.test(eventMessage, pc)).withFailMessage("Should match 'first'").isTrue();
 
         valueHolder[0] = "second";
-        assertThat(predicate.test(eventMessage)).withFailMessage("Should not match 'first' anymore").isFalse();
+        assertThat(predicate.test(eventMessage, pc)).withFailMessage("Should not match 'first' anymore").isFalse();
 
-        when(retriever.apply(eq(eventMessage), eq(converter))).thenReturn("second");
-        assertThat(predicate.test(eventMessage)).withFailMessage("Should match 'second'").isTrue();
+        when(retriever.apply(eq(eventMessage), eq(pc))).thenReturn("second");
+        assertThat(predicate.test(eventMessage, pc)).withFailMessage("Should match 'second'").isTrue();
     }
 }

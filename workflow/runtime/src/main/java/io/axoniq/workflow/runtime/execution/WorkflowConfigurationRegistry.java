@@ -19,15 +19,17 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
  * Registry for holding workflow configurations with corresponding start conditions.
@@ -44,14 +46,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
             @Nonnull QualifiedName qualifiedName,
             @Nonnull WorkflowConfiguration<?> workflowConfiguration
     ) {
-        return register(new EventCondition() {
-
-            @Nonnull
-            @Override
-            public QualifiedName qualifiedName() {
-                return qualifiedName;
-            }
-        }, workflowConfiguration);
+        return register(EventConditions.fromQualifiedName(qualifiedName), workflowConfiguration);
     }
 
     @Nonnull
@@ -68,7 +63,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
 
 
     record PredicatedWorkflowConfiguration(
-            Predicate<EventMessage> predicate,
+            BiPredicate<EventMessage, ProcessingContext> predicate,
             WorkflowConfiguration<?> configuration
     ) {
 

@@ -129,7 +129,7 @@ class WaitForCombineResultIntegrationTest
                             super.processingContext()
                                  .component(MessageTypeResolver.class).resolve(eventType)
                                  .orElseThrow().qualifiedName(),
-                            e -> associationsUtils.build(super.processingContext()).test(e)
+                            (e, pc) -> associationsUtils.build().test(e, pc)
                     ),
                     COMBINE_GLOBAL_AND_LOCAL,
                     timeout,

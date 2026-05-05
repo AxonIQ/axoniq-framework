@@ -18,8 +18,8 @@
  */
 package io.axoniq.workflow.runtime.association;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.function.BiFunction;
 
@@ -30,6 +30,6 @@ import java.util.function.BiFunction;
  * @since 1.0.0
  */
 @FunctionalInterface
-public interface ValueRetriever extends BiFunction<EventMessage, EventConverter, Object> {
+public interface ValueRetriever extends BiFunction<EventMessage, ProcessingContext, Object> {
 
 }

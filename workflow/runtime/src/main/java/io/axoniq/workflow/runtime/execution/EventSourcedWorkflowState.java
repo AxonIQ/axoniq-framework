@@ -35,7 +35,6 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,7 +135,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
-        Object eventPayload = eventMessage.payloadAs(Object.class, processingContext.component(EventConverter.class));
+        Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
         // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
@@ -156,7 +155,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 case FAILED:
                     Throwable stepCause;
                     try {
-                        WorkflowError err = eventMessage.payloadAs(WorkflowError.class, processingContext.component(EventConverter.class));
+                        WorkflowError err = eventMessage.payloadAs(WorkflowError.class);
                         stepCause = err != null ? err.toThrowable() : null;
                     } catch (Exception e) {
                         stepCause = null;
@@ -186,8 +185,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                    processingContext));
                     break;
                 case RETRYING:
-                    StepRetryInfo retryInfo = eventMessage.payloadAs(StepRetryInfo.class,
-                                                                     processingContext.component(EventConverter.class));
+                    StepRetryInfo retryInfo = eventMessage.payloadAs(StepRetryInfo.class);
                     addStep(WorkflowStep.retrying(stepName,
                                                   retryInfo,
                                                   eventMessage.timestamp(),
@@ -209,7 +207,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                          if (status == WorkflowStatus.FAILED || status == WorkflowStatus.CANCELLED) {
                              Throwable cause;
                              try {
-                                 WorkflowError err = eventMessage.payloadAs(WorkflowError.class, processingContext.component(EventConverter.class));
+                                 WorkflowError err = eventMessage.payloadAs(WorkflowError.class);
                                  cause = err != null ? err.toThrowable() : null;
                              } catch (Exception e) {
                                  // payload is not a WorkflowError
@@ -242,7 +240,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 Map<String, Object> stepPayload;
                 try {
                     stepPayload = eventMessage.payloadAs(new TypeReference<>() {
-                    }, processingContext.component(EventConverter.class));
+                    });
                 } catch (Exception e) {
                     logger.debug("Could not convert payload to map for reducer {}. Skipping payload update.", reducerName, e);
                     stepPayload = null;
