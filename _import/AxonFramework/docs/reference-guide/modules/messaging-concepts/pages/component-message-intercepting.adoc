@@ -6,7 +6,7 @@ Declarative and annotated interceptor support for Message Handling Components wi
 ====
 
 [[command-handler-interceptor-annotation]]
-==== `@CommandHandlerInterceptor` annotation
+== `@CommandHandlerInterceptor` annotation
 
 You can add a handler interceptor as a `@CommandHandlerInterceptor` annotated method on the aggregate or entity.
 This allows you to make decisions based on the current state of the aggregate:
