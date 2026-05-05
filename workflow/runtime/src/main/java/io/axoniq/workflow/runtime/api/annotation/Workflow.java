@@ -43,6 +43,7 @@ public @interface Workflow {
     String ATTR_START_ON_EVENT = "startOnEvent";
     String ATTR_START_ON_CONDITIONS = "startOnConditions";
     String ATTR_WORKFLOW_NAME = "workflowName";
+    String ATTR_WORKFLOW_STATUS = "workflowStatus";
     String ATTR_WORKFLOW_NAMESPACE = "workflowNamespace";
 
     /**

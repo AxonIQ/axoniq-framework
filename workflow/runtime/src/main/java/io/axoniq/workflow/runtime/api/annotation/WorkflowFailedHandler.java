@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.annotation;
 
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -25,7 +27,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Method marker to register a workflow lifecycle success listener.
+ * Method marker to register a workflow lifecycle failure listener.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -33,13 +35,14 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
-public @interface OnSuccess {
+@WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.FAILED)
+public @interface WorkflowFailedHandler {
+
     /**
      * Specifies the name of the workflow.
      *
      * @return workflow name, defaults to empty string, meaning that the full-qualified name and method name of the
-     * class is used.
+     * class are used
      */
     String workflowName() default "";
-
 }
