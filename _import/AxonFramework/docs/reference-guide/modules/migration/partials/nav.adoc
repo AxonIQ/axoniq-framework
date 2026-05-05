@@ -22,3 +22,6 @@
 ifdef::advanced-framework[]
 include::advanced-migration:partial$nav.adoc[]
 endif::[]
+ifdef::data-protection[]
+* xref:data-protection-migration:migration-path.adoc[Data Protection module migration]
+endif::[]
