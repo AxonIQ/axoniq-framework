@@ -30,7 +30,6 @@ import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * A {@link CoordinatorTask} implementation dedicated to splitting a {@link Segment}.
@@ -116,30 +115,25 @@ class SplitTask extends CoordinatorTask {
 
     private CompletableFuture<Boolean> abortAndSplit(WorkPackage workPackage) {
         return workPackage.abort(null)
-                          .thenApply(e -> splitAndRelease(workPackage.segment()));
+                          .thenCompose(e -> splitAndRelease(workPackage.segment()));
     }
 
     private CompletableFuture<Boolean> fetchSegmentAndSplit(int segmentId) {
         return unitOfWorkFactory.create().executeWithResult(
                 context -> tokenStore.fetchSegment(name, segmentId, context)
-                                     .thenApply(this::splitAndRelease)
-        );
+        ).thenCompose(this::splitAndRelease);
     }
 
-    private boolean splitAndRelease(Segment segmentToSplit) {
-        try {
-            joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-                    context -> tokenStore.fetchToken(name, segmentToSplit.getSegmentId(), context)
-                                         .thenApply(tokenToSplit -> TrackerStatus.split(segmentToSplit, tokenToSplit))
-                                         .thenCompose(splitStatuses -> splitAndRelease(
-                                                 splitStatuses, segmentToSplit, context
-                                         ))
-            ));
-        } finally {
-            // Remove the segment from the releases deadlines to allow the Coordinator to claim the split segments
-            releasesDeadlines.remove(segmentToSplit.getSegmentId());
-        }
-        return true;
+    private CompletableFuture<Boolean> splitAndRelease(Segment segmentToSplit) {
+        return unitOfWorkFactory.create().executeWithResult(
+                context -> tokenStore.fetchToken(name, segmentToSplit.getSegmentId(), context)
+                                     .thenApply(tokenToSplit -> TrackerStatus.split(segmentToSplit, tokenToSplit))
+                                     .thenCompose(splitStatuses -> splitAndRelease(splitStatuses, segmentToSplit, context))
+        ).thenApply(unused -> true)
+         .whenComplete((result, throwable) ->
+                 // Remove the segment from the releases deadlines to allow the Coordinator to claim the split segments
+                 releasesDeadlines.remove(segmentToSplit.getSegmentId())
+         );
     }
 
     private CompletableFuture<Void> splitAndRelease(TrackerStatus[] splitStatuses,

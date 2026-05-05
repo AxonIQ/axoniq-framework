@@ -35,6 +35,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -292,6 +293,39 @@ class MergeTaskTest {
             .isInstanceOf(ExecutionException.class)
             .cause()
             .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void runMergeSegmentsPlacesLowerSegmentTokenFirstRegardlessOfInitiatingSegment() {
+        // given - merge is initiated from segment 1 (higher ID), so thatSegment (0) < thisSegment (1) is true
+        // this exercises the swapped branch: MergedTrackingToken.merged(thatToken, thisToken)
+        TrackingToken tokenForSegment0 = new GlobalSequenceTrackingToken(0);
+        TrackingToken tokenForSegment1 = new GlobalSequenceTrackingToken(1);
+
+        MergeTask mergeFromSegmentOne = new MergeTask(
+                new CompletableFuture<>(), PROCESSOR_NAME, SEGMENT_TO_BE_MERGED, workPackages,
+                releasesDeadlines, tokenStore, new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE), clock
+        );
+        when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_MERGE), any()))
+                .thenReturn(completedFuture(tokenForSegment0));
+        when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_BE_MERGED), any()))
+                .thenReturn(completedFuture(tokenForSegment1));
+        when(tokenStore.deleteToken(anyString(), anyInt(), any())).thenReturn(FutureUtils.emptyCompletedFuture());
+        when(tokenStore.releaseClaim(anyString(), anyInt(), any())).thenReturn(FutureUtils.emptyCompletedFuture());
+        when(tokenStore.initializeSegment(any(), eq(PROCESSOR_NAME), eq(new Segment(0, 0)), any()))
+                .thenReturn(FutureUtils.emptyCompletedFuture());
+
+        ArgumentCaptor<TrackingToken> mergedTokenCaptor = ArgumentCaptor.forClass(TrackingToken.class);
+
+        // when
+        mergeFromSegmentOne.run();
+
+        // then - lower-ID segment token is always placed first, regardless of which segment initiated the merge
+        verify(tokenStore).initializeSegment(mergedTokenCaptor.capture(), eq(PROCESSOR_NAME), eq(new Segment(0, 0)), any());
+        TrackingToken resultToken = mergedTokenCaptor.getValue();
+        assertThat(resultToken).isInstanceOf(MergedTrackingToken.class);
+        assertThat(((MergedTrackingToken) resultToken).lowerSegmentToken()).isEqualTo(tokenForSegment0);
+        assertThat(((MergedTrackingToken) resultToken).upperSegmentToken()).isEqualTo(tokenForSegment1);
     }
 
     @Test
