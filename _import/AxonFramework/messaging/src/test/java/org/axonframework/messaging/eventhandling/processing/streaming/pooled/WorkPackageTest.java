@@ -566,28 +566,77 @@ class WorkPackageTest {
 
         @Test
         void processBatchSurfacesPerEventTokenInEntryContext() {
-            // given
+            // given — defer worker so all three scheduleEvent calls populate the queue before processing starts
+            List<Runnable> deferredWorkerTasks = new ArrayList<>();
+            doAnswer(inv -> {
+                deferredWorkerTasks.add(inv.getArgument(0));
+                return CompletableFuture.completedFuture(null);
+            }).when(executorService).submit(any(Runnable.class));
+
             WorkPackage subject = testSubjectBuilder.batchSize(3).build();
 
             // when
             subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
             subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
             subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
+            runDeferred(deferredWorkerTasks);
 
-            await().atMost(TIMEOUT).untilAsserted(() -> assertEquals(3, batchProcessor.getProcessedEvents().size()));
+            assertEquals(3, batchProcessor.getProcessedEvents().size());
+            ContextMessage event0 = batchProcessor.getProcessedEvents().get(0);
+            ContextMessage event1 = batchProcessor.getProcessedEvents().get(1);
+            ContextMessage event2 = batchProcessor.getProcessedEvents().get(2);
 
             // then — each entry's context must carry its own token, not the batch-end token
-            assertThat(TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(0).context()))
+            assertThat(TrackingToken.fromContext(event0.context()))
                     .hasValue(new GlobalSequenceTrackingToken(1L));
-            assertThat(TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(1).context()))
+            assertThat(TrackingToken.fromContext(event1.context()))
                     .hasValue(new GlobalSequenceTrackingToken(2L));
-            assertThat(TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(2).context()))
+            assertThat(TrackingToken.fromContext(event2.context()))
                     .hasValue(new GlobalSequenceTrackingToken(3L));
+        }
+
+        @Test
+        void processBatchExposesBatchEndTokenAsLastEventTokenInBatchContext() {
+            // given — defer worker so all three scheduleEvent calls populate the queue before processing starts
+            List<Runnable> deferredWorkerTasks = new ArrayList<>();
+            doAnswer(inv -> {
+                deferredWorkerTasks.add(inv.getArgument(0));
+                return CompletableFuture.completedFuture(null);
+            }).when(executorService).submit(any(Runnable.class));
+
+            List<TrackingToken> capturedBatchEndTokens = new ArrayList<>();
+            WorkPackage subject = testSubjectBuilder
+                    .batchSize(3)
+                    .batchProcessor((entries, ctx) -> {
+                        // capture the batch-end token once per event — all three must see the same value
+                        entries.forEach(e -> capturedBatchEndTokens.add(ctx.getResource(TrackingToken.BATCH_END_RESOURCE_KEY)));
+                        return MessageStream.empty();
+                    })
+                    .build();
+
+            // when
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
+            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
+            runDeferred(deferredWorkerTasks);
+
+            // then — each event in the batch sees the same batch-end token: the last event's position
+            TrackingToken expectedBatchEnd = new GlobalSequenceTrackingToken(3L);
+            assertThat(capturedBatchEndTokens)
+                    .hasSize(3)
+                    .containsOnly(expectedBatchEnd);
         }
 
         @Test
         void processBatchSurfacesPerEventReplayTokenInEntryContext() {
             // given — reset at position 3, so events at 1, 2, 3 are all replay events
+            // defer worker so all three events are in the queue before processing begins
+            List<Runnable> deferredWorkerTasks = new ArrayList<>();
+            doAnswer(inv -> {
+                deferredWorkerTasks.add(inv.getArgument(0));
+                return CompletableFuture.completedFuture(null);
+            }).when(executorService).submit(any(Runnable.class));
+
             TrackingToken tokenAtReset = new GlobalSequenceTrackingToken(3L);
             WorkPackage subject = testSubjectBuilder
                     .initialToken(ReplayToken.createReplayToken(tokenAtReset))
@@ -598,10 +647,10 @@ class WorkPackageTest {
             subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
             subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
             subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
-
-            await().atMost(TIMEOUT).untilAsserted(() -> assertEquals(3, batchProcessor.getProcessedEvents().size()));
+            runDeferred(deferredWorkerTasks);
 
             // then — each entry's context must carry a ReplayToken advanced to its own position
+            assertEquals(3, batchProcessor.getProcessedEvents().size());
             TrackingToken t0 = TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(0).context()).get();
             TrackingToken t1 = TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(1).context()).get();
             TrackingToken t2 = TrackingToken.fromContext(batchProcessor.getProcessedEvents().get(2).context()).get();
@@ -621,7 +670,8 @@ class WorkPackageTest {
 
         @Test
         void processBatchExposesBatchEndTokenViaResourceKey() {
-            // given
+            // given — use scheduleEvents (plural) to guarantee all three events are wrapped in one
+            // BatchProcessingEntry and therefore processed as a single batch
             List<TrackingToken> capturedBatchEndTokens = new ArrayList<>();
             WorkPackage subject = testSubjectBuilder
                     .batchSize(3)
@@ -631,16 +681,29 @@ class WorkPackageTest {
                     })
                     .build();
 
-            // when
-            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), globalTrackingTokenContext(1L)));
-            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), globalTrackingTokenContext(2L)));
-            subject.scheduleEvent(new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), globalTrackingTokenContext(3L)));
+            TrackingToken sharedToken = new GlobalSequenceTrackingToken(3L);
+            Context sharedContext = trackingTokenContext(sharedToken);
 
-            // then — regardless of how many batches the events span, the final batch-end token must equal the last event's token
+            // when — three events sharing one token are atomically enqueued as one batch
+            subject.scheduleEvents(List.of(
+                    new SimpleEntry<>(EventTestUtils.asEventMessage("event-1"), sharedContext),
+                    new SimpleEntry<>(EventTestUtils.asEventMessage("event-2"), sharedContext),
+                    new SimpleEntry<>(EventTestUtils.asEventMessage("event-3"), sharedContext)
+            ));
+
+            // then — exactly one batch is processed and its BATCH_END equals the shared token
             await().atMost(TIMEOUT).untilAsserted(() -> {
-                assertThat(capturedBatchEndTokens.getLast())
-                        .isEqualTo(new GlobalSequenceTrackingToken(3L));
+                assertThat(capturedBatchEndTokens).hasSize(1);
+                assertThat(capturedBatchEndTokens.getFirst()).isEqualTo(sharedToken);
             });
+        }
+    }
+
+    private static void runDeferred(List<Runnable> tasks) {
+        while (!tasks.isEmpty()) {
+            List<Runnable> snapshot = new ArrayList<>(tasks);
+            tasks.clear();
+            snapshot.forEach(Runnable::run);
         }
     }
 
@@ -676,7 +739,7 @@ class WorkPackageTest {
         @Override
         public MessageStream.Empty<Message> process(@NonNull List<MessageStream.Entry<? extends EventMessage>> entries, @NonNull ProcessingContext context) {
             List<? extends EventMessage> events = entries.stream().map(MessageStream.Entry::message).toList();
-            if (batchProcessorPredicate.test(events, TrackingToken.batchEndFromContext(context).orElse(null))) {
+            if (batchProcessorPredicate.test(events, context.getResource(TrackingToken.BATCH_END_RESOURCE_KEY))) {
                 processedEvents.addAll(entries.stream().map(e -> new ContextMessage(e.message(), e)).toList());
             }
             return MessageStream.empty();

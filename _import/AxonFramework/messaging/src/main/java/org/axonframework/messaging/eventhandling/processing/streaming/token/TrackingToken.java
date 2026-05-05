@@ -73,28 +73,6 @@ public interface TrackingToken {
     }
 
     /**
-     * Adds the given {@code token} to the given {@code context} using the {@link #BATCH_END_RESOURCE_KEY}.
-     *
-     * @param context The {@link Context} to add the batch-end {@code token} to.
-     * @param token   The {@link TrackingToken} representing the position of the last event in the batch.
-     * @return The resulting context.
-     */
-    static Context addBatchEndToContext(Context context, TrackingToken token) {
-        return context.withResource(BATCH_END_RESOURCE_KEY, token);
-    }
-
-    /**
-     * Returns an {@link Optional} of {@link TrackingToken} keyed under {@link #BATCH_END_RESOURCE_KEY} in the given
-     * {@code context}, representing the token of the last event in the current batch.
-     *
-     * @param context The {@link Context} to retrieve the batch-end {@link TrackingToken} from, if present.
-     * @return An {@link Optional} of {@link TrackingToken} representing the last position in the current batch.
-     */
-    static Optional<TrackingToken> batchEndFromContext(Context context) {
-        return Optional.ofNullable(context.getResource(BATCH_END_RESOURCE_KEY));
-    }
-
-    /**
      * A special {@link TrackingToken} that indicates the very beginning of an event stream.
      * <p>
      * Used to explicitly represent the first position in a stream instead of using {@code null}.
