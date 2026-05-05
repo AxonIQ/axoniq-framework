@@ -30,9 +30,9 @@ The following table summarizes the components affected by the reorganization of 
 | `org.axonframework:axon-messaging`
 | `io.axoniq.framework:axoniq-distributed-messaging`
 
-| Axon Server Testcontainer
-| `org.axonframework:axon-test`
-| `io.axoniq.framework:axoniq-testcontainer`
+| Axon Server Testcontainer (split from `axon-test`)
+| `org.axonframework:axon-test` (`AxonTestFixture` remains here)
+| `io.axoniq.framework:axoniq-testcontainer` (`AxonServerContainer` moves here)
 
 |===
 
@@ -72,37 +72,10 @@ Maven::
 Gradle::
 +
 --
-
-For usage with *Gradle Version 4.x* and below, apply the dependency-management-plugin like so:
-
 [source,groovy]
 ----
-buildscript {
-  repositories {
-    jcenter()
-  }
-  dependencies {
-    classpath "io.spring.gradle:dependency-management-plugin:0.5.1.RELEASE"
-  }
-}
-
-apply plugin: "io.spring.dependency-management"
+implementation(platform("io.axoniq.framework:axoniq-framework-bom:<VERSION>"))
 ----
-
-After this, import the Axon BOM:
-
-[source,groovy]
-----
-dependencyManagement {
-  imports {
-    mavenBom 'io.axoniq.framework:axoniq-framework-bom:<VERSION>'
-  }
-}
-----
-
-Beginning with *https://docs.gradle.org/5.0/userguide/managing_transitive_dependencies.html#sec:bom_import[Gradle version 5.0]*, you can also omit the dependency-management plugin and instead use the `platform` dependency DSL to import maven BOMs:
-
-`implementation(platform("io.axoniq.framework:axoniq-framework-bom:<VERSION>"))`
 --
 ====
 
@@ -310,7 +283,8 @@ Apart from that package move, the field names and method signatures of classes w
 == Axon Server testcontainer
 
 `AxonServerContainer` has moved from `axon-test` to a dedicated `axoniq-testcontainer` module.
-To continue using it, replace the dependency and update the import:
+To continue using it, add the new dependency and update the import.
+Be sure to keep the `org.axonframework:axon-test` dependency if you want to continue using the `AxonTestFixture`.
 
 [tabs]
 ====
@@ -318,13 +292,6 @@ Maven::
 +
 [source,xml]
 ----
-<!-- Remove (or reduce to test scope only if you use other axon-test features) -->
-<dependency>
-    <groupId>org.axonframework</groupId>
-    <artifactId>axon-test</artifactId>
-    <scope>test</scope>
-</dependency>
-
 <!-- Add -->
 <dependency>
     <groupId>io.axoniq.framework</groupId>
@@ -337,9 +304,6 @@ Gradle::
 +
 [source,groovy]
 ----
-// Remove (or reduce scope if you use other axon-test features)
-testImplementation 'org.axonframework:axon-test'
-
 // Add
 testImplementation 'io.axoniq.framework:axoniq-testcontainer'
 ----
