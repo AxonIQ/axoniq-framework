@@ -185,7 +185,7 @@ class WorkflowEngineReplayTest {
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
         when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
-                .thenReturn(List.of(new PredicatedWorkflowConfiguration(e -> true, configuration)));
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());

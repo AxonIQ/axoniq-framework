@@ -42,7 +42,7 @@ import org.mockito.*;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,7 +68,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     @Test
     void testRegisterAndGetConfigurations() {
         QualifiedName eventName = new QualifiedName("com.example.MyEvent");
-        Predicate<EventMessage> predicate = eventMessage -> true;
+        BiPredicate<EventMessage, ProcessingContext> predicate = (eventMessage, pc) -> true;
         EventCondition eventCondition = EventConditions.fromQualifiedName(eventName, predicate);
 
         WorkflowConfiguration<?> workflowConfiguration = new StubWorkflowConfiguration();
@@ -81,19 +81,19 @@ class SimpleWorkflowConfigurationRegistryTest {
 
         List<PredicatedWorkflowConfiguration> configs = registry.getWorkflowsConfigurations(eventName);
         assertThat(configs).hasSize(1);
-        assertThat(configs.get(0).predicate()).isEqualTo(predicate);
-        assertThat(configs.get(0).configuration()).isEqualTo(workflowConfiguration);
+        assertThat(configs.getFirst().predicate()).isEqualTo(predicate);
+        assertThat(configs.getFirst().configuration()).isEqualTo(workflowConfiguration);
     }
 
     @Test
     void testRegisterMultipleConfigurationsForSameEvent() {
         QualifiedName eventName = new QualifiedName("com.example.MyEvent");
 
-        Predicate<EventMessage> pred1 = msg -> true;
+        BiPredicate<EventMessage, ProcessingContext> pred1 = (msg, pc) -> true;
         EventCondition cond1 = EventConditions.fromQualifiedName(eventName, pred1);
         WorkflowConfiguration<?> conf1 = new StubWorkflowConfiguration();
 
-        Predicate<EventMessage> pred2 = msg -> false;
+        BiPredicate<EventMessage, ProcessingContext> pred2 = (msg, pc) -> false;
         EventCondition cond2 = EventConditions.fromQualifiedName(eventName, pred2);
         WorkflowConfiguration<?> conf2 = new StubWorkflowConfiguration();
 

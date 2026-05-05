@@ -18,15 +18,18 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
+import io.axoniq.workflow.runtime.association.EventMessageProcessingPredicateBuilder;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 /**
  * Helper for construction of {@link EventCondition}.
@@ -35,6 +38,15 @@ import java.util.function.Predicate;
  * @since 1.0.0
  */
 public class EventConditions {
+
+    /**
+     * Bi-predicate, which will never match.
+     */
+    static final BiPredicate<EventMessage, ProcessingContext> NEVER = (e, pc) -> false;
+    /**
+     * Bi-predicate, which will always match.
+     */
+    static final BiPredicate<EventMessage, ProcessingContext> ALWAYS = (e, pc) -> true;
 
     private EventConditions() {
         // hide instantiation
@@ -48,11 +60,21 @@ public class EventConditions {
      * @return condition component builder.
      */
     public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz) {
-        Objects.requireNonNull(clazz, "Class must not be null");
-        return (c) -> (EventCondition) () ->
-                c.getComponent(MessageTypeResolver.class).resolve(clazz)
-                 .orElse(new MessageType(clazz))
-                 .qualifiedName();
+        return c -> new EventCondition() {
+
+            @Override
+            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+                return ALWAYS;
+            }
+
+            @Override
+            public @NonNull QualifiedName qualifiedName() {
+                Objects.requireNonNull(clazz, "Class must not be null");
+                return c.getComponent(MessageTypeResolver.class).resolve(clazz)
+                        .orElse(new MessageType(clazz))
+                        .qualifiedName();
+            }
+        };
     }
 
     /**
@@ -64,14 +86,14 @@ public class EventConditions {
      * @return event condition builder.
      */
     public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz,
-                                                            @Nonnull ComponentBuilder<Predicate<EventMessage>> eventMessagePredicate) {
+                                                            @Nonnull EventMessageProcessingPredicateBuilder eventMessagePredicate) {
         Objects.requireNonNull(clazz, "Class must not be null");
         Objects.requireNonNull(eventMessagePredicate, "Predicate must not be null");
         return (c) -> new EventCondition() {
 
             @Nonnull
             @Override
-            public Predicate<EventMessage> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return eventMessagePredicate.build(c);
             }
 
@@ -93,18 +115,28 @@ public class EventConditions {
      * @return event condition.
      */
     public static EventCondition fromQualifiedName(@Nonnull QualifiedName qualifiedName) {
-        return () -> Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
+        return new EventCondition() {
+            @Override
+            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+                return ALWAYS;
+            }
+
+            @Override
+            public @NonNull QualifiedName qualifiedName() {
+                return Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
+            }
+        };
     }
 
     /**
      * Constructs an event condition from the qualified name and a message predicate.
      *
      * @param qualifiedName qualified name.
-     * @param predicate     message predicate.
+     * @param predicate     predicate on a message with context.
      * @return event condition.
      */
     public static EventCondition fromQualifiedName(@Nonnull QualifiedName qualifiedName,
-                                                   @Nonnull Predicate<EventMessage> predicate) {
+                                                   @Nonnull BiPredicate<EventMessage, ProcessingContext> predicate) {
         Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
         Objects.requireNonNull(predicate, "Predicate name must not be null");
 
@@ -118,7 +150,7 @@ public class EventConditions {
 
             @Nonnull
             @Override
-            public Predicate<EventMessage> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return predicate;
             }
         };
@@ -130,11 +162,12 @@ public class EventConditions {
      * @return a never-condition.
      */
     public static EventCondition never() {
-        return () -> new QualifiedName(Void.class);
+        return never(new QualifiedName(Void.class));
     }
 
     /**
-     * Creates a condition for an event with the given qualified name, which will never match. (This one is for testing).
+     * Creates a condition for an event with the given qualified name, which will never match. (This one is for
+     * testing).
      *
      * @param qualifiedName event qualified name.
      * @return event condition.
@@ -144,14 +177,14 @@ public class EventConditions {
         return new EventCondition() {
             @Nonnull
             @Override
-            public QualifiedName qualifiedName() {
-                return qualifiedName;
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
+                return NEVER;
             }
 
             @Nonnull
             @Override
-            public Predicate<EventMessage> predicate() {
-                return e -> false;
+            public QualifiedName qualifiedName() {
+                return qualifiedName;
             }
         };
     }

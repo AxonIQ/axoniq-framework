@@ -23,7 +23,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +38,6 @@ import java.util.function.UnaryOperator;
  */
 public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
 
-    private final EventConverter converter;
     private final String attributeName;
     private final Function<String, String> idProcessor;
 
@@ -48,7 +46,6 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
             @Nonnull String attributeName,
             @Nonnull UnaryOperator<String> customizer) {
         return new PayloadPropertyWorkflowIdProvider(
-                configuration.getComponent(EventConverter.class),
                 attributeName,
                 customizer
         );
@@ -57,28 +54,23 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     /**
      * Constructs id provider.
      *
-     * @param converter     converter to access event message payload.
      * @param attributeName name of the payload attribute.
      */
     public PayloadPropertyWorkflowIdProvider(
-            @Nonnull EventConverter converter,
             @Nonnull String attributeName) {
-        this(converter, attributeName, UnaryOperator.identity());
+        this(attributeName, UnaryOperator.identity());
     }
 
     /**
      * Constructs id provider.
      *
-     * @param converter     converter to access event message payload.
      * @param attributeName name of the payload attribute.
      * @param idProcessor   processor called on the result of attribute extractor.
      */
     public PayloadPropertyWorkflowIdProvider(
-            @Nonnull EventConverter converter,
             @Nonnull String attributeName,
             @Nonnull UnaryOperator<String> idProcessor
     ) {
-        this.converter = Objects.requireNonNull(converter, "Converter must not be null");
         this.attributeName = Objects.requireNonNull(attributeName, "Attribute name must not be null");
         this.idProcessor = idProcessor;
     }
@@ -88,8 +80,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
         return idProcessor
                 .apply(Optional.ofNullable(eventMessage.payloadAs(
                                        new TypeReference<Map<String, Object>>() {
-                                       },
-                                       converter
+                                       }
                                )).flatMap(p -> Optional.ofNullable(p.get(attributeName)))
                                .map(Object::toString)
                                .orElse(null));

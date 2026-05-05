@@ -330,7 +330,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         if (executable) {
             // live mode
-            eventWaitConditions.evaluateAndApply(eventMessage, contextDelegate::eventReceived);
+
+            eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
             appendTask(i -> state().evolve(eventMessage, processingContext));
         } else {
             // replay mode
@@ -409,7 +410,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void interrupt() {
-        runningSteps.cancelAll(new InterruptedException("Workflow engine shutdown"), s -> { });
+        runningSteps.cancelAll(new InterruptedException("Workflow engine shutdown"), s -> {
+        });
         // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
         // The task sets the driver thread's interrupt flag; the next taskQueue.take() observes it and throws
         // InterruptedException, propagating up so the driver thread exits cleanly.

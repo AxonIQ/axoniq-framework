@@ -112,9 +112,10 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return waitFor(
                 stepName,
                 EventConditions.fromQualifiedName(
-                        super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                        super.processingContext()
+                             .component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
                              .qualifiedName(),
-                        e -> predicate.test(e.payloadAs(eventType))
+                        (em, pc) -> predicate.test(em.payloadAs(eventType))
                 ),
                 GLOBAL_ONLY,
                 timeout,
@@ -142,7 +143,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 EventConditions.fromQualifiedName(
                         super.processingContext()
                              .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
-                        e -> associationsUtils.build(super.processingContext()).test(e)
+                        (em, pc) -> associationsUtils.build().test(em, pc)
                 ),
                 GLOBAL_ONLY,
                 timeout,
@@ -167,7 +168,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 EventConditions.fromQualifiedName(
                         super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
                              .qualifiedName(),
-                        e -> predicate.test(e.payloadAs(eventType))
+                        (em, pc) -> predicate.test(em.payloadAs(eventType))
                 ),
                 GLOBAL_ONLY,
                 timeout,
@@ -194,7 +195,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 EventConditions.fromQualifiedName(
                         super.processingContext()
                              .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
-                        e -> associationsUtils.build(super.processingContext()).test(e)
+                        (em, pc) -> associationsUtils.build().test(em, pc)
                 ),
                 GLOBAL_ONLY,
                 timeout,
@@ -218,8 +219,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
-     * Non-blocking wait for an event of the given type.
-     * Returns immediately with a {@link WorkflowStepResult} that completes when the event arrives or the timeout expires.
+     * Non-blocking wait for an event of the given type. Returns immediately with a {@link WorkflowStepResult} that
+     * completes when the event arrives or the timeout expires.
      *
      * @param stepName  name of the workflow step.
      * @param eventType the event type to wait for.
@@ -229,15 +230,16 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     public WorkflowStepResult waitForEvent(String stepName, Class<?> eventType, Duration timeout) {
         return waitFor(stepName,
                        EventConditions.fromQualifiedName(
-                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType)
+                                    .orElseThrow()
                                     .qualifiedName()
                        ),
                        PayloadReducer.GLOBAL_ONLY, timeout, defaults());
     }
 
     /**
-     * Non-blocking wait for an event of the given type with a predicate filter.
-     * Returns immediately with a {@link WorkflowStepResult} that completes when a matching event arrives or the timeout expires.
+     * Non-blocking wait for an event of the given type with a predicate filter. Returns immediately with a
+     * {@link WorkflowStepResult} that completes when a matching event arrives or the timeout expires.
      *
      * @param stepName  name of the workflow step.
      * @param eventType the event type to wait for.
@@ -250,16 +252,17 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                                Predicate<T> predicate, Duration timeout) {
         return waitFor(stepName,
                        EventConditions.fromQualifiedName(
-                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType)
+                                    .orElseThrow()
                                     .qualifiedName(),
-                               e -> predicate.test(e.payloadAs(eventType))
+                               (em, pc) -> predicate.test(em.payloadAs(eventType))
                        ),
                        PayloadReducer.GLOBAL_ONLY, timeout, defaults());
     }
 
     /**
-     * Non-blocking wait for an event of the given type with association filtering.
-     * Returns immediately with a {@link WorkflowStepResult} that completes when a matching event arrives or the timeout expires.
+     * Non-blocking wait for an event of the given type with association filtering. Returns immediately with a
+     * {@link WorkflowStepResult} that completes when a matching event arrives or the timeout expires.
      *
      * @param stepName          name of the workflow step.
      * @param eventType         the event type to wait for.
@@ -271,9 +274,10 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                            AssociationsUtils associationsUtils, Duration timeout) {
         return waitFor(stepName,
                        EventConditions.fromQualifiedName(
-                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType).orElseThrow()
+                               super.processingContext().component(MessageTypeResolver.class).resolve(eventType)
+                                    .orElseThrow()
                                     .qualifiedName(),
-                               e -> associationsUtils.build(super.processingContext()).test(e)
+                               (em, pc) -> associationsUtils.build().test(em, pc)
                        ),
                        PayloadReducer.GLOBAL_ONLY, timeout, defaults());
     }
@@ -303,8 +307,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
-     * Non-blocking sleep that returns immediately with a {@link WorkflowStepResult}.
-     * The result completes when the timeout expires.
+     * Non-blocking sleep that returns immediately with a {@link WorkflowStepResult}. The result completes when the
+     * timeout expires.
      *
      * @param stepName name of the step.
      * @param timeout  duration to sleep.
@@ -690,8 +694,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
 
     /**
      * Cancels a single running step by name without terminating the workflow. The step's future is completed
-     * exceptionally with the given cause, wrapped in a {@link StepCancellationException}
-     * if it isn't one already.
+     * exceptionally with the given cause, wrapped in a {@link StepCancellationException} if it isn't one already.
      *
      * @param stepName the name of the step to cancel
      * @param cause    the exception that caused the step cancellation

@@ -40,7 +40,6 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -64,7 +63,6 @@ class WorkflowModuleTest {
     private Configuration configuration;
     private WorkflowConfigurationRegistry<?> registry;
     private MessageTypeResolver messageTypeResolver;
-    private EventConverter converter;
 
     @BeforeEach
     void setUp() {
@@ -72,10 +70,8 @@ class WorkflowModuleTest {
         configuration = mock(Configuration.class);
         registry = mock(WorkflowConfigurationRegistry.class);
         messageTypeResolver = mock(MessageTypeResolver.class);
-        converter = mock(EventConverter.class);
         when(configuration.getComponent(WorkflowConfigurationRegistry.class)).thenReturn(registry);
         when(configuration.getComponent(MessageTypeResolver.class)).thenReturn(messageTypeResolver);
-        when(configuration.getComponent(EventConverter.class)).thenReturn(converter);
         when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class)))
                 .thenAnswer(invocation -> {
                     Supplier<ValueComparisonOperatorRegistry> defaultSupplier = invocation.getArgument(1);

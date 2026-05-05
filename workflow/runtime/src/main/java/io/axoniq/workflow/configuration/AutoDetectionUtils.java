@@ -41,7 +41,6 @@ import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -233,9 +232,9 @@ public class AutoDetectionUtils {
                 getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
                         .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
                         .orElseGet(
-                                () -> new PayloadPropertyWorkflowIdProvider(c.getComponent(EventConverter.class),
-                                                                            (String) attributes.get(
-                                                                                    ATTR_ID_PROPERTY))
+                                () -> new PayloadPropertyWorkflowIdProvider(
+                                        (String) attributes.get(ATTR_ID_PROPERTY)
+                                )
                         );
     }
 

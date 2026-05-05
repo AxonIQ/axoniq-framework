@@ -20,17 +20,14 @@ package io.axoniq.workflow.dsl.api;
 
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
-import java.lang.reflect.Type;
 import java.util.Map;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -41,78 +38,73 @@ import static org.mockito.Mockito.*;
  */
 class AssociationsUtilsTest {
 
-    private EventConverter converter;
-
-    @BeforeEach
-    void setUp() {
-        converter = Mockito.mock(EventConverter.class);
-    }
-
     @Test
     void testBuildSingleAssociation() {
-        Predicate<EventMessage> predicate = AssociationsUtils
+        ProcessingContext processingContext = Mockito.mock(ProcessingContext.class);
+        BiPredicate<EventMessage, ProcessingContext> predicate = AssociationsUtils
                 .associate(payloadProperty("orderId"), "=", "123")
-                .build(converter);
+                .build();
 
         Map<String, Object> payload = Map.of("orderId", "123");
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
-        when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(payload);
 
-        assertThat(predicate.test(eventMessage)).isTrue();
+        assertThat(predicate.test(eventMessage, processingContext)).isTrue();
     }
 
     @Test
     void testBuildMultipleAssociations() {
-        Predicate<EventMessage> predicate = AssociationsUtils
+        ProcessingContext processingContext = Mockito.mock(ProcessingContext.class);
+        BiPredicate<EventMessage, ProcessingContext> predicate = AssociationsUtils
                 .associate(payloadProperty("orderId"), "=", "123")
                 .and(payloadProperty("customerId"), "=", "abc")
-                .build(converter);
+                .build();
 
         Map<String, Object> payload = Map.of("orderId", "123", "customerId", "abc");
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
-        when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(payload);
 
-        assertThat(predicate.test(eventMessage)).isTrue();
+        assertThat(predicate.test(eventMessage, processingContext)).isTrue();
 
         Map<String, Object> partialPayload = Map.of("orderId", "123");
         EventMessage partialEventMessage = Mockito.mock(EventMessage.class);
-        when(partialEventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(partialPayload);
+        when(partialEventMessage.payloadAs(Map.class)).thenReturn(partialPayload);
 
-        assertThat(predicate.test(partialEventMessage)).isFalse();
+        assertThat(predicate.test(partialEventMessage, processingContext)).isFalse();
 
         Map<String, Object> mismatchPayload = Map.of("orderId", "123", "customerId", "wrong");
         EventMessage mismatchEventMessage = Mockito.mock(EventMessage.class);
-        when(mismatchEventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(mismatchPayload);
+        when(mismatchEventMessage.payloadAs(Map.class)).thenReturn(mismatchPayload);
 
-        assertThat(predicate.test(mismatchEventMessage)).isFalse();
+        assertThat(predicate.test(mismatchEventMessage, processingContext)).isFalse();
     }
 
     @Test
     void testBuildWithProcessingContext() {
         ProcessingContext processingContext = Mockito.mock(ProcessingContext.class);
-        when(processingContext.component(EventConverter.class)).thenReturn(converter);
 
-        Predicate<EventMessage> predicate = AssociationsUtils
+        BiPredicate<EventMessage, ProcessingContext> predicate = AssociationsUtils
                 .associate(payloadProperty("orderId"), "=", "123")
-                .build(processingContext);
+                .build();
 
         Map<String, Object> payload = Map.of("orderId", "123");
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
-        when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(payload);
 
-        assertThat(predicate.test(eventMessage)).isTrue();
+        assertThat(predicate.test(eventMessage, processingContext)).isTrue();
     }
 
     @Test
     void testBuildWithMissingKey() {
-        Predicate<EventMessage> predicate = AssociationsUtils
+        ProcessingContext processingContext = Mockito.mock(ProcessingContext.class);
+        BiPredicate<EventMessage, ProcessingContext> predicate = AssociationsUtils
                 .associate(payloadProperty("orderId"), "=", "123")
-                .build(converter);
+                .build();
 
         Map<String, Object> payload = Map.of("somethingElse", "123");
         EventMessage eventMessage = Mockito.mock(EventMessage.class);
-        when(eventMessage.payloadAs(any(Type.class), eq(converter))).thenReturn(payload);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(payload);
 
-        assertThat(predicate.test(eventMessage)).isFalse();
+        assertThat(predicate.test(eventMessage, processingContext)).isFalse();
     }
 }

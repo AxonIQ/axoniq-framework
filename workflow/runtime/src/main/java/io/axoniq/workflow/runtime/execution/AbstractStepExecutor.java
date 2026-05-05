@@ -35,7 +35,6 @@ import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -236,7 +235,7 @@ public abstract class AbstractStepExecutor {
     @Nonnull
     protected Map<String, Object> eventMessagePayload(@Nonnull EventMessage eventMessage) {
         return sanitize(eventMessage.payloadAs(new TypeReference<>() {
-                        }, workflowContext.processingContext().component(EventConverter.class))
+                        })
         );
     }
 
