@@ -16,7 +16,9 @@ This page covers the key infrastructure components you'll work with:
 Next to the infrastructure components, this chapter contains a section for:
 
 * **<<configuring_event_conversion,Event conversion>>**
+ifdef::advanced-framework[]
 * **<<distributing_events,Distributing events>>**
+endif::[]
 
 For more details on event stores specifically, see the xref:events:event-store-internals.adoc[event store internals] page.
 
