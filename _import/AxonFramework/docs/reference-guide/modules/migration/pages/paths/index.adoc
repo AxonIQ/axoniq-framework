@@ -23,6 +23,9 @@ Whether you are performing a straightforward version bump or a deep architectura
 * xref:migration:paths/configuration.adoc[Configuration migration]
 * xref:migration:paths/sequencing-policies.adoc[Sequencing Policy migration]
 * xref:migration:paths/dlq.adoc[Dead-Letter Queue migration]
+ifdef::advanced-framework[]
+* xref:advanced-migration:paths/5.0-to-5.1.adoc[Axon Framework 5.0 to Axoniq Framework migration]
+endif::[]
 ifdef::data-protection[]
 * xref:data-protection-migration:migration-path.adoc[Data Protection module migration]
 endif::[]
@@ -32,6 +35,10 @@ endif::[]
 == Base migration changes
 
 Every user migrating from Axon Framework 4.x to 5.x will encounter a set of base changes. These primarily involve package renames and module restructurings.
+
+ifdef::advanced-framework[]
+NOTE: Axon Framework 5.1 extracts several production components into a dedicated commercial library: *Axoniq Framework*. If you are migrating to 5.1, be sure to consider the steps explained in the xref:advanced-migration:paths/5.0-to-5.1.adoc[Axon Framework 5.0 to *Axoniq* Framework 5.1] migration path.
+endif::[]
 
 [#import-and-package-changes]
 === Import and package changes

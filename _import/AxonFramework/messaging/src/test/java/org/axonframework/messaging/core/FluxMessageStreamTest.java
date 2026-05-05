@@ -119,8 +119,8 @@ class FluxMessageStreamTest extends MessageStreamTest<Message> {
 
         // without signalProgress() in onError(), this times out
         assertThat(callbackFired.await(5, TimeUnit.SECONDS))
-            .as("callback must fire when Flux errors while consumer is awaiting")
-            .isTrue();
+                .as("callback must fire when Flux errors while consumer is awaiting")
+                .isTrue();
 
         // consuming the error completes the stream exceptionally
         assertThat(testSubject.next()).isEmpty();

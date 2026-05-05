@@ -48,8 +48,7 @@ class SingleValueMessageStreamTest extends MessageStreamTest<Message> {
 
     @Override
     protected MessageStream.Empty<Message> completedEmptyStreamTestSubject() {
-        Assumptions.abort("DelayedMessageStream does not support empty streams");
-        return null;
+        return (MessageStream.Empty<Message>) MessageStream.fromFuture(CompletableFuture.completedFuture(null));
     }
 
     @Override
@@ -186,6 +185,7 @@ class SingleValueMessageStreamTest extends MessageStreamTest<Message> {
 
     @Nested
     class WhenAllElementsConsumed {
+
         SingleValueMessageStream<Message> ms = new SingleValueMessageStream<>(new SimpleEntry<>(createRandomMessage()));
 
         @BeforeEach

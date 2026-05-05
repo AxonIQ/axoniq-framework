@@ -192,7 +192,9 @@ public abstract class MessageStreamTest<M extends Message> {
         MessageStream<M> testSubject = completedTestSubject(List.of(msg));
         RuntimeException e = new RuntimeException("Callback failed");
 
-        testSubject.setCallback(() -> { throw e; });
+        testSubject.setCallback(() -> {
+            throw e;
+        });
 
         assertThat(testSubject.error()).containsSame(e);
         assertThat(testSubject.isCompleted()).isTrue();
@@ -328,7 +330,8 @@ public abstract class MessageStreamTest<M extends Message> {
         AtomicBoolean invoked = new AtomicBoolean(false);
 
         CompletableFuture<Void> completionMarker = new CompletableFuture<>();
-        MessageStream<M> stream = uncompletedTestSubject(List.of(), completionMarker).onComplete(() -> invoked.set(true));
+        MessageStream<M> stream = uncompletedTestSubject(List.of(),
+                                                         completionMarker).onComplete(() -> invoked.set(true));
 
         assertFalse(stream.hasNextAvailable());
         assertFalse(invoked.get());

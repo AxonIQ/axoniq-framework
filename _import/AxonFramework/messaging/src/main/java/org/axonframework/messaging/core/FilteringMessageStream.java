@@ -66,7 +66,7 @@ class FilteringMessageStream<M extends Message> extends AbstractMessageStream<M>
         }
 
         return result.map(FetchResult::of)
-            .orElseGet(() -> delegate.isCompleted() ? FetchResult.completed() : FetchResult.notReady());
+                     .orElseGet(() -> delegate.isCompleted() ? FetchResult.completed() : FetchResult.notReady());
     }
 
     @Override

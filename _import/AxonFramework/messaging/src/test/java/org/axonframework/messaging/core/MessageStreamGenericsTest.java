@@ -25,9 +25,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests if the generics on {@link MessageStream} methods are set correctly,
- * generally allowing methods to be called with subtypes for a message stream
- * of a specific type.
+ * Tests if the generics on {@link MessageStream} methods are set correctly, generally allowing methods to be called
+ * with subtypes for a message stream of a specific type.
  *
  * @author John Hendrikx
  */
@@ -36,8 +35,9 @@ class MessageStreamGenericsTest {
     @Test
     void shouldAcceptGenericSubtypesForConcatWith() {
         MessageStream<SourceMessage> items = MessageStream.<SourceMessage>just(new SourceMessage.Snapshot())
-            .concatWith(MessageStream.fromItems(new SourceMessage.Event(), new SourceMessage.Event()))
-            .concatWith(MessageStream.just(new SourceMessage.ResumePosition()));
+                                                          .concatWith(MessageStream.fromItems(new SourceMessage.Event(),
+                                                                                              new SourceMessage.Event()))
+                                                          .concatWith(MessageStream.just(new SourceMessage.ResumePosition()));
 
         assertThat(items.next()).map(Entry::message).containsInstanceOf(SourceMessage.Snapshot.class);
         assertThat(items.next()).map(Entry::message).containsInstanceOf(SourceMessage.Event.class);
@@ -49,8 +49,8 @@ class MessageStreamGenericsTest {
     @Test
     void shouldAcceptGenericSubtypesForOnErrorContinue() {
         MessageStream<SourceMessage> items = MessageStream.<SourceMessage>just(new SourceMessage.Snapshot())
-            .concatWith(MessageStream.failed(new RuntimeException("oops")))
-            .onErrorContinue(e -> MessageStream.just(new SourceMessage.ResumePosition()));
+                                                          .concatWith(MessageStream.failed(new RuntimeException("oops")))
+                                                          .onErrorContinue(e -> MessageStream.just(new SourceMessage.ResumePosition()));
 
         assertThat(items.next()).map(Entry::message).containsInstanceOf(SourceMessage.Snapshot.class);
         assertThat(items.next()).map(Entry::message).containsInstanceOf(SourceMessage.ResumePosition.class);
@@ -60,9 +60,9 @@ class MessageStreamGenericsTest {
     @Test
     void shouldAcceptGenericSubtypesForFromItems() {
         MessageStream<SourceMessage> items = MessageStream.fromItems(
-            new SourceMessage.Snapshot(),
-            new SourceMessage.Event(),
-            new SourceMessage.ResumePosition()
+                new SourceMessage.Snapshot(),
+                new SourceMessage.Event(),
+                new SourceMessage.ResumePosition()
         );
 
         assertThat(items.next()).map(Entry::message).containsInstanceOf(SourceMessage.Snapshot.class);
@@ -74,9 +74,9 @@ class MessageStreamGenericsTest {
     @Test
     void shouldAcceptGenericSubtypesForFromIterable() {
         MessageStream<SourceMessage> items = MessageStream.fromIterable(List.of(
-            new SourceMessage.Snapshot(),
-            new SourceMessage.Event(),
-            new SourceMessage.ResumePosition()
+                new SourceMessage.Snapshot(),
+                new SourceMessage.Event(),
+                new SourceMessage.ResumePosition()
         ));
 
         assertThat(items.next()).map(Entry::message).containsInstanceOf(SourceMessage.Snapshot.class);
@@ -88,18 +88,21 @@ class MessageStreamGenericsTest {
     sealed interface SourceMessage extends Message {
 
         final class Event extends GenericMessage implements SourceMessage {
+
             public Event() {
                 super(new MessageType(EventMessage.class), null);
             }
         }
 
         final class Snapshot extends GenericMessage implements SourceMessage {
+
             public Snapshot() {
                 super(new MessageType(Snapshot.class), null);
             }
         }
 
         final class ResumePosition extends GenericMessage implements SourceMessage {
+
             public ResumePosition() {
                 super(new MessageType(ResumePosition.class), null);
             }

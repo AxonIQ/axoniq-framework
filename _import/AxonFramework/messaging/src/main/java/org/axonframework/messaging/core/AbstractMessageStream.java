@@ -95,8 +95,7 @@ import static org.axonframework.messaging.core.MessageStreamUtils.NO_OP_CALLBACK
 public abstract class AbstractMessageStream<M extends Message> implements MessageStream<M> {
 
     /**
-     * Represents the result of attempting to fetch the next element from a
-     * {@link MessageStream}.
+     * Represents the result of attempting to fetch the next element from a {@link MessageStream}.
      * <p>
      * A {@code FetchResult} models four distinct outcomes:
      * <ul>
@@ -282,16 +281,15 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
      */
 
     /**
-     * Holds the {@link Runnable} that is called when the stream completes or items
-     * are available for reading.
+     * Holds the {@link Runnable} that is called when the stream completes or items are available for reading.
      * <p>
      * Only access while synchronized on this class.
      */
     private Runnable callback = NO_OP_CALLBACK;
 
     /**
-     * Contains the entry that was peeked because of a call to {@link #peek()} or {@link #hasNextAvailable()}.
-     * A call to {@link #next()} will return this entry and clear it.
+     * Contains the entry that was peeked because of a call to {@link #peek()} or {@link #hasNextAvailable()}. A call to
+     * {@link #next()} will return this entry and clear it.
      * <p>
      * Only access while synchronized on this class.
      */
@@ -299,8 +297,7 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     private Entry<M> peekedEntry;
 
     /**
-     * Holds the error if the stream completed with an error. This must be {@code null}
-     * if completed is {@code false}.
+     * Holds the error if the stream completed with an error. This must be {@code null} if completed is {@code false}.
      * <p>
      * Only access while synchronized on this class.
      */
@@ -308,43 +305,41 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     private Throwable error;
 
     /**
-     * Indicates that this stream is completed, either because all items were consumed
-     * and no more can become available, or because an error occurred.
+     * Indicates that this stream is completed, either because all items were consumed and no more can become available,
+     * or because an error occurred.
      * <p>
      * Only access while synchronized on this class.
      */
     private boolean completed;
 
     /**
-     * Indicates that no data is available downstream and that {@link #signalProgress()} must
-     * be called by the downstream producer when new data is available or a state change
-     * occurred (error or completion). This will then in turn trigger the consumer via the callback.
-     * When this flag is {@code false} external triggers that would normally lead to a callback
-     * are suppressed.
+     * Indicates that no data is available downstream and that {@link #signalProgress()} must be called by the
+     * downstream producer when new data is available or a state change occurred (error or completion). This will then
+     * in turn trigger the consumer via the callback. When this flag is {@code false} external triggers that would
+     * normally lead to a callback are suppressed.
      * <p>
      * Only access while synchronized on this class.
      */
     private boolean awaitingData;
 
     /**
-     * Indicates that this stream is fully initialized and is in a valid state. This
-     * flag is checked in the {@link #initialize(FetchResult)} call to reject any
-     * attempt to initialize the stream when it was already initialized (either by
-     * calling initialize, or by any other interaction with the stream).
+     * Indicates that this stream is fully initialized and is in a valid state. This flag is checked in the
+     * {@link #initialize(FetchResult)} call to reject any attempt to initialize the stream when it was already
+     * initialized (either by calling initialize, or by any other interaction with the stream).
      * <p>
      * Only access while synchronized on this class.
      */
     private boolean initialized;
 
     /**
-     * This method can be used after the super constructor call completes in a subtype to
-     * set the initial state of the stream. It may only be called during construction, and
-     * will throw an exception if the stream already has a valid state.
+     * This method can be used after the super constructor call completes in a subtype to set the initial state of the
+     * stream. It may only be called during construction, and will throw an exception if the stream already has a valid
+     * state.
      *
      * @param initialFetchResult the initial fetch result; must not be null and must not be a Value
-     * @throws NullPointerException if {@code initialFetchResult} is null
+     * @throws NullPointerException     if {@code initialFetchResult} is null
      * @throws IllegalArgumentException if {@code initialFetchResult} is a Value
-     * @throws IllegalStateException if already initialized
+     * @throws IllegalStateException    if already initialized
      */
     protected final synchronized void initialize(FetchResult<Entry<M>> initialFetchResult) {
         Objects.requireNonNull(initialFetchResult, "The initialFetchResult parameter cannot be null.");
@@ -554,8 +549,8 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     /**
      * Attempts to fetch the next available {@link Entry} from the underlying source.
      * <p>
-     * This method is invoked by {@link #next()} when no previously peeked entry is available.
-     * Implementations must return a {@link FetchResult} describing the current state of the stream:
+     * This method is invoked by {@link #next()} when no previously peeked entry is available. Implementations must
+     * return a {@link FetchResult} describing the current state of the stream:
      * <ul>
      *     <li>{@link FetchResult.Value} if an entry is immediately available,</li>
      *     <li>{@link FetchResult.NotReady} if no entry is currently available but more may arrive later,</li>
@@ -588,13 +583,11 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     protected abstract FetchResult<Entry<M>> fetchNext();
 
     /**
-     * Callback invoked when the stream is about to transition to a completed state,
-     * either successfully or exceptionally. Subclasses may override this method to
-     * perform custom actions on completion.
+     * Callback invoked when the stream is about to transition to a completed state, either successfully or
+     * exceptionally. Subclasses may override this method to perform custom actions on completion.
      * <p>
-     * If the implementation throws an exception, the stream still completes, but
-     * it will complete with the thrown exception. If the stream was about to
-     * complete with an error, and the callback fails as well, the exception is
+     * If the implementation throws an exception, the stream still completes, but it will complete with the thrown
+     * exception. If the stream was about to complete with an error, and the callback fails as well, the exception is
      * added as a suppressed exception.
      */
     protected void onCompleted() {
@@ -612,13 +605,11 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     private void complete() {  // keep private to guard this class's invariants
         if (!completed) {
             try {
-                 onCompleted();
-            }
-            catch (Exception e) {
+                onCompleted();
+            } catch (Exception e) {
                 if (this.error == null) {
                     this.error = e;
-                }
-                else {
+                } else {
                     this.error.addSuppressed(e);
                 }
             }
@@ -640,8 +631,7 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
             }
 
             cb.run();
-        }
-        catch (Throwable t) {
+        } catch (Throwable t) {
             synchronized (this) {
                 completeExceptionally(t);
             }
@@ -651,8 +641,7 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     /**
      * Returns a structured diagnostic representation of this {@link MessageStream}.
      * <p>
-     * The output is designed for debugging complex stream compositions and focuses on
-     * three orthogonal aspects:
+     * The output is designed for debugging complex stream compositions and focuses on three orthogonal aspects:
      * <ul>
      *     <li><b>Lifecycle status</b> (terminal or transitional state)</li>
      *     <li><b>Transient flags</b> (abnormal or noteworthy conditions)</li>
@@ -698,9 +687,9 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     @Override
     public synchronized String toString() {
         String status = error != null ? "ERROR"
-                          : completed ? "COMPLETED"
-                       : awaitingData ? "NOT_READY"
-                                      : null;
+                : completed ? "COMPLETED"
+                : awaitingData ? "NOT_READY"
+                : null;
         String flags = describeFlags();  // pipe separated
         String delegates = describeDelegates();  // comma separated, with the active prepended with asterisk
         String statusDescription = Stream.of(status, (peekedEntry == null ? null : "P"), flags)
@@ -712,8 +701,8 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     }
 
     /**
-     * Subtypes should override this to return flags that apply to this stream for debugging purposes.
-     * Flags should be short. Multiple flags should be separated with a pipe ("|").
+     * Subtypes should override this to return flags that apply to this stream for debugging purposes. Flags should be
+     * short. Multiple flags should be separated with a pipe ("|").
      * <p>
      * Only include flags for abnormal states, to reduce visual noise.
      *
@@ -725,12 +714,11 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     }
 
     /**
-     * Subtypes should override this to describe any (message stream) delegates they use for
-     * debugging purposes. This allows to visualize a chain of message streams, their states and
-     * how they are linked.
+     * Subtypes should override this to describe any (message stream) delegates they use for debugging purposes. This
+     * allows to visualize a chain of message streams, their states and how they are linked.
      * <p>
-     * If there are multiple delegates, then they should be comma separated with the active
-     * delegate prepended with an asterisk ("*").
+     * If there are multiple delegates, then they should be comma separated with the active delegate prepended with an
+     * asterisk ("*").
      *
      * @return the description of delegate streams, or {@code null} if there are no delegates
      */

@@ -188,7 +188,8 @@ class ConcatenatingMessageStreamTest extends MessageStreamTest<Message> {
             stream1.sealExceptionally(new IllegalArgumentException("Error"));
 
             assertTrue(callbackCalled.getAndSet(false));
-            assertFalse(testSubject.error().isPresent());  // error from producer side is only reported once stream is consumed up to that point
+            assertFalse(testSubject.error()
+                                   .isPresent());  // error from producer side is only reported once stream is consumed up to that point
             assertThat(testSubject.next()).isEmpty();  // call next to surface error
             assertTrue(testSubject.error().isPresent());  // next called now, error should surface
             verify(stream2).close();
@@ -304,8 +305,8 @@ class ConcatenatingMessageStreamTest extends MessageStreamTest<Message> {
         AtomicBoolean callbackExecuted = new AtomicBoolean(false);
 
         MessageStream<Message> original = new ConcatenatingMessageStream<>(
-            MessageStream.just(originalMessages.get(0)),
-            MessageStream.fromIterable(originalMessages.subList(1, originalMessages.size()))
+                MessageStream.just(originalMessages.get(0)),
+                MessageStream.fromIterable(originalMessages.subList(1, originalMessages.size()))
         );
         MessageStream<Message> withCallback = original.onComplete(() -> callbackExecuted.set(true));
 

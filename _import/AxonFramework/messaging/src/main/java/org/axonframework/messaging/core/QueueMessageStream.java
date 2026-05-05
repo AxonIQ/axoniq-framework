@@ -65,12 +65,13 @@ public class QueueMessageStream<M extends Message> extends AbstractMessageStream
      *     consumed, the stream will complete with the exception.</li>
      * </ul>
      *
-     * @param sealed {@code true} if the no more elements can be added by the
-     *               producer, otherwise {@code false}
-     * @param error  if {@code sealed} is {@code true} this indicates whether
-     *               the stream was sealed with or without an error
+     * @param sealed {@code true} if the no more elements can be added by the producer, otherwise {@code false}
+     * @param error  if {@code sealed} is {@code true} this indicates whether the stream was sealed with or without an
+     *               error
      */
-    record State(boolean sealed, Throwable error) {}
+    record State(boolean sealed, Throwable error) {
+
+    }
 
     private static final State OPEN = new State(false, null);
 
@@ -113,7 +114,7 @@ public class QueueMessageStream<M extends Message> extends AbstractMessageStream
             return FetchResult.of(next);
         }
 
-        return switch(state.get()) {
+        return switch (state.get()) {
             case State(boolean sealed, Throwable error) when sealed && error == null -> FetchResult.completed();
             case State(boolean sealed, Throwable error) when sealed -> FetchResult.error(error);
             default -> FetchResult.notReady();

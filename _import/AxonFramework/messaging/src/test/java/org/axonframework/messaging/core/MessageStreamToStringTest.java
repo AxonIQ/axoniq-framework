@@ -33,28 +33,32 @@ class MessageStreamToStringTest {
     @Test
     void shouldHaveNiceToString() {
         MessageStream<Message> stream = MessageStream.just(createMessage())
-            .concatWith(MessageStream.fromIterable(List.of(createMessage(), createMessage())).first())
-            .onErrorContinue(t -> MessageStream.fromFuture(CompletableFuture.completedFuture(createMessage())))
-            .onClose(() -> {});
+                                                     .concatWith(MessageStream.fromIterable(List.of(createMessage(),
+                                                                                                    createMessage()))
+                                                                              .first())
+                                                     .onErrorContinue(t -> MessageStream.fromFuture(CompletableFuture.completedFuture(
+                                                             createMessage())))
+                                                     .onClose(() -> {
+                                                     });
 
         assertThat(stream.toString())
-            .isEqualTo("CloseCallback{OnErrorContinue[P]{Concatenating{*SingleValue, TruncateFirst{Iterator[P]}}}}");
+                .isEqualTo("CloseCallback{OnErrorContinue[P]{Concatenating{*SingleValue, TruncateFirst{Iterator[P]}}}}");
 
         assertThat(stream.next()).isNotEmpty();
 
         assertThat(stream.toString())
-            .isEqualTo("CloseCallback{OnErrorContinue{Concatenating{*SingleValue, TruncateFirst{Iterator[P]}}}}");
+                .isEqualTo("CloseCallback{OnErrorContinue{Concatenating{*SingleValue, TruncateFirst{Iterator[P]}}}}");
 
         assertThat(stream.next()).isNotEmpty();
 
         assertThat(stream.toString())
-            .isEqualTo("CloseCallback{OnErrorContinue{Concatenating{*TruncateFirst{Iterator}}}}");
+                .isEqualTo("CloseCallback{OnErrorContinue{Concatenating{*TruncateFirst{Iterator}}}}");
 
         assertThat(stream.next()).isEmpty();
 
         assertThat(stream.toString())
-            .isEqualTo("CloseCallback[COMPLETED]{OnErrorContinue[COMPLETED]{Concatenating[COMPLETED]{*TruncateFirst[COMPLETED]{Iterator[COMPLETED]}}}}");
-
+                .isEqualTo(
+                        "CloseCallback[COMPLETED]{OnErrorContinue[COMPLETED]{Concatenating[COMPLETED]{*TruncateFirst[COMPLETED]{Iterator[COMPLETED]}}}}");
     }
 
     private Message createMessage() {

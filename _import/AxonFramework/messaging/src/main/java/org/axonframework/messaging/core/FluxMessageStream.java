@@ -43,8 +43,8 @@ class FluxMessageStream<M extends Message> extends AbstractMessageStream<M> {
     private final AtomicBoolean subscribed = new AtomicBoolean(false);
 
     /**
-     * Indicates that the producer side will no longer produce new elements. The
-     * consumer side may still consume elements that are buffered.
+     * Indicates that the producer side will no longer produce new elements. The consumer side may still consume
+     * elements that are buffered.
      */
     private final AtomicBoolean sealed = new AtomicBoolean(false);
 

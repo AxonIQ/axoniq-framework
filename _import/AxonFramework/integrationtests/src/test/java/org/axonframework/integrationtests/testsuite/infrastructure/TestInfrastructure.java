@@ -49,8 +49,8 @@ public interface TestInfrastructure {
     void configureInfrastructure(ComponentRegistry registry);
 
     /**
-     * Purge persisted data so the next test starts with a clean slate. Opt-in — only tests that require a clean
-     * initial state need to call {@link org.axonframework.integrationtests.testsuite.AbstractIntegrationTest#purgeData()}.
+     * Purge persisted data so the next test starts with a clean slate. Opt-in — only tests that require a clean initial
+     * state need to call {@link org.axonframework.integrationtests.testsuite.AbstractIntegrationTest#purgeData()}.
      * <p>
      * For in-memory backends this is typically a no-op because the configuration is recreated per test anyway.
      */

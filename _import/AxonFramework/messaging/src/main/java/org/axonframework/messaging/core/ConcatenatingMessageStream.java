@@ -74,8 +74,8 @@ class ConcatenatingMessageStream<M extends Message> extends AbstractMessageStrea
     ConcatenatingMessageStream(MessageStream<? extends M> first,
                                MessageStream<? extends M> second) {
         this.streams = new ArrayList<>(List.of(
-            (MessageStream<M>) first,
-            (MessageStream<M>) second
+                (MessageStream<M>) first,
+                (MessageStream<M>) second
         ));
 
         switchStream();
@@ -85,17 +85,20 @@ class ConcatenatingMessageStream<M extends Message> extends AbstractMessageStrea
     protected synchronized FetchResult<Entry<M>> fetchNext() {
         do {
             switch (FetchResult.of(active)) {
-                case FetchResult.Completed(): continue;
-                case FetchResult<Entry<M>> result: return result;
+                case FetchResult.Completed():
+                    continue;
+                case FetchResult<Entry<M>> result:
+                    return result;
             }
-        } while(switchStream());
+        } while (switchStream());
 
         return FetchResult.completed();
     }
 
     private boolean switchStream() {
         if (active != null) {
-            active.setCallback(() -> {});
+            active.setCallback(() -> {
+            });
             active.close();
         }
 
@@ -118,6 +121,8 @@ class ConcatenatingMessageStream<M extends Message> extends AbstractMessageStrea
 
     @Override
     protected String describeDelegates() {
-        return Stream.concat(Stream.of(active), streams.stream()).map(Object::toString).collect(Collectors.joining(", ", "*", ""));
+        return Stream.concat(Stream.of(active), streams.stream()).map(Object::toString).collect(Collectors.joining(", ",
+                                                                                                                   "*",
+                                                                                                                   ""));
     }
 }

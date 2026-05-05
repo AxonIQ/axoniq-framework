@@ -116,6 +116,7 @@ This indicates this file should be used to override existing annotations, instea
 For the best results, ensure that the `DomainEventEntry`  table uses its own sequence.
 This can be ensured by specifying a different sequence generator for that entity only.
 
+pass:[<!-- vale AxonIQ.Acronyms = NO -->]
 == PostgreSQL, `@LOB`-annotated columns, and default Hibernate mapping
 
 Specific to link:https://www.postgresql.org/[PostgreSQL] is its link:https://www.postgresql.org/docs/current/storage-toast.html[TOAST] and link:https://www.postgresql.org/docs/current/largeobjects.html[Large Object Storage] functionality.
@@ -467,3 +468,4 @@ databaseChangeLog:
             constraintName: dead_letter_sequence_index_index
             tableName: dead_letter_entry
 ----
+pass:[<!-- vale AxonIQ.Acronyms = YES -->]

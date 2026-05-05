@@ -212,7 +212,8 @@ public class SimpleQueryBus implements QueryBus {
         matchingHandlers.forEach((query, updateHandler) -> {
             try {
                 if (!updateHandler.offer(update, Context.empty())) {
-                    updateHandler.sealExceptionally(new QueryExecutionException("Subscription update buffer overflow", null));
+                    updateHandler.sealExceptionally(new QueryExecutionException("Subscription update buffer overflow",
+                                                                                null));
                     updateHandlers.remove(query, updateHandler);
                 }
             } catch (Exception e) {

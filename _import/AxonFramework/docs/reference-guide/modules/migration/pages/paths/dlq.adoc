@@ -12,8 +12,9 @@ endif::[]
 ====
 The most significant changes are:
 
-* **Database schema**: Column names in the embedded event entry changed; the schema is not backward compatible with Axon Framework 4 data.
-* **Queue scoping**: DLQs are now scoped per event handling component, not per processing group. Each component within a processor gets its own queue.
+* **Database schema**: Column names in the embedded event entry changed. The schema is not backward compatible with Axon Framework 4 data.
+* **Queue scoping**: DLQs are now scoped per event handling component, not per processing group.
+Each component within a processor gets its own queue.
 * **MongoDB support removed**: The `MongoSequencedDeadLetterQueue` (previously available via the MongoDB Extension) is not available in Axon Framework 5.
 * **Configuration Changes**: The configuration APIs have changed in several places between Axon 4 and 5.
 * **Sequence Processing**: the API of the `SequencedDeadLetterProcessor` interface has been adjusted to an async-first approach.
@@ -300,7 +301,8 @@ endif::[]
 
 === Declarative custom DLQ factory configuration
 
-If you need custom configuration for certain DLQs you could still use a custom `SequencedDeadLetterQueueFactory` in Axon Framework 5. In Axon Framework 4 the factory is presented with the processor name only to identify the DLQ. In Axon Framework 5 the name of the DLQ is determined by both the processor name **and** event handling component name, as described xref:_queue_scoping_changes[here].
+If you need custom configuration for certain DLQs you could still use a custom `SequencedDeadLetterQueueFactory` in Axon Framework 5. In Axon Framework 4 the factory is presented with the processor name only to identify the DLQ.
+In Axon Framework 5 the name of the DLQ is determined by both the processor name **and** event handling component name, as described xref:_queue_scoping_changes[here].
 
 [tabs]
 ====
@@ -335,7 +337,7 @@ public class AxonConfig {
 
 Axon Framework 5::
 +
-Configuration API (using `InMemorySequencedDeadLetterQueue` for brevity; replace with `JpaSequencedDeadLetterQueue` or `JdbcSequencedDeadLetterQueue` for production):
+Configuration API (using `InMemorySequencedDeadLetterQueue` for brevity, but replace with `JpaSequencedDeadLetterQueue` or `JdbcSequencedDeadLetterQueue` for production):
 +
 [source,java]
 ----
@@ -544,7 +546,8 @@ public class ProcessorConfig {
 
 == Changes in the builder API of `JdbcSequencedDeadLetterQueue` and `JpaSequencedDeadLetterQueue`
 
-The changes between Axon Framework 4 and 5 also affected the builder API of the `JdbcSequencedDeadLetterQueue` and `JpaSequencedDeadLetterQueue`. The most notable changes are:
+The changes between Axon Framework 4 and 5 also affected the builder API of the `JdbcSequencedDeadLetterQueue` and `JpaSequencedDeadLetterQueue`.
+The most notable changes are:
 
 * **Change from Serializer to Converter**: instead of an event serializer and generic serializer, the builders now take `EventConverter` and `Converter` respectively.
 * **Transaction handling**: instead of a `ConnectionProvider` and `TransactionManager` for internal transaction management, Axon Framework 5 now uses the `TransactionalExecutorProvider` for ensuring transactional execution of database tasks.
@@ -552,9 +555,7 @@ The changes between Axon Framework 4 and 5 also affected the builder API of the 
 == Processing dead lettered sequences
 
 Processing dead lettered sequences in Axon Framework 5 works similar to Axon Framework 4. However, the APIs slightly changed between the two versions.
-The most noticeable changes are
-* the move to an async-first approach for the `SequencedDeadLetterProcessor`, and
-* the change in the queue scoping, changing how to retrieve a `SequencedDeadLetterProcessor` can be retrieved from the configuration.
+The most noticeable changes are * the move to an async-first approach for the `SequencedDeadLetterProcessor`, and * the change in the queue scoping, changing how to retrieve a `SequencedDeadLetterProcessor` can be retrieved from the configuration.
 
 TIP: https://platform.axoniq.io/[Axoniq Platform] can process dead lettered sequences without the need for custom logic as described below.
 

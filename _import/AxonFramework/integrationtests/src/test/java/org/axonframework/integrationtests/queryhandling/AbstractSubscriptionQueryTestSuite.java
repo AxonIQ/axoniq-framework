@@ -596,10 +596,10 @@ public abstract class AbstractSubscriptionQueryTestSuite extends AbstractQueryTe
         // Don't consume next element:
         await().untilAsserted(() -> assertThat(result.hasNextAvailable()).isTrue());
         assertThat(result.peek())
-            .map(MessageStream.Entry::message)
-            .map(GenericSubscriptionQueryUpdateMessage.class::cast)
-            .map(m -> m.payloadAs(String.class))
-            .contains("Update1");
+                .map(MessageStream.Entry::message)
+                .map(GenericSubscriptionQueryUpdateMessage.class::cast)
+                .map(m -> m.payloadAs(String.class))
+                .contains("Update1");
 
         result.close();
 

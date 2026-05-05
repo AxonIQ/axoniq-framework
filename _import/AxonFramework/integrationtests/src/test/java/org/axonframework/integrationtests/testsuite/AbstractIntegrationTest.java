@@ -48,9 +48,9 @@ public abstract class AbstractIntegrationTest {
     protected AxonConfiguration startedConfiguration;
 
     /**
-     * Returns the {@link TestInfrastructure} for this test. Leaf classes typically return a {@code private static
-     * final} instance so the infrastructure wrapper (and any heavy resources it guards, such as a shared
-     * Testcontainer) is created once per leaf class:
+     * Returns the {@link TestInfrastructure} for this test. Leaf classes typically return a
+     * {@code private static final} instance so the infrastructure wrapper (and any heavy resources it guards, such as a
+     * shared Testcontainer) is created once per leaf class:
      * <pre>{@code
      * private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
      *
@@ -73,8 +73,8 @@ public abstract class AbstractIntegrationTest {
     protected abstract ApplicationConfigurer applicationConfigurer();
 
     /**
-     * Shuts down the Axon configuration and releases infrastructure resources acquired during {@link #startApp()}.
-     * The infrastructure is only stopped when {@link #startApp()} actually completed, signalled by a non-null
+     * Shuts down the Axon configuration and releases infrastructure resources acquired during {@link #startApp()}. The
+     * infrastructure is only stopped when {@link #startApp()} actually completed, signalled by a non-null
      * {@link #startedConfiguration}.
      */
     @AfterEach

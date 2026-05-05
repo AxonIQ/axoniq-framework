@@ -32,17 +32,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for {@link AbstractMessageStream} focusing on the internal state machine: callback
- * mechanics, signalProgress/awaitingData interaction, initialization, peek caching, and the
- * onCompleted hook.
+ * Tests for {@link AbstractMessageStream} focusing on the internal state machine: callback mechanics,
+ * signalProgress/awaitingData interaction, initialization, peek caching, and the onCompleted hook.
  *
  * @author John Hendrikx
  */
 class AbstractMessageStreamTest {
 
     /**
-     * Minimal {@link AbstractMessageStream} that lets tests control exactly what {@link FetchResult}
-     * values are returned and lets them call {@link #signalProgress()} from outside.
+     * Minimal {@link AbstractMessageStream} that lets tests control exactly what {@link FetchResult} values are
+     * returned and lets them call {@link #signalProgress()} from outside.
      */
     private static class ControllableStream extends AbstractMessageStream<Message> {
 
@@ -95,6 +94,7 @@ class AbstractMessageStreamTest {
 
     @Nested
     class WhenInitialized {
+
         ControllableStream stream = new ControllableStream();
 
         @Test
@@ -126,7 +126,7 @@ class AbstractMessageStreamTest {
         @Test
         void withValueThenThrowsIllegalArgumentException() {
             assertThatThrownBy(() -> stream.callInitialize(FetchResult.of(entryOf("msg"))))
-                .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(IllegalArgumentException.class);
         }
 
         @Test
@@ -134,7 +134,7 @@ class AbstractMessageStreamTest {
             stream.callInitialize(FetchResult.notReady());
 
             assertThatThrownBy(() -> stream.callInitialize(FetchResult.notReady()))
-                .isInstanceOf(IllegalStateException.class);
+                    .isInstanceOf(IllegalStateException.class);
         }
 
         @Test
@@ -142,12 +142,13 @@ class AbstractMessageStreamTest {
             stream.next();
 
             assertThatThrownBy(() -> stream.callInitialize(FetchResult.notReady()))
-                .isInstanceOf(IllegalStateException.class);
+                    .isInstanceOf(IllegalStateException.class);
         }
     }
 
     @Nested
     class WhenNextCalled {
+
         ControllableStream stream = new ControllableStream();
 
         @Test
@@ -274,6 +275,7 @@ class AbstractMessageStreamTest {
 
     @Nested
     class WhenSetCallbackCalled {
+
         AtomicInteger count = new AtomicInteger();
         ControllableStream stream = new ControllableStream();
 
@@ -333,12 +335,13 @@ class AbstractMessageStreamTest {
         @Test
         void withNullCallbackThenThrowsNullPointerException() {
             assertThatThrownBy(() -> stream.setCallback(null))
-                .isInstanceOf(NullPointerException.class);
+                    .isInstanceOf(NullPointerException.class);
         }
     }
 
     @Nested
     class WhenSignalProgressCalled {
+
         ControllableStream stream = new ControllableStream();
         AtomicInteger count = new AtomicInteger();
 
@@ -423,6 +426,7 @@ class AbstractMessageStreamTest {
 
     @Nested
     class WhenCloseCalled {
+
         ControllableStream stream = new ControllableStream();
 
         @Test
@@ -471,6 +475,7 @@ class AbstractMessageStreamTest {
 
     @Nested
     class WhenStreamCompletes {
+
         ControllableStream stream = new ControllableStream();
 
         @Test
@@ -491,6 +496,7 @@ class AbstractMessageStreamTest {
 
         @Nested
         class AndOnCompletedThrowsException {
+
             RuntimeException onCompletedException = new IllegalArgumentException("boo");
 
             {
@@ -513,9 +519,9 @@ class AbstractMessageStreamTest {
 
                 assertThat(stream.onCompletedCount()).isEqualTo(1);
                 assertThat(stream.error()).get(InstanceOfAssertFactories.THROWABLE)
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessage("failure")
-                    .hasSuppressedException(onCompletedException);
+                                          .isInstanceOf(IllegalStateException.class)
+                                          .hasMessage("failure")
+                                          .hasSuppressedException(onCompletedException);
             }
         }
 
@@ -530,6 +536,7 @@ class AbstractMessageStreamTest {
 
     @Nested
     class WhenCallbackThrows {
+
         ControllableStream stream = new ControllableStream();
 
         @Test

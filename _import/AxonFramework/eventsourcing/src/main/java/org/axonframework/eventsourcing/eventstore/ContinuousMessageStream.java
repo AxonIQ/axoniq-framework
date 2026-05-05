@@ -115,8 +115,7 @@ public final class ContinuousMessageStream<E> extends AbstractMessageStream<Even
             try {
                 this.data = fetcher.get();
                 this.position = 0;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 error = e;
 
                 seal();

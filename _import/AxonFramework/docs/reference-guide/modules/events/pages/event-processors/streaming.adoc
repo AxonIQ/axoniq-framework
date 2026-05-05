@@ -296,7 +296,7 @@ Whenever the xref:event-processors/index.adoc#error-handling[error handler] reth
 
 The processor will retry processing using an incremental back-off period, starting at 1 second and doubling after each attempt until it reaches the maximum wait time of 60 seconds per attempt.
 
-Due to the <<Pooled streaming processor threading,two-pool threading architecture>>, the failed segment is likely to be picked up quickly by another thread within the same JVM.
+Due to the <<thread_configuration,two-pool threading architecture>>, the failed segment is likely to be picked up quickly by another thread within the same JVM.
 The back-off mechanism applies within the local JVM instance only.
 
 In a distributed environment with multiple PSEP instances, other instances will ignore the back-off and may immediately claim and process the failed segment, providing faster recovery from transient errors.
