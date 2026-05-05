@@ -468,4 +468,8 @@ databaseChangeLog:
             constraintName: dead_letter_sequence_index_index
             tableName: dead_letter_entry
 ----
+
+ifdef::advanced-framework[]
+include::connector:partial$postgresql-operations.adoc[]
+endif::[]
 pass:[<!-- vale AxonIQ.Acronyms = YES -->]

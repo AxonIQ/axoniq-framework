@@ -412,7 +412,7 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
     }
 
     private WorkPackage spawnWorker(Segment segment, TrackingToken initialToken) {
-        WorkPackage.BatchProcessor batchProcessor = (events, context) -> processWithErrorHandling(events, context);
+        WorkPackage.BatchProcessor batchProcessor = (entries, context) -> processWithErrorHandling(entries, context);
         var batchSize = configuration.batchSize();
         var claimExtensionThreshold = configuration.claimExtensionThreshold();
         var clock = configuration.clock();
@@ -435,13 +435,15 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
                           .build();
     }
 
-    private MessageStream.Empty<Message> processWithErrorHandling(List<? extends EventMessage> events,
-                                                                  ProcessingContext context) {
-        return eventHandlingComponents.handle(events, context)
+    private MessageStream.Empty<Message> processWithErrorHandling(
+            List<MessageStream.Entry<? extends EventMessage>> entries,
+            ProcessingContext context
+    ) {
+        return eventHandlingComponents.handle(entries, context)
                                       .onErrorContinue(ex -> {
                                           try {
                                               configuration.errorHandler()
-                                                           .handleError(new ErrorContext(name, ex, events, context));
+                                                           .handleError(new ErrorContext(name, ex, entries.stream().map(MessageStream.Entry::message).toList(), context));
                                           } catch (RuntimeException re) {
                                               return MessageStream.failed(re);
                                           } catch (Exception e) {
