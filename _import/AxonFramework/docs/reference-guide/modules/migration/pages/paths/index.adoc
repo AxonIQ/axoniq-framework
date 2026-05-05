@@ -24,7 +24,7 @@ Whether you are performing a straightforward version bump or a deep architectura
 * xref:migration:paths/sequencing-policies.adoc[Sequencing Policy migration]
 * xref:migration:paths/dlq.adoc[Dead-Letter Queue migration]
 ifdef::data-protection[]
-* xref:data-protection-migration:pages$migration-path.adoc[Data Protection module migration]
+* xref:data-protection-migration:migration-path.adoc[Data Protection module migration]
 endif::[]
 3. **What is not yet there**
 4. **Missing a Migration Path?**
