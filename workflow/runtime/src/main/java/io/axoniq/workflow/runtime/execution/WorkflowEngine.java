@@ -113,17 +113,21 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
         logger.debug("Replay status changed to {} at {}",
-                    statusChange.status(),
-                    context.resources().get(TrackingToken.RESOURCE_KEY));
+                     statusChange.status(),
+                     context.resources().get(TrackingToken.RESOURCE_KEY));
 
         if (!statusChange.status().isReplay()) {
-            executeEventSourcedWorkflows();
+            switchToLiveMode();
         }
         return MessageStream.empty();
     }
 
 
-    private void executeEventSourcedWorkflows() {
+    /**
+     * Switches the engine to live mode. By doing so, the engine stops replaying events and starts executing workflow
+     * executions. Prior to that, all finished workflow executions are removed from the execution repository.
+     */
+    public void switchToLiveMode() {
         var running = isRunning.getAndSet(true);
         if (!running) {
             logger.info("Workflow instance replay finished. Switching to live mode.");
@@ -190,7 +194,8 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                      logger.warn(
                                              "A workflow with id '{}' is already running; ignoring new start request triggered by event '{}'. "
                                                      + "If this was intentional, associate each parallel workflow with a different idProperty so every instance gets a unique id.",
-                                             workflowId, eventMessage.type().qualifiedName()
+                                             workflowId,
+                                             eventMessage.type().qualifiedName()
                                      );
                                      return;
                                  }
@@ -228,12 +233,12 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     /**
      * Shuts downs the engine and removes all running workflow executions.
      * <p>
-     * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads
-     * parked in {@code sleepAsync} / {@code waitFor} / async {@code execute} can exit. This is an interrupt, not a
-     * cancellation: no {@code <Step>Cancelled} / {@code <Workflow>Cancelled} events are emitted, so the persisted
-     * event stream still reflects the most recent {@code <Step>Started} and the step resumes on the next app start.
-     * Without this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task
-     * executor) blocks on {@code close()} waiting for those threads to terminate. See issue #125.
+     * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads parked
+     * in {@code sleepAsync} / {@code waitFor} / async {@code execute} can exit. This is an interrupt, not a
+     * cancellation: no {@code <Step>Cancelled} / {@code <Workflow>Cancelled} events are emitted, so the persisted event
+     * stream still reflects the most recent {@code <Step>Started} and the step resumes on the next app start. Without
+     * this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task executor) blocks
+     * on {@code close()} waiting for those threads to terminate. See issue #125.
      */
     public void shutdown() {
         var executions = workflowExecutionRepository.findAll();

@@ -34,8 +34,7 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -45,10 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
-
-import static org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken.createReplayToken;
 
 /**
  * Event handling component handling all events.
@@ -59,7 +55,8 @@ import static org.axonframework.messaging.eventhandling.processing.streaming.tok
 public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
-    @SuppressWarnings("NullableProblems") public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
+    @SuppressWarnings("NullableProblems")
+    public static final BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
             pcepc.eventCriteria(
                          set -> {
@@ -71,33 +68,10 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                          }
                  )
                  .eventSource(c.getComponent(StreamableEventSource.class))
-                 .tokenStore(c.getComponent(TokenStore.class))
+                 .tokenStore(new InMemoryTokenStore())
                  .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
-                 .initialSegmentCount(1) // FIXME -> should be configurable?
-                 .batchSize(1) // FIXME -> should be configurable? currently only 1 is supported / working
-                 .initialToken(s -> c.getComponent(StreamableEventSource.class)
-                                     .latestToken(null)
-                                     .thenCompose(latestToken -> {
-                                         if (latestToken.position().isPresent()
-                                                 && latestToken.position().getAsLong() > 0) {
-                                             return CompletableFuture.completedFuture(
-                                                     createReplayToken(
-                                                             latestToken,
-                                                             // TODO change after MVP
-                                                             // for the MVP we do a full replay
-                                                             new GlobalSequenceTrackingToken(0)
-                                                     )
-                                             );
-                                         } else {
-                                             // FIXME -> check how to handle replay if there are no events in the store
-                                             return CompletableFuture.completedFuture(
-                                                     createReplayToken(
-                                                             new GlobalSequenceTrackingToken(1)
-                                                     )
-                                             );
-                                         }
-                                     })
-                 );
+                 .initialSegmentCount(1) // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
+                 .batchSize(1); // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
     private final ReplayStatusChangedHandler replayStatusChangedHandler;
