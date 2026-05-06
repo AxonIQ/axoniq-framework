@@ -313,6 +313,13 @@ These terms are exceptions to sentence-case rules in H2-H6 headings:
 - Watch for common misspellings (e.g., "poplar" instead of "popular")
 - Avoid overly long sentences (Vale may flag sentences that are too complex - break them into shorter, clearer sentences)
 
+### Em-dash prohibition
+**Never use em-dashes (`—`) in documentation.** Em-dashes read as machine-generated and make the text feel less human. Use alternative punctuation instead:
+- Replace `—` with a comma, colon, semicolon, or parentheses depending on the context
+- ✅ "The processor starts immediately, consuming from the head of the stream."
+- ✅ "The processor starts immediately (consuming from the head of the stream)."
+- ❌ "The processor starts immediately — consuming from the head of the stream."
+
 ---
 
 ## Critical Reminders
