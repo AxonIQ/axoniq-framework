@@ -563,14 +563,28 @@ class PooledStreamingEventProcessorTest {
             assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(2, testSubject.processingStatus().size()));
         }
 
-        @Test
-        void getTokenStoreIdentifier() {
-            String expectedIdentifier = "some-identifier";
+        @Nested
+        class GetTokenStoreIdentifier {
 
-            when(tokenStore.retrieveStorageIdentifier(any()))
-                    .thenReturn(completedFuture(expectedIdentifier));
+            @Test
+            void returnsIdentifierResolvedDuringStart() {
+                // given
+                String expectedIdentifier = "some-identifier";
+                when(tokenStore.retrieveStorageIdentifier(any()))
+                        .thenReturn(completedFuture(expectedIdentifier));
 
-            assertEquals(expectedIdentifier, testSubject.getTokenStoreIdentifier());
+                // when
+                startEventProcessor();
+
+                // then
+                assertEquals(expectedIdentifier, testSubject.getTokenStoreIdentifier());
+            }
+
+            @Test
+            void throwsIllegalStateExceptionWhenCalledBeforeStart() {
+                // when / then
+                assertThrows(IllegalStateException.class, () -> testSubject.getTokenStoreIdentifier());
+            }
         }
 
         @Test
