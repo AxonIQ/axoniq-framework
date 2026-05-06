@@ -56,5 +56,5 @@ Note that, especially, in such a setup you would need to delegate said split or 
 ____
 
 ifdef::advanced-framework[]
-include::axoniq-server-connector:partial$blacklisting-events.adoc[]
+include::connector:partial$blacklisting-events.adoc[]
 endif::[]

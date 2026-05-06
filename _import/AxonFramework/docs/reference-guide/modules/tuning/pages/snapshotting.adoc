@@ -97,7 +97,7 @@ Current implementations include:
 * *`AxonServerSnapshotStore`* - Stores snapshots in Axon Server with thread-safe, concurrent access.
 
 Each snapshot contains the entity identifier, payload, position, version, timestamp, and optional metadata.
-By default, only a single snapshot per entity is retained; new snapshots overwrite the previous one.
+By default, only a single snapshot per entity is retained. New snapshots overwrite the previous one.
 Future versions of the framework may allow storing multiple snapshots per entity, enabling scenarios such as rollbacks or retaining older snapshot versions.
 
 A suitable `SnapshotStore` is typically registered automatically by Axon Framework, but may be overridden when required.
