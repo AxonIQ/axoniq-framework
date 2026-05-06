@@ -123,6 +123,65 @@ Furthermore, embracing an ordering approach might lead to place _all_ event hand
 In all, you are free to use an ordering, but we recommend using it sparingly.
 ====
 
+[[lifecycle]]
+== Processor lifecycle
+
+Every `EventProcessor` exposes a common set of lifecycle methods to start, stop, and inspect state.
+These methods are available on all processor implementations, including the xref:event-processors/subscribing.adoc[Subscribing] and xref:event-processors/streaming.adoc[Streaming] Event Processor.
+
+=== Starting and stopping
+
+`start()` and `shutdown()` both return a `CompletableFuture<Void>`.
+The future completes when the operation has fully finished, allowing callers to chain further work or simply await it:
+
+[source,java]
+----
+import org.axonframework.messaging.eventhandling.processing.EventProcessor;
+
+public class ProcessorLifecycleService {
+
+    public void startAndAwait(EventProcessor processor) {
+        // Blocks until the processor is fully started
+        processor.start().join();
+    }
+
+    public void stopAndAwait(EventProcessor processor) {
+        // Blocks until the processor is fully stopped
+        processor.shutdown().join();
+    }
+}
+----
+
+[NOTE]
+====
+What "fully started" means depends on the processor implementation.
+For the xref:event-processors/streaming.adoc[Pooled Streaming Event Processor], `start()` completes only after the token store identifier has been resolved and the coordinator has started.
+Do not call processor-specific methods that require an active processor (such as `getTokenStoreIdentifier()`) before awaiting `start()`.
+====
+
+=== Checking state
+
+Two synchronous methods allow you to inspect the current state of a processor at any point:
+
+* `isRunning()` — returns `true` when the processor is active and processing events.
+Returns `false` after a clean `shutdown()` or before `start()` has been called.
+* `isError()` — returns `true` when the processor has gone into error mode due to an unhandled exception.
+Returns `false` after a clean `shutdown()`.
+See xref:event-processors/streaming.adoc#error-mode[Error mode] for more on how the Streaming Event Processor handles errors.
+
+[source,java]
+----
+import org.axonframework.messaging.eventhandling.processing.EventProcessor;
+
+public class ProcessorStateChecker {
+
+    public void printState(EventProcessor processor) {
+        System.out.println("Running: " + processor.isRunning());
+        System.out.println("Error:   " + processor.isError());
+    }
+}
+----
+
 [[error-handling]]
 == Error handling
 

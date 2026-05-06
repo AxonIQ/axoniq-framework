@@ -498,6 +498,9 @@ The following files in `axon-5/` describe the API changes:
 - Update configuration API (EventProcessorModule)
 - Remove EventProcessingModule/Configurer references
 
+**Changes applied:**
+- Added `[[lifecycle]]` section documenting `start()`, `shutdown()`, `isRunning()`, and `isError()` as the common `EventProcessor` lifecycle contract, with code examples and a note about implementation-specific behaviour of `start()` in the Streaming processor.
+
 ### modules/events/pages/event-processors/dead-letter-queue.adoc
 **Status:** ✅ COMPLETED
 **Changes applied:**
@@ -530,6 +533,10 @@ The following files in `axon-5/` describe the API changes:
 - Update configuration examples
 - Document StreamableEventSource (replaces StreamableMessageSource)
 - Update token management (now async with CompletableFuture)
+
+**Changes applied:**
+- Updated "Retrieving the token store identifier" section: `getTokenStoreIdentifier()` now requires `start()` to have completed; identifier is resolved eagerly during startup. Added `[IMPORTANT]` admonition and updated code comment.
+- Added `[[lifecycle]]` section before Configuring: documents `start()` two-step async init (token store identifier + coordinator), `[IMPORTANT]` admonition for `getTokenStoreIdentifier()` pre-start guard, and code example showing safe chaining after `start()`.
 
 ### modules/events/pages/event-processors/subscribing.adoc
 **Changes to apply:**

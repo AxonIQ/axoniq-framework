@@ -51,6 +51,43 @@ It provides a high-performance, two-pool architecture that separates event fetch
 
 The processor supports all core streaming operations including <<replaying-events,replaying events>>, <<parallel_processing,parallelism>>, and tracking progress with <<tracking_tokens,tokens>>.
 
+[[lifecycle]]
+== Processor lifecycle
+
+The `PooledStreamingEventProcessor` follows the common xref:event-processors/index.adoc#lifecycle[Event Processor lifecycle] contract, with one important addition: `start()` performs initialization work before event processing can begin.
+
+=== What start() does
+
+When `start()` is called, the processor performs the following steps in sequence before its returned `CompletableFuture<Void>` completes:
+
+1. Resolves the <<token_store,token store>> identifier from the configured `TokenStore`.
+2. Starts the internal `Coordinator`, which opens the event stream and begins claiming segments.
+
+Because `start()` is fully asynchronous, callers should await the returned future before interacting with any processor state that depends on a running processor:
+
+[source,java]
+----
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
+
+public class ProcessorService {
+
+    public void startAndQueryIdentifier(StreamingEventProcessor processor) {
+        processor.start()
+                 .thenRun(() -> {
+                     // Safe: start() has completed, identifier is resolved
+                     String identifier = processor.getTokenStoreIdentifier();
+                     System.out.println("Token store identifier: " + identifier);
+                 });
+    }
+}
+----
+
+[IMPORTANT]
+====
+`getTokenStoreIdentifier()` throws an `IllegalStateException` if called before `start()` has completed.
+Always await the `start()` future before calling it.
+====
+
 [[configuring]]
 == Configuring
 
@@ -756,7 +793,13 @@ public class AxonConfig {
 
 Implementations of `TokenStore` might share state in the underlying storage.
 To ensure correct operation, a token store has a unique identifier that uniquely identifies the storage location of the tokens in that store.
-This identifier can be queried with the `retrieveStorageIdentifier` method of your event processor.
+This identifier is resolved during `start()` as part of the processor's startup sequence and can be queried with `getTokenStoreIdentifier()` once the processor has started.
+
+[IMPORTANT]
+====
+`getTokenStoreIdentifier()` requires the processor to have been started.
+Calling it before `start()` has completed throws an `IllegalStateException`.
+====
 
 [source,java]
 ----
@@ -765,6 +808,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.StreamingE
 public class AxonConfig {
 
     public String tokenStoreFor(StreamingEventProcessor eventProcessor) {
+        // The processor must be started before calling getTokenStoreIdentifier()
         return eventProcessor.getTokenStoreIdentifier();
     }
 }
