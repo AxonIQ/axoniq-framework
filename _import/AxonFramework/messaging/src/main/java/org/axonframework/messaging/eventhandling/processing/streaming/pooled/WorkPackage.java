@@ -329,33 +329,35 @@ class WorkPackage {
             return;
         }
         logger.debug("Scheduling Work Package [{}]-[{}] to process events.", segment.getSegmentId(), name);
+        executorService.submit(this::runWorker);
+    }
 
-        executorService.submit(() -> {
-            CompletableFuture<Exception> aborting = abortFlag.get();
-            if (aborting != null) {
-                logger.debug("Work Package [{}]-[{}] should be aborted. Will shutdown this work package.",
-                             segment.getSegmentId(), name);
-                segmentStatusUpdater.accept(previousStatus -> null);
-                aborting.complete(abortException.get());
-                return;
-            }
+    private void runWorker() {
+        CompletableFuture<Exception> aborting = abortFlag.get();
+        if (aborting != null) {
+            logger.debug("Work Package [{}]-[{}] should be aborted. Will shutdown this work package.",
+                         segment.getSegmentId(), name);
+            segmentStatusUpdater.accept(previousStatus -> null);
+            aborting.complete(abortException.get());
+            return;
+        }
+        processEvents().whenCompleteAsync(this::onProcessingComplete, executorService);
+    }
 
-            processEvents().whenCompleteAsync((r, e) -> {
-                processingEvents.set(false);
-                if (e != null) {
-                    Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
-                    logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
-                                segment.getSegmentId(), name, cause);
-                    abort(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
-                }
-                scheduled.set(false);
-                if (!processingQueue.isEmpty() || abortFlag.get() != null) {
-                    logger.debug("Rescheduling Work Package [{}]-[{}] since there are events left.",
-                                 segment.getSegmentId(), name);
-                    scheduleWorker();
-                }
-            }, executorService);
-        });
+    private void onProcessingComplete(@Nullable Void ignored, @Nullable Throwable e) {
+        processingEvents.set(false);
+        if (e != null) {
+            Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+            logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
+                        segment.getSegmentId(), name, cause);
+            abort(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
+        }
+        scheduled.set(false);
+        if (!processingQueue.isEmpty() || abortFlag.get() != null) {
+            logger.debug("Rescheduling Work Package [{}]-[{}] since there are events left.",
+                         segment.getSegmentId(), name);
+            scheduleWorker();
+        }
     }
 
     private CompletableFuture<Void> processEvents() {

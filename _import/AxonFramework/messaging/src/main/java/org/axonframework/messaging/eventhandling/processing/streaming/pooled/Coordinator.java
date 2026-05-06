@@ -181,7 +181,7 @@ class Coordinator {
         }
         return initializeTokenStore()
                 .thenCompose(initialized -> {
-                    if (initialized) {
+                    if (Boolean.TRUE.equals(initialized)) {
                         return emptyCompletedFuture();
                     }
                     return CompletableFuture
@@ -1107,10 +1107,10 @@ class Coordinator {
         private List<Segment> selectClaimCandidates(List<Segment> segments, int maxSegmentsToClaim) {
             List<Segment> candidates = new ArrayList<>();
             for (Segment segment : segments) {
-                if (workPackages.containsKey(segment.getSegmentId())) {
+                int segmentId = segment.getSegmentId();
+                if (workPackages.containsKey(segmentId)) {
                     continue;
                 }
-                int segmentId = segment.getSegmentId();
                 if (isSegmentBlockedFromClaim(segmentId)) {
                     logger.debug(
                             "Processor [{}] (Coordination Task [{}]). Segment {} is still marked to not be claimed till [{}].",
@@ -1119,9 +1119,7 @@ class Coordinator {
                             segmentId,
                             releasesDeadlines.get(segmentId));
                     processingStatusUpdater.accept(segmentId, ignored -> null);
-                    continue;
-                }
-                if (candidates.size() < maxSegmentsToClaim) {
+                } else if (candidates.size() < maxSegmentsToClaim) {
                     candidates.add(segment);
                 }
             }

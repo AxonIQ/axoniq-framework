@@ -623,9 +623,8 @@ class CoordinatorTest {
         @Test
         void abortsWorkPackagesAndSchedulesRetryWhenEventStreamIsNullButWorkPackagesPresent()
                 throws NoSuchFieldException {
-            // given - inject a work package so the coordinator has active work but no open stream;
-            //         fetchAvailableSegments returns empty, so no new segments are claimed and
-            //         ensureOpenStream receives NoToken → stream stays null
+            // given - coordinator has an active work package but no open stream and no new available segments to claim
+            // No token received, stream stays null
             doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
             doReturn(completedFuture(Collections.emptyList())).when(tokenStore)
                                                               .fetchAvailableSegments(eq(PROCESSOR_NAME), any());
