@@ -200,6 +200,12 @@ For critical information users must not miss.
 - Focus on "how do I accomplish X", not "how does X work internally"
 - Explain internal details only when they affect user decisions
 
+**No em-dashes:**
+- Never use em-dashes (`—`) — they read as machine-generated and make text feel less human
+- Replace with a comma, colon, semicolon, or parentheses depending on context
+- ✅ "The processor starts immediately, consuming from the head of the stream."
+- ❌ "The processor starts immediately — consuming from the head of the stream."
+
 **Terminology (AF5):**
 - "entity" not "aggregate" for modeling patterns (aggregates are one type of entity)
 - "EventSink" for publishing side — introduce it clearly, explaining its relation to EventBus
