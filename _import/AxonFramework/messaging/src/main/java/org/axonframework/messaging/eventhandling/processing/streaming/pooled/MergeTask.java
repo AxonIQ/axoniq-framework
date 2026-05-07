@@ -29,7 +29,6 @@ import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * A {@link CoordinatorTask} implementation dedicated to merging two {@link Segment}s.
@@ -106,27 +105,27 @@ class MergeTask extends CoordinatorTask {
     protected CompletableFuture<Boolean> task() {
         logger.debug("Processor [{}] will perform merge instruction for segment {}.", name, segmentId);
 
-        Segment thisSegment = joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-            context -> tokenStore.fetchSegment(name, segmentId, context)
-        ));
+        return unitOfWorkFactory.create().executeWithResult(
+                context -> tokenStore.fetchSegment(name, segmentId, context)
+        ).thenCompose(thisSegment -> {
+            if (segmentId == thisSegment.mergeableSegmentId()) {
+                logger.debug("Processor [{}] cannot merge segment {}. "
+                                     + "A merge request can only be fulfilled if there is more than one segment.",
+                             name, segmentId);
+                return CompletableFuture.completedFuture(false);
+            }
 
-        if (segmentId == thisSegment.mergeableSegmentId()) {
-            logger.debug("Processor [{}] cannot merge segment {}. "
-                                 + "A merge request can only be fulfilled if there is more than one segment.",
-                         name, segmentId);
-            return CompletableFuture.completedFuture(false);
-        }
-
-        Segment thatSegment = joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-            context -> tokenStore.fetchSegment(name, thisSegment.mergeableSegmentId(), context)
-        ));
-
-        CompletableFuture<TrackingToken> thisTokenFuture = tokenFor(thisSegment.getSegmentId());
-        CompletableFuture<TrackingToken> thatTokenFuture = tokenFor(thatSegment.getSegmentId());
-        return thisTokenFuture.thenCombine(
-                thatTokenFuture,
-                (thisToken, thatToken) -> mergeSegments(thisSegment, thisToken, thatSegment, thatToken)
-        );
+            return unitOfWorkFactory.create().executeWithResult(
+                    context -> tokenStore.fetchSegment(name, thisSegment.mergeableSegmentId(), context)
+            ).thenCompose(thatSegment -> {
+                CompletableFuture<TrackingToken> thisTokenFuture = tokenFor(thisSegment.getSegmentId());
+                CompletableFuture<TrackingToken> thatTokenFuture = tokenFor(thatSegment.getSegmentId());
+                return thisTokenFuture
+                        .thenCombine(thatTokenFuture,
+                                     (thisToken, thatToken) -> mergeSegments(thisSegment, thisToken, thatSegment, thatToken))
+                        .thenCompose(f -> f);
+            });
+        });
     }
 
     private CompletableFuture<TrackingToken> tokenFor(int segmentId) {
@@ -149,38 +148,26 @@ class MergeTask extends CoordinatorTask {
         );
     }
 
-    private Boolean mergeSegments(Segment thisSegment, TrackingToken thisToken,
-                                  Segment thatSegment, TrackingToken thatToken) {
-        try {
+    private CompletableFuture<Boolean> mergeSegments(Segment thisSegment, TrackingToken thisToken,
+                                                     Segment thatSegment, TrackingToken thatToken) {
+        return unitOfWorkFactory.create().executeWithResult(context -> {
             Segment mergedSegment = thisSegment.mergedWith(thatSegment);
             TrackingToken mergedToken = thatSegment.getSegmentId() < thisSegment.getSegmentId()
                     ? MergedTrackingToken.merged(thatToken, thisToken)
                     : MergedTrackingToken.merged(thisToken, thatToken);
-
-            joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-                    context -> tokenStore.deleteToken(name, thisSegment.getSegmentId(), context)
-                                         .thenCompose(result -> tokenStore.deleteToken(name, thatSegment.getSegmentId(), context))
-                                         .thenCompose(result -> tokenStore.initializeSegment(
-                                             mergedToken,
-                                             name,
-                                             mergedSegment,
-                                             context
-                                         ))
-                                         .thenCompose(result -> tokenStore.releaseClaim(
-                                             name,
-                                             mergedSegment.getSegmentId(),
-                                             context
-                                         ))
-            ));
-
-            logger.info("Processor [{}] successfully merged {} with {} into {}.",
-                        name, thisSegment, thatSegment, mergedSegment);
-        } finally {
-            // Remove both segments from the releases deadlines to allow the Coordinator to claim the merged segment
+            return tokenStore.deleteToken(name, thisSegment.getSegmentId(), context)
+                             .thenCompose(result -> tokenStore.deleteToken(name, thatSegment.getSegmentId(), context))
+                             .thenCompose(result -> tokenStore.initializeSegment(mergedToken, name, mergedSegment, context))
+                             .thenCompose(result -> tokenStore.releaseClaim(name, mergedSegment.getSegmentId(), context))
+                             .thenApply(unused -> {
+                                 logger.info("Processor [{}] successfully merged {} with {} into {}.",
+                                             name, thisSegment, thatSegment, mergedSegment);
+                                 return true;
+                             });
+        }).whenComplete((result, throwable) -> {
             releasesDeadlines.remove(thisSegment.getSegmentId());
             releasesDeadlines.remove(thatSegment.getSegmentId());
-        }
-        return true;
+        });
     }
 
     @Override
