@@ -388,7 +388,11 @@ class WorkPackage {
                     batchProcessedCallback.run();
                 }
             });
-            return unitOfWork.execute();
+            try {
+                return unitOfWork.execute();
+            } catch (Exception e) {
+                return CompletableFuture.failedFuture(e);
+            }
         } else {
             segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
             if (lastStoredToken != lastConsumedToken && now() > nextClaimExtension.get()) {
