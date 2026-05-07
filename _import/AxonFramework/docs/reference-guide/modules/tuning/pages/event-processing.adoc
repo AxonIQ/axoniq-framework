@@ -67,7 +67,7 @@ The practical rule is simple:
 
 * use a durable token store in production
 * keep the token store close to the data that your event handlers update
-* size the database so token claims and event handling do not contend for connections
+* size connection pooling so that token claims and event handling do not contend for connections
 
 For the full token store configuration options, see xref:events:event-processors/streaming.adoc#token_store[Token store].
 
