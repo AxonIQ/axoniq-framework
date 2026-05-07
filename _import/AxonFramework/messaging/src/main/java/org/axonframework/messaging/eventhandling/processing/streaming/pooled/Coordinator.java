@@ -1363,10 +1363,10 @@ class Coordinator {
                                             name, generation, work.segment());
                            }
                        })
-                       .thenRun(() -> joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
+                       .thenCompose(unused -> unitOfWorkFactory.create().executeWithResult(
                                context -> tokenStore.releaseClaim(name, segmentId, context)
-                                                    .thenCompose(unused -> segmentChangeListener.onSegmentReleased(work.segment()))
-                       )))
+                                                    .thenCompose(ignored -> segmentChangeListener.onSegmentReleased(work.segment()))
+                       ))
                        .exceptionally(throwable -> {
                            logger.warn(
                                    "Processor [{}] (Coordination Task [{}]). An exception occurred during the abort of work package [{}].",
