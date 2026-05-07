@@ -40,7 +40,30 @@ public void configureEventProcessing(MessagingConfigurer configurer) {
 }
 ----
 
-If you prefer Spring Boot auto-configuration, expose the same processor settings as beans or let the framework bind its defaults and only override the values you need.
+Spring Boot users typically configure pooled streaming processors by declaring an `EventProcessorDefinition` bean.
+
+For example:
+
+[source,java]
+----
+@Configuration
+public class NotificationAutomationConfiguration {
+
+    @Bean
+    EventProcessorDefinition notificationProcessor() {
+        return EventProcessorDefinition
+                .pooledStreaming("notification-processor")
+                .assigningHandlers(descriptor -> descriptor.beanName().endsWith("Notification")
+                        && descriptor.beanType().getPackageName().endsWith("automation"))
+                .customized(config -> config
+                        .initialSegmentCount(4)
+                        .batchSize(100)
+                );
+    }
+}
+----
+
+This Spring Boot style keeps the processor definition explicit while still allowing the framework to bind the rest of the configuration from properties and defaults.
 
 == Sequencing policy
 

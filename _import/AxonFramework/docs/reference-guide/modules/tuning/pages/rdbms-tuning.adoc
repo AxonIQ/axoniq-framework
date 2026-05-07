@@ -102,6 +102,98 @@ It is important to specify `metadata-complete="false"`.
 This indicates this file should be used to override existing annotations, instead of replacing them.
 For the best results, keep the event table on its own sequence and do not share it with unrelated tables.
 
+[#_postgresql_lob_annotated_columns_and_default_hibernate_mapping]
+== PostgreSQL, `@Lob`-annotated columns, and default Hibernate mapping
+
+link:https://www.postgresql.org/[PostgreSQL] has two relevant mechanisms for large values: link:https://www.postgresql.org/docs/current/storage-toast.html[TOAST] and link:https://www.postgresql.org/docs/current/largeobjects.html[Large Object Storage].
+TOAST, the "oversized attribute storage technique," compresses columns larger than 8 KB when possible and otherwise moves them out of line into a separate table.
+Large Object Storage uses a fixed `OID` column type and points to the actual data in a dedicated large object table.
+
+That distinction matters for Axon Framework because JPA uses `@Lob` for several serialized columns.
+Those include the event payload and metadata columns, token storage, saga state, and dead-letter diagnostics.
+With PostgreSQL and Hibernate, `@Lob` fields are typically mapped to the large object path, which means the main table stores an `OID` instead of the actual byte array.
+
+That default is usually not what you want for Axon Framework storage.
+It adds indirection on reads, leaves large object rows behind when the original row changes, and makes token updates more expensive than they need to be.
+Where possible, prefer the normal byte array storage path and let PostgreSQL use TOAST instead of Large Object Storage.
+
+The practical options are:
+
+. Adjust the Hibernate dialect so `@Lob` maps to `BYTEA`.
+. Override the Hibernate mapping for the affected columns.
+. Optionally migrate existing columns from `OID` to `BYTEA`.
+
+=== Hibernate dialect changes
+
+To avoid `OID`, enforce `BYTEA` by providing a custom PostgreSQL dialect.
+
+[source,java]
+----
+public class ByteaEnforcedPostgresSQLDialect extends PostgreSQLDialect {
+
+    public ByteaEnforcedPostgresSQLDialect() {
+        super(DatabaseVersion.make(9, 5));
+    }
+
+    @Override
+    protected String columnType(int sqlTypeCode) {
+        return sqlTypeCode == SqlTypes.BLOB ? "bytea" : super.columnType(sqlTypeCode);
+    }
+
+    @Override
+    protected String castType(int sqlTypeCode) {
+        return sqlTypeCode == SqlTypes.BLOB ? "bytea" : super.castType(sqlTypeCode);
+    }
+
+    @Override
+    public void contributeTypes(TypeContributions typeContributions,
+                                ServiceRegistry serviceRegistry) {
+        super.contributeTypes(typeContributions, serviceRegistry);
+        JdbcTypeRegistry jdbcTypeRegistry = typeContributions.getTypeConfiguration()
+                                                             .getJdbcTypeRegistry();
+        jdbcTypeRegistry.addDescriptor(Types.BLOB, BinaryJdbcType.INSTANCE);
+    }
+}
+----
+
+With the dialect in place, configure Hibernate to use it, for example through Spring:
+
+[source,properties]
+----
+jpa.database-platform=fully.qualified.classname.ByteaEnforcedPostgresSQLDialect
+----
+
+=== Hibernate mapping override
+
+You can also use Hibernate metadata overrides to map affected columns to `BYTEA` explicitly.
+Add an `orm.xml` file on the classpath under `META-INF` with the required overrides.
+
+[source,xml]
+----
+<entity-mappings xmlns="http://java.sun.com/xml/ns/persistence/orm" version="2.0">
+    <entity class="org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.TokenEntry">
+        <attribute-override name="token">
+            <column name="token" column-definition="BYTEA"></column>
+        </attribute-override>
+    </entity>
+</entity-mappings>
+----
+
+=== OID to BYTEA column migration
+
+If you already have Axon-specific tables using `OID`, migrate them to `BYTEA`.
+For the `token_entry` table, the following SQL is a typical approach:
+
+[source,sql]
+----
+ALTER TABLE token_entry ADD COLUMN token_bytea BYTEA;
+UPDATE token_entry SET token_bytea = lo_get(token);
+ALTER TABLE token_entry DROP COLUMN token;
+ALTER TABLE token_entry RENAME COLUMN token_bytea TO token;
+----
+
+After the migration, the affected columns can be read directly again without going through large object indirection.
+
 == JPA and DCB
 
 The JPA-backed event store in Axon Framework 5 is aggregate-based.
@@ -118,13 +210,12 @@ Streaming processors claim tokens, advance tokens, and process events in batches
 Size the pool so event handling does not block on connection acquisition.
 Leave enough headroom for command handling, token updates, and any other database users in the same application.
 
-For PostgreSQL specifically, avoid treating large object handling as a tuning shortcut for the event store.
 Let the JPA provider and the database use the normal byte array storage path where possible.
 
-[source,java]
-----
-// Keep the pool large enough for event processing, token claims, and the rest of the application.
-----
+[NOTE]
+====
+For PostgreSQL specifically, avoid treating large object handling as a tuning shortcut for the event store. Hibernate's PostgreSQL LOB behavior is version-dependent, so double-check the mapping for the Hibernate version you are actually using before assuming `@Lob` will follow the normal `BYTEA` / `TEXT` path. Older baselines may still force `OID` for `@Lob`-annotated fields.
+====
 
 ifdef::advanced-framework[]
 include::connector:partial$postgresql-operations.adoc[]
