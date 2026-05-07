@@ -26,6 +26,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.stor
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -45,7 +46,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -224,7 +224,7 @@ class MergeTaskTest {
     @Test
     void runCompletesExceptionallyThroughUnableToClaimTokenExceptionOnFetch() {
         when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_MERGE), any()))
-                .thenThrow(new UnableToClaimTokenException("some exception"));
+                .thenReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("some exception")));
 
         testSubject.run();
 
@@ -252,9 +252,8 @@ class MergeTaskTest {
 
         workPackages.put(SEGMENT_TO_BE_MERGED, workPackageTwo);
 
-        doThrow(new UnableToClaimTokenException("some exception"))
-                .when(tokenStore)
-                .deleteToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_BE_MERGED), any());
+        when(tokenStore.deleteToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_BE_MERGED), any()))
+                .thenReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("some exception")));
 
         testSubject.run();
 
@@ -281,9 +280,8 @@ class MergeTaskTest {
                 .thenReturn(FutureUtils.emptyCompletedFuture());
         workPackages.put(SEGMENT_TO_BE_MERGED, workPackageTwo);
 
-        doThrow(new IllegalStateException("some exception"))
-                .when(tokenStore)
-                .deleteToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_BE_MERGED), any());
+        when(tokenStore.deleteToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_BE_MERGED), any()))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("some exception")));
 
         testSubject.run();
 
@@ -326,6 +324,30 @@ class MergeTaskTest {
         assertThat(resultToken).isInstanceOf(MergedTrackingToken.class);
         assertThat(((MergedTrackingToken) resultToken).lowerSegmentToken()).isEqualTo(tokenForSegment0);
         assertThat(((MergedTrackingToken) resultToken).upperSegmentToken()).isEqualTo(tokenForSegment1);
+    }
+
+    @Nested
+    class WhenMergeSegmentsFails {
+
+        @Test
+        void runClearsReleasesDeadlinesEvenWhenMergedWithThrows() {
+            // given - fetchSegment returns an incompatible thatSegment (different mask), causing mergedWith to throw
+            Segment incompatibleSegment = new Segment(1, 3);
+            when(tokenStore.fetchSegment(eq(PROCESSOR_NAME), eq(SEGMENT_ONE.getSegmentId()), any()))
+                    .thenReturn(completedFuture(incompatibleSegment));
+            when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_MERGE), any()))
+                    .thenReturn(completedFuture(new GlobalSequenceTrackingToken(0)));
+            when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_BE_MERGED), any()))
+                    .thenReturn(completedFuture(new GlobalSequenceTrackingToken(1)));
+
+            // when
+            testSubject.run();
+
+            // then - the result is exceptionally completed, and both release deadlines are removed
+            assertThat(result).isDone();
+            assertThat(result.isCompletedExceptionally()).isTrue();
+            assertThat(releasesDeadlines).isEmpty();
+        }
     }
 
     @Test

@@ -154,7 +154,7 @@ class ClaimTaskTest {
                 throws ExecutionException, InterruptedException {
             // the given-token is already claimed by another processor
             when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ID), any()))
-                    .thenThrow(new UnableToClaimTokenException("already claimed by another processor"));
+                    .thenReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("already claimed by another processor")));
 
             // when
             testSubject.run();
