@@ -252,6 +252,8 @@ BDD-style testing:
 - 4-space indentation, 120-character line limit, LF line endings, UTF-8
 - IntelliJ code style: import from `axon_code_style.xml` at repo root
 - Import threshold: `class_count_to_use_import_on_demand = 99` (effectively: no wildcard imports)
+- **ASCII only**: all source files (`.java`, `.adoc`, `.xml`, `.properties`, etc.) must contain only ASCII characters. Never use curly/smart quotes (`"` `"` `'` `'`), em-dashes (`—`), ellipsis (`…`), or any other non-ASCII Unicode. Use straight ASCII equivalents (`"`, `'`, `--` or `,`, `...`).
+- **LF line endings only**: never use CR (`\r`) or CRLF (`\r\n`). Configure your editor/IDE to write LF.
 
 ### Implementation Guidelines
 1. **Discover API essence** - Design for future flexibility over current completeness

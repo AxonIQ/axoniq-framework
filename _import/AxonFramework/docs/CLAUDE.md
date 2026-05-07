@@ -320,6 +320,15 @@ These terms are exceptions to sentence-case rules in H2-H6 headings:
 - ✅ "The processor starts immediately (consuming from the head of the stream)."
 - ❌ "The processor starts immediately — consuming from the head of the stream."
 
+### ASCII-only text
+**All `.adoc` files must contain only ASCII characters.** Never use:
+- Curly/smart quotes: `"` `"` `'` `'` — use straight `"` and `'` instead
+- Em-dash: `—` — use a comma, colon, or parentheses instead (see above)
+- Ellipsis: `…` — use three dots `...` instead
+- Any other non-ASCII Unicode character
+
+**LF line endings only** — never use CR (`\r`) or CRLF. Configure your editor to write LF.
+
 ---
 
 ## Critical Reminders

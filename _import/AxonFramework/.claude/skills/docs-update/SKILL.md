@@ -206,6 +206,12 @@ For critical information users must not miss.
 - ✅ "The processor starts immediately, consuming from the head of the stream."
 - ❌ "The processor starts immediately — consuming from the head of the stream."
 
+**ASCII only:**
+- All `.adoc` files must contain only ASCII characters
+- Never use curly/smart quotes (`"` `"` `'` `'`), em-dash (`—`), ellipsis (`…`), or any other non-ASCII Unicode
+- Use straight ASCII equivalents: `"`, `'`, `...`
+- Use LF line endings only, never CR or CRLF
+
 **Terminology (AF5):**
 - "entity" not "aggregate" for modeling patterns (aggregates are one type of entity)
 - "EventSink" for publishing side — introduce it clearly, explaining its relation to EventBus
