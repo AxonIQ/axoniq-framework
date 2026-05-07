@@ -1,6 +1,6 @@
 = Event Processing
 
-Event processing in Axon Framework 5 is centered around `PooledStreamingEventProcessor`.
+Event processing in Axon Framework is centered around `PooledStreamingEventProcessor`.
 That processor is the main tuning surface when you want to increase throughput, control batching, or adapt to multiple application instances.
 
 == Pooled streaming processors
