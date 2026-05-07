@@ -1092,19 +1092,24 @@ class Coordinator {
                     context -> tokenStore.fetchAvailableSegments(name, context)
             ).thenCompose(segments -> {
                 int maxSegmentsToClaim = maxSegmentProvider.apply(name) - workPackages.size();
-                List<Segment> candidates = selectClaimCandidates(segments, maxSegmentsToClaim);
-
-                Map<Segment, TrackingToken> newClaims = new HashMap<>();
-                CompletableFuture<Map<Segment, TrackingToken>> result = CompletableFuture.completedFuture(newClaims);
-                for (Segment segment : candidates) {
-                    result = result.thenCompose(claims -> claimSegmentToken(segment, claims));
-                }
-                return result;
+                List<Segment> candidates = selectClaimCandidates(segments);
+                return claimUpTo(candidates, maxSegmentsToClaim, new HashMap<>());
             });
         }
 
-        // As segments are used for Segment#computeSegment, we cannot filter out the WorkPackages upfront.
-        private List<Segment> selectClaimCandidates(List<Segment> segments, int maxSegmentsToClaim) {
+        private CompletableFuture<Map<Segment, TrackingToken>> claimUpTo(
+                List<Segment> remainingCandidates, int maxSegmentsToClaim, Map<Segment, TrackingToken> successfulClaims
+        ) {
+            if (remainingCandidates.isEmpty() || successfulClaims.size() >= maxSegmentsToClaim) {
+                return CompletableFuture.completedFuture(successfulClaims);
+            }
+            Segment firstCandidateToClaim = remainingCandidates.getFirst();
+            List<Segment> subsequentCandidates = remainingCandidates.subList(1, remainingCandidates.size());
+            return claimSegmentToken(firstCandidateToClaim, successfulClaims)
+                    .thenCompose(claimsAfterAttempt -> claimUpTo(subsequentCandidates, maxSegmentsToClaim, claimsAfterAttempt));
+        }
+
+        private List<Segment> selectClaimCandidates(List<Segment> segments) {
             List<Segment> candidates = new ArrayList<>();
             for (Segment segment : segments) {
                 int segmentId = segment.getSegmentId();
@@ -1119,7 +1124,7 @@ class Coordinator {
                             segmentId,
                             releasesDeadlines.get(segmentId));
                     processingStatusUpdater.accept(segmentId, ignored -> null);
-                } else if (candidates.size() < maxSegmentsToClaim) {
+                } else {
                     candidates.add(segment);
                 }
             }

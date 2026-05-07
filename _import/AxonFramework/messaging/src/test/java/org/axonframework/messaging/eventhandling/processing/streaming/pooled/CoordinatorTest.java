@@ -99,6 +99,7 @@ class CoordinatorTest {
                                  .unitOfWorkFactory(new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE))
                                  .executorService(executorService)
                                  .workPackageFactory((segment, trackingToken) -> workPackage)
+                                 .processingStatusUpdater((id, updater) -> {})
                                  .initialToken(es -> es.firstToken(null).thenApply(ReplayToken::createReplayToken))
                                  .maxSegmentProvider(e -> SEGMENTS.size())
                                  .build();
@@ -112,7 +113,7 @@ class CoordinatorTest {
         final GlobalSequenceTrackingToken token = new GlobalSequenceTrackingToken(0);
 
         doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
-        doReturn(completedFuture(token)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), anyInt(), any());
+        doReturn(completedFuture(token)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
         doThrow(releaseClaimException).when(tokenStore).releaseClaim(eq(PROCESSOR_NAME), anyInt(), any());
         doThrow(streamOpenException).when(messageSource).open(any(), isNull());
         doReturn(completedFuture(streamOpenException)).when(workPackage).abort(any());
@@ -143,7 +144,7 @@ class CoordinatorTest {
                 .when(tokenStore)
                 .initializeTokenSegments(eq(PROCESSOR_NAME), anyInt(), any(), any(ProcessingContext.class)
                 );
-        doReturn(completedFuture(token)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), anyInt(), any());
+        doReturn(completedFuture(token)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
         doReturn(SEGMENT_ZERO).when(workPackage).segment();
         doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
 
@@ -215,24 +216,62 @@ class CoordinatorTest {
         verify(workPackage, times(0)).scheduleEvent(any());
     }
 
-    @Test
-    void claimsNewSegmentsSkipsSegmentWhenUnableToClaimToken() {
-        // given - token store has segments but claiming fails with UnableToClaimTokenException
-        doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
-        doReturn(completedFuture(List.of(SEGMENT_ZERO)))
-                .when(tokenStore).fetchAvailableSegments(eq(PROCESSOR_NAME), any());
-        doReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("claim failed")))
-                .when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
-        doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
+    /**
+     * Tests for the {@code claimNewSegments} path — specifically how the coordinator handles
+     * {@link UnableToClaimTokenException} during token claiming.
+     */
+    @Nested
+    class ClaimNewSegments {
 
-        // when
-        testSubject.start();
+        @BeforeEach
+        void setUp() {
+            doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
+            doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
+        }
 
-        // then - token claim was attempted, no work package created for the segment
-        verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
-        verify(workPackage, never()).onBatchProcessed(any());
-        // coordinator schedules delayed retry since no segments were successfully claimed
-        verify(executorService, times(1)).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        @Test
+        void skipsSegmentWhenUnableToClaimToken() {
+            // given - token store has segments but claiming fails with UnableToClaimTokenException
+            doReturn(completedFuture(List.of(SEGMENT_ZERO)))
+                    .when(tokenStore).fetchAvailableSegments(eq(PROCESSOR_NAME), any());
+            doReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("claim failed")))
+                    .when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
+
+            // when
+            testSubject.start();
+
+            // then - token claim was attempted, no work package created for the segment
+            verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
+            verify(workPackage, never()).onBatchProcessed(any());
+            // coordinator schedules delayed retry since no segments were successfully claimed
+            verify(executorService, times(1)).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        }
+
+        @Test
+        void continuesClaimingRemainingSegmentsAfterOneClaimFails() {
+            // given - SEGMENT_ZERO fails to claim, SEGMENT_ONE succeeds
+            GlobalSequenceTrackingToken token = new GlobalSequenceTrackingToken(0);
+            doReturn(completedFuture(List.of(SEGMENT_ZERO, SEGMENT_ONE)))
+                    .when(tokenStore).fetchAvailableSegments(eq(PROCESSOR_NAME), any());
+            doReturn(CompletableFuture.failedFuture(new UnableToClaimTokenException("already claimed")))
+                    .when(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ZERO), any());
+            doReturn(completedFuture(token))
+                    .when(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ONE), any());
+            doReturn(SEGMENT_ONE).when(workPackage).segment();
+            doReturn(false).when(workPackage).isAbortTriggered();
+            doReturn(true).when(workPackage).hasRemainingCapacity();
+            doReturn(false).when(workPackage).isDone();
+            doReturn(MessageStream.fromIterable(Collections.emptyList()))
+                    .when(messageSource).open(any(StreamingCondition.class), isNull());
+
+            // when
+            testSubject.start();
+
+            // then - SEGMENT_ZERO was attempted but skipped; SEGMENT_ONE was still claimed and scheduled
+            verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ZERO), any());
+            verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ONE), any());
+            verify(workPackage).scheduleWorker();
+        }
     }
 
     @Test
@@ -258,7 +297,7 @@ class CoordinatorTest {
         final GlobalSequenceTrackingToken token = new GlobalSequenceTrackingToken(0);
 
         doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
-        doReturn(completedFuture(token)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), anyInt(), any());
+        doReturn(completedFuture(token)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
         doReturn(SEGMENT_ZERO).when(workPackage).segment();
         doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
         //Using reflection to add a work package to keep the test simple
@@ -484,7 +523,7 @@ class CoordinatorTest {
             doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
             doReturn(completedFuture(List.of(SEGMENT_ZERO))).when(tokenStore)
                                                              .fetchAvailableSegments(eq(PROCESSOR_NAME), any());
-            doReturn(completedFuture(null)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), anyInt(), any());
+            doReturn(completedFuture(null)).when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
             // override setUp default so firstToken resolves to a real token
             doReturn(completedFuture(resolvedFirstToken)).when(messageSource).firstToken(null);
             doReturn(SEGMENT_ZERO).when(workPackage).segment();
