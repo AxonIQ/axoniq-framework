@@ -26,16 +26,18 @@ Use the `EventProcessingConfigurer` to register pooled streaming processors and 
 
 [source,java]
 ----
-MessagingConfigurer.create()
-                   .eventProcessing(eventProcessing -> eventProcessing
+public void configureEventProcessing(MessagingConfigurer configurer) {
+
+    configurer.eventProcessing(eventProcessing -> eventProcessing
                            .pooledStreaming(pooled -> pooled
-                                   .defaults((configuration, processorConfig) -> processorConfig
+                                  .defaults((configuration, processorConfig) -> processorConfig
                                            .initialSegmentCount(8)
                                            .batchSize(50)
                                            .tokenClaimInterval(5000)
                                            .claimExtensionThreshold(5000))
                                    .defaultProcessor("order-processor", components ->
                                            components.declarative("OrderUpdated", cfg -> orderProjection))));
+}
 ----
 
 If you prefer Spring Boot auto-configuration, expose the same processor settings as beans or let the framework bind its defaults and only override the values you need.
@@ -46,6 +48,11 @@ If you prefer Spring Boot auto-configuration, expose the same processor settings
 It groups work according to the configured `SequencingPolicy`.
 When two events resolve to the same sequence identifier, they are handled sequentially relative to each other.
 When they resolve to different identifiers, they can still be processed in parallel by different work packages.
+
+By default, Axon configures a `HierarchicalSequencingPolicy`.
+It first applies `SequentialPerAggregatePolicy` and falls back to `SequentialPolicy` when no aggregate identifier is available in the `ProcessingContext`.
+In that fallback case, events are processed sequentially within a single segment, so parallelism is effectively disabled.
+For the full sequencing behavior and configuration options, see xref:events:event-processors/streaming.adoc#sequential_processing[Sequential processing].
 
 That means your sequencing policy directly affects throughput:
 
