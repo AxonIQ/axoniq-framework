@@ -76,9 +76,12 @@ Axon Configuration API::
 --
 [source,java]
 ----
-MessagingConfigurer.create()
-                   .componentRegistry(cr -> cr.registerComponent(SequencingPolicy.class,
-                                                                 c -> new TenantBasedSequencingPolicy()));
+public void configureSequencingPolicy(MessagingConfigurer configurer) {
+    configurer.componentRegistry(cr -> cr.registerComponent(
+            SequencingPolicy.class,
+            c -> new TenantBasedSequencingPolicy())
+    );
+}
 ----
 --
 
@@ -108,7 +111,10 @@ If command handling is already serialized by another mechanism, register `NoOpSe
 
 [source,java]
 ----
-MessagingConfigurer.create()
-                   .componentRegistry(cr -> cr.registerComponent(SequencingPolicy.class,
-                                                                 c -> NoOpSequencingPolicy.INSTANCE));
+public void configureSequencingPolicy(MessagingConfigurer configurer) {
+    configurer.componentRegistry(cr -> cr.registerComponent(
+            SequencingPolicy.class,
+            c -> NoOpSequencingPolicy.INSTANCE)
+    );
+}
 ----

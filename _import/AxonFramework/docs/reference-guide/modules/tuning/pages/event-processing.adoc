@@ -97,8 +97,4 @@ In other words, the same tuning knobs still exist, but the right values depend o
 * Increase `initialSegmentCount` when you expect multiple application instances to share the load.
 * Use a durable `TokenStore`; the in-memory store is only appropriate for tests and simple demos.
 * Set the executor sizes so coordinator and worker threads do not starve each other.
-* Enable coordinator claim extension when workers process large batches and token claims need to be refreshed more aggressively.
-
-ifdef::advanced-framework[]
-include::connector:partial$blacklisting-events.adoc[]
-endif::[]
+* Enable coordinator claim extension when workers process large batches and token claims need to be refreshed more aggressively. See xref:events:event-processors/streaming.adoc#token_claim_config[token claim configuration].
