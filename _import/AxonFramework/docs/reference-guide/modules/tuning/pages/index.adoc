@@ -1,7 +1,7 @@
 = Tuning
 :page-aliases: README.adoc
 
-The Tuning section collects the performance guidance that is relevant for Axon Framework 5.
+The Tuning section collects the performance guidance that is relevant for Axon Framework.
 It focuses on command sequencing, pooled streaming event processing, snapshotting for event-sourced entities, and relational database settings for the JPA-backed event store.
 
 The topics in this section are intentionally practical.
