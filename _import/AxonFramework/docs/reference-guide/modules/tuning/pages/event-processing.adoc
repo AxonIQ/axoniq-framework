@@ -74,7 +74,7 @@ For the full token store configuration options, see xref:events:event-processors
 == DCB impact
 
 Dynamic Consistency Boundaries change the shape of the event stream that a processor sees.
-In an aggregate-based store, the sequencing and token management story is still centered on aggregate-oriented ordering.
+In an aggregate-based store, the sequencing and token management is still centered on aggregate-oriented ordering.
 With DCB support, the concurrency boundary is defined by tags and criteria instead, so event handler sequencing and processor parallelism need to be chosen with that model in mind.
 
 In other words, the same tuning knobs still exist, but the right values depend on the storage model:
