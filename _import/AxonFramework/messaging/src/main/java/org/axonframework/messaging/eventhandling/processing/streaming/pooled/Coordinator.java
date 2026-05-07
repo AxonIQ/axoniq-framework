@@ -1093,20 +1093,18 @@ class Coordinator {
             ).thenCompose(segments -> {
                 int maxSegmentsToClaim = maxSegmentProvider.apply(name) - workPackages.size();
                 List<Segment> candidates = selectClaimCandidates(segments);
-                return claimUpTo(candidates, maxSegmentsToClaim, new HashMap<>());
-            });
-        }
 
-        private CompletableFuture<Map<Segment, TrackingToken>> claimUpTo(
-                List<Segment> remainingCandidates, int maxSegmentsToClaim, Map<Segment, TrackingToken> successfulClaims
-        ) {
-            if (remainingCandidates.isEmpty() || successfulClaims.size() >= maxSegmentsToClaim) {
-                return CompletableFuture.completedFuture(successfulClaims);
-            }
-            Segment firstCandidateToClaim = remainingCandidates.getFirst();
-            List<Segment> subsequentCandidates = remainingCandidates.subList(1, remainingCandidates.size());
-            return claimSegmentToken(firstCandidateToClaim, successfulClaims)
-                    .thenCompose(claimsAfterAttempt -> claimUpTo(subsequentCandidates, maxSegmentsToClaim, claimsAfterAttempt));
+                CompletableFuture<Map<Segment, TrackingToken>> successfullyClaimedSegments = CompletableFuture.completedFuture(new HashMap<>());
+                for (Segment candidate : candidates) {
+                    successfullyClaimedSegments = successfullyClaimedSegments.thenCompose(successfulClaims -> {
+                        if (successfulClaims.size() >= maxSegmentsToClaim) {
+                            return CompletableFuture.completedFuture(successfulClaims);
+                        }
+                        return claimSegmentToken(candidate, successfulClaims);
+                    });
+                }
+                return successfullyClaimedSegments;
+            });
         }
 
         private List<Segment> selectClaimCandidates(List<Segment> segments) {
