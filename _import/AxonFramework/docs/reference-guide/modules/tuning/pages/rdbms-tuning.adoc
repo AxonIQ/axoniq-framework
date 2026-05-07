@@ -125,3 +125,7 @@ Let the JPA provider and the database use the normal byte array storage path whe
 ----
 // Keep the pool large enough for event processing, token claims, and the rest of the application.
 ----
+
+ifdef::advanced-framework[]
+include::connector:partial$postgresql-operations.adoc[]
+endif::[]

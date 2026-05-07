@@ -93,5 +93,5 @@ In other words, the same tuning knobs still exist, but the right values depend o
 * Enable coordinator claim extension when workers process large batches and token claims need to be refreshed more aggressively.
 
 ifdef::advanced-framework[]
-include::axoniq-server-connector:partial$blacklisting-events.adoc[]
+include::connector:partial$blacklisting-events.adoc[]
 endif::[]
