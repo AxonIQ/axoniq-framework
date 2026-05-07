@@ -27,7 +27,7 @@ ifdef::advanced-framework[]
 * xref:advanced-migration:paths/5.0-to-5.1.adoc[Axon Framework 5.0 to Axoniq Framework migration]
 endif::[]
 ifdef::data-protection[]
-* xref:data-protection-migration:pages$migration-path.adoc[Data Protection module migration]
+* xref:data-protection-migration:migration-path.adoc[Data Protection module migration]
 endif::[]
 3. **What is not yet there**
 4. **Missing a Migration Path?**
