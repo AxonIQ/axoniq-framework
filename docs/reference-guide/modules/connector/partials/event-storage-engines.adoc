@@ -130,7 +130,7 @@ public class AxonConfig {
 The `PostgresqlEventStorageEngine` stores events directly in a PostgreSQL 16+ database, fully supporting Dynamic Consistency Boundaries where events may have several tags.
 This is the default storage engine when running without Axon Server.
 
-The engine creates its schema automatically on startup — an `events` table, a `tags` table for DCB tag data, a `consistency_tags` table for concurrent-write safety, and an `events_monotonic_seq` sequence — so no manual DDL is required.
+The engine creates its schema automatically on startup—an `events` table, a `tags` table for DCB tag data, a `consistency_tags` table for concurrent-write safety, and an `events_monotonic_seq` sequence—so no manual DDL is required.
 
 [tabs]
 ======
@@ -151,7 +151,7 @@ Declare dependencies:
 ----
 
 The `PostgresqlEventStorageEngine` registers itself automatically once a `DataSource` is present in the component registry.
-To register an explicit engine — for example when overriding defaults — use `EventSourcingConfigurer`:
+To register an explicit engine—for example when overriding defaults—use `EventSourcingConfigurer`:
 
 [source,java]
 ----
