@@ -172,9 +172,9 @@ Do not call processor-specific methods that require an active processor (such as
 
 Two synchronous methods allow you to inspect the current state of a processor at any point:
 
-* `isRunning()` — returns `true` when the processor is active and processing events.
+* `isRunning()`: returns `true` when the processor is active and processing events.
 Returns `false` after a clean `shutdown()` or before `start()` has been called.
-* `isError()` — returns `true` when the processor has gone into error mode due to an unhandled exception.
+* `isError()`: returns `true` when the processor has gone into error mode due to an unhandled exception.
 Returns `false` after a clean `shutdown()`.
 See xref:event-processors/streaming.adoc#error-mode[Error mode] for more on how the Streaming Event Processor handles errors.
 
