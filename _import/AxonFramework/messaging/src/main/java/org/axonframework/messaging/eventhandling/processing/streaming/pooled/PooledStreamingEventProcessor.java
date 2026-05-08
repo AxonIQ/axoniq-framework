@@ -203,12 +203,23 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
         return coordinator.isError();
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * This implementation resolves the identifier eagerly during {@link #start()}. If called before {@code start()}
+     * has completed, the identifier is resolved lazily with a blocking call to the {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore}.
+     *
+     * @throws org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToRetrieveIdentifierException
+     * if lazy resolution is triggered and the {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore}
+     * fails to retrieve the identifier
+     */
     @Override
     public String getTokenStoreIdentifier() {
         if (tokenStoreIdentifier == null) {
-            throw new IllegalStateException(
-                    "Token store identifier is not yet resolved. Ensure start() has completed before calling this method."
-            );
+            var unitOfWork = unitOfWorkFactory.create();
+            tokenStoreIdentifier = FutureUtils
+                    .joinAndUnwrap(unitOfWork
+                                           .executeWithResult(tokenStore::retrieveStorageIdentifier));
         }
         return tokenStoreIdentifier;
     }
