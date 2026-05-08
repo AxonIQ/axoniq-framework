@@ -18,6 +18,7 @@ package org.axonframework.messaging.core.annotation;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.interception.annotation.ChainedMessageHandlerInterceptorMember;
 import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptorMemberChain;
 import org.axonframework.messaging.core.interception.annotation.MessageInterceptingMember;
 import org.axonframework.messaging.core.interception.annotation.NoMoreInterceptors;
@@ -296,7 +297,7 @@ public class AnnotatedHandlerInspector<T> {
             if (i.isEmpty()) {
                 return NoMoreInterceptors.instance();
             }
-            return new ChainedMessageHandlerInterceptorMember<>(t, i.iterator());
+            return new ChainedMessageHandlerInterceptorMember<>(i.iterator());
         });
     }
 
