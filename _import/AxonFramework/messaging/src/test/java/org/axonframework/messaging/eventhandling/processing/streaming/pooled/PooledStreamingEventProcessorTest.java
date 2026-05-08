@@ -46,6 +46,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToRetrieveIdentifierException;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayBlockingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatus;
@@ -563,14 +564,61 @@ class PooledStreamingEventProcessorTest {
             assertWithin(1, TimeUnit.SECONDS, () -> assertEquals(2, testSubject.processingStatus().size()));
         }
 
-        @Test
-        void getTokenStoreIdentifier() {
-            String expectedIdentifier = "some-identifier";
+        @Nested
+        class GetTokenStoreIdentifier {
 
-            when(tokenStore.retrieveStorageIdentifier(any()))
-                    .thenReturn(completedFuture(expectedIdentifier));
+            @Test
+            void returnsIdentifierResolvedDuringStart() {
+                // given
+                String expectedIdentifier = "some-identifier";
+                when(tokenStore.retrieveStorageIdentifier(any()))
+                        .thenReturn(completedFuture(expectedIdentifier));
 
-            assertEquals(expectedIdentifier, testSubject.getTokenStoreIdentifier());
+                // when
+                startEventProcessor();
+
+                // then
+                assertEquals(expectedIdentifier, testSubject.getTokenStoreIdentifier());
+            }
+
+            @Test
+            void resolvesIdentifierLazilyWhenCalledBeforeStart() {
+                // when
+                String identifier = testSubject.getTokenStoreIdentifier();
+
+                // then
+                assertThat(identifier).isNotNull();
+            }
+
+            @Test
+            void propagatesExceptionWhenLazyResolutionFails() {
+                // given
+                var failure = new UnableToRetrieveIdentifierException("Storage unavailable", new RuntimeException());
+                when(tokenStore.retrieveStorageIdentifier(any()))
+                        .thenReturn(CompletableFuture.failedFuture(failure));
+
+                // when / then
+                assertThrows(UnableToRetrieveIdentifierException.class, () -> testSubject.getTokenStoreIdentifier());
+            }
+
+            @Test
+            void startCompletesExceptionallyAndSkipsCoordinatorWhenRetrievalFails() {
+                // given
+                var failure = new UnableToRetrieveIdentifierException("Storage unavailable", new RuntimeException());
+                when(tokenStore.retrieveStorageIdentifier(any()))
+                        .thenReturn(CompletableFuture.failedFuture(failure));
+
+                // when
+                var startFuture = testSubject.start();
+
+                // then
+                assertThat(startFuture).isCompletedExceptionally()
+                                       .failsWithin(1, TimeUnit.SECONDS)
+                                       .withThrowableOfType(ExecutionException.class)
+                                       .havingCause()
+                                       .isInstanceOf(UnableToRetrieveIdentifierException.class);
+                assertFalse(testSubject.isRunning());
+            }
         }
 
         @Test
