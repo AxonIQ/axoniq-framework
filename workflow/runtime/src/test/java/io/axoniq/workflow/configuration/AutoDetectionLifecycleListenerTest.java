@@ -167,7 +167,7 @@ class AutoDetectionLifecycleListenerTest {
 
         public List<String> invoked = new ArrayList<>();
 
-        @Workflow(startOnEvent = "start", idProperty = "id")
+        @Workflow(startOnEventName = "start", idProperty = "id")
         public void myWorkflow(TestWorkflowContext context) {
         }
 
@@ -181,11 +181,11 @@ class AutoDetectionLifecycleListenerTest {
 
         public List<String> invoked = new ArrayList<>();
 
-        @Workflow(workflowName = "workflow-1", startOnEvent = "start", idProperty = "id")
+        @Workflow(workflowName = "workflow-1", startOnEventName = "start", idProperty = "id")
         public void myWorkflow1(TestWorkflowContext context) {
         }
 
-        @Workflow(workflowName = "workflow-2", startOnEvent = "start", idProperty = "id")
+        @Workflow(workflowName = "workflow-2", startOnEventName = "start", idProperty = "id")
         public void myWorkflow2(TestWorkflowContext context) {
         }
 

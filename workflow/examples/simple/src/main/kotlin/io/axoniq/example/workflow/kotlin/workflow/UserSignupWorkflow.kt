@@ -32,7 +32,7 @@ private val logger = KotlinLogging.logger {}
 
 class UserSignupWorkflow {
 
-    @Workflow(idProperty = "id", startOnEvent = "my.custom.RegistrationReceived")
+    @Workflow(idProperty = "id", startOnEventName = "my.custom.RegistrationReceived")
     fun Kontext.onExecute() {
         logger.info { "User signup workflow started at ${Instant.now()} for $payload" }
 

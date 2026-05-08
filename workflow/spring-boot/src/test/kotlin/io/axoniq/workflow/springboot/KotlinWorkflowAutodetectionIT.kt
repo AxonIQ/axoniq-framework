@@ -36,7 +36,6 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.EnableMBeanExport
-import org.springframework.context.annotation.Import
 import org.springframework.jmx.support.RegistrationPolicy
 import org.springframework.test.context.ContextConfiguration
 
@@ -92,7 +91,7 @@ class KotlinWorkflow {
 
     @Workflow(
         workflowName = "KotlinWorkflow",
-        startOnEvent = "io.namespace.KotlinEvent"
+        startOnEventName = "io.namespace.KotlinEvent"
     )
     fun Kontext.onExecute() {
         executed = true

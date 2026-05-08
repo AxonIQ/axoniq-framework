@@ -14,7 +14,7 @@ Here's the simplest possible workflow—a single durable step:
 ----
 public class OrderFulfillmentWorkflow {
 
-    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
     public void execute(SimpleWorkflowContext ctx) {
 
         ctx.awaitExecute("reserveStock", Boolean.class,
@@ -37,7 +37,7 @@ public class OrderFulfillmentWorkflow {
 
     Logger logger = LoggerFactory.getLogger(OrderFulfillmentWorkflow.class);
 
-    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
     public void execute(SimpleWorkflowContext ctx) {
 
         var customerId = ctx.workflowPayload().get("customerId");
@@ -90,7 +90,7 @@ The `@Workflow` annotation tells the engine how to wire up your workflow:
 [horizontal]
 `idProperty = "orderId"`:: Extracts the workflow instance ID from the triggering event's payload.
 Each unique `orderId` gets its own workflow instance.
-`startOnEvent = "OrderPlaced"`:: The qualified event name that triggers a new workflow instance.
+`startOnEventName = "OrderPlaced"`:: The qualified event name that triggers a new workflow instance.
 
 [TIP]
 ====
@@ -119,7 +119,7 @@ Let's extend our workflow to initiate payment after reserving stock:
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+@Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
 public void execute(SimpleWorkflowContext ctx) {
 
     var customerId = ctx.workflowPayload().get("customerId");
@@ -172,7 +172,7 @@ The `awaitEvent` primitive suspends the workflow until a matching external event
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+@Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
 public void execute(SimpleWorkflowContext ctx) {
 
     var customerId = ctx.workflowPayload().get("customerId");
@@ -244,7 +244,7 @@ If you prefer Kotlin, the same workflow looks like this:
 ----
 class OrderFulfillmentWorkflow {
 
-    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
     fun Kontext.onExecute() {
         val customerId = payload["customerId"]
         val amount = payload["amount"]

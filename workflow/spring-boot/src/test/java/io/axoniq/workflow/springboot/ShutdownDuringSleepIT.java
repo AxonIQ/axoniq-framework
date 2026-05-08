@@ -150,7 +150,7 @@ class ShutdownDuringSleepIT {
 
         @Workflow(
                 workflowName = "ShutdownDuringSleepWorkflow",
-                startOnEvent = "io.axoniq.issue125.StartSleep",
+                startOnEventName = "io.axoniq.issue125.StartSleep",
                 idProperty = "id"
         )
         public void execute(SimpleWorkflowContext ctx) {

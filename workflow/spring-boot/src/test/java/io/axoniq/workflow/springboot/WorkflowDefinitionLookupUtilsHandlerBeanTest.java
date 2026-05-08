@@ -100,14 +100,14 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
 
     static class MyWorkflow {
 
-        @Workflow(startOnEvent = "StartEvent", idProperty = "id")
+        @Workflow(startOnEventName = "StartEvent", idProperty = "id")
         public void define(MyWorkflowContext context) {
         }
     }
 
     static class MyOtherWorkflow {
 
-        @Workflow(startOnEvent = "OtherStartEvent", idProperty = "id")
+        @Workflow(startOnEventName = "OtherStartEvent", idProperty = "id")
         public void define(OtherWorkflowContext context) {
         }
     }

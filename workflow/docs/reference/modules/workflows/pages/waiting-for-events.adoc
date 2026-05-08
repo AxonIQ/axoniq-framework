@@ -195,7 +195,7 @@ Notice the order—we subscribe to the event *before* initiating payment, to avo
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+@Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
 public void execute(SimpleWorkflowContext ctx) {
 
     var reserved = ctx.awaitExecute("reserveStock", Boolean.class,

@@ -116,7 +116,7 @@ public class WorkflowAutodetectionIT {
 
         @Workflow(
                 workflowName = "TestWorkflow",
-                startOnEvent = "io.namespace.TestEvent"
+                startOnEventName = "io.namespace.TestEvent"
         )
         public void test(SimpleWorkflowContext context) {
             executed = true;
