@@ -67,11 +67,20 @@ Because `start()` is fully asynchronous, callers should await the returned futur
 
 [source,java]
 ----
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 
 public class ProcessorService {
 
-    public void startAndQueryIdentifier(StreamingEventProcessor processor) {
+    private final AxonConfiguration configuration;
+
+    public ProcessorService(AxonConfiguration configuration) {
+        this.configuration = configuration;
+    }
+
+    public void startAndQueryIdentifier(String processorName) {
+        StreamingEventProcessor processor =
+                configuration.getComponent(StreamingEventProcessor.class, processorName);
         processor.start()
                  .thenRun(() -> {
                      // Safe: start() has completed, identifier is resolved

@@ -136,16 +136,25 @@ The future completes when the operation has fully finished, allowing callers to 
 
 [source,java]
 ----
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 
 public class ProcessorLifecycleService {
 
-    public void startAndAwait(EventProcessor processor) {
+    private final AxonConfiguration configuration;
+
+    public ProcessorLifecycleService(AxonConfiguration configuration) {
+        this.configuration = configuration;
+    }
+
+    public void startAndAwait(String processorName) {
+        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
         // Blocks until the processor is fully started
         processor.start().join();
     }
 
-    public void stopAndAwait(EventProcessor processor) {
+    public void stopAndAwait(String processorName) {
+        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
         // Blocks until the processor is fully stopped
         processor.shutdown().join();
     }
@@ -171,11 +180,19 @@ See xref:event-processors/streaming.adoc#error-mode[Error mode] for more on how 
 
 [source,java]
 ----
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 
 public class ProcessorStateChecker {
 
-    public void printState(EventProcessor processor) {
+    private final AxonConfiguration configuration;
+
+    public ProcessorStateChecker(AxonConfiguration configuration) {
+        this.configuration = configuration;
+    }
+
+    public void printState(String processorName) {
+        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
         System.out.println("Running: " + processor.isRunning());
         System.out.println("Error:   " + processor.isError());
     }
