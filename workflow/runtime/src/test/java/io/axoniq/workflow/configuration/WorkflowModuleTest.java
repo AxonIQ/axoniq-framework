@@ -210,7 +210,7 @@ class WorkflowModuleTest {
 
     public static class TestAutodetectedWorkflow {
 
-        @Workflow(workflowName = "autodetectedWorkflow", startOnEvent = "java.lang.String", idProperty = "id")
+        @Workflow(workflowName = "autodetectedWorkflow", startOnEventName = "java.lang.String", idProperty = "id")
         void myWorkflow(@Nonnull TestWorkflowContext context) {
             // some workflow logic
         }

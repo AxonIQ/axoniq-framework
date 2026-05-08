@@ -322,7 +322,7 @@ Workflow IDs must be unique across all running workflows. If two workflow defini
 [source,java]
 .OrderFulfillmentWorkflow—handles stock and shipping
 ----
-@Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+@Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
 public void execute(SimpleWorkflowContext ctx) {
     ctx.awaitExecute("reserveStock", Boolean.class,
                       InventoryService::reserveStock);
@@ -334,7 +334,7 @@ public void execute(SimpleWorkflowContext ctx) {
 [source,java]
 .CustomerNotificationWorkflow—handles all customer communication
 ----
-@Workflow(idProperty = "customerId", startOnEvent = "OrderPlaced")
+@Workflow(idProperty = "customerId", startOnEventClass = OrderPlacedEvent.class)
 public void execute(SimpleWorkflowContext ctx) {
     ctx.awaitExecute("sendConfirmationEmail",
             payload("email", ctx.workflowPayload().get("email"),
@@ -378,4 +378,3 @@ Both workflows receive the same `OrderPlaced` event payload, but they run indepe
 For cross-workflow interaction patterns—parent-child workflows, event-based signalling between workflows—see xref:common-patterns.adoc#_sub_workflows[Sub-workflows] in Common Patterns.
 
 For more orchestration patterns like fan-out/fan-in, saga compensation, scatter-gather, and human-in-the-loop, see xref:common-patterns.adoc[].
-

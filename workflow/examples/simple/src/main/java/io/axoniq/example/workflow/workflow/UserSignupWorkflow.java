@@ -20,6 +20,7 @@ package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.MagicHappenedEvent;
 import io.axoniq.example.workflow.fixture.NotificationService;
+import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
@@ -47,7 +48,7 @@ public class UserSignupWorkflow {
 
     @Workflow(
             idProperty = "id",
-            startOnEvent = "my.custom.RegistrationReceived",
+            startOnEventClass = RegistrationReceivedEvent.class,
             startOnConditions = {"status=vip"}
     )
     public void execute(

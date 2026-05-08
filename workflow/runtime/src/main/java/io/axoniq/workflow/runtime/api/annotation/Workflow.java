@@ -40,7 +40,8 @@ public @interface Workflow {
 
     String ATTR_ID_PROPERTY = "idProperty";
     String ATTR_ID_PROPERTY_PROVIDER = "idPropertyProvider";
-    String ATTR_START_ON_EVENT = "startOnEvent";
+    String ATTR_START_ON_EVENT_NAME = "startOnEventName";
+    String ATTR_START_ON_EVENT_CLASS = "startOnEventClass";
     String ATTR_START_ON_CONDITIONS = "startOnConditions";
     String ATTR_WORKFLOW_NAME = "workflowName";
     String ATTR_WORKFLOW_STATUS = "workflowStatus";
@@ -62,11 +63,20 @@ public @interface Workflow {
     String workflowNamespace() default "";
 
     /**
-     * Specifies the qualified name of the event to be used as starting trigger.
+     * Specifies the qualified name of the event to be used as a starting trigger.
+     * If this property is set, the {@link #startOnEventClass()} property must not be set.
      *
      * @return qualified name of the event, defaults to empty string.
      */
-    String startOnEvent();
+    String startOnEventName() default "";
+
+    /**
+     * Specifies the class of the event to be used as a starting trigger.
+     * If this property is set, the {@link #startOnEventName()} property must not be set.
+     *
+     * @return class of the event, defaults to Void.class.
+     */
+    Class<?> startOnEventClass() default Void.class;
 
     /**
      * List of start conditions expressed as associations.

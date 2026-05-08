@@ -276,7 +276,7 @@ The same approach works in reverse: the child publishes a dedicated completion e
 .Parent workflow—launches a child and waits for it to finish
 ----
 @Workflow(idProperty = "orderId",
-          startOnEvent = "OrderPlaced",
+          startOnEventClass = OrderPlacedEvent.class,
           workflowNamespace = "io.myapp")
 public void execute(SimpleWorkflowContext ctx) {
 
@@ -319,7 +319,7 @@ public void execute(SimpleWorkflowContext ctx) {
 .Child workflow—triggered by the dedicated event, signals completion explicitly
 ----
 @Workflow(idProperty = "childWorkflowId",
-          startOnEvent = "io.myapp.StartPaymentProcess",                   // <1>
+          startOnEventName = "io.myapp.StartPaymentProcess",              // <1>
           workflowNamespace = "io.myapp.payments")
 public void execute(SimpleWorkflowContext ctx) {
 

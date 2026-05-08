@@ -240,7 +240,7 @@ The simplest way is to annotate methods on your workflow class:
 ----
 public class OrderFulfillmentWorkflow {
 
-    @Workflow(idProperty = "orderId", startOnEvent = "OrderPlaced")
+    @Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
     public void execute(SimpleWorkflowContext ctx) {
         // ... workflow logic
     }

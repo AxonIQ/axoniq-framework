@@ -11,10 +11,18 @@ The `@Workflow` annotation is the simplest way to define a workflow:
 [source,java]
 ----
 @Workflow(idProperty = "orderId",
-          startOnEvent = "OrderPlaced",
+          startOnEventClass = OrderPlacedEvent.class,
           workflowNamespace = "io.myapp.orders")
 public void execute(SimpleWorkflowContext ctx) { /* ... */ }
 ----
+
+The start trigger can be declared in two ways:
+
+- `startOnEventClass = OrderPlacedEvent.class` for a type-safe class reference
+- `startOnEventName = "io.myapp.orders.OrderPlaced"` for an explicit qualified event name
+
+Use exactly one of these attributes on a workflow method.
+`startOnConditions` can be combined with either form to further filter which events start a workflow.
 
 The declarative API offers the same capabilities plus additional options not available via annotations.
 The configuration is the same whether you use Java or Kotlin—the API is identical in both languages.

@@ -37,6 +37,7 @@ import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 
 import java.lang.annotation.Annotation;
@@ -203,8 +204,17 @@ public class AutoDetectionUtils {
             var opRegistry = c.getComponent(ValueComparisonOperatorRegistry.class,
                                             ValueComparisonOperatorRegistry::new);
             var associationValues = (String[]) attributes.get(ATTR_START_ON_CONDITIONS);
+
+            var eventQualifiedName = getIfNotDefault(attributes, ATTR_START_ON_EVENT_NAME, "")
+                    .map(QualifiedName::new)
+                    .orElseGet(() -> getIfNotDefault(attributes, ATTR_START_ON_EVENT_CLASS, Void.class)
+                            .map(clazz -> c.getComponent(MessageTypeResolver.class)
+                                           .resolveOrThrow(clazz)
+                                           .qualifiedName())
+                            .orElseThrow()
+                    );
             return EventConditions.fromQualifiedName(
-                    new QualifiedName((String) attributes.get(ATTR_START_ON_EVENT)),
+                    eventQualifiedName,
                     AssociationsUtils.parse(opRegistry, associationValues).build(c)
             );
         };
@@ -285,7 +295,7 @@ public class AutoDetectionUtils {
     }
 
     /**
-     * Checks if given type can wrap the expected type.
+     * Checks if the given type can wrap the expected type.
      *
      * @param type         type to check.
      * @param expectedType type to be wrapped.
@@ -442,6 +452,26 @@ public class AutoDetectionUtils {
                                 + " but none was specified on annotation of  " + type.getName() + "#"
                                 + method.getName());
             }
+        }
+
+        var hasStartOnEventClassSpecifiedCorrectly =
+                attributes.containsKey(ATTR_START_ON_EVENT_CLASS) && !Void.class.equals(attributes.get(
+                        ATTR_START_ON_EVENT_CLASS));
+        var hasStartOnEventNameSpecifiedCorrectly = attributes.containsKey(ATTR_START_ON_EVENT_NAME) && !"".equals(
+                attributes.get(ATTR_START_ON_EVENT_NAME));
+        if (!hasStartOnEventClassSpecifiedCorrectly && !hasStartOnEventNameSpecifiedCorrectly) {
+            throw new IllegalArgumentException(
+                    "Either " + ATTR_START_ON_EVENT_NAME + " or " + ATTR_START_ON_EVENT_CLASS + " must be specified, "
+                            + " but none was specified on annotation of  " + type.getName() + "#"
+                            + method.getName());
+        }
+        if (hasStartOnEventClassSpecifiedCorrectly && hasStartOnEventNameSpecifiedCorrectly) {
+            throw new IllegalArgumentException(
+                    "Either " + ATTR_START_ON_EVENT_NAME + " or " + ATTR_START_ON_EVENT_CLASS
+                            + ", but not both must be specified, "
+                            + " but both were specified on annotation of  " + type.getName() + "#"
+                            + method.getName()
+            );
         }
     }
 

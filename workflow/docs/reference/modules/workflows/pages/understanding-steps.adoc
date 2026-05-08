@@ -539,7 +539,7 @@ The simplest way is via the `@Workflow` annotation:
 [source,java]
 ----
 @Workflow(idProperty = "orderId",
-          startOnEvent = "OrderPlaced",
+          startOnEventClass = OrderPlacedEvent.class,
           workflowNamespace = "io.myapp.orders")  // <1>
 public void execute(SimpleWorkflowContext ctx) {
     ctx.awaitExecute("reserveStock", Boolean.class,

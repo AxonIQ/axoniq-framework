@@ -60,7 +60,7 @@ public class PaymentWorkflow {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
     @Workflow(
-            startOnEvent = "io.axoniq.demo.bikerental.coreapi.rental.BikeRequestedEvent",
+            startOnEventName = "io.axoniq.demo.bikerental.coreapi.rental.BikeRequestedEvent",
             idProperty = "bikeId",
             workflowName = "PaymentWorkflow"
     )
