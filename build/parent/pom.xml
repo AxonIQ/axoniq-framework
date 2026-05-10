@@ -53,7 +53,7 @@
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.0.2</hikari.version>
         <hsqldb.version>2.7.4</hsqldb.version>
-        <hibernate-core.version>7.3.3.Final</hibernate-core.version>
+        <hibernate-core.version>7.3.4.Final</hibernate-core.version>
         <mysql-connector-java.version>9.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.11</postgresql.version>
         <ojdbc.version>23.26.1.0.0</ojdbc.version>
@@ -66,7 +66,7 @@
         <jakarta.validation.version>3.1.1</jakarta.validation.version>
         <jspecify.version>1.0.0</jspecify.version>
         <!-- Logging -->
-        <log4j.version>2.25.4</log4j.version>
+        <log4j.version>2.26.0</log4j.version>
         <slf4j.version>2.0.17</slf4j.version>
         <!-- Metrics -->
         <dropwizard.metrics.version>5.0.6</dropwizard.metrics.version>
