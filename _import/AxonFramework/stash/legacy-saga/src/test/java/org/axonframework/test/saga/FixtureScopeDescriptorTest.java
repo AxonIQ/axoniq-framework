@@ -30,7 +30,7 @@ import org.junit.jupiter.api.*;
  *
  * @author Steven van Beelen
  */
-class FixtureTest_ScopeDescriptor {
+class FixtureScopeDescriptorTest {
 
     private FixtureConfiguration fixture;
 

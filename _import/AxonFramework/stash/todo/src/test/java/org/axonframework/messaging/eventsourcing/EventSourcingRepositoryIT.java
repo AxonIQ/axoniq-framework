@@ -50,7 +50,7 @@ import static org.mockito.Mockito.*;
 /**
  * @author Allard Buijze
  */
-public class EventSourcingRepositoryIntegrationTest implements Thread.UncaughtExceptionHandler {
+public class EventSourcingRepositoryIT implements Thread.UncaughtExceptionHandler {
 
     private static final int CONCURRENT_MODIFIERS = 10;
     private LegacyEventSourcingRepository<SimpleAggregateRoot> repository;

@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * @author Steven van Beelen
  */
-public class FixtureTest_RegisteringMethodEnhancements {
+public class FixtureRegisteringMethodEnhancementsTest {
 
     private static final String TEST_AGGREGATE_IDENTIFIER = "aggregate-identifier";
 

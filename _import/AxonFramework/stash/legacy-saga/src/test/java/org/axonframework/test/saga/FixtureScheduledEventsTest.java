@@ -26,7 +26,7 @@ import java.util.UUID;
  *
  * @author Steven van Beelen
  */
-class FixtureTest_ScheduledEvents {
+class FixtureScheduledEventsTest {
 
     private static final String IDENTIFIER = UUID.randomUUID().toString();
     private static final Duration TRIGGER_DURATION_MINUTES = Duration.ofMinutes(10);

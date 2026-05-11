@@ -26,7 +26,7 @@ import org.junit.jupiter.api.*;
  * @author Steven van Beelen
  */
 @Disabled("TODO #3727")
-class WeakReferenceCacheIntegrationTest extends CachingIntegrationTestSuite {
+class WeakReferenceCacheIT extends CachingIntegrationTestSuite {
 
     @Override
     public Cache buildCache(String name) {

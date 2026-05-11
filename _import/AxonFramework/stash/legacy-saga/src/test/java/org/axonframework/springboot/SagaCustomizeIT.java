@@ -59,7 +59,7 @@ import static org.awaitility.Awaitility.await;
 })
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
 @Disabled("TODO #3097")
-class SagaCustomizeIntegrationTest {
+class SagaCustomizeIT {
 
     @Autowired
     private EventBus eventBus;

@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * @author Patrick Haas
  */
-class FixtureTest_ExceptionHandling {
+class FixtureExceptionHandlingTest {
 
     private static final String AGGREGATE_ID = "1";
 

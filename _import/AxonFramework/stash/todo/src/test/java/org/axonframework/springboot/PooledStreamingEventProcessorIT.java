@@ -56,7 +56,7 @@ import java.util.stream.Stream;
  * @author Steven van Beelen
  */
 @Disabled("TODO #3495")
-class PooledStreamingEventProcessorIntegrationTest {
+class PooledStreamingEventProcessorIT {
 
     private ApplicationContextRunner testApplicationContext;
 

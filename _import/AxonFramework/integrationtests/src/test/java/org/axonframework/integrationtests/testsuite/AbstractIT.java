@@ -42,7 +42,7 @@ import java.util.UUID;
  * @since 5.1.0
  */
 @Internal
-public abstract class AbstractIntegrationTest {
+public abstract class AbstractIT {
 
     protected CommandGateway commandGateway;
     protected AxonConfiguration startedConfiguration;

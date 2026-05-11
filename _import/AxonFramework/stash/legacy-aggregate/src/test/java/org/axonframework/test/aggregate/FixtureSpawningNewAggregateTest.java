@@ -41,7 +41,7 @@ import static org.mockito.Mockito.*;
  * @author Milan Savic
  */
 @ExtendWith(MockitoExtension.class)
-class FixtureTest_SpawningNewAggregate {
+class FixtureSpawningNewAggregateTest {
 
     private FixtureConfiguration<Aggregate1> fixture;
 

@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author Marc Gathier
  * @author Steven van Beelen
  */
-class FixtureTest_CreationPolicy {
+class FixtureCreationPolicyTest {
 
     private static final ComplexAggregateId AGGREGATE_ID = new ComplexAggregateId(UUID.randomUUID(), 42);
     private static final boolean PUBLISH_EVENTS = true;

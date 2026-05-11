@@ -39,7 +39,7 @@ import static org.mockito.Mockito.*;
  *
  * @author Allard Buijze
  */
-class FixtureTest_StateStorage {
+class FixtureStateStorageTest {
 
     private static final String AGGREGATE_ID = "id";
 

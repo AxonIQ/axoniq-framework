@@ -34,7 +34,7 @@ import static org.mockito.Mockito.*;
 /**
  * @author Allard Buijze
  */
-class FixtureTest_Generic {
+class FixtureGenericTest {
 
     private FixtureConfiguration<StandardAggregate> fixture;
     private AggregateFactory<StandardAggregate> mockAggregateFactory;

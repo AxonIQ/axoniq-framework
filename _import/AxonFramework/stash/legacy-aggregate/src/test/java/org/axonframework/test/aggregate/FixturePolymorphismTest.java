@@ -42,7 +42,7 @@ import static org.axonframework.modelling.command.AggregateLifecycle.createNew;
  *
  * @author Milan Savic
  */
-class FixtureTest_Polymorphism {
+class FixturePolymorphismTest {
 
     private FixtureConfiguration<AggregateA> fixture;
 

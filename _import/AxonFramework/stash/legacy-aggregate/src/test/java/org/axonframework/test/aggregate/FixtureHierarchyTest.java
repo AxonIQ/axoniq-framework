@@ -33,7 +33,7 @@ import static org.axonframework.modelling.command.AggregateLifecycle.apply;
  *
  * @author Allard Buijze
  */
-class FixtureTest_Hierarchy {
+class FixtureHierarchyTest {
 
     private static final String AGGREGATE_IDENTIFIER = "123";
 
