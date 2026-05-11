@@ -163,7 +163,9 @@ class Coordinator {
                         runState.updateAndGet(RunState::attemptStop)
                                 .shutdownHandle()
                                 .complete(null);
-                        if (e instanceof CompletionException ce) throw ce;
+                        if (e instanceof CompletionException ce) {
+                            throw ce;
+                        }
                         throw new CompletionException(e);
                     });
         } else if (!newState.isRunning) {
