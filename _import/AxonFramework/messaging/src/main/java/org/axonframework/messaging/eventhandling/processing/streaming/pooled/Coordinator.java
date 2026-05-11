@@ -1184,7 +1184,7 @@ class Coordinator {
             }
 
             if (eventStream == null && !workPackages.isEmpty() && !(trackingToken instanceof NoToken)) {
-                CompletableFuture<TrackingToken> tokenFuture = trackingToken != null
+                CompletableFuture<TrackingToken> startPositionFuture = trackingToken != null
                         ? CompletableFuture.completedFuture(trackingToken)
                         : eventSource.firstToken(null);
                 return tokenFuture.thenAccept(startStreamingFrom -> {
