@@ -345,9 +345,7 @@ class CoordinatorTest {
      * {@link org.axonframework.common.ProcessUtils#executeUntilTrueAsync}:
      * single-failure-then-success path, and all-attempts-exhausted path.
      * <p>
-     * Note: each retry incurs a real 100 ms delay imposed by the JDK-internal
-     * {@code CompletableFuture} delayer; the 30-retry exhaustion test therefore
-     * takes ~3 s by design.
+     * Uses a 1 ms retry interval and 3 max retries to keep test execution fast.
      */
     @Nested
     class InitializeTokenStoreWithRetry {
