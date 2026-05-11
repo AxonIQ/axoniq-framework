@@ -131,41 +131,13 @@ These methods are available on all processor implementations, including the xref
 
 === Starting and stopping
 
-`start()` and `shutdown()` both return a `CompletableFuture<Void>`.
-The future completes when the operation has fully finished, allowing callers to chain further work or simply await it:
-
-[source,java]
-----
-import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.messaging.eventhandling.processing.EventProcessor;
-
-public class ProcessorLifecycleService {
-
-    private final AxonConfiguration configuration;
-
-    public ProcessorLifecycleService(AxonConfiguration configuration) {
-        this.configuration = configuration;
-    }
-
-    public void startAndAwait(String processorName) {
-        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
-        // Blocks until the processor is fully started
-        processor.start().join();
-    }
-
-    public void stopAndAwait(String processorName) {
-        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
-        // Blocks until the processor is fully stopped
-        processor.shutdown().join();
-    }
-}
-----
+`start()` and `shutdown()` both return a `CompletableFuture<Void>` that completes when the operation has fully finished.
 
 [NOTE]
 ====
-What "fully started" means depends on the processor implementation.
-For the xref:event-processors/streaming.adoc[Pooled Streaming Event Processor], `start()` completes only after the token store identifier has been resolved and the coordinator has started.
-Do not call processor-specific methods that require an active processor (such as `getTokenStoreIdentifier()`) before awaiting `start()`.
+In most scenarios, you do not need to invoke `start()` or `shutdown()` manually.
+Axon Framework manages the processor lifecycle automatically as part of application startup and shutdown.
+Only call these methods directly when you need explicit control, for example when triggering a programmatic replay or conditionally pausing processing.
 ====
 
 === Checking state

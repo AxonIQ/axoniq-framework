@@ -55,6 +55,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -101,7 +102,7 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
     private final Coordinator coordinator;
     private final WorkPackage.EventFilter workPackageEventFilter;
 
-    private volatile @Nullable String tokenStoreIdentifier;
+    private final AtomicReference<@Nullable String> tokenStoreIdentifier = new AtomicReference<>();
     private final Map<Integer, TrackerStatus> processingStatus = new ConcurrentHashMap<>();
 
     /**
@@ -183,7 +184,7 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
         logger.info("Starting PooledStreamingEventProcessor [{}].", name);
         var unitOfWork = unitOfWorkFactory.create();
         return unitOfWork.executeWithResult(tokenStore::retrieveStorageIdentifier)
-                         .thenAccept(id -> this.tokenStoreIdentifier = id)
+                         .thenAccept(tokenStoreIdentifier::set)
                          .thenCompose(unused -> coordinator.start());
     }
 
@@ -207,21 +208,17 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
      * {@inheritDoc}
      * <p>
      * This implementation resolves the identifier eagerly during {@link #start()}. If called before {@code start()}
-     * has completed, the identifier is resolved lazily with a blocking call to the {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore}.
-     *
-     * @throws org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToRetrieveIdentifierException
-     * if lazy resolution is triggered and the {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore}
-     * fails to retrieve the identifier
+     * has completed, the identifier is resolved lazily with a blocking call to the
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore}.
      */
     @Override
     public String getTokenStoreIdentifier() {
-        if (tokenStoreIdentifier == null) {
-            var unitOfWork = unitOfWorkFactory.create();
-            tokenStoreIdentifier = FutureUtils
-                    .joinAndUnwrap(unitOfWork
-                                           .executeWithResult(tokenStore::retrieveStorageIdentifier));
-        }
-        return tokenStoreIdentifier;
+        return tokenStoreIdentifier.updateAndGet(i -> i != null ? i : calculateIdentifier());
+    }
+
+    private String calculateIdentifier() {
+        var unitOfWork = unitOfWorkFactory.create();
+        return FutureUtils.joinAndUnwrap(unitOfWork.executeWithResult(tokenStore::retrieveStorageIdentifier));
     }
 
     @Override

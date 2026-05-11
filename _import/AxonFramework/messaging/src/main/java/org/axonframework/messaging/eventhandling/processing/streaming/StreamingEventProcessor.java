@@ -53,15 +53,12 @@ public interface StreamingEventProcessor extends EventProcessor {
     /**
      * Returns the unique identifier of the {@link TokenStore} used by this {@link StreamingEventProcessor}.
      * <p>
-     * Implementations may resolve the identifier lazily on the first call to this method, or eagerly during
-     * {@link #start()}. When resolved eagerly, calling this method before {@code start()} has completed
-     * successfully will throw an {@link IllegalStateException}.
+     * The identifier is resolved eagerly during {@link #start()} when the processor has been started. If called
+     * before {@link #start()} has completed, implementations may resolve the identifier lazily with a blocking call
+     * to the {@link TokenStore}.
      *
      * @return the unique identifier of the {@link TokenStore} used by this {@link StreamingEventProcessor}
-     * @throws IllegalStateException               if the identifier has not yet been resolved (e.g., before
-     *                                             {@link #start()} completes in eager implementations)
      * @throws UnableToRetrieveIdentifierException if the {@link TokenStore} was unable to retrieve the identifier
-     *                                             (in lazy implementations, thrown directly from this call)
      */
     String getTokenStoreIdentifier();
 
