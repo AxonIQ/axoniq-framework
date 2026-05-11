@@ -17,6 +17,9 @@
 package org.axonframework.extension.springboot;
 
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.junit.jupiter.api.*;
@@ -127,7 +130,7 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
         @Component
         static class DummyQueryHandler {
 
-            @QueryHandler
+            @QueryHandler(queryName = "dummy")
             DummyQueryResponse handle(DummyQuery query) {
                 return new DummyQueryResponse("Successful response!");
             }
@@ -152,9 +155,9 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
                 logger.info("GRACEFUL SHUTDOWN TEST | Before sleep...");
                 Thread.sleep(1000);
                 logger.info("GRACEFUL SHUTDOWN TEST | After sleep...");
-                var dummyQuery = new DummyQuery();
+                var queryMessage = new GenericQueryMessage(new MessageType(new QualifiedName("dummy")), new DummyQuery());
                 try {
-                    var resultOpt = queryGateway.query(dummyQuery, DummyQueryResponse.class, null);
+                    var resultOpt = queryGateway.query(queryMessage, DummyQueryResponse.class, null);
                     var result = resultOpt.get(1, TimeUnit.SECONDS);
                     logger.info("GRACEFUL SHUTDOWN TEST | Query executed!");
                     return ResponseEntity.ok(result);
