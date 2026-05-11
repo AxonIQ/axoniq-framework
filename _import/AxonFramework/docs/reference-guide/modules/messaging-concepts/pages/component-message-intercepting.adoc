@@ -4,7 +4,8 @@ Component-level interceptors apply cross-cutting behavior within a single handli
 They complement bus-level interceptors, which apply globally to all messages on a bus, by targeting only the handlers within a specific component.
 Axon Framework supports two approaches: annotated interceptor methods placed directly on the component class, and declarative interceptors registered during module configuration.
 
-== Annotated interceptors
+[[command-handler-interceptor-annotation]]
+== `@CommandHandlerInterceptor` annotation
 
 Annotated interceptors are methods placed on a handling component class and marked with one of the interceptor annotations.
 The framework invokes these methods around the regular handler methods on the same component instance.
@@ -193,7 +194,7 @@ Omitting `messageType` defaults to matching any `Message`.
 
 *Intercepting all messages on a component:*
 
-Omitting `messageType` matches any message, so the interceptor runs before every handler on the component — event handlers and query handlers alike.
+Omitting `messageType` matches any message, so the interceptor runs before every handler on the component, including event handlers and query handlers.
 This is useful for cross-cutting concerns such as logging or security checks that should apply regardless of the message type being processed.
 
 [source,java]

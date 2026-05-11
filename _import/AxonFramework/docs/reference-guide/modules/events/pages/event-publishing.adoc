@@ -28,7 +28,7 @@ Event publication only results in event storage if an xref:infrastructure.adoc#e
 == Event Appender: Publishing events from an entity
 
 The xref:commands:modeling/aggregate.adoc[Entity] or its xref:commands:modeling/multi-entity-aggregates.adoc[child entities] are typically the starting point of all event messages.
-The event simply is the notification that a decision has been made; a successful resolution of handling a command.
+The event simply is the notification that a decision has been made: a successful resolution of handling a command.
 Note that <<event_tagging,tagging>> is a hard requirement to ensure the published event as associated with your entity or entities.
 
 To publish an event from an entity, it is required to do this from the lifecycle of the entity instance.
