@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.axonframework.common.FutureUtils;
+import org.axonframework.common.ProcessRetriesExhaustedException;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.EmptyApplicationContext;
@@ -327,7 +328,8 @@ class CoordinatorTest {
     }
 
     /**
-     * Tests for the {@code initializeTokenStoreWithRetry} retry logic:
+     * Tests for the token store initialization retry logic delegated to
+     * {@link org.axonframework.common.ProcessUtils#executeUntilTrueAsync}:
      * single-failure-then-success path, and all-attempts-exhausted path.
      * <p>
      * Note: each retry incurs a real 100 ms delay imposed by the JDK-internal
@@ -373,7 +375,7 @@ class CoordinatorTest {
         }
 
         @Test
-        void completesExceptionallyWithIllegalStateExceptionWhenAllAttemptsExhausted() {
+        void completesExceptionallyWithProcessRetriesExhaustedExceptionWhenAllAttemptsExhausted() {
             // given - fetchSegments always throws so initializeTokenStore always returns false
             doReturn(CompletableFuture.failedFuture(new RuntimeException("persistent store error")))
                     .when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
@@ -382,11 +384,10 @@ class CoordinatorTest {
             CompletableFuture<Void> startFuture = testSubject.start();
 
             // then - after all 30 retries (each separated by a real 100 ms JDK delay, ~3 s total)
-            //        the future completes exceptionally with an IllegalStateException
+            //        the future completes exceptionally with a ProcessRetriesExhaustedException
             assertWithin(5, TimeUnit.SECONDS, () -> assertTrue(startFuture.isCompletedExceptionally()));
             CompletionException thrown = assertThrows(CompletionException.class, startFuture::join);
-            assertInstanceOf(IllegalStateException.class, thrown.getCause());
-            assertThat(thrown.getCause().getMessage()).contains(PROCESSOR_NAME);
+            assertInstanceOf(ProcessRetriesExhaustedException.class, thrown.getCause());
         }
     }
 

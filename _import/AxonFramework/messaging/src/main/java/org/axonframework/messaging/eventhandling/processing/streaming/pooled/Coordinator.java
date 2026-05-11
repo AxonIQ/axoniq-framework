@@ -16,6 +16,7 @@
 
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
+import org.axonframework.common.ProcessUtils;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -153,7 +154,7 @@ class Coordinator {
         RunState newState = this.runState.updateAndGet(RunState::attemptStart);
         if (newState.wasStarted()) {
             logger.debug("Processor [{}]. Starting Coordinator...", name);
-            return initializeTokenStoreWithRetry(30)
+            return ProcessUtils.executeUntilTrueAsync(this::initializeTokenStore, 100, 30, executorService)
                     .thenRun(() -> {
                         CoordinationTask task = new CoordinationTask();
                         executorService.submit(task);
@@ -171,23 +172,6 @@ class Coordinator {
                     "Cannot start a processor [%s] while it's in process of shutting down.", name));
         }
         return emptyCompletedFuture();
-    }
-
-    private CompletableFuture<Void> initializeTokenStoreWithRetry(int attemptsLeft) {
-        if (attemptsLeft <= 0) {
-            return CompletableFuture.failedFuture(new IllegalStateException(
-                    String.format("Processor [%s]. Unable to initialize the token store after multiple attempts.", name)
-            ));
-        }
-        return initializeTokenStore()
-                .thenCompose(initialized -> {
-                    if (Boolean.TRUE.equals(initialized)) {
-                        return emptyCompletedFuture();
-                    }
-                    return CompletableFuture
-                            .runAsync(() -> {}, CompletableFuture.delayedExecutor(100, TimeUnit.MILLISECONDS, executorService))
-                            .thenCompose(ignored -> initializeTokenStoreWithRetry(attemptsLeft - 1));
-                });
     }
 
     /**
