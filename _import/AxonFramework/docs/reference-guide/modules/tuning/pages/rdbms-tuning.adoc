@@ -113,6 +113,10 @@ The practical options are:
 . Override the Hibernate mapping for the affected columns.
 . Optionally migrate existing columns from `OID` to `BYTEA`.
 
+ifdef::advanced-framework[]
+NOTE: The xref:events:infrastructure.adoc#postgresql_event_storage_engine[PostgreSQL Event Storage Engine] is a dedicated event storage engine optimized for PostgreSQL 16, including full DCB support. Consider it as an alternative to the JPA-backed eventstore if you are using PostgreSQL.
+endif::[]
+
 === Hibernate dialect changes
 
 To avoid `OID`, enforce `BYTEA` by providing a custom PostgreSQL dialect.
