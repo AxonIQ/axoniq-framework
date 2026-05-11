@@ -64,12 +64,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 )
 class AxonAutoConfigurationWithGracefulShutdownTest {
 
-    // Counted down by DummyController when a request is actively being handled,
-    // so tests can reliably trigger shutdown only after the request is in-flight.
-    static volatile CountDownLatch requestHandlerStarted;
-
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @Autowired
+    private CountDownLatch requestHandlerStarted;
 
     @LocalServerPort
     private int port;
@@ -90,7 +89,6 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
     @DirtiesContext
     void givenActiveRequestWhenTriggerShutdownThenWaitingForRequestsToComplete() throws Exception {
         // given
-        requestHandlerStarted = new CountDownLatch(1);
         CompletableFuture<ResponseEntity<DummyQueryResponse>> requestActiveDuringShutdown = CompletableFuture.supplyAsync(
                 () -> restTemplate.getForEntity("http://localhost:" + port + "/dummy", DummyQueryResponse.class));
         assertThat(requestHandlerStarted.await(2, TimeUnit.SECONDS)).isTrue();
@@ -117,6 +115,11 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
     static class TestConfig {
 
         @Bean
+        public CountDownLatch requestHandlerStarted() {
+            return new CountDownLatch(1);
+        }
+
+        @Bean
         public TestRestTemplate testRestTemplate() {
             return new TestRestTemplate();
         }
@@ -130,23 +133,22 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
             }
         }
 
-
         @RestController
         static class DummyController {
 
             private static final Logger logger = LoggerFactory.getLogger(DummyController.class);
 
             private final QueryGateway queryGateway;
+            private final CountDownLatch requestHandlerStarted;
 
-            public DummyController(QueryGateway queryGateway) {
+            public DummyController(QueryGateway queryGateway, CountDownLatch requestHandlerStarted) {
                 this.queryGateway = queryGateway;
+                this.requestHandlerStarted = requestHandlerStarted;
             }
 
             @GetMapping("/dummy")
             ResponseEntity<?> dummyQuery() throws InterruptedException {
-                if (requestHandlerStarted != null) {
-                    requestHandlerStarted.countDown();
-                }
+                requestHandlerStarted.countDown();
                 logger.info("GRACEFUL SHUTDOWN TEST | Before sleep...");
                 Thread.sleep(1000);
                 logger.info("GRACEFUL SHUTDOWN TEST | After sleep...");
