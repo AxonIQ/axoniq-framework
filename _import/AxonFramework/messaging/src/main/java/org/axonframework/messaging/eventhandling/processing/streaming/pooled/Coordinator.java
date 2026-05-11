@@ -97,6 +97,8 @@ class Coordinator {
     private final BiConsumer<Integer, UnaryOperator<TrackerStatus>> processingStatusUpdater;
     private final long tokenClaimInterval;
     private final long claimExtensionThreshold;
+    private final long tokenStoreInitRetryInterval;
+    private final int tokenStoreInitMaxRetries;
     private final Clock clock;
     private final MaxSegmentProvider maxSegmentProvider;
     private final int initialSegmentCount;
@@ -136,6 +138,8 @@ class Coordinator {
         this.processingStatusUpdater = builder.processingStatusUpdater;
         this.tokenClaimInterval = builder.tokenClaimInterval;
         this.claimExtensionThreshold = builder.claimExtensionThreshold;
+        this.tokenStoreInitRetryInterval = builder.tokenStoreInitRetryInterval;
+        this.tokenStoreInitMaxRetries = builder.tokenStoreInitMaxRetries;
         this.clock = builder.clock;
         this.maxSegmentProvider = builder.maxSegmentProvider;
         this.initialSegmentCount = builder.initialSegmentCount;
@@ -154,7 +158,7 @@ class Coordinator {
         RunState newState = this.runState.updateAndGet(RunState::attemptStart);
         if (newState.wasStarted()) {
             logger.debug("Processor [{}]. Starting Coordinator...", name);
-            return ProcessUtils.executeUntilTrueAsync(this::initializeTokenStore, 100, 30, executorService)
+            return ProcessUtils.executeUntilTrueAsync(this::initializeTokenStore, tokenStoreInitRetryInterval, tokenStoreInitMaxRetries, executorService)
                     .thenRun(() -> {
                         CoordinationTask task = new CoordinationTask();
                         executorService.submit(task);
@@ -424,6 +428,8 @@ class Coordinator {
         private BiConsumer<Integer, UnaryOperator<TrackerStatus>> processingStatusUpdater;
         private long tokenClaimInterval = 5000;
         private long claimExtensionThreshold = 5000;
+        private long tokenStoreInitRetryInterval = 100;
+        private int tokenStoreInitMaxRetries = 30;
         private Clock clock = GenericEventMessage.clock;
         private MaxSegmentProvider maxSegmentProvider;
         private int initialSegmentCount = 16;
@@ -549,6 +555,28 @@ class Coordinator {
          */
         Builder claimExtensionThreshold(long claimExtensionThreshold) {
             this.claimExtensionThreshold = claimExtensionThreshold;
+            return this;
+        }
+
+        /**
+         * Sets the retry interval in milliseconds between token store initialization attempts. Defaults to {@code 100}.
+         *
+         * @param tokenStoreInitRetryInterval the interval in milliseconds between token store initialization retries
+         * @return the current Builder instance, for fluent interfacing
+         */
+        Builder tokenStoreInitRetryInterval(long tokenStoreInitRetryInterval) {
+            this.tokenStoreInitRetryInterval = tokenStoreInitRetryInterval;
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of token store initialization attempts before giving up. Defaults to {@code 30}.
+         *
+         * @param tokenStoreInitMaxRetries the maximum number of token store initialization attempts
+         * @return the current Builder instance, for fluent interfacing
+         */
+        Builder tokenStoreInitMaxRetries(int tokenStoreInitMaxRetries) {
+            this.tokenStoreInitMaxRetries = tokenStoreInitMaxRetries;
             return this;
         }
 

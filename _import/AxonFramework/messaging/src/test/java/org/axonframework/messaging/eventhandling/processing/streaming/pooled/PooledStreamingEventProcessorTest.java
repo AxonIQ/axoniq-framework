@@ -879,7 +879,8 @@ class PooledStreamingEventProcessorTest {
                         return releaseGate;
                     })));
             startEventProcessor();
-            assertWithin(1, TimeUnit.SECONDS, () -> assertFalse(testSubject.processingStatus().isEmpty()));
+            await().atMost(1, TimeUnit.SECONDS)
+                   .untilAsserted(() -> assertFalse(testSubject.processingStatus().isEmpty()));
 
             // when - shutdown is triggered while the release listener is still pending
             CompletableFuture<Void> shutdownFuture = testSubject.shutdown();
@@ -896,7 +897,7 @@ class PooledStreamingEventProcessorTest {
 
             // then - completing the gate unblocks the abort flow and shutdown finishes
             releaseGate.complete(null);
-            assertWithin(1, TimeUnit.SECONDS, () -> assertThat(shutdownFuture).isCompleted());
+            await().atMost(1, TimeUnit.SECONDS).untilAsserted(() -> assertThat(shutdownFuture).isCompleted());
         }
     }
 

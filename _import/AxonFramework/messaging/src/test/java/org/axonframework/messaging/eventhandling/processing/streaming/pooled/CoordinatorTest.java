@@ -19,13 +19,14 @@ package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
-import static org.axonframework.common.util.AssertUtils.assertWithin;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Future;
@@ -93,17 +94,25 @@ class CoordinatorTest {
     void setUp() {
         when(messageSource.latestToken(null)).thenReturn(FutureUtils.emptyCompletedFuture());
         when(messageSource.firstToken(null)).thenReturn(FutureUtils.emptyCompletedFuture());
-        testSubject = Coordinator.builder()
-                                 .name(PROCESSOR_NAME)
-                                 .eventSource(messageSource)
-                                 .tokenStore(tokenStore)
-                                 .unitOfWorkFactory(new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE))
-                                 .executorService(executorService)
-                                 .workPackageFactory((segment, trackingToken) -> workPackage)
-                                 .processingStatusUpdater((id, updater) -> {})
-                                 .initialToken(es -> es.firstToken(null).thenApply(ReplayToken::createReplayToken))
-                                 .maxSegmentProvider(e -> SEGMENTS.size())
-                                 .build();
+        testSubject = buildCoordinator();
+    }
+
+    private Coordinator buildCoordinator() {
+        return buildCoordinatorWith(builder -> builder);
+    }
+
+    private Coordinator buildCoordinatorWith(UnaryOperator<Coordinator.Builder> customizer) {
+        return customizer.apply(Coordinator.builder()
+                                           .name(PROCESSOR_NAME)
+                                           .eventSource(messageSource)
+                                           .tokenStore(tokenStore)
+                                           .unitOfWorkFactory(new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE))
+                                           .executorService(executorService)
+                                           .workPackageFactory((segment, trackingToken) -> workPackage)
+                                           .processingStatusUpdater((id, updater) -> {})
+                                           .initialToken(es -> es.firstToken(null).thenApply(ReplayToken::createReplayToken))
+                                           .maxSegmentProvider(e -> SEGMENTS.size()))
+                         .build();
     }
 
     @Test
@@ -198,16 +207,16 @@ class CoordinatorTest {
 
         testSubject.start();
 
-        assertWithin(500, TimeUnit.MILLISECONDS,
-                     () -> verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ONE), any()));
+        await().atMost(500, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ONE), any()));
 
-        assertWithin(500,
-                     TimeUnit.MILLISECONDS,
-                     () -> verify(messageSource).open(streamingFrom(testToken), null));
+        await().atMost(500, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> verify(messageSource).open(streamingFrom(testToken), null));
 
         //noinspection unchecked
         ArgumentCaptor<List<MessageStream.Entry<? extends EventMessage>>> eventsCaptor = ArgumentCaptor.forClass(List.class);
-        assertWithin(500, TimeUnit.MILLISECONDS, () -> verify(workPackage).scheduleEvents(eventsCaptor.capture()));
+        await().atMost(500, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> verify(workPackage).scheduleEvents(eventsCaptor.capture()));
 
         var resultEvents = eventsCaptor.getValue();
         assertEquals(2, resultEvents.size());
@@ -340,10 +349,10 @@ class CoordinatorTest {
     class InitializeTokenStoreWithRetry {
 
         @BeforeEach
-        void stubExecutorExecuteToRunImmediately() {
-            // The JDK-internal delayer fires executorService.execute(r) after the real 100 ms.
-            // Stub execute so the runnable runs immediately once the delay has elapsed,
-            // allowing the CompletableFuture chain to continue without further blocking.
+        void setUp() {
+            testSubject = buildCoordinatorWith(b -> b.tokenStoreInitRetryInterval(1).tokenStoreInitMaxRetries(3));
+            // The JDK-internal delayer fires executorService.execute(r) after the retry interval.
+            // Stub execute so the runnable runs immediately once the delay has elapsed.
             doAnswer(invocation -> {
                 ((Runnable) invocation.getArgument(0)).run();
                 return null;
@@ -367,7 +376,7 @@ class CoordinatorTest {
             CompletableFuture<Void> startFuture = testSubject.start();
 
             // then - fetchSegments is called twice (initial attempt + 1 retry) and start completes normally
-            assertWithin(1, TimeUnit.SECONDS, () -> {
+            await().atMost(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 assertTrue(startFuture.isDone());
                 assertFalse(startFuture.isCompletedExceptionally());
             });
@@ -383,11 +392,11 @@ class CoordinatorTest {
             // when
             CompletableFuture<Void> startFuture = testSubject.start();
 
-            // then - after all 30 retries (each separated by a real 100 ms JDK delay, ~3 s total)
-            //        the future completes exceptionally with a ProcessRetriesExhaustedException
-            assertWithin(5, TimeUnit.SECONDS, () -> assertTrue(startFuture.isCompletedExceptionally()));
+            // then - after all 3 retries the future completes exceptionally with a ProcessRetriesExhaustedException
+            await().atMost(1, TimeUnit.SECONDS).untilAsserted(() -> assertTrue(startFuture.isCompletedExceptionally()));
             CompletionException thrown = assertThrows(CompletionException.class, startFuture::join);
             assertInstanceOf(ProcessRetriesExhaustedException.class, thrown.getCause());
+            verify(tokenStore, times(3)).fetchSegments(eq(PROCESSOR_NAME), any());
         }
     }
 
@@ -457,7 +466,7 @@ class CoordinatorTest {
             CompletableFuture<Void> startFuture = coordinator.start();
 
             // then - the shutdown action is triggered once the start future completes exceptionally
-            assertWithin(5, TimeUnit.SECONDS, () -> {
+            await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
                 assertTrue(startFuture.isCompletedExceptionally());
                 assertTrue(shutdownInvoked.get());
             });
