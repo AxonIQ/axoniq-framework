@@ -30,6 +30,18 @@ Axon Framework is a framework for building evolutionary, event-driven microservi
 - **Composition over Inheritance**: Favors composition patterns throughout the codebase
 - **Declarative Configuration**: Moving from annotation-heavy to declarative configuration approaches
 
+## Branching Strategy
+
+| Branch Pattern | Purpose |
+|---|---|
+| `main` | Next minor or major release. Always contains all commits — patch branch changes flow upward into `main`. |
+| `axon-[2-5].[0-12].x` | Patch release branches (e.g., `axon-5.0.x`). Changes to a patch branch are merged upward through higher patch branches and ultimately into `main`. |
+| `bug/[issue-number]/[name]` | Bug fixes. Prefix groups all bug branches together; issue number sub-groups related branches. |
+| `enhancement/[issue-number]/[name]` | Enhancements to existing features. |
+| `feature/[issue-number]/[name]` | New features. |
+| `documentation/[issue-number]/[name]` | Documentation-only changes. |
+| `dependency-upgrade/[issue-number]/[name]` | Dependency version upgrades. |
+
 ## Build Commands
 
 Maven wrapper is used (`./mvnw`). Key commands:
