@@ -275,7 +275,7 @@ class DefaultEventHandlingComponentsConfigurerTest {
 
             var builtComponent = new DefaultEventHandlingComponentsConfigurer()
                     .declarative("comp", cfg -> component)
-                    .withExceptionHandler((event, context, error) -> { invocationLog.add("exceptionHandler"); return MessageStream.empty(); })
+                    .withExceptionHandler(c -> (event, context, error) -> { invocationLog.add("exceptionHandler"); return MessageStream.empty(); })
                     .toMap()
                     .get("comp")
                     .build(configurer.build());
@@ -296,7 +296,7 @@ class DefaultEventHandlingComponentsConfigurerTest {
 
             var builtComponent = new DefaultEventHandlingComponentsConfigurer()
                     .declarative("comp", cfg -> component)
-                    .withExceptionHandler((event, context, error) -> MessageStream.empty())
+                    .withExceptionHandler(c -> (event, context, error) -> MessageStream.empty())
                     .toMap()
                     .get("comp")
                     .build(configurer.build());
@@ -317,7 +317,7 @@ class DefaultEventHandlingComponentsConfigurerTest {
 
             var builtComponent = new DefaultEventHandlingComponentsConfigurer()
                     .declarative("comp", cfg -> component)
-                    .withExceptionHandler((event, context, error) -> MessageStream.failed(new IOException("wrapped")))
+                    .withExceptionHandler(c -> (event, context, error) -> MessageStream.failed(new IOException("wrapped")))
                     .toMap()
                     .get("comp")
                     .build(configurer.build());
@@ -339,7 +339,7 @@ class DefaultEventHandlingComponentsConfigurerTest {
 
             var builtComponent = new DefaultEventHandlingComponentsConfigurer()
                     .declarative("comp", cfg -> component)
-                    .withExceptionHandler((event, context, error) -> { throw new RuntimeException("unexpected"); })
+                    .withExceptionHandler(c -> (event, context, error) -> { throw new RuntimeException("unexpected"); })
                     .toMap()
                     .get("comp")
                     .build(configurer.build());
@@ -366,7 +366,7 @@ class DefaultEventHandlingComponentsConfigurerTest {
             var built = new DefaultEventHandlingComponentsConfigurer()
                     .declarative("comp1", cfg -> comp1)
                     .declarative("comp2", cfg -> comp2)
-                    .withExceptionHandler((event, context, error) -> { invocationLog.add(error.getMessage()); return MessageStream.empty(); })
+                    .withExceptionHandler(c -> (event, context, error) -> { invocationLog.add(error.getMessage()); return MessageStream.empty(); })
                     .toMap();
             var cfg = configurer.build();
 
