@@ -62,8 +62,11 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "management.endpoints.migrate-legacy-ids=true"
         }
 )
-@Disabled("TODO as part of issue #3310")
 class AxonAutoConfigurationWithGracefulShutdownTest {
+
+    // Counted down by DummyController when a request is actively being handled,
+    // so tests can reliably trigger shutdown only after the request is in-flight.
+    static volatile CountDownLatch requestHandlerStarted;
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -71,7 +74,6 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
     @LocalServerPort
     private int port;
 
-    @Disabled("TODO as part of issue #3310")
     @Test
     @DirtiesContext
     void whenPostForActuatorShutdownThenShuttingDownIsStarted() {
@@ -84,18 +86,14 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
         assertThat((String) entity.getBody().get("message")).contains("Shutting down");
     }
 
-    @Disabled("TODO as part of issue #3310")
     @Test
     @DirtiesContext
     void givenActiveRequestWhenTriggerShutdownThenWaitingForRequestsToComplete() throws Exception {
         // given
-        CountDownLatch requestStarted = new CountDownLatch(1);
+        requestHandlerStarted = new CountDownLatch(1);
         CompletableFuture<ResponseEntity<DummyQueryResponse>> requestActiveDuringShutdown = CompletableFuture.supplyAsync(
-                () -> {
-                    requestStarted.countDown();
-                    return restTemplate.getForEntity("http://localhost:" + port + "/dummy", DummyQueryResponse.class);
-                });
-        assertThat(requestStarted.await(1, TimeUnit.SECONDS)).isTrue();
+                () -> restTemplate.getForEntity("http://localhost:" + port + "/dummy", DummyQueryResponse.class));
+        assertThat(requestHandlerStarted.await(2, TimeUnit.SECONDS)).isTrue();
 
         // when
         ResponseEntity<Void> shutdownResponse = this.restTemplate.postForEntity(
@@ -126,7 +124,7 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
         @Component
         static class DummyQueryHandler {
 
-            @QueryHandler(queryName = "dummy")
+            @QueryHandler
             DummyQueryResponse handle(DummyQuery query) {
                 return new DummyQueryResponse("Successful response!");
             }
@@ -146,6 +144,9 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
 
             @GetMapping("/dummy")
             ResponseEntity<?> dummyQuery() throws InterruptedException {
+                if (requestHandlerStarted != null) {
+                    requestHandlerStarted.countDown();
+                }
                 logger.info("GRACEFUL SHUTDOWN TEST | Before sleep...");
                 Thread.sleep(1000);
                 logger.info("GRACEFUL SHUTDOWN TEST | After sleep...");
