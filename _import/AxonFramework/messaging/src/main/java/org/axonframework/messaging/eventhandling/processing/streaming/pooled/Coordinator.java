@@ -98,7 +98,7 @@ class Coordinator {
     private final long tokenClaimInterval;
     private final long claimExtensionThreshold;
     private final long tokenStoreInitRetryInterval;
-    private final int tokenStoreInitMaxRetries;
+    private final long tokenStoreInitMaxRetries;
     private final Clock clock;
     private final MaxSegmentProvider maxSegmentProvider;
     private final int initialSegmentCount;
@@ -429,7 +429,7 @@ class Coordinator {
         private long tokenClaimInterval = 5000;
         private long claimExtensionThreshold = 5000;
         private long tokenStoreInitRetryInterval = 100;
-        private int tokenStoreInitMaxRetries = 30;
+        private long tokenStoreInitMaxRetries = 30;
         private Clock clock = GenericEventMessage.clock;
         private MaxSegmentProvider maxSegmentProvider;
         private int initialSegmentCount = 16;
@@ -575,7 +575,7 @@ class Coordinator {
          * @param tokenStoreInitMaxRetries the maximum number of token store initialization attempts
          * @return the current Builder instance, for fluent interfacing
          */
-        Builder tokenStoreInitMaxRetries(int tokenStoreInitMaxRetries) {
+        Builder tokenStoreInitMaxRetries(long tokenStoreInitMaxRetries) {
             this.tokenStoreInitMaxRetries = tokenStoreInitMaxRetries;
             return this;
         }

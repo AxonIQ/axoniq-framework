@@ -101,6 +101,10 @@ class CoordinatorTest {
         return buildCoordinatorWith(builder -> builder);
     }
 
+    private void awaitStart(Coordinator coordinator) {
+        coordinator.start().orTimeout(1, TimeUnit.SECONDS).join();
+    }
+
     private Coordinator buildCoordinatorWith(UnaryOperator<Coordinator.Builder> customizer) {
         return customizer.apply(Coordinator.builder()
                                            .name(PROCESSOR_NAME)
@@ -131,7 +135,7 @@ class CoordinatorTest {
         doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
 
         //act
-        testSubject.start();
+        awaitStart(testSubject);
 
         //asserts
         verify(executorService, times(1)).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
@@ -159,7 +163,7 @@ class CoordinatorTest {
         doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
 
         //act
-        testSubject.start();
+        awaitStart(testSubject);
 
         //asserts
         verify(executorService, times(1)).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
@@ -205,7 +209,7 @@ class CoordinatorTest {
                 .thenReturn(completedFuture(testToken));
         when(messageSource.open(streamingFrom(testToken), null)).thenReturn(testStream);
 
-        testSubject.start();
+        awaitStart(testSubject);
 
         await().atMost(500, TimeUnit.MILLISECONDS)
                .untilAsserted(() -> verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ONE), any()));
@@ -248,7 +252,7 @@ class CoordinatorTest {
                     .when(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
 
             // when
-            testSubject.start();
+            awaitStart(testSubject);
 
             // then - token claim was attempted, no work package created for the segment
             verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), any(Segment.class), any());
@@ -275,7 +279,7 @@ class CoordinatorTest {
                     .when(messageSource).open(any(StreamingCondition.class), isNull());
 
             // when
-            testSubject.start();
+            awaitStart(testSubject);
 
             // then - SEGMENT_ZERO was attempted but skipped; SEGMENT_ONE was still claimed and scheduled
             verify(tokenStore).fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_ZERO), any());
@@ -295,7 +299,7 @@ class CoordinatorTest {
         doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
 
         // when
-        testSubject.start();
+        awaitStart(testSubject);
 
         // then - the unexpected exception propagates through claimSegmentToken and triggers a retry
         verify(executorService).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
@@ -318,7 +322,7 @@ class CoordinatorTest {
         doReturn(abortFuture).when(workPackage).abort(any());
 
         //act
-        testSubject.start();
+        awaitStart(testSubject);
 
         //asserts
         verify(messageSource, never()).open(any(StreamingCondition.class), eq(null));
@@ -420,7 +424,7 @@ class CoordinatorTest {
         void returnsCompletedFutureWhenAlreadyRunning() {
             // given - coordinator already running
             doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
-            testSubject.start();
+            awaitStart(testSubject);
 
             // when - start is called again
             CompletableFuture<Void> secondStart = testSubject.start();
@@ -435,7 +439,7 @@ class CoordinatorTest {
             // given - coordinator that has been started and then stopped (shutdown handle not yet done,
             //         because the coordination task was captured without running)
             doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
-            testSubject.start();
+            awaitStart(testSubject);
             testSubject.stop();
 
             // when / then
@@ -512,7 +516,7 @@ class CoordinatorTest {
             doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
 
             // when
-            coordinator.start();
+            awaitStart(coordinator);
 
             // then - the work package is still registered and scheduled despite the failing claim listener
             verify(workPackage).scheduleWorker();
@@ -545,7 +549,7 @@ class CoordinatorTest {
             doAnswer(runTaskSync()).when(executorService).submit(any(Runnable.class));
 
             // when
-            testSubject.start();
+            awaitStart(testSubject);
 
             // then - firstToken is consulted to determine the stream start position,
             //        and the stream is subsequently opened from that resolved token
@@ -571,7 +575,7 @@ class CoordinatorTest {
             }).when(executorService).submit(any(Runnable.class));
             doReturn(completedFuture(SEGMENTS)).when(tokenStore).fetchSegments(eq(PROCESSOR_NAME), any());
 
-            testSubject.start();
+            awaitStart(testSubject);
 
             AtomicLong generationCounter = ReflectionUtils.getFieldValue(
                     Coordinator.class.getDeclaredField("coordinationTaskGeneration"), testSubject);
@@ -616,7 +620,7 @@ class CoordinatorTest {
             workPackages.put(SEGMENT_ID, workPackage);
 
             // when
-            coordinator.start();
+            awaitStart(coordinator);
 
             // then - abort is called with the unwrapped inner cause, not the CompletionException wrapper
             ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
@@ -655,7 +659,7 @@ class CoordinatorTest {
             workPackages.put(SEGMENT_ID, workPackage);
 
             // when
-            coordinator.start();
+            awaitStart(coordinator);
 
             // then - abort was triggered on the work package due to the extend-claim failure
             verify(workPackage, atLeastOnce()).abort(any());
@@ -688,7 +692,7 @@ class CoordinatorTest {
             workPackages.put(SEGMENT_ID, workPackage);
 
             // when
-            testSubject.start();
+            awaitStart(testSubject);
 
             // then - the null-stream guard triggers abort on the active work package
             verify(workPackage).abort(any());
@@ -725,7 +729,7 @@ class CoordinatorTest {
             workPackages.put(SEGMENT_ID, workPackage);
 
             // when
-            coordinator.start();
+            awaitStart(coordinator);
 
             // then - onSegmentReleased was invoked as part of the abort chain
             assertThat(releasedCalled.get()).isTrue();
@@ -761,7 +765,7 @@ class CoordinatorTest {
             workPackages.put(SEGMENT_ID, workPackage);
 
             // when
-            coordinator.start();
+            awaitStart(coordinator);
 
             // then - the failure is swallowed by the exceptionally handler and a retry is still scheduled
             verify(executorService).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
