@@ -1,14 +1,16 @@
 :navtitle: Relational Databases
 = Relational Database Tuning
 
-When using Axon Framework with a relational database, there are a few things worth tuning for better throughput and more predictable event-store behavior:
+== JPA event storage engine
+
+When using Axon Framework's JPA event storage engine with a relational database, there are a few things worth tuning for better throughput and more predictable event-store behavior:
 
 * use the right indexes for the event store tables
 * keep the JPA sequence generator aligned with the framework defaults
 * size the database connection pool for pooled streaming event processors
 * remember that the JPA event store in Axon Framework 5 is aggregate-based, not DCB-based
 
-== Important indices
+=== Important indices
 
 [#important_indices]
 :navtitle: Important Indices
@@ -49,7 +51,7 @@ Alternatively, you should configure the event store to convert timestamps to UTC
 The `aggregateType` and `type` columns store identifiers that are compared and queried often.
 Keep them compact, but do not sacrifice readability or compatibility with the configured message types.
 
-== Auto-increment and sequences
+=== Auto-increment and sequences
 
 [#auto_increment_and_sequences]
 :navtitle: Auto-Increment and Sequences
@@ -93,7 +95,7 @@ This indicates this file should be used to override existing annotations, instea
 For the best results, keep the event table on its own sequence and do not share it with unrelated tables.
 
 [#_postgresql_lob_annotated_columns_and_default_hibernate_mapping]
-== PostgreSQL, `@Lob`-annotated columns, and default Hibernate mapping
+=== PostgreSQL, `@Lob`-annotated columns, and default Hibernate mapping
 
 link:https://www.postgresql.org/[PostgreSQL] has two relevant mechanisms for large values: link:https://www.postgresql.org/docs/current/storage-toast.html[TOAST] and link:https://www.postgresql.org/docs/current/largeobjects.html[Large Object Storage].
 TOAST, the "oversized attribute storage technique," compresses columns larger than 8 KB when possible and otherwise moves them out of line into a separate table.
@@ -124,7 +126,7 @@ ifdef::advanced-framework[]
 NOTE: The xref:events:infrastructure.adoc#postgresql_event_storage_engine[PostgreSQL Event Storage Engine] is a dedicated event storage engine optimized for PostgreSQL 16, including full DCB support. Consider it as an alternative to the JPA-backed eventstore if you are using PostgreSQL.
 endif::[]
 
-=== Hibernate dialect changes
+==== Hibernate dialect changes
 
 To avoid `OID`, enforce `BYTEA` by providing a custom PostgreSQL dialect.
 
@@ -164,7 +166,7 @@ With the dialect in place, configure Hibernate to use it, for example through Sp
 jpa.database-platform=fully.qualified.classname.ByteaEnforcedPostgresSQLDialect
 ----
 
-=== Hibernate mapping override
+==== Hibernate mapping override
 
 You can also use Hibernate metadata overrides to map affected columns to `BYTEA` explicitly.
 Add an `orm.xml` file on the classpath under `META-INF` with the required overrides.
@@ -180,7 +182,7 @@ Add an `orm.xml` file on the classpath under `META-INF` with the required overri
 </entity-mappings>
 ----
 
-=== OID to BYTEA column migration
+==== OID to BYTEA column migration
 
 If you already have Axon-specific tables using `OID`, migrate them to `BYTEA`.
 For the `token_entry` table, the following SQL is a typical approach:
@@ -195,7 +197,7 @@ ALTER TABLE token_entry RENAME COLUMN token_bytea TO token;
 
 After the migration, the affected columns can be read directly again without going through large object indirection.
 
-== JPA and DCB
+=== JPA and DCB
 
 The JPA-backed event store in Axon Framework 5 is aggregate-based.
 If you are using Dynamic Consistency Boundaries, choose the event store or extension that supports that model instead.
@@ -203,7 +205,7 @@ If you are using Dynamic Consistency Boundaries, choose the event store or exten
 That distinction matters for performance tuning as well.
 JPA tuning here affects the aggregate-based storage path and the token store used by streaming processors.
 
-== Connection pools
+=== Connection pools
 
 Database activity in Axon Framework is not limited to event appends.
 Streaming processors claim tokens, advance tokens, and process events in batches, so the pool must support sustained concurrent access.
