@@ -69,7 +69,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author Allard Buijze
  * @author Simon Zambrovski
  */
-class EventProcessorPropertiesAndDefinitionInteractionTest {
+class EventProcessorPropertiesAndDefinitionInteractionIT {
 
     private static final String KEY1 = "org.axonframework.extension.springboot.fixture.event.test1";
     private static final String KEY2 = "org.axonframework.extension.springboot.fixture.event.test2";
@@ -138,7 +138,7 @@ class EventProcessorPropertiesAndDefinitionInteractionTest {
 
     @Nested
     @SpringBootTest(
-            classes = {EventProcessorPropertiesAndDefinitionInteractionTest.MyCustomContext.class},
+            classes = {EventProcessorPropertiesAndDefinitionInteractionIT.MyCustomContext.class},
             properties = {
                     "axon.eventstorage.jpa.polling-interval=0",
                     "axon.eventhandling.processors[org.axonframework.extension.springboot.fixture.event.test1].mode=pooled",
@@ -245,7 +245,7 @@ class EventProcessorPropertiesAndDefinitionInteractionTest {
 
     @Nested
     @SpringBootTest(
-            classes = {EventProcessorPropertiesAndDefinitionInteractionTest.MyCustomContext.class},
+            classes = {EventProcessorPropertiesAndDefinitionInteractionIT.MyCustomContext.class},
             properties = {
                     "axon.eventstorage.jpa.polling-interval=0",
                     "axon.eventhandling.processors[org.axonframework.extension.springboot.fixture.event.test1].mode=subscribing",
@@ -284,7 +284,7 @@ class EventProcessorPropertiesAndDefinitionInteractionTest {
 
     @Nested
     @SpringBootTest(
-            classes = {EventProcessorPropertiesAndDefinitionInteractionTest.MyCustomContext.class,
+            classes = {EventProcessorPropertiesAndDefinitionInteractionIT.MyCustomContext.class,
                     SubscribingEventProcessorDefinitionContext.class},
             properties = {
                     "axon.eventstorage.jpa.polling-interval=0"
@@ -328,7 +328,7 @@ class EventProcessorPropertiesAndDefinitionInteractionTest {
 
     @Nested
     @SpringBootTest(
-            classes = {EventProcessorPropertiesAndDefinitionInteractionTest.MyCustomContext.class,
+            classes = {EventProcessorPropertiesAndDefinitionInteractionIT.MyCustomContext.class,
                     SubscribingEventProcessorDefinitionContext.class,
                     PooledStreamingEventProcessorDefinitionContext.class},
             properties = {

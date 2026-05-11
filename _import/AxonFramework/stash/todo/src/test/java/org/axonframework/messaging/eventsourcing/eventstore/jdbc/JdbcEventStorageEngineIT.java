@@ -68,7 +68,7 @@ import static org.mockito.Mockito.*;
         @Tag("slow"),
 })
 @Disabled("Disabled as part of hefty BlockingStream adjustments")
-class JdbcEventStorageEngineTest
+class JdbcEventStorageEngineIT
         extends BatchingEventStorageEngineTest<LegacyJdbcEventStorageEngine, LegacyJdbcEventStorageEngine.Builder> {
 
     private JDBCDataSource dataSource;

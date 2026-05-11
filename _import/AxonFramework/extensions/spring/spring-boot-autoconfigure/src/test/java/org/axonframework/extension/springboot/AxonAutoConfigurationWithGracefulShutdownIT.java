@@ -63,7 +63,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         }
 )
 @Disabled("TODO as part of issue #3310")
-class AxonAutoConfigurationWithGracefulShutdownTest {
+class AxonAutoConfigurationWithGracefulShutdownIT {
 
     @Autowired
     private TestRestTemplate restTemplate;

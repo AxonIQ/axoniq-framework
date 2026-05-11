@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Simon Zambrovski
  * @author Steven van Beelen
  */
-class EventProcessorPropertiesTest {
+class EventProcessorPropertiesIT {
 
     @SpringBootTest(classes = MyContext.class)
     @Nested

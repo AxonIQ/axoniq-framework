@@ -56,7 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Steven van Beelen
  */
-class EventHandlerSelectorTest {
+class EventHandlerSelectorIT {
 
     private static final String ORDERS_NAMESPACE = "orders";
     private static final String ORDERS_PROCESSOR_NAME = "EventProcessor[" + ORDERS_NAMESPACE + "]";

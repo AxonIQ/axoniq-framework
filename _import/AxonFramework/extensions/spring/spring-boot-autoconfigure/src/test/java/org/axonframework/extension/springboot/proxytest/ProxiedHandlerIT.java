@@ -45,13 +45,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest(
-    classes = ProxiedHandlerTest.TestConfig.class,
+    classes = ProxiedHandlerIT.TestConfig.class,
     properties = {
         "axon.eventstorage.jpa.polling-interval=0"
     }
 )
 @EnableAutoConfiguration
-class ProxiedHandlerTest {
+class ProxiedHandlerIT {
     @Inject private ProxiedEventHandler proxiedEventHandler;
     @Inject private ScopeProxiedEventHandler scopeProxiedEventHandler;
     @Inject private ProxiedCommandHandler proxiedCommandHandler;
@@ -90,7 +90,7 @@ class ProxiedHandlerTest {
     }
 
     @Configuration
-    @ComponentScan(basePackageClasses = ProxiedHandlerTest.class)
+    @ComponentScan(basePackageClasses = ProxiedHandlerIT.class)
     static class TestConfig {
         @Bean
         static MethodValidationPostProcessor mvpp() {
