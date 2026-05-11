@@ -31,6 +31,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -85,6 +87,7 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
 
         // then
         assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(entity.getBody()).isNotNull();
         assertThat((String) entity.getBody().get("message")).contains("Shutting down");
     }
 
@@ -124,7 +127,9 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
 
         @Bean
         public TestRestTemplate testRestTemplate() {
-            return new TestRestTemplate();
+            return new TestRestTemplate(new RestTemplateBuilder()
+                                                .connectTimeout(Duration.ofSeconds(5))
+                                                .readTimeout(Duration.ofSeconds(5)));
         }
 
         @Component
@@ -155,7 +160,8 @@ class AxonAutoConfigurationWithGracefulShutdownTest {
                 logger.info("GRACEFUL SHUTDOWN TEST | Before sleep...");
                 Thread.sleep(1000);
                 logger.info("GRACEFUL SHUTDOWN TEST | After sleep...");
-                var queryMessage = new GenericQueryMessage(new MessageType(new QualifiedName("dummy")), new DummyQuery());
+                var queryMessage = new GenericQueryMessage(new MessageType(new QualifiedName("dummy")),
+                                                           new DummyQuery());
                 try {
                     var resultOpt = queryGateway.query(queryMessage, DummyQueryResponse.class, null);
                     var result = resultOpt.get(1, TimeUnit.SECONDS);
