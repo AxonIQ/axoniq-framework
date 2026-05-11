@@ -341,11 +341,10 @@ class WorkPackage {
             aborting.complete(abortException.get());
             return;
         }
-        processEvents().whenCompleteAsync(this::onProcessingComplete, executorService);
+        processEvents().whenCompleteAsync((unused, e) -> onProcessingComplete(e), executorService);
     }
 
-    private void onProcessingComplete(@Nullable Void ignored, @Nullable Throwable e) {
-        processingEvents.set(false);
+    private void onProcessingComplete(@Nullable Throwable e) {
         if (e != null) {
             Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
             logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
@@ -388,11 +387,13 @@ class WorkPackage {
                     batchProcessedCallback.run();
                 }
             });
+            CompletableFuture<Void> result;
             try {
-                return unitOfWork.execute();
+                result = unitOfWork.execute();
             } catch (Exception e) {
-                return CompletableFuture.failedFuture(e);
+                result = CompletableFuture.failedFuture(e);
             }
+            return result.whenComplete((v, t) -> processingEvents.set(false));
         } else {
             segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
             if (lastStoredToken != lastConsumedToken && now() > nextClaimExtension.get()) {

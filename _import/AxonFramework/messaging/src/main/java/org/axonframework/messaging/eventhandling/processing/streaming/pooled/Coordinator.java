@@ -846,14 +846,14 @@ class Coordinator {
                                  generation);
                     claimAndStreamFuture = claimNewSegments()
                             .thenCompose(newSegments -> {
-                                TrackingToken[] position = {streamStartPosition};
+                                AtomicReference<TrackingToken> position = new AtomicReference<>(streamStartPosition);
                                 CompletableFuture<Void> chain = emptyCompletedFuture();
                                 for (Map.Entry<Segment, TrackingToken> entry : newSegments.entrySet()) {
                                     Segment segment = entry.getKey();
                                     TrackingToken token = entry.getValue();
                                     TrackingToken otherUnwrapped = WrappedToken.unwrapLowerBound(token);
-                                    position[0] = position[0] == null || otherUnwrapped == null
-                                            ? null : position[0].lowerBound(otherUnwrapped);
+                                    position.updateAndGet(p -> p == null || otherUnwrapped == null
+                                            ? null : p.lowerBound(otherUnwrapped));
                                     int segmentId = segment.getSegmentId();
                                     if (!workPackages.containsKey(segmentId)) {
                                         chain = chain.thenCompose(ignored ->
@@ -869,7 +869,7 @@ class Coordinator {
                                             generation,
                                             newSegments.size());
                                 }
-                                return chain.thenCompose(ignored -> ensureOpenStream(position[0]));
+                                return chain.thenCompose(ignored -> ensureOpenStream(position.get()));
                             });
                 }
                 claimAndStreamFuture.whenComplete((ignored, e) -> {
@@ -886,10 +886,9 @@ class Coordinator {
                         coordinateEvents();
                     }
                 });
-                return;
+            } else {
+                coordinateEvents();
             }
-
-            coordinateEvents();
         }
 
         private void coordinateEvents() {
