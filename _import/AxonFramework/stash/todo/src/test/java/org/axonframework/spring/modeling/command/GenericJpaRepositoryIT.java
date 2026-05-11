@@ -69,10 +69,10 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(SpringExtension.class)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
-@ContextConfiguration(classes = GenericJpaRepositoryIntegrationTest.TestContext.class)
+@ContextConfiguration(classes = GenericJpaRepositoryIT.TestContext.class)
 @Transactional
 @Disabled("State based aggregates are not supported") // FIXME #3499
-class GenericJpaRepositoryIntegrationTest implements EventMessageHandler {
+class GenericJpaRepositoryIT implements EventMessageHandler {
 
     private final List<EventMessage> capturedEvents = new ArrayList<>();
     @Autowired

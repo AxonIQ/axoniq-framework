@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * @author Jan-Hendrik Kuperus
  */
-class FixtureTest_MarkDeleted {
+class FixtureMarkDeletedTest {
 
     private FixtureConfiguration<AnnotatedAggregate> fixture;
 

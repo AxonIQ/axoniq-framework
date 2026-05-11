@@ -573,18 +573,7 @@
                         <log4j.version>${log4j.version}</log4j.version>
                         <test.forkNumber>$${surefire.forkNumber}</test.forkNumber>
                     </systemPropertyVariables>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/*Tests.java</include>
-                        <include>**/*Test_*.java</include>
-                        <include>**/*Tests_*.java</include>
-                    </includes>
-                    <excludes>
-                        <exclude>**/*IntegrationTest.java</exclude>
-                        <exclude>**/*IntegrationTests.java</exclude>
-                        <exclude>**/*IntegrationTest_*.java</exclude>
-                        <exclude>**/*IntegrationTests_*.java</exclude>
-                    </excludes>
+
                 </configuration>
             </plugin>
             <!-- package -->
@@ -705,22 +694,7 @@
                                     <systemPropertyVariables>
                                         <test.forkNumber>${surefire.forkNumber}</test.forkNumber>
                                     </systemPropertyVariables>
-                                    <includes>
-                                        <include>**/*IntegrationTest.java</include>
-                                        <include>**/*IntegrationTests.java</include>
-                                        <include>**/*IntegrationTest_*.java</include>
-                                        <include>**/*IntegrationTests_*.java</include>
-                                        <!-- these are the defaults -->
-                                        <include>**/IT*.java</include>
-                                        <include>**/*IT.java</include>
-                                        <include>**/*ITCase.java</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>**/*Test.java</exclude>
-                                        <exclude>**/*Tests.java</exclude>
-                                        <exclude>**/*Test_*.java</exclude>
-                                        <exclude>**/*Tests_*.java</exclude>
-                                    </excludes>
+
                                 </configuration>
                             </execution>
 

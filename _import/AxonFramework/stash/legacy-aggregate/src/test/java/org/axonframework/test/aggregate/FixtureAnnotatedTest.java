@@ -44,7 +44,7 @@ import static org.mockito.Mockito.*;
  *
  * @author Allard Buijze
  */
-class FixtureTest_Annotated {
+class FixtureAnnotatedTest {
 
     private static final String AGGREGATE_ID = "aggregateId";
 

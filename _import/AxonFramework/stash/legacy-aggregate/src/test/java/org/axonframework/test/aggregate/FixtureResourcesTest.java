@@ -34,7 +34,7 @@ import static org.mockito.Mockito.*;
 /**
  * @author Allard Buijze
  */
-class FixtureTest_Resources {
+class FixtureResourcesTest {
 
     private FixtureConfiguration<AggregateWithResources> fixture;
 

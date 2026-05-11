@@ -39,7 +39,7 @@ import static org.mockito.Mockito.*;
  * @author Allard Buijze
  * @since 0.7
  */
-class FixtureTest_MatcherParams {
+class FixtureMatcherParamsTest {
 
     private FixtureConfiguration<StandardAggregate> fixture;
 
@@ -196,7 +196,7 @@ class FixtureTest_MatcherParams {
                         .expectEvents(new DoesMatch<List<? extends EventMessage>>())
         );
         assertTrue(e.getMessage().contains("The published events do not match the expected events"));
-        assertTrue(e.getMessage().contains("FixtureTest_MatcherParams$DoesMatch <|> "));
+        assertTrue(e.getMessage().contains("FixtureMatcherParamsTest$DoesMatch <|> "));
         assertTrue(e.getMessage().contains("probable cause"));
     }
 

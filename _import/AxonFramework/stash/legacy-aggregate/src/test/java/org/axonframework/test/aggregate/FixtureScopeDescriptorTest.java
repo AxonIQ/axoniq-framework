@@ -33,7 +33,7 @@ import static org.axonframework.modelling.command.AggregateLifecycle.apply;
  *
  * @author Steven van Beelen
  */
-class FixtureTest_ScopeDescriptor {
+class FixtureScopeDescriptorTest {
 
     private FixtureConfiguration<TestAggregate> fixture;
 

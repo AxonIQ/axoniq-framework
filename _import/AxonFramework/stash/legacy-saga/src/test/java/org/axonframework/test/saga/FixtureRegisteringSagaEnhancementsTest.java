@@ -38,7 +38,7 @@ import static org.mockito.Mockito.*;
  *
  * @author Steven van Beelen
  */
-class FixtureTest_RegisteringSagaEnhancements {
+class FixtureRegisteringSagaEnhancementsTest {
 
     private SagaTestFixture<SomeTestSaga> testSubject;
 

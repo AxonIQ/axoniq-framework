@@ -52,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author Steven van Beelen
  */
 @Disabled("#3710 Reenable after ParameterResolver fix")
-public class FixtureTest_RegisteringMethodEnhancements {
+public class FixtureRegisteringMethodEnhancementsTest {
 
     private static final String TEST_AGGREGATE_IDENTIFIER = "aggregate-identifier";
 

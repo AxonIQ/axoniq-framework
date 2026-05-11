@@ -25,7 +25,7 @@ import org.junit.jupiter.api.*;
  *
  * @author Milan Savic
  */
-class FixtureTest_Deadlines {
+class FixtureDeadlinesTest {
 
     private static final String AGGREGATE_ID = "id";
     private static final CreateMyAggregateCommand CREATE_COMMAND = new CreateMyAggregateCommand(AGGREGATE_ID);

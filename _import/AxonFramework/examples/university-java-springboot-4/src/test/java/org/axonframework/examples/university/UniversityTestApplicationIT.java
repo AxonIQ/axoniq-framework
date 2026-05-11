@@ -27,7 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
-class UniversityTestApplicationITest {
+class UniversityTestApplicationIT {
 
     @Container
     private static final AxonServerContainer axonServer = new AxonServerContainer()
@@ -39,23 +39,24 @@ class UniversityTestApplicationITest {
     @SpringBootTest(classes = UniversityExampleApplication.class)
     @ActiveProfiles("itest")
     class DefaultTests {
-    @DynamicPropertySource
-    static void datasourceProperties(DynamicPropertyRegistry registry) {
-      registry.add("axon.axonserver.servers", axonServer::getAxonServerAddress);
-    }
 
-    @BeforeAll
-    static void setContextUp() throws Exception {
-      // Mainly needed to create DBC context now:
-      AxonServerContainerUtils.purgeEventsFromAxonServer(axonServer.getHost(),
-                                                         axonServer.getHttpPort(),
-                                                         "default",
-                                                         AxonServerContainerUtils.DCB_CONTEXT);
-    }
+        @DynamicPropertySource
+        static void datasourceProperties(DynamicPropertyRegistry registry) {
+            registry.add("axon.axonserver.servers", axonServer::getAxonServerAddress);
+        }
 
-    @Test
-    void applicationStarts() {
-      // just run
+        @BeforeAll
+        static void setContextUp() throws Exception {
+            // Mainly needed to create DBC context now:
+            AxonServerContainerUtils.purgeEventsFromAxonServer(axonServer.getHost(),
+                                                               axonServer.getHttpPort(),
+                                                               "default",
+                                                               AxonServerContainerUtils.DCB_CONTEXT);
+        }
+
+        @Test
+        void applicationStarts() {
+            // just run
+        }
     }
-  }
 }
