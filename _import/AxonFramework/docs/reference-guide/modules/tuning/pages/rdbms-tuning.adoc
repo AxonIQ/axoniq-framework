@@ -101,13 +101,20 @@ Large Object Storage uses a fixed `OID` column type and points to the actual dat
 
 That distinction matters for Axon Framework because JPA uses `@Lob` for several serialized columns.
 Those include the event payload and metadata columns, token storage, saga state, and dead-letter diagnostics.
-With PostgreSQL and Hibernate, `@Lob` fields are typically mapped to the large object path, which means the main table stores an `OID` instead of the actual byte array.
 
+With PostgreSQL and Hibernate, `@Lob` fields are mapped to the large object path depending on the Hibernate version you are using.
+which means the main table stores an `OID` instead of the actual byte array.
 That default is usually not what you want for Axon Framework storage.
 It adds indirection on reads, leaves large object rows behind when the original row changes, and makes token updates more expensive than they need to be.
 Where possible, prefer the normal byte array storage path and let PostgreSQL use TOAST instead of Large Object Storage.
 
-The practical options are:
+[NOTE]
+====
+Hibernate's PostgreSQL LOB behavior is version-dependent, so double-check the mapping for the Hibernate version you are actually using before assuming `@Lob` will follow the normal `BYTEA` / `TEXT` path.
+Older baselines may still force `OID` for `@Lob`-annotated fields.
+====
+
+The practical options to handle this are:
 
 . Adjust the Hibernate dialect so `@Lob` maps to `BYTEA`.
 . Override the Hibernate mapping for the affected columns.
@@ -203,13 +210,6 @@ Streaming processors claim tokens, advance tokens, and process events in batches
 
 Size the pool so event handling does not block on connection acquisition.
 Leave enough headroom for command handling, token updates, and any other database users in the same application.
-
-Let the JPA provider and the database use the normal byte array storage path where possible.
-
-[NOTE]
-====
-For PostgreSQL specifically, avoid treating large object handling as a tuning shortcut for the event store. Hibernate's PostgreSQL LOB behavior is version-dependent, so double-check the mapping for the Hibernate version you are actually using before assuming `@Lob` will follow the normal `BYTEA` / `TEXT` path. Older baselines may still force `OID` for `@Lob`-annotated fields.
-====
 
 ifdef::advanced-framework[]
 include::connector:partial$postgresql-operations.adoc[]
