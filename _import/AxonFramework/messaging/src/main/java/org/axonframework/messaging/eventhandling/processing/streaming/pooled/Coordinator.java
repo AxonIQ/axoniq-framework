@@ -168,7 +168,9 @@ class Coordinator {
                         runState.updateAndGet(RunState::attemptStop)
                                 .shutdownHandle()
                                 .complete(null);
-                        if (e instanceof CompletionException ce) throw ce;
+                        if (e instanceof CompletionException ce) {
+                            throw ce;
+                        }
                         throw new CompletionException(e);
                     });
         } else if (!newState.isRunning) {
@@ -1167,7 +1169,9 @@ class Coordinator {
                             segmentId);
                     return claims;
                 }
-                if (e instanceof CompletionException ce) throw ce;
+                if (e instanceof CompletionException ce) {
+                    throw ce;
+                }
                 throw new CompletionException(e);
             });
         }
@@ -1192,7 +1196,7 @@ class Coordinator {
             }
 
             if (eventStream == null && !workPackages.isEmpty() && !(trackingToken instanceof NoToken)) {
-                CompletableFuture<TrackingToken> tokenFuture = trackingToken != null
+                CompletableFuture<TrackingToken> startPositionFuture = trackingToken != null
                         ? CompletableFuture.completedFuture(trackingToken)
                         : eventSource.firstToken(null);
                 return tokenFuture.thenAccept(startStreamingFrom -> {
