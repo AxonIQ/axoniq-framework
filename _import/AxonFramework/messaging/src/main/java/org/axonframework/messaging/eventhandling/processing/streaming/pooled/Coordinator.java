@@ -1199,7 +1199,7 @@ class Coordinator {
                 CompletableFuture<TrackingToken> startPositionFuture = trackingToken != null
                         ? CompletableFuture.completedFuture(trackingToken)
                         : eventSource.firstToken(null);
-                return tokenFuture.thenAccept(startStreamingFrom -> {
+                return startPositionFuture.thenAccept(startStreamingFrom -> {
                     eventStream = eventSource.open(
                             StreamingCondition.conditionFor(startStreamingFrom, eventCriteria), null
                     );
