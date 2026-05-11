@@ -833,11 +833,11 @@ class Coordinator {
                 return;
             }
 
+            CompletableFuture<Void> claimAndStreamFuture;
             if (eventStream == null || unclaimedSegmentValidationThreshold <= clock.instant().toEpochMilli()) {
                 // Claim new segments, construct work packages per new segment, and open stream based on lowest segment
                 unclaimedSegmentValidationThreshold = clock.instant().toEpochMilli() + tokenClaimInterval;
                 TrackingToken streamStartPosition = lastScheduledToken;
-                CompletableFuture<Void> claimAndStreamFuture;
                 if (releaseSegmentsIfTooManyClaimed()) {
                     claimAndStreamFuture = ensureOpenStream(streamStartPosition);
                 } else {
@@ -872,23 +872,24 @@ class Coordinator {
                                 return chain.thenCompose(ignored -> ensureOpenStream(position.get()));
                             });
                 }
-                claimAndStreamFuture.whenComplete((ignored, e) -> {
-                    if (e != null) {
-                        Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
-                        logger.warn(
-                                "Processor [{}] (Coordination Task [{}]). Exception occurred while starting work packages"
-                                        + " and opening the event stream.",
-                                name,
-                                generation,
-                                cause);
-                        abortAndScheduleRetry(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
-                    } else {
-                        coordinateEvents();
-                    }
-                });
             } else {
-                coordinateEvents();
+                // Stream is already open; no claiming needed, proceed immediately.
+                claimAndStreamFuture = emptyCompletedFuture();
             }
+            claimAndStreamFuture.whenComplete((ignored, e) -> {
+                if (e != null) {
+                    Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+                    logger.warn(
+                            "Processor [{}] (Coordination Task [{}]). Exception occurred while starting work packages"
+                                    + " and opening the event stream.",
+                            name,
+                            generation,
+                            cause);
+                    abortAndScheduleRetry(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
+                } else {
+                    coordinateEvents();
+                }
+            });
         }
 
         private void coordinateEvents() {
@@ -1083,7 +1084,7 @@ class Coordinator {
                         if (successfulClaims.size() >= maxSegmentsToClaim) {
                             return CompletableFuture.completedFuture(successfulClaims);
                         }
-                        return claimSegmentToken(candidate, successfulClaims);
+                        return claimSegment(candidate, successfulClaims);
                     });
                 }
                 return successfullyClaimedSegments;
@@ -1112,7 +1113,7 @@ class Coordinator {
             return candidates;
         }
 
-        private CompletableFuture<Map<Segment, TrackingToken>> claimSegmentToken(
+        private CompletableFuture<Map<Segment, TrackingToken>> claimSegment(
                 Segment segment, Map<Segment, TrackingToken> claims
         ) {
             int segmentId = segment.getSegmentId();
