@@ -67,7 +67,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "management.endpoints.migrate-legacy-ids=true"
         }
 )
-class AxonAutoConfigurationWithGracefulShutdownTest {
+class AxonAutoConfigurationWithGracefulShutdownIT {
 
     @Autowired
     private TestRestTemplate restTemplate;

@@ -25,7 +25,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @AxonSpringBootTest(properties = "axon.axonserver.enabled=false")
-class CreateCourseCommandTest {
+class CreateCourseCommandIT {
 
     @Autowired
     private AxonTestFixture fixture;
