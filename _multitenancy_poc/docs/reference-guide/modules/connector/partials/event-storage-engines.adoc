@@ -1,4 +1,5 @@
 [.axoniq-feature]
+[#axonserver_event_storage_engine]
 ==== `AxonServerEventStorageEngine`
 
 The `AxonServerEventStorageEngine` connects to link:https://www.axoniq.io/products/axon-server[Axon Server,window=_blank,role=external], fully supporting a Dynamic Consistency Boundaries where events may have several tags.
@@ -60,6 +61,7 @@ If you want to disable Axon Server as the default `EventStorageEngine`, you have
 ======
 
 [.axoniq-feature]
+[#aggregate_based_axonserver_event_storage_engine]
 ==== `AggregateBasedAxonServerEventStorageEngine`
 
 The `AggregateBasedAxonServerEventStorageEngine` uses Axon Server's API before we supported the Dynamic Consistency Boundary.
@@ -125,6 +127,7 @@ public class AxonConfig {
 ====
 
 [.axoniq-feature]
+[#postgresql_event_storage_engine]
 ==== `PostgresqlEventStorageEngine`
 
 The `PostgresqlEventStorageEngine` stores events directly in a PostgreSQL 16+ database, fully supporting Dynamic Consistency Boundaries where events may have several tags.
