@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 
 /**
@@ -123,7 +124,7 @@ class MergeTask extends CoordinatorTask {
                 return thisTokenFuture
                         .thenCombine(thatTokenFuture,
                                      (thisToken, thatToken) -> mergeSegments(thisSegment, thisToken, thatSegment, thatToken))
-                        .thenCompose(f -> f);
+                        .thenCompose(Function.identity());
             });
         });
     }

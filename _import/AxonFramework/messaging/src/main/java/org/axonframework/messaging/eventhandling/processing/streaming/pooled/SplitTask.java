@@ -129,16 +129,15 @@ class SplitTask extends CoordinatorTask {
                 context -> tokenStore.fetchToken(name, segmentToSplit.getSegmentId(), context)
                                      .thenApply(tokenToSplit -> TrackerStatus.split(segmentToSplit, tokenToSplit))
                                      .thenCompose(splitStatuses -> splitAndRelease(splitStatuses, segmentToSplit, context))
-        ).thenApply(unused -> true)
-         .whenComplete((result, throwable) ->
+        ).whenComplete((result, throwable) ->
                  // Remove the segment from the releases deadlines to allow the Coordinator to claim the split segments
                  releasesDeadlines.remove(segmentToSplit.getSegmentId())
          );
     }
 
-    private CompletableFuture<Void> splitAndRelease(TrackerStatus[] splitStatuses,
-                                                    Segment segmentToSplit,
-                                                    ProcessingContext context) {
+    private CompletableFuture<Boolean> splitAndRelease(TrackerStatus[] splitStatuses,
+                                                     Segment segmentToSplit,
+                                                     ProcessingContext context) {
         return tokenStore.initializeSegment(
                                  splitStatuses[1].getTrackingToken(),
                                  name,
@@ -161,10 +160,13 @@ class SplitTask extends CoordinatorTask {
                                  splitStatuses[0].getSegment(),
                                  context
                          ))
-                         .thenRun(() -> logger.info(
-                                 "Processor [{}] successfully split {} into {} and {}.",
-                                 name, segmentToSplit, splitStatuses[0].getSegment(), splitStatuses[1].getSegment()
-                         ));
+                         .thenApply(ignored -> {
+                             logger.info(
+                                     "Processor [{}] successfully split {} into {} and {}.",
+                                     name, segmentToSplit, splitStatuses[0].getSegment(), splitStatuses[1].getSegment()
+                             );
+                             return true;
+                         });
     }
 
     @Override
