@@ -1157,7 +1157,9 @@ class Coordinator {
                             segmentId);
                     return claims;
                 }
-                if (e instanceof CompletionException ce) throw ce;
+                if (e instanceof CompletionException ce) {
+                    throw ce;
+                }
                 throw new CompletionException(e);
             });
         }
