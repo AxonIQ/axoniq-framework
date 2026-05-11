@@ -42,6 +42,14 @@ Axon Framework is a framework for building evolutionary, event-driven microservi
 | `documentation/[issue-number]/[name]` | Documentation-only changes. |
 | `dependency-upgrade/[issue-number]/[name]` | Dependency version upgrades. |
 
+## Commit Guidelines
+* use a subject line
+* separate the subject line from the description by an empty line
+* focus on the how and why in the description, not the what
+* use the actual issue number at the start of the subject line, for example `[#2343]`
+* reference any related issue numbers in the commit message
+* avoid including unrelated changes in the same commit
+
 ## Build Commands
 
 Maven wrapper is used (`./mvnw`). Key commands:
