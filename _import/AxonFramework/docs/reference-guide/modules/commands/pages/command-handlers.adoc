@@ -339,23 +339,21 @@ For a complete list of supported parameters, see xref:messaging-concepts:support
 
 == Injecting multiple entities with `@InjectEntity`
 
-Command handlers can work with multiple entity instances by using the `@InjectEntity` annotation.
-This allows you to inject different entities as parameters, which Axon will automatically load based on the command:
+A single command handler can receive multiple entity instances as parameters.
+By default, `@InjectEntity` loads the entity whose ID matches the command's routing key.
+Use `idProperty` to load a second entity identified by a different command field:
 
 [source,java]
 ----
-import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
+import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.modelling.annotation.InjectEntity;
-import org.springframework.stereotype.Component;
 
 @Command(routingKey = "sourceCardId") // <1>
 public record TransferBalanceCommand(
     String sourceCardId,
     String destinationCardId,
-    String transactionId,
     int amount
-) {
-}
+) {}
 
 @Component
 public class GiftCardTransferHandler {
@@ -363,95 +361,28 @@ public class GiftCardTransferHandler {
     @CommandHandler
     public void handle(
         TransferBalanceCommand cmd,
-        @InjectEntity GiftCard sourceCard, // <2>
-        @InjectEntity(idProperty = "destinationCardId") GiftCard destinationCard, // <3>
-        EventAppender eventAppender
+        @InjectEntity GiftCard source,                                     // <2>
+        @InjectEntity(idProperty = "destinationCardId") GiftCard dest,    // <3>
+        EventAppender appender
     ) {
-        // Validate source card
-        if (sourceCard.getRemainingValue() < cmd.amount()) {
-            throw new IllegalStateException("Insufficient balance on source card");
+        if (source.getRemainingValue() < cmd.amount()) {
+            throw new IllegalStateException("Insufficient balance");
         }
-
-        // Perform transfer
-        eventAppender.append(
-            new BalanceDeductedEvent(cmd.sourceCardId(), cmd.amount(), cmd.transactionId()),
-            new BalanceAddedEvent(cmd.destinationCardId(), cmd.amount(), cmd.transactionId())
+        appender.append(
+            new BalanceDeducted(cmd.sourceCardId(), cmd.amount()),
+            new BalanceAdded(cmd.destinationCardId(), cmd.amount())
         );
     }
 }
 ----
 
-<1> The command's `routingKey` determines which card is the "primary" entity.
+<1> `routingKey` marks the primary entity identifier used to route the command to the correct node.
 
-<2> Without `idProperty`, the `@InjectEntity` behavior defaults to using the command's routing key to load an entity.
+<2> Without `idProperty`, Axon loads the entity whose ID matches the command's routing key (`sourceCardId`).
 
-<3> With `idProperty = "destinationCardId"`, Axon loads the destination card from a different property.
+<3> `idProperty = "destinationCardId"` tells Axon to load this entity using the `destinationCardId` field instead.
 
-[TIP]
-====
-By specifying the `idProperty` attributes on `@InjectEntity` annotated parameters you can load an entity based on different field or getter present in the command. This is an example of how a command handler can load different entities.
-====
-
-=== Manual loading with repository
-
-If you have a different way of loading required state (for example, from a custom data source or with special loading logic), you can manually load entities using the repository.
-However, this is effectively the same as a stateless command handler—you're just using services to access state:
-
-[source,java]
-----
-@Component
-public class GiftCardCustomLoadingHandler {
-
-    private final Repository<String, GiftCard> repository; // <1>
-    private final CustomCardLookupService cardLookup;
-
-    @CommandHandler
-    public CompletableFuture<Void> handle(
-        TransferBalanceByAccountCommand cmd,
-        ProcessingContext context, // <2>
-        EventAppender eventAppender // <3>
-    ) {
-        // Custom logic to determine which cards to use
-        String sourceCardId = cardLookup.findActiveCardForAccount(cmd.sourceAccountId());
-        String destCardId = cardLookup.findActiveCardForAccount(cmd.destinationAccountId());
-
-        // Load both entities, extract them, and combine
-        return repository.load(sourceCardId, context) // <4>
-                .thenApply(ManagedEntity::entity) // <5>
-                .thenCombine(
-                    repository.load(destCardId, context)
-                            .thenApply(ManagedEntity::entity), // <6>
-                    (sourceCard, destCard) -> {
-                        // Perform operations on loaded entities
-                        sourceCard.handle(
-                            new RedeemCardCommand(sourceCardId, cmd.transactionId(), cmd.amount()),
-                            eventAppender
-                        );
-                        destCard.handle(
-                            new RechargeCardCommand(destCardId, cmd.amount()),
-                            eventAppender
-                        );
-
-                        return null; // <7>
-                    }
-                );
-    }
-}
-----
-
-<1> `Repository` interface with proper generic types (ID type and Entity type).
-
-<2> `ProcessingContext` is injected to pass to repository operations.
-
-<3> `EventAppender` is injected as a parameter to publish events.
-
-<4> `repository.load()` returns a `CompletableFuture<ManagedEntity<ID, E>>`.
-
-<5> `thenApply(ManagedEntity::entity)` extracts the entity from the `ManagedEntity` wrapper.
-
-<6> Both load operations extract their entities, so `thenCombine()` receives the actual `GiftCard` instances directly.
-
-<7> Return `null` since the command handler return type is `CompletableFuture<Void>`.
+For full details on entity configuration and lifecycle, see xref:commands:entities/index.adoc[Entities].
 
 == Explicit command handler subscription
 

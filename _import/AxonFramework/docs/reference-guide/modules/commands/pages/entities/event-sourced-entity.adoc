@@ -65,6 +65,21 @@ They validate the command against current state and append events.
 They must never contain business logic, only state assignments.
 * **Entity creator**: a constructor or static factory method annotated with `@EntityCreator` that tells Axon how to construct the initial entity instance before replaying events.
 
+[IMPORTANT]
+====
+Command handlers validate and append events; they must never write to entity state fields.
+Event sourcing handlers update state; they must contain no business logic.
+
+This separation is critical because event sourcing handlers also run during replay when the entity is loaded from its event stream.
+Any business logic in an event sourcing handler would execute unexpectedly during replay.
+====
+
+[TIP]
+====
+An entity only needs the state required to make decisions about incoming commands.
+An event sourcing handler is only needed when the resulting state change is relevant for validating future commands.
+====
+
 [#entity-creation-with-entitycreator]
 === Entity creator
 
@@ -173,15 +188,6 @@ public class CourseEntity {
 <1> Axon invokes this constructor with the first event when sourcing the entity.
 Can be combined with an `@InjectEntityId`-annotated parameter if both the event and identifier are needed.
 
-[IMPORTANT]
-====
-Command handlers validate and append events; they must never write to entity state fields.
-Event sourcing handlers update state; they must contain no business logic.
-
-This separation is critical because event sourcing handlers also run during replay when the entity is loaded from its event stream.
-Any business logic in an event sourcing handler would execute unexpectedly during replay.
-====
-
 == Configuring an entity
 
 Three approaches are available:
@@ -273,6 +279,7 @@ configurer.registerEntity(
 Use `command.payloadAs(Class)` to convert the raw command message to the expected type.
 
 <2> `EventAppender.forContext(context)` retrieves the event appender for the current processing context.
+To append metadata alongside an event, see xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata].
 
 <3> Instance command handlers are invoked on an already-existing entity.
 The loaded entity is passed as the second argument.
@@ -376,3 +383,4 @@ The entity class structure is otherwise identical to the <<_autodetected,autodet
 * xref:events:event-handlers.adoc[Event handlers]
 * xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata] — to append metadata alongside an event, pass a `Metadata` instance as the second argument to `eventAppender.append()`
 * xref:tuning:snapshotting.adoc[Snapshotting] — available as a performance optimization for entities with large event streams
+* xref:testing:index.adoc[Test fixtures] — the test fixture guards against unintentional state changes in command handlers and is strongly recommended for stateful entity testing
