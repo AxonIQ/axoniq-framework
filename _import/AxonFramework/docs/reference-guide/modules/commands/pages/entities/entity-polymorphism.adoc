@@ -12,77 +12,149 @@ Use polymorphism when variants have structurally different commands, state, or b
 
 == Defining a polymorphic hierarchy
 
-The abstract parent class is annotated with `concreteTypes` listing every concrete subtype.
+The abstract parent class lists every concrete subtype via `concreteTypes`.
 Axon scans all listed subtypes for command and event handlers automatically.
 Subtypes do not need any annotation of their own.
 
-[tabs]
-====
-Spring Boot::
-+
-Annotate the abstract parent with `@EventSourced(concreteTypes = {...})`.
-Axon's auto-configuration detects and registers it.
-Do *not* annotate the subtypes with `@EventSourced`—they are already discovered via `concreteTypes`, and since `@EventSourced` is a Spring `@Component`, annotating them would make Spring create unnecessary prototype beans for classes that are only ever instantiated by the `@EntityCreator` factory.
-+
+Three approaches are supported:
+
+. <<_declarative,Declarative>>: no annotations. Provide a factory that creates the correct concrete type from the first event.
+. <<_autodetected,Autodetected>>: annotate with `@EventSourcedEntity(concreteTypes = {...})`. Register with `EventSourcedEntityModule.autodetected()`.
+. <<_spring_boot,Spring Boot>>: annotate the abstract parent with `@EventSourced(concreteTypes = {...})`. Auto-configuration handles registration.
+
+=== Declarative
+
+In the declarative approach, the entity class needs no framework annotations.
+Polymorphism is handled by an `EventSourcedEntityFactory.fromEventMessage()` factory that inspects the first event and creates the correct concrete type:
+
 [source,java]
 ----
-import org.axonframework.eventsourcing.annotation.EventSourcingHandler;
-import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
-import org.axonframework.extension.spring.stereotype.EventSourced;
-import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-
-@EventSourced(tagKey = "courseId", concreteTypes = {OnlineCourse.class, InPersonCourse.class}) // <1>
+// Abstract parent — no annotations needed
 public abstract class CourseEntity {
 
     protected String courseId;
     protected String title;
     protected int capacity;
     protected int enrolledCount;
+}
 
-    @CommandHandler
-    public static String handle(CreateCourse cmd, EventAppender appender) { // <2>
-        appender.append(new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity(), cmd.courseType(), cmd.platformUrl(), cmd.location()));
-        return cmd.courseId();
+// Concrete subtypes
+public class OnlineCourse extends CourseEntity {
+
+    protected String platformUrl;
+
+    public OnlineCourse(CourseCreated event) {
+        this.courseId = event.courseId();
+        this.title = event.title();
+        this.capacity = event.capacity();
+        this.platformUrl = event.platformUrl();
     }
+}
 
-    @EntityCreator
-    public static CourseEntity create(CourseCreated event) { // <3>
-        return switch (event.courseType()) {
-            case ONLINE   -> new OnlineCourse(event);
-            case IN_PERSON -> new InPersonCourse(event);
-        };
-    }
+public class InPersonCourse extends CourseEntity {
 
-    @CommandHandler
-    public void handle(EnrollStudent cmd, EventAppender appender) { // <4>
-        if (enrolledCount >= capacity) {
-            throw new IllegalStateException("Course is full");
-        }
-        appender.append(new StudentEnrolled(courseId, cmd.studentId()));
-    }
+    protected String location;
 
-    @EventSourcingHandler
-    protected void on(StudentEnrolled event) {
-        this.enrolledCount++;
+    public InPersonCourse(CourseCreated event) {
+        this.courseId = event.courseId();
+        this.title = event.title();
+        this.capacity = event.capacity();
+        this.location = event.location();
     }
 }
 ----
-+
-<1> Lists the concrete subtypes. Axon scans all of them for handlers.
-`tagKey` names the event field used to filter the event stream.
-+
-<2> A static `@CommandHandler` handles the creation command and returns the entity's ID.
-+
-<3> `@EntityCreator` is invoked by the framework when sourcing the creation event to construct the right concrete instance.
-+
-<4> Command handlers on the abstract parent are shared by all subtypes.
 
-Plain Java::
-+
-Annotate the abstract parent with `@EventSourcedEntity(concreteTypes = {...})`.
-Subtypes do not need any annotation; Axon discovers them from `concreteTypes`.
-+
+Register with `EventSourcedEntityModule.declarative()`, providing a factory that creates the right concrete type:
+
+[source,java]
+----
+import org.axonframework.eventsourcing.EventSourcedEntityFactory;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.Tag;
+
+EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+
+configurer.registerEntity(
+    EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
+        .messagingModel((config, model) -> model
+            .creationalCommandHandler(
+                new QualifiedName(CreateCourse.class),
+                (command, context) -> {
+                    CreateCourse cmd = command.payloadAs(CreateCourse.class);
+                    EventAppender.forContext(context).append(
+                        new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity(),
+                                          cmd.courseType(), cmd.platformUrl(), cmd.location())
+                    );
+                    return MessageStream.empty().cast();
+                }
+            )
+            .instanceCommandHandler(
+                new QualifiedName(EnrollStudent.class),
+                (command, entity, context) -> {
+                    if (entity.enrolledCount >= entity.capacity) {
+                        throw new IllegalStateException("Course is full");
+                    }
+                    EnrollStudent cmd = command.payloadAs(EnrollStudent.class);
+                    EventAppender.forContext(context).append(
+                        new StudentEnrolled(entity.courseId, cmd.studentId())
+                    );
+                    return MessageStream.empty().cast();
+                }
+            )
+            .instanceCommandHandler(
+                new QualifiedName(UpdatePlatformUrl.class),
+                (command, entity, context) -> {
+                    OnlineCourse online = (OnlineCourse) entity; // <1>
+                    UpdatePlatformUrl cmd = command.payloadAs(UpdatePlatformUrl.class);
+                    EventAppender.forContext(context).append(
+                        new PlatformUrlUpdated(online.courseId, cmd.newUrl())
+                    );
+                    return MessageStream.empty().cast();
+                }
+            )
+            .entityEvolver((entity, event, context) -> {
+                if (event.type().qualifiedName().equals(new QualifiedName(StudentEnrolled.class))) {
+                    entity.enrolledCount++;
+                }
+                if (event.type().qualifiedName().equals(new QualifiedName(PlatformUrlUpdated.class))) {
+                    ((OnlineCourse) entity).platformUrl = event.payloadAs(PlatformUrlUpdated.class).newUrl(); // <2>
+                }
+                return entity;
+            })
+            .build()
+        )
+        .entityFactory(c -> EventSourcedEntityFactory.fromEventMessage((id, firstEvent) -> { // <3>
+            CourseCreated e = firstEvent.payloadAs(CourseCreated.class);
+            return switch (e.courseType()) {
+                case ONLINE    -> new OnlineCourse(e);
+                case IN_PERSON -> new InPersonCourse(e);
+            };
+        }))
+        .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id)))
+        .build()
+);
+----
+
+<1> Cast to the concrete type to access subtype-specific fields.
+This is safe because `UpdatePlatformUrl` can only target an `OnlineCourse`.
+
+<2> The evolver mutates and returns the same instance (mutable classes).
+For immutable classes, return a new instance of the correct concrete type instead.
+
+<3> `fromEventMessage` receives the entity identifier and the first event in the stream.
+Inspect the event to determine which concrete type to instantiate.
+This replaces the `@EntityCreator` static factory used in the autodetected approach.
+
+=== Autodetected
+
+Use `@EventSourcedEntity(concreteTypes = {...})` and register with `EventSourcedEntityModule.autodetected()`.
+Axon reads `concreteTypes` from the annotation and scans all subtypes automatically.
+
 [source,java]
 ----
 import org.axonframework.eventsourcing.annotation.EventSourcedEntity;
@@ -100,13 +172,13 @@ public abstract class CourseEntity {
     protected int enrolledCount;
 
     @CommandHandler
-    public static String handle(CreateCourse cmd, EventAppender appender) { // <2>
+    public static String handle(CreateCourse cmd, EventAppender appender) {
         appender.append(new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity(), cmd.courseType(), cmd.platformUrl(), cmd.location()));
         return cmd.courseId();
     }
 
     @EntityCreator
-    public static CourseEntity create(CourseCreated event) { // <3>
+    public static CourseEntity create(CourseCreated event) {
         return switch (event.courseType()) {
             case ONLINE    -> new OnlineCourse(event);
             case IN_PERSON -> new InPersonCourse(event);
@@ -114,7 +186,7 @@ public abstract class CourseEntity {
     }
 
     @CommandHandler
-    public void handle(EnrollStudent cmd, EventAppender appender) { // <4>
+    public void handle(EnrollStudent cmd, EventAppender appender) {
         if (enrolledCount >= capacity) {
             throw new IllegalStateException("Course is full");
         }
@@ -127,31 +199,32 @@ public abstract class CourseEntity {
     }
 }
 ----
-+
-<1> Lists the concrete subtypes. Subtypes do not need `@EventSourcedEntity`.
-+
-<2> A static `@CommandHandler` handles the creation command and returns the entity's ID.
-+
-<3> `@EntityCreator` is invoked by the framework when sourcing the creation event to construct the right concrete instance.
-+
-<4> Command handlers on the abstract parent are shared by all subtypes.
-====
 
-=== Creation pattern
+<1> Subtypes do not need `@EventSourcedEntity`; Axon discovers them from `concreteTypes`.
 
-Polymorphic entity creation requires two cooperating methods on the abstract parent:
+Register the abstract parent class:
 
-[cols="1,3"]
-|===
-|Method |Role
+[source,java]
+----
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 
-|Static `@CommandHandler`
-|Handles the creation command, appends the creation event, and returns the entity ID.
+EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
 
-|`@EntityCreator` factory
-|Called by the framework when sourcing the entity from its event stream, passing the first event found.
-Inspects that event and instantiates the correct concrete subtype.
-|===
+configurer.registerEntity(
+    EventSourcedEntityModule.autodetected(String.class, CourseEntity.class) // <1>
+);
+----
+
+<1> Pass the abstract parent class.
+Axon discovers the concrete subtypes from `concreteTypes` automatically.
+
+=== Spring Boot
+
+In Spring Boot, annotate the abstract parent with `@EventSourced(concreteTypes = {...})` instead of `@EventSourcedEntity(concreteTypes = {...})`.
+Axon's auto-configuration detects and registers it, including all listed subtypes — no explicit configuration class is required.
+Do *not* annotate the subtypes with `@EventSourced`—they are already discovered via `concreteTypes`, and since `@EventSourced` is a Spring `@Component`, annotating them would cause Spring to create unnecessary beans.
+The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 === Concrete subtypes
 
@@ -184,56 +257,18 @@ public class OnlineCourse extends CourseEntity {
 }
 ----
 
-<1> The constructor receives the creation event, passed in by the `@EntityCreator` factory on the parent.
+<1> The constructor receives the creation event, passed in by the `@EntityCreator` factory on the parent (autodetected approach) or by the `fromEventMessage` factory (declarative approach).
+Parent fields must be at least `protected`—subtype constructors assign them with normal Java code, so `private` fields will not compile.
 <2> Commands specific to this subtype are declared here. They cannot also have a handler on any other class in the hierarchy.
-
-== Configuration
-
-[tabs]
-====
-Spring Boot::
-+
-`@EventSourced(concreteTypes = {...})` on the abstract parent is all that is needed.
-Axon's Spring Boot auto-configuration detects and registers the entity including all listed subtypes.
-+
-[source,java]
-----
-@EventSourced(tagKey = "courseId", concreteTypes = {OnlineCourse.class, InPersonCourse.class})
-public abstract class CourseEntity {
-    // ...
-}
-----
-
-Plain Java::
-+
-Register the parent class with `EventSourcingConfigurer` using the `autodetected` builder.
-Axon reads `concreteTypes` from the annotation and scans all subtypes automatically.
-+
-[source,java]
-----
-import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
-
-configurer.registerEntity(
-    EventSourcedEntityModule.autodetected(String.class, CourseEntity.class) // <1>
-);
-----
-+
-<1> Pass the abstract parent class. Axon discovers the concrete subtypes from `concreteTypes`.
-====
 
 == Constraints
 
 * Subtypes not listed in `concreteTypes` are silently ignored; their command and event handlers will not be registered and commands targeting them will fail at runtime.
 * Each command may have at most one handler anywhere in the hierarchy.
-  Axon throws `DuplicateCommandHandlerSubscriptionException` at startup if the same command appears in more than one class within the same entity type.
-  Creational command clashes between subtypes are caught separately and throw `IllegalArgumentException` at startup.
+Axon throws `DuplicateCommandHandlerSubscriptionException` at startup if the same command appears in more than one class within the same entity type.
+This applies to both instance and creational command handlers.
 * `@EventSourcingHandler` methods can be declared on both the parent and subtypes; the parent's handler is called first, then the subtype's.
 * The concrete type is fixed at creation time; an entity cannot change its type at runtime.
-* Parent fields that subtypes assign in their constructors must be at least `protected`.
-  Subtype constructors assign parent fields with normal Java code (`this.courseId = event.courseId()`), not framework reflection, so `private` fields will not compile.
 
 == Further reading
 
