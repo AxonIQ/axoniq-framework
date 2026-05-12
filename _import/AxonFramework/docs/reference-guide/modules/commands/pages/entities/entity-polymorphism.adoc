@@ -29,7 +29,7 @@ Polymorphism is handled by an `EventSourcedEntityFactory.fromEventMessage()` fac
 
 [source,java]
 ----
-// Abstract parent — no annotations needed
+// Abstract parent—no annotations needed
 public abstract class CourseEntity {
 
     protected String courseId;
@@ -222,7 +222,7 @@ Axon discovers the concrete subtypes from `concreteTypes` automatically.
 === Spring Boot
 
 In Spring Boot, annotate the abstract parent with `@EventSourced(concreteTypes = {...})` instead of `@EventSourcedEntity(concreteTypes = {...})`.
-Axon's auto-configuration detects and registers it, including all listed subtypes — no explicit configuration class is required.
+Axon's auto-configuration detects and registers it, including all listed subtypes—no explicit configuration class is required.
 Do *not* annotate the subtypes with `@EventSourced`—they are already discovered via `concreteTypes`, and since `@EventSourced` is a Spring `@Component`, annotating them would cause Spring to create unnecessary beans.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 

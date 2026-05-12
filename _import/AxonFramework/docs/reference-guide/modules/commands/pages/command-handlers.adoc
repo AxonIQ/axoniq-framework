@@ -2,7 +2,7 @@
 :navtitle: Handling
 
 Command handlers process commands and perform the corresponding business logic.
-A command handler decides whether a requested change is valid and, if so, applies it — either by modifying state directly or by appending events.
+A command handler decides whether a requested change is valid and, if so, applies it—either by modifying state directly or by appending events.
 Handlers can be stateless or stateful depending on whether they need prior state to make that decision.
 
 == Stateless vs stateful command handlers
@@ -10,7 +10,7 @@ Handlers can be stateless or stateful depending on whether they need prior state
 Command handlers in Axon Framework fall into two categories:
 
 * **Stateless command handlers**: No prior state is needed to process the command.
-Each invocation is independent — for example, sending a notification or forwarding a command to an external system.
+Each invocation is independent—for example, sending a notification or forwarding a command to an external system.
 
 * **Stateful command handlers**: Prior state is required to enforce business rules.
 A bank account command needs the current balance to prevent overdrafts.
@@ -35,7 +35,7 @@ public class GiftCardBulkOperationsHandler {
 
     private final GiftCardInventoryService inventoryService; // <2>
 
-    public GiftCardBulkOperationsHandler( GiftCardInventoryService inventoryService) {
+    public GiftCardBulkOperationsHandler(GiftCardInventoryService inventoryService) {
         this.inventoryService = inventoryService;
     }
 
@@ -127,12 +127,12 @@ public class GiftCardCommandHandlers {
 
 <3> Instance handler receives entities when the parameter is annotated with `@InjectEntity`.
 Axon automatically loads it based on the command's routing key.
-Other options are available and specified in the `@InjectEntity` documentation.
+To load by a different field, see <<_injecting_multiple_entities_with_injectentity,Injecting multiple entities>>.
 
 <4> The handler accesses the entity to make business decision.
 This can either be done by invoking entity-specific decision methods or by inspecting the state (as shown in the sample above).
 
-For how to define the entity itself — state fields, event sourcing handlers, `@EntityCreator` patterns, and configuration — see xref:commands:entities/index.adoc[Entities].
+For how to define the entity itself—state fields, event sourcing handlers, `@EntityCreator` patterns, and configuration—see xref:commands:entities/index.adoc[Entities].
 
 [TIP]
 ====
@@ -222,7 +222,7 @@ Upcasters are still needed for structural changes to events in the event store.
 However, for commands and for handlers that simply need data in a different format, payload conversion is more appropriate.
 ====
 
-== Handling commands with ProcessingContext
+== Handling commands with `ProcessingContext`
 
 The `ProcessingContext` is a fundamental concept in Axon Framework, backing the internal concept of the `UnitOfWork`.
 When a command is handled, Axon automatically creates a `ProcessingContext` and makes it available to all components involved in processing the command.
@@ -266,30 +266,27 @@ The `EventAppender` must be injected as a parameter in your command handlers:
 [source,java]
 ----
 @CommandHandler
-public GiftCard(IssueCardCommand cmd, EventAppender eventAppender) { // <1>
-    // Validate command
+public String handle(IssueCardCommand cmd, EventAppender eventAppender) { // <1>
     if (cmd.amount() <= 0) {
         throw new IllegalArgumentException("Amount must be positive");
     }
-
-    // Append event(s)
     eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount())); // <2>
+    return cmd.cardId();
 }
 
 @CommandHandler
 public void handle(RechargeCardCommand cmd, EventAppender eventAppender) {
-    // Can append multiple events
     eventAppender.append(
-        new CardRechargedEvent(id, cmd.amount()),
-        new CardRechargeRecordedEvent(id, cmd.transactionId())
+        new CardRechargedEvent(cmd.cardId(), cmd.amount()),
+        new CardRechargeRecordedEvent(cmd.cardId(), cmd.transactionId())
     ); // <3>
 }
 ----
 
-<1> The `EventAppender` is injected as a method parameter alongside the command.
+<1> `EventAppender` is injected as a handler parameter alongside the command.
 
 <2> Use `eventAppender.append()` to publish one or more events.
-Events are applied to the entity and published when the `ProcessingContext` commits.
+Events are published when the `ProcessingContext` commits.
 
 <3> Multiple events can be appended in a single call.
 
@@ -442,28 +439,18 @@ Register a stateless command handler using the Configuration API:
 
 [source,java]
 ----
-    void buildConfiguration() {
-        // Create the Event Sourcing configurer
-        EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
 
-        // Register stateful event-sourced entity
-        configurer.registerEntity(
-            EventSourcedEntityModule.autodetected(String.class, GiftCard.class)
-        );
+configurer.registerCommandHandlingModule(
+    CommandHandlingModule.named("gift-card-validation")
+                         .commandHandlers()
+                         .annotatedCommandHandlingComponent(config ->
+                             new GiftCardValidationHandler(config.getComponent(QueryDispatcher.class))
+                         )
+);
 
-        // Register stateless command handler
-        configurer.registerCommandHandlingModule(
-            CommandHandlingModule.named("gift-card-validation")
-                                 .commandHandlers()
-                                 .annotatedCommandHandlingComponent(config ->
-                                     new GiftCardValidationHandler(config.getComponent(QueryDispatcher.class))
-                                 )
-        );
-
-        // Build and start the configuration
-        AxonConfiguration configuration = configurer.build();
-        configuration.start();
-    }
+AxonConfiguration configuration = configurer.build();
+configuration.start();
 ----
 
 For registering event-sourced entities, see xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities].

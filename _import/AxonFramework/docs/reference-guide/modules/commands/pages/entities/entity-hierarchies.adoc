@@ -27,7 +27,7 @@ The parent entity declares its children using `@EntityMember`.
 It specifies which property of an incoming command or event payload identifies the target child.
 Axon matches that value against the child's corresponding getter method.
 
-For a single child field with no other fields of the same type, `routingKey` can be omitted — commands are forwarded to it automatically:
+For a single child field with no other fields of the same type, `routingKey` can be omitted—commands are forwarded to it automatically:
 
 [source,java]
 ----
@@ -44,7 +44,7 @@ public class CourseEntity {
 }
 ----
 
-<1> No `routingKey` needed — there is only one `CourseScheduleEntity` field, so commands are forwarded to it automatically.
+<1> No `routingKey` needed—there is only one `CourseScheduleEntity` field, so commands are forwarded to it automatically.
 
 [NOTE]
 ====
@@ -155,7 +155,7 @@ Child entity metamodels are built separately and added to the parent metamodel u
 
 [source,java]
 ----
-// Parent entity — plain record, no annotations
+// Parent entity—plain record, no annotations
 public record CourseEntity(String courseId, int capacity, List<EnrollmentEntity> enrollments) {
 
     CourseEntity(String courseId) {
@@ -171,7 +171,7 @@ public record CourseEntity(String courseId, int capacity, List<EnrollmentEntity>
     }
 }
 
-// Child entity — plain record, no annotations
+// Child entity—plain record, no annotations
 public record EnrollmentEntity(String studentId, boolean dropped) {
 
     EnrollmentEntity(String studentId) {
@@ -393,7 +393,7 @@ configurer.registerEntity(
 === Spring Boot
 
 In Spring Boot, annotate the parent entity with `@EventSourced` instead of `@EventSourcedEntity`.
-Axon's auto-configuration detects and registers it automatically — no explicit configuration class is required.
+Axon's auto-configuration detects and registers it automatically—no explicit configuration class is required.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 [#advanced-routing]
