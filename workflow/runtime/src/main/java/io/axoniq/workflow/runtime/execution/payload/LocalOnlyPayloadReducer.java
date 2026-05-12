@@ -16,33 +16,36 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.runtime.api.payload;
+package io.axoniq.workflow.runtime.execution.payload;
 
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
-import java.util.function.BiFunction;
 
 /**
- * Payload reducer to combine two payloads into one. In general, there is a global payload (part of the state of the
- * workflow instance) and a local payload (part of the step execution). On the step invocation, the global and local
- * form the invocation parameters. After the step execution, the local result and global payload form the resulting
- * workflow instance payload.
+ * Simple {@code PayloadReducer} that will only pass along the {@code local} payload, ignoring the {@code global}
+ * payload, without modification.
  *
  * @author Simon Zambrovski
- * @author Stefan Dragisic
  * @since 1.0.0
  */
-@FunctionalInterface
-public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
+public class LocalOnlyPayloadReducer implements PayloadReducer {
 
     /**
-     * Retrieves the name of the reducer.
-     *
-     * @return reducer name.
+     * Name of {@link LocalOnlyPayloadReducer} reducer.
      */
-    @Nonnull
-    default String name() {
-        return this.getClass().getName();
+    public static final String NAME = "local_only";
+
+    @Override
+    public Map<String, Object> apply(@NonNull Map<String, Object> global,
+                                     @Nonnull Map<String, Object> local) {
+        return local;
+    }
+
+    @Override
+    public @NonNull String name() {
+        return NAME;
     }
 }

@@ -29,6 +29,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -39,6 +40,7 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.jspecify.annotations.NonNull;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
@@ -82,7 +84,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      */
     @Override
     public void enhance(@Nonnull ComponentRegistry componentRegistry) {
-
+        registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
@@ -92,6 +94,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
+    }
+
+    private void registerPayloadReducerRegistry(@NonNull ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(PayloadReducerRegistry.class,
+                                               cfg -> new PayloadReducerRegistry());
     }
 
     void registerEventNameCustomizer(@Nonnull ComponentRegistry componentRegistry) {
@@ -153,7 +160,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new
         );
-
     }
 
     @Override

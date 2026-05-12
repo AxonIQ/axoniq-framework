@@ -21,7 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
@@ -35,6 +35,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -49,13 +50,14 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
         state = new EventSourcedWorkflowState(Map.of("initialKey", "initialValue"));
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(converter);
+        when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
     }
 
     @Test
     void testEvolvePayloadSuccess() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                           NAME);
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             Map.of("newKey", "newValue"),
                                                             metadata);
@@ -70,7 +72,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolvePayloadWithNonMapPayloadDoesNotThrow() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                              PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+                                           NAME);
         // String payload cannot be converted to Map<String, Object> via Jackson as a root object if it is not a JSON object
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             "Not a Map",

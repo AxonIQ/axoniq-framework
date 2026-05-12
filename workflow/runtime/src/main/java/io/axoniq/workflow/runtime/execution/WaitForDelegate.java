@@ -170,17 +170,11 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         // Cancel the timeout future since the awaited event has arrived
         workflowExecution.cancelAndRemoveRunningStep(awaited.stepName(), false);
         var payload = eventMessagePayload(awaited.eventMessage());
-        final String resultMappingName;
-        if (PayloadReducer.isDefault(awaited.payloadReducer())) {
-            resultMappingName = PayloadReducer.name(awaited.payloadReducer());
-        } else {
-            resultMappingName = null;
-        }
         workflowExecution.appendTask(state -> {
             try {
                 completed(awaited.stepName(),
                           payload,
-                          resultMappingName,
+                          awaited.payloadReducer().name(),
                           awaited.eventNameCustomizer()).join();
             } catch (Exception e) {
                 logger.warn("Failed to publish completed event for step '{}': {}",

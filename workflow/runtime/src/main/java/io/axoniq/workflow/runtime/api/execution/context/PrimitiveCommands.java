@@ -22,9 +22,13 @@ import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
@@ -50,7 +54,7 @@ public class PrimitiveCommands {
      * @param action              action to perform.
      * @param duration            maximum duration of execution.
      * @param type                type of return object.
-     * @param converter           type converter.
+     * @param processingContext   processing context.
      * @param eventNameCustomizer event name customizer.
      * @param <T>                 Java type of return object.
      * @return object mapped of result of the step execution.
@@ -61,13 +65,16 @@ public class PrimitiveCommands {
             @Nonnull PayloadProcessor action,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
-            @Nonnull EventConverter converter,
-            @Nonnull EventNameCustomizer eventNameCustomizer) {
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull ProcessingContext processingContext) {
         return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
                                                                    payload,
                                                                    action,
                                                                    duration,
-                                                                   eventNameCustomizer), converter, type);
+                                                                   eventNameCustomizer,
+                                                                   processingContext),
+                                                      processingContext.component(EventConverter.class),
+                                                      type);
     }
 
     public static <T> BlockingExecuteWithResultCommand<T> blockingLocalExecute(
@@ -76,15 +83,19 @@ public class PrimitiveCommands {
             @Nonnull PayloadProcessor action,
             @Nonnull Duration duration,
             @Nonnull TypeReference<T> type,
-            @Nonnull EventConverter converter,
             @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy) {
+            @Nonnull RetryPolicy retryPolicy,
+            @Nonnull ProcessingContext processingContext) {
         return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
                                                                    payload,
                                                                    action,
                                                                    duration,
                                                                    eventNameCustomizer,
-                                                                   retryPolicy), converter, type);
+                                                                   retryPolicy,
+                                                                   processingContext),
+                                                      processingContext.component(EventConverter.class),
+                                                      type
+        );
     }
 
     /**
@@ -121,13 +132,15 @@ public class PrimitiveCommands {
             @Nonnull Map<String, Object> local,
             @Nonnull PayloadProcessor action,
             @Nonnull Duration duration,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull ProcessingContext processingContext
     ) {
+        var registry = processingContext.component(PayloadReducerRegistry.class);
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    PayloadReducer.LOCAL_ONLY,
-                                                    PayloadReducer.GLOBAL_ONLY,
+                                                    registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                                                    registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                                                     duration,
                                                     eventNameCustomizer,
                                                     RetryPolicy.NONE);
@@ -139,13 +152,15 @@ public class PrimitiveCommands {
             @Nonnull PayloadProcessor action,
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy
+            @Nonnull RetryPolicy retryPolicy,
+            @Nonnull ProcessingContext processingContext
     ) {
+        var registry = processingContext.component(PayloadReducerRegistry.class);
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    PayloadReducer.LOCAL_ONLY,
-                                                    PayloadReducer.GLOBAL_ONLY,
+                                                    registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                                                    registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                                                     duration,
                                                     eventNameCustomizer,
                                                     retryPolicy);
@@ -267,11 +282,16 @@ public class PrimitiveCommands {
      * Default execute command implementation.
      */
     @Internal
-    public record WorkflowStepResultExecuteCommand(String stepName, Map<String, Object> local, PayloadProcessor action,
-                                                   PayloadReducer parameterMapping, PayloadReducer resultMapping,
-                                                   Duration timeout, EventNameCustomizer eventNameCustomizer,
-                                                   RetryPolicy retryPolicy)
-            implements ExecutePrimitive.ExecuteCommand<WorkflowStepResult> {
+    public record WorkflowStepResultExecuteCommand(
+            String stepName,
+            Map<String, Object> local,
+            PayloadProcessor action,
+            PayloadReducer parameterMapping,
+            PayloadReducer resultMapping,
+            Duration timeout,
+            EventNameCustomizer eventNameCustomizer,
+            RetryPolicy retryPolicy
+    ) implements ExecutePrimitive.ExecuteCommand<WorkflowStepResult> {
 
         public WorkflowStepResultExecuteCommand(
                 @Nonnull String stepName,

@@ -22,7 +22,7 @@ import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -42,6 +42,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -121,6 +122,7 @@ class TerminalStateGuardTest {
         when(processingContext.component(EventConverter.class)).thenReturn(
                 new DelegatingEventConverter(new JacksonConverter())
         );
+        when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
@@ -180,11 +182,11 @@ class TerminalStateGuardTest {
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
 
         workflowState.evolve(EventMessageUtils.completedStep(workflowContext,
-                                                              "step-1",
-                                                              Map.of(),
-                                                              PayloadReducer.NAME_GLOBAL_ONLY,
-                                                              eventNameCustomizer),
-                              processingContext);
+                                                             "step-1",
+                                                             Map.of(),
+            NAME,
+                                                             eventNameCustomizer),
+                             processingContext);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
 
@@ -198,8 +200,8 @@ class TerminalStateGuardTest {
     @Test
     void failedFutureContainsStepNameInMessage() {
         workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(),
-                                                             PayloadReducer.NAME_GLOBAL_ONLY, eventNameCustomizer),
-                              processingContext);
+            NAME, eventNameCustomizer),
+                             processingContext);
 
         var future = stepExecutor.testCompleted("my-step", Map.of(), eventNameCustomizer);
 

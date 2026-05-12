@@ -22,6 +22,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
@@ -35,6 +36,7 @@ import java.util.Collection;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -45,6 +47,8 @@ import static org.mockito.Mockito.*;
 class EventWaitConditionsTest {
 
     private EventWaitConditions eventWaitConditions;
+    private final PayloadReducerRegistry registry = new PayloadReducerRegistry();
+    private final PayloadReducer globalOnly = registry.get(NAME).orElseThrow();
 
     @BeforeEach
     void setUp() {
@@ -55,7 +59,7 @@ class EventWaitConditionsTest {
     void testAddAndRemove() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
-        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
+        eventWaitConditions.add("step1", condition, globalOnly, defaults());
 
         ComponentDescriptor descriptor = mock(ComponentDescriptor.class);
         eventWaitConditions.describeTo(descriptor);
@@ -70,7 +74,7 @@ class EventWaitConditionsTest {
     void testEvaluateAndApplyMatches() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
-        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
+        eventWaitConditions.add("step1", condition, globalOnly, defaults());
 
         EventMessage message = mock(EventMessage.class);
         ProcessingContext pc = mock(ProcessingContext.class);
@@ -89,7 +93,7 @@ class EventWaitConditionsTest {
     void testEvaluateAndApplyNoMatch() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.never(qName);
-        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
+        eventWaitConditions.add("step1", condition, globalOnly, defaults());
 
         EventMessage message = mock(EventMessage.class);
         ProcessingContext pc = mock(ProcessingContext.class);
@@ -109,11 +113,11 @@ class EventWaitConditionsTest {
     void testDescribeTo() {
         QualifiedName qName1 = new QualifiedName("ns", "Event1");
         EventCondition condition = EventConditions.fromQualifiedName(qName1);
-        eventWaitConditions.add("step1", condition, PayloadReducer.GLOBAL_ONLY, defaults());
+        eventWaitConditions.add("step1", condition, globalOnly, defaults());
 
         QualifiedName qName2 = new QualifiedName("ns", "Event2");
         EventCondition condition2 = EventConditions.fromQualifiedName(qName2);
-        eventWaitConditions.add("step2", condition2, PayloadReducer.GLOBAL_ONLY, defaults());
+        eventWaitConditions.add("step2", condition2, globalOnly, defaults());
 
 
         Collection<?> list = getDescribedConditions();

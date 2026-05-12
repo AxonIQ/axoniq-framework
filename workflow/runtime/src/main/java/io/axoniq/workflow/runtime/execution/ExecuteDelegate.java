@@ -180,13 +180,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                             if (r != null) {
                                 workflowExecution.appendTask(i -> {
                                     // FIXME - This is where we should publish using an append condition
-                                    final String resultMappingName;
-                                    if (PayloadReducer.isDefault(resultPayloadReducer)) {
-                                        resultMappingName = PayloadReducer.name(resultPayloadReducer);
-                                    } else {
-                                        resultMappingName = null;
-                                    }
-                                    completed(stepName, r, resultMappingName, eventNameCustomizer);
+                                    completed(stepName, r, resultPayloadReducer.name(), eventNameCustomizer);
                                 });
                             } else {
                                 if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {

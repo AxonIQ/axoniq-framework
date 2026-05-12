@@ -24,7 +24,6 @@ import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
@@ -33,6 +32,7 @@ import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.Map;
 
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.*;
@@ -95,7 +95,7 @@ class EventMessageUtilsTest {
         assertThat(message.payload()).isEqualTo(payload);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.STARTED);
-        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(PayloadReducer.NAME_COMBINE_LOCAL_AND_GLOBAL);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(NAME);
     }
 
     @Test

@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
@@ -28,6 +27,7 @@ import org.junit.jupiter.api.*;
 import java.util.Map;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
+import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -52,7 +52,7 @@ class WorkflowEventNamespaceInheritanceTest {
         EventMessage evt = EventMessageUtils.completedStep(ctx,
                                                            "myStep",
                                                            Map.of(),
-                                                           PayloadReducer.NAME_GLOBAL_ONLY,
+          NAME,
                                                            merged);
 
         // Then the namespace should be inherited from the workflow customizer
@@ -76,7 +76,7 @@ class WorkflowEventNamespaceInheritanceTest {
         EventMessage evt = EventMessageUtils.completedStep(ctx,
                                                            "myStep",
                                                            Map.of(),
-                                                           PayloadReducer.NAME_GLOBAL_ONLY,
+          NAME,
                                                            merged);
 
         // Then the step-level namespace should win

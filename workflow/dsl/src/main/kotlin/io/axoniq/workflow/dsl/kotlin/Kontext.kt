@@ -26,6 +26,11 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
+import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer
+import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
 import org.axonframework.messaging.eventhandling.conversion.EventConverter
@@ -116,8 +121,14 @@ class Kontext(
         stepName: String,
         action: (payload: Map<String, Any?>) -> T,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
-        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
+        parameterMapping: PayloadReducer = workflowKontext.processingContext()
+            .component(PayloadReducerRegistry::class.java).get(
+                LocalOnlyPayloadReducer.NAME
+            ).orElseThrow(),
+        resultMapping: PayloadReducer = workflowKontext.processingContext()
+            .component(PayloadReducerRegistry::class.java).get(
+                GlobalOnlyPayloadReducer.NAME
+            ).orElseThrow(),
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults(),
         retryPolicy: RetryPolicy = RetryPolicy.NONE
@@ -156,7 +167,9 @@ class Kontext(
     fun <T : Any> awaitEvent(
         stepName: String,
         type: KClass<T>,
-        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
+        resultMapping: PayloadReducer = workflowKontext.processingContext()
+            .component(PayloadReducerRegistry::class.java)
+            .get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): T {
@@ -227,8 +240,10 @@ class Kontext(
         stepName: String,
         action: PayloadProcessor,
         local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = PayloadReducer.LOCAL_ONLY,
-        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
+        parameterMapping: PayloadReducer = workflowKontext.processingContext()
+            .component(PayloadReducerRegistry::class.java).get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+        resultMapping: PayloadReducer = workflowKontext.processingContext()
+            .component(PayloadReducerRegistry::class.java).get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults(),
         retryPolicy: RetryPolicy = RetryPolicy.NONE
@@ -258,7 +273,8 @@ class Kontext(
     fun waitFor(
         stepName: String,
         qualifiedName: QualifiedName,
-        resultMapping: PayloadReducer = PayloadReducer.GLOBAL_ONLY,
+        resultMapping: PayloadReducer = workflowKontext.processingContext()
+            .component(PayloadReducerRegistry::class.java).get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
         timeout: Duration = 5.seconds,
         eventNameCustomizer: EventNameCustomizer = defaults()
     ): WorkflowStepResult = workflowKontext.waitFor(
