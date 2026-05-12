@@ -10,9 +10,52 @@ This makes the event log the single source of truth, giving you a complete and i
 If you are unfamiliar with event sourcing, see xref:events:index.adoc[Events] for an introduction to the concept.
 ====
 
-== Defining an event-sourced entity
+== Entity identification
 
-An event-sourced entity consists of three types of methods:
+Every command that targets an entity instance must identify which instance to load.
+Annotate the identifier field on the command with `@TargetEntityId`:
+
+[source,java]
+----
+import org.axonframework.modelling.annotation.TargetEntityId;
+
+public record EnrollStudentCommand(
+        @TargetEntityId String courseId, // <1>
+        String studentId
+) {}
+----
+
+<1> Axon reads this field to load the correct entity instance before invoking the handler.
+Not required on static creational command handlers, since no entity exists yet at that point.
+
+Axon also needs to know which events belong to this entity's stream.
+Set `tagKey` on the entity annotation to the tag key used on your events, and mark the corresponding event field with `@EventTag`:
+
+[source,java]
+----
+import org.axonframework.eventsourcing.annotation.EventTag;
+
+public record CourseCreatedEvent(
+        @EventTag String courseId, // <1>
+        String title,
+        int capacity
+) {}
+----
+
+<1> Marks this field as the entity's stream tag.
+Set `tagKey` on the entity annotation to the same key so Axon filters the event stream correctly.
+Set `tagKey` explicitly to keep it stable if the class is renamed.
+See xref:events:event-store-internals.adoc#tags[Event store internals] for details on how tag-based filtering works.
+
+[NOTE]
+====
+`@Command(routingKey = "...")` is a separate concern: it sets the routing key used by a distributed command bus (such as Axon Server) to route the command to the correct application node.
+It does not affect which entity instance is loaded.
+====
+
+== Entity members
+
+An event-sourced entity consists of four types of members:
 
 * **Creational command handlers**: static methods that handle the command that creates the entity.
 They validate the command and append the creation event.
@@ -20,86 +63,236 @@ They validate the command and append the creation event.
 They validate the command against current state and append events.
 * **Event sourcing handlers**: private instance methods that apply events to update the entity's state fields.
 They must never contain business logic, only state assignments.
+* **Entity creator**: a constructor or static factory method annotated with `@EntityCreator` that tells Axon how to construct the initial entity instance before replaying events.
 
-The `@EventSourcedEntity` annotation (or `@EventSourced` in Spring environments) marks the class so Axon can discover and register it.
+[#entity-creation-with-entitycreator]
+=== Entity creator
 
-[tabs]
-====
-Spring Boot::
-+
+In the annotated and Spring Boot approaches, the `@EntityCreator` annotation specifies how Axon constructs the initial entity instance before replaying events.
+It is mandatory for annotation-based entities.
+
+There are three patterns:
+
+**Pattern 1: Empty instance**
+
+When placed on a no-arg constructor, Axon creates an empty instance and then applies all events:
+
 [source,java]
 ----
-import org.axonframework.eventsourcing.annotation.EventSourcingHandler;
-import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
-import org.axonframework.extension.spring.stereotype.EventSourced;
-import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-
-@EventSourced(tagKey = "courseId") // <1>
+@EventSourced
 public class CourseEntity {
 
     private String courseId;
-    private String title;
     private int capacity;
-    private int enrolledCount;
 
-    @CommandHandler // <2>
-    public static String handle(CreateCourseCommand cmd, EventAppender eventAppender) {
-        if (cmd.capacity() <= 0) {
-            throw new IllegalArgumentException("Capacity must be positive");
-        }
-        eventAppender.append(new CourseCreatedEvent(cmd.courseId(), cmd.title(), cmd.capacity())); // <3>
-        return cmd.courseId(); // <4>
+    @EntityCreator // <1>
+    protected CourseEntity() {
     }
 
     @CommandHandler
-    public void handle(EnrollStudentCommand cmd, EventAppender eventAppender) {
-        if (enrolledCount >= capacity) { // <5>
-            throw new IllegalStateException("Course is full");
-        }
-        eventAppender.append(new StudentEnrolledEvent(courseId, cmd.studentId()));
-    }
-
-    @EventSourcingHandler // <6>
-    private void on(CourseCreatedEvent event) {
-        this.courseId = event.courseId();
-        this.title = event.title();
-        this.capacity = event.capacity();
+    public static String handle(CreateCourseCommand cmd, EventAppender appender) {
+        appender.append(new CourseCreatedEvent(cmd.courseId(), cmd.capacity()));
+        return cmd.courseId();
     }
 
     @EventSourcingHandler
-    private void on(StudentEnrolledEvent event) {
-        this.enrolledCount++;
-    }
-
-    @EntityCreator // <7>
-    protected CourseEntity() {
+    private void on(CourseCreatedEvent event) {
+        this.courseId = event.courseId();
+        this.capacity = event.capacity();
     }
 }
 ----
-+
-<1> `tagKey = "courseId"` tells Axon which tag to filter events by when loading this entity's stream.
-If omitted, Axon falls back to the entity's simple class name.
-+
-<2> A static method with `@CommandHandler` is the creational handler.
-It must be static because no entity instance exists yet when the creation command arrives.
-+
-<3> Events are appended via `EventAppender`, which is injected as a parameter.
-Never modify state directly in a command handler; always go through events.
-+
-<4> Return the entity identifier so the caller knows which entity was created.
-+
-<5> Instance command handlers read current state to make decisions.
-This state was built up by replaying past events via the `@EventSourcingHandler` methods.
-+
-<6> Event sourcing handlers update state.
-They are called when replaying historical events to reconstruct the entity, and again for newly appended events.
-+
-<7> The `@EntityCreator` constructor tells Axon how to create an empty entity instance before applying events.
-See xref:commands:command-handlers.adoc#entity-creation-with-entitycreator[Entity creation with `@EntityCreator`] for all three creation patterns.
 
-Plain Java::
-+
+<1> Axon invokes this constructor to create the initial instance, then replays all events.
+
+**Pattern 2: Identifier-only**
+
+When placed on a constructor with an `@InjectEntityId`-annotated parameter, Axon passes the entity identifier at construction time:
+
+[source,java]
+----
+@EventSourced
+public class CourseEntity {
+
+    private final String courseId;
+    private int capacity;
+
+    @EntityCreator // <1>
+    protected CourseEntity(@InjectEntityId String courseId) { // <2>
+        this.courseId = courseId;
+    }
+
+    @CommandHandler
+    public static String handle(CreateCourseCommand cmd, EventAppender appender) {
+        appender.append(new CourseCreatedEvent(cmd.courseId(), cmd.capacity()));
+        return cmd.courseId();
+    }
+
+    @EventSourcingHandler
+    private void on(CourseCreatedEvent event) {
+        this.capacity = event.capacity();
+    }
+}
+----
+
+<1> Axon invokes this constructor with the entity identifier resolved from the incoming command.
+<2> `@InjectEntityId` tells Axon this parameter is the entity identifier, not an event payload.
+
+[WARNING]
+====
+Use `@InjectEntityId` to disambiguate the identifier from an event payload.
+Without it, the first parameter is assumed to be the event payload (Pattern 3).
+====
+
+**Pattern 3: Creation from first event**
+
+When placed on a constructor that takes an event type as its first parameter, Axon passes the first event in the entity's stream at construction time:
+
+[source,java]
+----
+@EventSourced
+public class CourseEntity {
+
+    private final String courseId;
+    private final int initialCapacity;
+
+    @EntityCreator // <1>
+    protected CourseEntity(CourseCreatedEvent event) {
+        this.courseId = event.courseId();
+        this.initialCapacity = event.capacity();
+    }
+
+    @CommandHandler
+    public static String handle(CreateCourseCommand cmd, EventAppender appender) {
+        appender.append(new CourseCreatedEvent(cmd.courseId(), cmd.capacity()));
+        return cmd.courseId();
+    }
+}
+----
+
+<1> Axon invokes this constructor with the first event when sourcing the entity.
+Can be combined with an `@InjectEntityId`-annotated parameter if both the event and identifier are needed.
+
+[IMPORTANT]
+====
+Command handlers validate and append events; they must never write to entity state fields.
+Event sourcing handlers update state; they must contain no business logic.
+
+This separation is critical because event sourcing handlers also run during replay when the entity is loaded from its event stream.
+Any business logic in an event sourcing handler would execute unexpectedly during replay.
+====
+
+== Configuring an entity
+
+Three approaches are available:
+
+. <<_declarative,Declarative>>: no annotations on the entity class. Wire handlers and lifecycle programmatically with `EventSourcedEntityModule.declarative()`.
+. <<_autodetected,Autodetected>>: annotate with `@EventSourcedEntity`. Register with `EventSourcedEntityModule.autodetected()`.
+. <<_spring_boot,Spring Boot>>: annotate with `@EventSourced`. Axon's auto-configuration detects and registers it automatically.
+
+=== Declarative
+
+The declarative approach lets you define an event-sourced entity as a plain Java class or record with no framework annotations.
+Command handlers, the event evolver, and configuration are all wired programmatically.
+
+[source,java]
+----
+// Entity: a plain record — no framework annotations needed
+public record CourseEntity(String courseId, String title, int capacity, int enrolledCount) {
+
+    CourseEntity(String courseId) { // <1>
+        this(courseId, "", 0, 0);
+    }
+}
+----
+
+<1> A minimal constructor used by the entity factory as the initial state when the entity is first loaded by ID.
+
+Register the entity with `EventSourcedEntityModule.declarative()`:
+
+[source,java]
+----
+import org.axonframework.eventsourcing.EventSourcedEntityFactory;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.gateway.EventAppender;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.Tag;
+
+EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+
+configurer.registerEntity(
+    EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
+        .messagingModel((config, model) -> model
+            .creationalCommandHandler( // <1>
+                new QualifiedName(CreateCourseCommand.class),
+                (command, context) -> {
+                    CreateCourseCommand cmd = command.payloadAs(CreateCourseCommand.class);
+                    EventAppender.forContext(context).append( // <2>
+                        new CourseCreatedEvent(cmd.courseId(), cmd.title(), cmd.capacity())
+                    );
+                    return MessageStream.empty().cast();
+                }
+            )
+            .instanceCommandHandler( // <3>
+                new QualifiedName(EnrollStudentCommand.class),
+                (command, entity, context) -> {
+                    if (entity.enrolledCount() >= entity.capacity()) {
+                        throw new IllegalStateException("Course is full");
+                    }
+                    EnrollStudentCommand cmd = command.payloadAs(EnrollStudentCommand.class);
+                    EventAppender.forContext(context).append(
+                        new StudentEnrolledEvent(entity.courseId(), cmd.studentId())
+                    );
+                    return MessageStream.empty().cast();
+                }
+            )
+            .entityEvolver((entity, event, context) -> { // <4>
+                if (event.type().qualifiedName().equals(new QualifiedName(CourseCreatedEvent.class))) {
+                    CourseCreatedEvent e = event.payloadAs(CourseCreatedEvent.class);
+                    return new CourseEntity(e.courseId(), e.title(), e.capacity(), 0);
+                }
+                if (event.type().qualifiedName().equals(new QualifiedName(StudentEnrolledEvent.class))) {
+                    return new CourseEntity(
+                        entity.courseId(), entity.title(), entity.capacity(), entity.enrolledCount() + 1
+                    );
+                }
+                return entity;
+            })
+            .build()
+        )
+        .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(CourseEntity::new)) // <5>
+        .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id))) // <6>
+        .build()
+);
+----
+
+<1> Creational command handlers are invoked when no entity instance exists yet.
+Use `command.payloadAs(Class)` to convert the raw command message to the expected type.
+
+<2> `EventAppender.forContext(context)` retrieves the event appender for the current processing context.
+
+<3> Instance command handlers are invoked on an already-existing entity.
+The loaded entity is passed as the second argument.
+
+<4> The entity evolver applies events to produce the next entity state.
+Return the same instance or a new one; for immutable records, always return a new instance.
+
+<5> `EventSourcedEntityFactory.fromIdentifier` constructs the initial entity state from its identifier when the entity is first loaded.
+
+<6> The criteria resolver tells Axon which events belong to this entity's stream, using tag-based filtering.
+
+[NOTE]
+====
+If your command classes use `@Command` annotations with custom names or namespaces, use `config.getComponent(MessageTypeResolver.class).resolveOrThrow(YourCommand.class).qualifiedName()` instead of `new QualifiedName(YourCommand.class)` to ensure the correct qualified name is used.
+====
+
+=== Autodetected
+
+Use `@EventSourcedEntity` and register the entity with `EventSourcedEntityModule.autodetected()`.
+
 [source,java]
 ----
 import org.axonframework.eventsourcing.annotation.EventSourcedEntity;
@@ -150,116 +343,11 @@ public class CourseEntity {
     }
 }
 ----
-+
+
 <1> Use `@EventSourcedEntity` (non-Spring) instead of `@EventSourced`.
-Subtypes do not need a separate annotation.
-====
 
-== Event stream filtering and command routing
-
-`tagKey` on `@EventSourcedEntity` tells Axon which tag key to use when filtering the event store for this entity's events.
-The events themselves must carry a matching tag, added with `@EventTag`:
-
-[source,java]
-----
-import org.axonframework.eventsourcing.annotation.EventTag;
-import org.axonframework.extension.spring.stereotype.EventSourced;
-
-public record CourseCreatedEvent(
-    @EventTag String courseId, // <1>
-    String title,
-    int capacity
-) {}
-
-@EventSourced(tagKey = "courseId") // <2>
-public class CourseEntity {
-    // ...
-}
-----
-
-<1> `@EventTag` creates a tag from the annotated field.
-By default the tag key is the field name, so `@EventTag String courseId` produces `Tag("courseId", value)`.
-<2> `tagKey = "courseId"` tells Axon to load this entity's events by filtering on tag key `"courseId"`, matching the tag produced by `@EventTag`.
-
-If `tagKey` is omitted on the entity, Axon falls back to the entity's simple class name—set it explicitly to keep the tag key stable across refactoring.
-
-For instance command handlers, Axon also needs to know which entity instance to load.
-Annotate the identifier field on the command with `@TargetEntityId`:
-
-[source,java]
-----
-import org.axonframework.modelling.annotation.TargetEntityId;
-
-public record EnrollStudentCommand(
-    @TargetEntityId String courseId, // <1>
-    String studentId
-) {}
-----
-
-<1> Axon reads this field to load the correct entity instance from the event store before invoking the handler.
-Not required on the static creational command handler, since no entity exists yet at that point.
-
-[NOTE]
-====
-`@Command(routingKey = "...")` is a separate concern: it sets the routing key used by a distributed command bus (such as Axon Server) to route the command to the right application node.
-It does not affect which entity instance is loaded.
-====
-
-== Separation of concerns
-
-Command handlers validate and publish events; they must never write to state fields.
-Event sourcing handlers update state; they must contain no business logic.
-
-This separation matters because event sourcing handlers also run during replay when the entity is loaded from its event stream—any business logic there would execute unexpectedly.
-
-[TIP]
-====
-The xref:testing:index.adoc[Test Fixture] catches state mutations in command handlers automatically.
-====
-
-== Appending events with metadata
-
-Pass a `Metadata` instance as the second argument to attach metadata (correlation IDs, user context, etc.) to an event:
-
-[source,java]
-----
-import org.axonframework.messaging.core.Metadata;
-
-@CommandHandler
-public void handle(EnrollStudentCommand cmd, EventAppender eventAppender) {
-    Metadata metadata = Metadata.from(Map.of("enrolledBy", cmd.operatorId()));
-    eventAppender.append(new StudentEnrolledEvent(courseId, cmd.studentId()), metadata);
-}
-----
-
-To attach the same metadata to multiple events: `eventAppender.append(List.of(event1, event2), metadata)`.
-
-== Migrating from Axon Framework 4
-
-If you are porting an existing Axon 4 aggregate to an event-sourced entity, see the
-xref:migration:paths/aggregates/index.adoc[aggregate migration guide] for a step-by-step walkthrough.
-
-== Configuring event-sourced entities
-
-[tabs]
-====
-Spring Boot::
-+
-Annotate the entity with `@EventSourced`.
-Axon's auto-configuration detects and registers it automatically.
-+
-[source,java]
-----
-@EventSourced
-public class CourseEntity {
-    // ...
-}
-----
-
-Plain Java::
-+
 Register the entity using `EventSourcingConfigurer`:
-+
+
 [source,java]
 ----
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
@@ -270,147 +358,15 @@ configurer.registerEntity(
     EventSourcedEntityModule.autodetected(String.class, CourseEntity.class) // <1>
 );
 ----
-+
+
 <1> The first argument is the identifier type; the second is the entity class.
-`autodetected` reads annotations from the class automatically.
-====
+`autodetected` reads `@CommandHandler`, `@EventSourcingHandler`, and `@EntityCreator` annotations from the class automatically.
 
-== Snapshots
+=== Spring Boot
 
-Snapshots capture entity state at a point in time so Axon only needs to replay events after the snapshot, avoiding the cost of replaying the full event stream.
-
-[NOTE]
-====
-Snapshot policy is only configurable through the _declarative_ builder (`EventSourcedEntityModule.declarative`).
-The annotation-based `autodetected` helper does not expose a snapshot configuration point.
-If you need snapshots, build the module with `declarative` instead of `autodetected`, providing the messaging model, entity factory, and criteria resolver explicitly.
-====
-
-[tabs]
-====
-Spring Boot::
-+
-Declare the module as a Spring bean using the declarative builder.
-Do not also annotate the entity class with `@EventSourced`, as that would register the entity twice.
-Also declare a `SnapshotStore` bean—Axon does not auto-configure one.
-+
-[source,java]
-----
-import org.axonframework.eventsourcing.EventSourcedEntityFactory;
-import org.axonframework.eventsourcing.annotation.AnnotationBasedEventCriteriaResolver;
-import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
-import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
-import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
-import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
-import org.axonframework.messaging.core.conversion.MessageConverter;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
-import org.axonframework.modelling.entity.annotation.AnnotatedEntityMetamodel;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class CourseEntityConfiguration {
-
-    @Bean
-    public SnapshotStore snapshotStore() {
-        return new InMemorySnapshotStore(); // <1>
-    }
-
-    @Bean
-    public EventSourcedEntityModule<String, CourseEntity> courseEntityModule() {
-        return EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-            .messagingModel((config, builder) -> AnnotatedEntityMetamodel.forConcreteType( // <2>
-                CourseEntity.class,
-                config.getComponent(ParameterResolverFactory.class),
-                config.getComponent(MessageTypeResolver.class),
-                config.getComponent(MessageConverter.class),
-                config.getComponent(EventConverter.class)
-            ))
-            .entityFactory(c -> EventSourcedEntityFactory.fromNoArgument(CourseEntity::new)) // <3>
-            .criteriaResolver(c -> new AnnotationBasedEventCriteriaResolver<>( // <4>
-                CourseEntity.class, String.class, c
-            ))
-            .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <5>
-            .snapshotPolicy(c -> SnapshotPolicy.afterEvents(50)) // <6>
-            .build();
-    }
-}
-----
-+
-<1> `InMemorySnapshotStore` stores snapshots in memory—for development and testing only.
-In production, replace this with a persistent `SnapshotStore` implementation backed by a database or the event store.
-+
-<2> Builds the entity metamodel from annotations on `CourseEntity` (`@CommandHandler`, `@EventSourcingHandler`).
-+
-<3> Creates a new entity instance via the `@EntityCreator` no-arg constructor.
-+
-<4> Reads `@EventSourcedEntity(tagKey = ...)` from `CourseEntity` to build the `EventCriteria` for event stream filtering.
-+
-<5> Reads `@TargetEntityId` from command payloads to identify which entity instance to load.
-+
-<6> `SnapshotPolicy.afterEvents(50)` triggers a snapshot after more than 50 events have been applied since the last snapshot.
-
-Plain Java::
-+
-[source,java]
-----
-import org.axonframework.eventsourcing.EventSourcedEntityFactory;
-import org.axonframework.eventsourcing.annotation.AnnotationBasedEventCriteriaResolver;
-import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
-import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
-import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
-import org.axonframework.messaging.core.conversion.MessageConverter;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
-import org.axonframework.modelling.entity.annotation.AnnotatedEntityMetamodel;
-
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
-
-configurer.componentRegistry(r -> r.registerComponent(
-    SnapshotStore.class, c -> new InMemorySnapshotStore() // <1>
-));
-
-configurer.registerEntity(
-    EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-        .messagingModel((config, builder) -> AnnotatedEntityMetamodel.forConcreteType( // <2>
-            CourseEntity.class,
-            config.getComponent(ParameterResolverFactory.class),
-            config.getComponent(MessageTypeResolver.class),
-            config.getComponent(MessageConverter.class),
-            config.getComponent(EventConverter.class)
-        ))
-        .entityFactory(c -> EventSourcedEntityFactory.fromNoArgument(CourseEntity::new)) // <3>
-        .criteriaResolver(c -> new AnnotationBasedEventCriteriaResolver<>( // <4>
-            CourseEntity.class, String.class, c
-        ))
-        .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <5>
-        .snapshotPolicy(c -> SnapshotPolicy.afterEvents(50)) // <6>
-        .build()
-);
-----
-+
-<1> `InMemorySnapshotStore` stores snapshots in memory—for development and testing only.
-In production, replace this with a persistent `SnapshotStore` implementation backed by a database or the event store.
-+
-<2> Builds the entity metamodel from annotations on `CourseEntity` (`@CommandHandler`, `@EventSourcingHandler`).
-+
-<3> Creates a new entity instance via the `@EntityCreator` no-arg constructor.
-+
-<4> Reads `@EventSourcedEntity(tagKey = ...)` from `CourseEntity` to build the `EventCriteria` for event stream filtering.
-+
-<5> Reads `@TargetEntityId` from command payloads to identify which entity instance to load.
-+
-<6> `SnapshotPolicy.afterEvents(50)` triggers a snapshot after more than 50 events have been applied since the last snapshot.
-====
-
-For more on tuning snapshots, see xref:tuning:snapshotting.adoc[].
+In Spring Boot, annotate the entity with `@EventSourced` instead of `@EventSourcedEntity`.
+Axon's auto-configuration detects and registers it automatically — no explicit configuration class is required.
+The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 == Further reading
 
@@ -418,3 +374,5 @@ For more on tuning snapshots, see xref:tuning:snapshotting.adoc[].
 * xref:commands:entities/entity-hierarchies.adoc[Entity hierarchies]
 * xref:commands:entities/entity-polymorphism.adoc[Polymorphic entities]
 * xref:events:event-handlers.adoc[Event handlers]
+* xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata] — to append metadata alongside an event, pass a `Metadata` instance as the second argument to `eventAppender.append()`
+* xref:tuning:snapshotting.adoc[Snapshotting] — available as a performance optimization for entities with large event streams
