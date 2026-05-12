@@ -1,59 +1,28 @@
 = Command Handlers
 :navtitle: Handling
 
-Command handlers are the components that process commands and perform the corresponding business logic.
-Command handlers can be either stateless or stateful, depending on whether they need to maintain state across command invocations.
-
-This page explains how to define command handlers, handle commands, and work with the key concepts like `ProcessingContext`, `EventAppender`, and message types.
-
-In Axon Framework 5, commands are the primary driver of all state changes.
-A command handler decides whether a requested change is valid and applies it by updating the state directly or by appending events to a log.
-
-Some commands need no prior state: they validate the request on its own terms and apply the change.
-Others require checking what happened before.
-A bank account command needs the current balance; a course enrollment command needs the current student count.
-When a command needs prior state, one approach is to load an *entity*: a class that holds the relevant fields and enforces the business rules for that command.
-
-An entity is an implementation choice, not an architectural requirement.
-A command handler that needs no prior state requires no entity.
-This is why entities are documented under commands: they exist to serve commands, not as a concept of their own.
-
-For full documentation on event-sourced entities, entity hierarchies, and polymorphism, see xref:commands:entities/index.adoc[Entities].
-
-[TIP]
-.Annotating command messages
-====
-It's recommended to annotate all command message classes with `@Command`. This allows you to:
-
-* Define an explicit message type independent of the Java class name.
-* Version your queries for evolution over time.
-* Organize queries by bounded context using namespaces.
-* Leverage payload conversion at handling time for different representations.
-
-If the `@Command` annotation is omitted, Axon will default to using the fully qualified class name as the command name, which tightly couples your message identity to your Java package structure.
-====
+Command handlers process commands and perform the corresponding business logic.
+A command handler decides whether a requested change is valid and, if so, applies it — either by modifying state directly or by appending events.
+Handlers can be stateless or stateful depending on whether they need prior state to make that decision.
 
 == Stateless vs stateful command handlers
 
 Command handlers in Axon Framework fall into two categories:
 
-* **Stateless command handlers**: Regular components (registered objects or beans) that don't maintain state in the handler itself between command invocations.
-Each command is processed independently.
-State may be accessed through injected services or repositories, but the handler itself doesn't manage state.
+* **Stateless command handlers**: No prior state is needed to process the command.
+Each invocation is independent — for example, sending a notification or forwarding a command to an external system.
 
-* **Stateful command handlers**: Components that maintain state in the handler itself across command invocations.
-These are typically event-sourced entities where state is built up from events and stored in the handler instance.
-
-[NOTE]
-====
-With recent versions of Axon Framework, the emphasis has shifted from modeling-centric (read: aggregate focus) to command-centric.
-Entities are now understood as one implementation pattern for stateful command handling, not a core framework concept.
-The focus is on handling commands effectively, with various patterns available to achieve that goal.
-====
+* **Stateful command handlers**: Prior state is required to enforce business rules.
+A bank account command needs the current balance to prevent overdrafts.
+A course enrollment command needs the current student count to enforce capacity.
+State is typically held in an event-sourced entity that Axon loads automatically before invoking the handler.
++
+An entity is one way to provide that state, but it is an implementation choice, not an architectural requirement.
+For full documentation on defining and configuring entities, see xref:commands:entities/index.adoc[Entities].
 
 == Stateless command handlers
 
-Stateless command handlers are regular components with command handling methods that don't maintain state in the handler itself. An example of command handling methods are methods annotated with `@CommandHandler`
+Stateless command handlers are regular components with methods annotated with `@CommandHandler`.
 They may access state through injected services or repositories, but the handler instance itself is stateless.
 
 [source,java]
@@ -113,143 +82,17 @@ Stateless handlers are useful for:
 [#stateful-command-handlers]
 == Stateful command handlers
 
-Stateful command handlers maintain state in the handler itself across command invocations.
-State is typically built up from events and used to make decisions about whether commands can be executed.
+When a command needs prior state to make decisions, you can use an entity.
+Axon loads the entity automatically before invoking the handler.
 
-Axon Framework supports two paradigms for defining stateful command handlers:
-
-* **Entity-centric**: Define an entity class and place `@CommandHandler` methods directly on it.
-* **Command-centric**: Define command handlers as separate methods that receive the entity as a parameter, which Axon automatically loads.
-
-Both approaches achieve the same goal but reflect different design preferences.
-The entity-centric approach groups all command handling logic with the entity state, while the command-centric approach keeps command handling logic separate from state management.
-
-=== Entity-centric command handlers
-
-In the entity-centric model, you define a class marked with `@EventSourcedEntity` and place command handlers directly on it:
+You can place `@CommandHandler` methods directly on the entity class, or keep them in a separate component and receive the loaded entity as a parameter via `@InjectEntity`:
 
 [source,java]
 ----
-import org.axonframework.eventsourcing.annotation.EventSourcedEntity;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.commandhandling.annotation.Command;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-
-@Command(routingKey = "cardId") // <1>
-public record IssueCardCommand(String cardId, int amount, String shopId) {
-}
-
-@Command(routingKey = "cardId")
-public record RedeemCardCommand(String cardId, String transactionId, int amount) {
-}
-
-@EventSourcedEntity // <2>
-public class GiftCard {
-
-    private String id;
-    private int remainingValue;
-
-    @CommandHandler // <3>
-    public static String issue(IssueCardCommand cmd, EventAppender eventAppender) {
-        if (cmd.amount() <= 0) {
-            throw new IllegalArgumentException("Amount must be positive");
-        }
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount()));
-        return cmd.cardId();
-    }
-
-    @CommandHandler // <4>
-    public void handle(RedeemCardCommand cmd, EventAppender eventAppender) {
-        if (cmd.amount() <= 0) {
-            throw new IllegalArgumentException("amount <= 0");
-        }
-        if (cmd.amount() > remainingValue) { // <5>
-            throw new IllegalStateException("amount > remaining value");
-        }
-        eventAppender.append(new CardRedeemedEvent(id, cmd.transactionId(), cmd.amount()));
-    }
-
-    // Event sourcing handlers update state
-    @EventSourcingHandler
-    private void on(CardIssuedEvent event) {
-        this.id = event.cardId();
-        this.remainingValue = event.amount();
-    }
-
-    @EventSourcingHandler
-    private void on(CardRedeemedEvent event) {
-        this.remainingValue -= event.amount();
-    }
-
-    @EntityCreator // <6>
-    protected GiftCard() {
-        // Required no-arg constructor for reconstitution
-    }
-}
-----
-
-<1> The `@Command` annotation on the command class defines the message type and routing key.
-The `routingKey` attribute specifies which property contains the identifier for routing.
-Commands with the same routing key are routed to the same handler instance to avoid optimistic concurrency conflicts.
-
-<2> The `@EventSourcedEntity` annotation (non-Spring) or `@EventSourced` (Spring) marks the class as an event-sourced entity. If such an event-sourced entity contains command handlers, those will be automatically discovered.
-
-<3> A creational command handler (static method) creates a new instance by appending events.
-
-<4> An instance command handler (instance method) operates on an existing instance, requiring it to be loaded first based on the entity identifier.
-The task of finding the entity identifier is performed by the `EntityIdResolver`, which defaults to the `AnnotatedEntityIdResolver`.
-The `AnnotatedEntityIdResolver` in turn checks for the existence of an `@TargetEntityId` annotated field or getter on the command.
-
-<5> Instance handlers have access to current state for decision-making.
-
-<6> The `@EntityCreator` constructor tells Axon how to create an empty entity instance before replaying events.
-See xref:commands:command-handlers.adoc#entity-creation-with-entitycreator[Entity creation with `@EntityCreator`] for all three creation patterns.
-
-For a full guide to event-sourced entities (including configuration, snapshots, and child entities), see xref:commands:entities/index.adoc[Entities].
-
-[#_command_centric_stateful_handlers]
-=== Command-centric command handlers
-
-In the command-centric model, you define command handlers as separate methods that receive the entity as a parameter.
-Axon Framework automatically loads the entity instance based on the command's routing key:
-
-[source,java]
-----
-import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.extension.spring.stereotype.EventSourced;
+import org.axonframework.modelling.annotation.InjectEntity;
 import org.springframework.stereotype.Component;
-
-// The entity definition with state and event sourcing handlers
-@EventSourcedEntity
-public class GiftCard {
-
-    private String id;
-    private int remainingValue;
-
-    @EventSourcingHandler
-    private void on(CardIssuedEvent event) {
-        this.id = event.cardId();
-        this.remainingValue = event.amount();
-    }
-
-    @EventSourcingHandler
-    private void on(CardRedeemedEvent event) {
-        this.remainingValue -= event.amount();
-    }
-
-    public String getId() {
-        return id;
-    }
-
-    public int getRemainingValue() {
-        return remainingValue;
-    }
-
-    @EntityCreator
-    protected GiftCard() {
-        // Required no-arg constructor for reconstitution
-    }
-}
 
 // Separate command handlers that receive the entity as a parameter
 @Component // <1>
@@ -289,6 +132,8 @@ Other options are available and specified in the `@InjectEntity` documentation.
 <4> The handler accesses the entity to make business decision.
 This can either be done by invoking entity-specific decision methods or by inspecting the state (as shown in the sample above).
 
+For how to define the entity itself — state fields, event sourcing handlers, `@EntityCreator` patterns, and configuration — see xref:commands:entities/index.adoc[Entities].
+
 [TIP]
 ====
 The command-centric approach aligns closest with [Vertical Slice-based Architecture](https://www.baeldung.com/java-vertical-slice-architecture). This style is useful when:
@@ -299,256 +144,18 @@ The command-centric approach aligns closest with [Vertical Slice-based Architect
 * You want to easily test command handling logic without the entity class.
 ====
 
-=== Creational and instance handlers
-
-Both entity-centric and command-centric stateful handlers support two handler types:
-
-* **Creational handlers**: Create new instances (static factory methods on the entity, or separate methods without entity parameter)
-* **Instance handlers**: Operate on existing instances (instance methods on the entity, or separate methods with entity parameter)
-
-The examples below show the entity-centric approach.
-For command-centric examples, see the previous section.
-
-==== Creational handlers
-
-Creational handlers are static methods with `@CommandHandler` that create new entity instances by appending events:
-
-[source,java]
-----
-@EventSourced
-public class GiftCard {
-
-    @CommandHandler
-    public static String issue(IssueCardCommand cmd, EventAppender eventAppender) { // <1>
-        if (cmd.amount() <= 0) {
-            throw new IllegalArgumentException("Amount must be positive");
-        }
-
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount())); // <2>
-
-        return cmd.cardId(); // <3>
-    }
-
-    @EntityCreator // <4>
-    protected GiftCard() {
-        // Required no-arg constructor for reconstitution
-    }
-}
-----
-
-<1> Static method marked with `@CommandHandler` creates the entity.
-
-<2> Events are appended to create and initialize the entity.
-The entity instance itself doesn't need to be created or returned by the handler.
-
-<3> The method can return whatever value makes sense for the caller—typically the entity identifier, but could be any result type.
-
-<4> The entity creator of the event-sourced entity, as described in more detail <<Entity creation with `@EntityCreator`,here>>. A no-arg constructor in this example.
-
-==== Instance handlers
-
-Instance handlers operate on existing instances that are loaded based on their identifier:
-
-[source,java]
-----
-@EventSourced
-public class GiftCard {
-
-    private String id;
-    private int remainingValue;
-
-    @CommandHandler // <1>
-    public void handle(RedeemCardCommand cmd, EventAppender eventAppender) {
-        if (cmd.amount() > remainingValue) {
-            throw new IllegalStateException("Insufficient balance");
-        }
-        eventAppender.append(new CardRedeemedEvent(id, cmd.transactionId(), cmd.amount()));
-    }
-
-    @EntityCreator // <2>
-    protected GiftCard() {
-    }
-}
-----
-
-<1> Instance methods with `@CommandHandler` require an existing instance to be loaded based on the entity identifier.
-The task of finding the entity identifier is performed by the `EntityIdResolver`, which defaults to the `AnnotatedEntityIdResolver`. The `AnnotatedEntityIdResolver` in turn checks for the existence of an `@TargetEntityId` annotated field or getter on the command.
-
-<2> The entity creator of the event-sourced entity, as described in more detail <<Entity creation with `@EntityCreator`,here>>. A no-arg constructor in this example.
-
-The framework automatically loads the correct instance based on the command's routing key before invoking the handler.
-
-=== Entity creation with `@EntityCreator`
-
-In event sourcing, events are used to reconstruct the state of an entity.
-To be able to reconstruct the state, an initial entity instance should be constructed.
-The `@EntityCreator` annotation specifies how to create that initial instance.
-The `@EntityCreator` is mandatory when writing annotation-based entities, as they are in charge of telling Axon Framework how you prefer to initialize an entity.
-
-There are three patterns for entity creation:
-
-**Pattern 1: Empty instance creation**
-
-When the `@EntityCreator` annotation is placed on a no-arg constructor, Axon Framework constructs an empty instance of that entity:
-
-[source,java]
-----
-@EventSourced
-public class GiftCard {
-
-    private String id;
-    private int remainingValue;
-
-    @EntityCreator // <1>
-    public GiftCard() {
-    }
-
-    @CommandHandler // <2>
-    public static void handle(IssueCardCommand cmd, EventAppender eventAppender) {
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount()));
-    }
-
-    @EventSourcingHandler
-    private void on(CardIssuedEvent event) {
-        this.id = event.id();
-        this.remainingValue = event.amount();
-    }
-}
-----
-
-<1> A no-argument constructor annotated with `@EntityCreator`.
-This constructor will be invoked to create the initial entity for further instance command handling.
-
-<2> A static command handler must be used for the creation command, since no instance exists to handle it yet.
-Once the event is published, future loads will use the `@EntityCreator` to create the instance from that event.
-
-**Pattern 2: Identifier-only creation**
-
-Besides pattern one, where a no-arg constructors was annotated with the `@EntityCreator` annotation, you can also place the `@EntityCreator` on a constructor that includes an entity identifier parameter.
-The entity identifier is required to be annotated with `@InjectEntityId`, as shown in the sample below:
-
-[source,java]
-----
-@EventSourced
-public class GiftCard {
-
-    private String id;
-    private int remainingValue;
-
-    @EntityCreator // <1>
-    public GiftCard(@InjectEntityId String id) { // <2>
-        this.id = id;
-    }
-
-    @CommandHandler // <3>
-    public static void handle(IssueCardCommand cmd, EventAppender eventAppender) {
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount()));
-    }
-
-    @EventSourcingHandler
-    private void on(CardIssuedEvent event) {
-        this.remainingValue = event.amount();
-    }
-}
-----
-
-<1> `@EntityCreator` on a constructor that takes only the identifier to creates the initial instance.
-This constructor will be invoked to create the initial entity for further instance command handling.
-
-<2> The entity identifier parameter, annotated with `@InjectEntityId`.
-The identifier is resolved from the first event payload.
-The annotation is required by Axon Framework to be able to differentiate between an entity identifier parameter and event parameter (as used in pattern 3).
-
-<3> A static command handler must be used for the creation command, since no instance exists to handle it yet.
-Once the event is published, future loads will use the `@EntityCreator` to create the instance from that event.
-
-[WARNING]
-====
-Use `@InjectEntityId` to disambiguate the entity identifier from the event payload.
-Without this annotation, the first parameter is assumed to be the event payload.
-====
-
-**Pattern 3: Creation from origin event**
-
-Besides no-argument and identifier-only `@EntityCreator` annotated constructors, you can use the first event to construct the initial entity:
-
-[source,java]
-----
-@EventSourced
-public class GiftCard {
-
-    private final String id;
-    private final int initialAmount;
-
-    @EntityCreator // <1>
-    public GiftCard(CardIssuedEvent event, @InjectEntityId String id) {
-        this.id = event.cardId(); // or use the injected id parameter
-        this.initialAmount = event.amount();
-    }
-
-    @CommandHandler // <2>
-    public static String issue(IssueCardCommand cmd, EventAppender eventAppender) {
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount()));
-        return cmd.cardId();
-    }
-}
-----
-
-<1> `@EntityCreator` on a constructor that takes the first event that can then be used to initialize the entity state.
-Can be combined with an `@InjectEntityId` annotated entity identifier parameter if desired.
-This constructor will be invoked to create the initial entity for further instance command handling.
-
-<2> A static command handler must be used for the creation command, since no instance exists to handle it yet.
-Once the event is published, future loads will use the `@EntityCreator` to create the instance from that event.
-
-[IMPORTANT]
-====
-**Understanding the relationship:**
-
-* `@EntityCreator` defines how to create entity instances (either through a no-arg, identifier-only, or first-event-based constructor).
-* `@CommandHandler` on static methods handles creation commands and appends events.
-* `@CommandHandler` on instance methods handles commands on loaded entities.
-
-When a command arrives Axon Framework checks if the command is targeted towards a creational or instance command handler:
-
-1. For an instance command handler, Axon loads the entity using `@EntityCreator` first.
-Then the appropriate instance command handler is invoked on that instance.
-2. For a creational command handler, the static command handling method is invoked first.
-Then, the appropriate event sourcing handlers are triggered to set the new state.
-
-Both annotations work together in the entity lifecycle, but serve distinct purposes.
-====
-
-=== Polymorphic entities
-
-Axon Framework allows for polymorphism in your entities when desired.
-Please check out the following example that shows how to construct a polymorphic entity:
-
-[source,java]
-----
-@EventSourcedEntity(concreteTypes = {StandardCard.class, PremiumCard.class}) // <1>
-public abstract class GiftCard {
-
-    @EntityCreator // <2>
-    public static GiftCard create(@InjectEntityId CardId id) {
-        if (id.type() == CardType.STANDARD) {
-            return new StandardCard(id);
-        } else {
-            return new PremiumCard(id);
-        }
-    }
-}
-----
-
-<1> The base or parent class is on purpose made abstract, to signal it is not the concrete entity type.
-Furthermore, the `@EventSourcedEntity` (or `@EventSourced` for Spring environments) annotation specifies the concrete types of the entity through the `concreteTypes` field.
-
-<2> Static factory method with `@EntityCreator` can return different subtypes based on the identifier.
-
 == Command message types
 
 In Axon Framework, commands are identified by a `MessageType`, which consists of a `QualifiedName` and version.
 This decouples the logical identity of a command from its (Java) representation.
+
+[TIP]
+====
+Annotate command classes with `@Command` to define an explicit message type.
+This lets you set a stable name and namespace independent of the Java class name, version the command for evolution over time, and enable payload conversion at handling time.
+
+If `@Command` is omitted, Axon falls back to the fully qualified class name as the command name, which tightly couples your message identity to your Java package structure.
+====
 
 === Declaring command types
 
@@ -615,7 +222,7 @@ Upcasters are still needed for structural changes to events in the event store.
 However, for commands and for handlers that simply need data in a different format, payload conversion is more appropriate.
 ====
 
-== `Handling commands with ProcessingContext`
+== Handling commands with ProcessingContext
 
 The `ProcessingContext` is a fundamental concept in Axon Framework, backing the internal concept of the `UnitOfWork`.
 When a command is handled, Axon automatically creates a `ProcessingContext` and makes it available to all components involved in processing the command.
@@ -691,70 +298,6 @@ Events are applied to the entity and published when the `ProcessingContext` comm
 The `EventAppender` is `ProcessingContext`-aware and ensures events are published within the correct processing context.
 Never try to store or reuse an `EventAppender` across different command invocations.
 ====
-
-== Business logic and state changes
-
-For stateful command handlers, there is a critical separation of concerns:
-
-* **Command handlers** validate whether the handler is in the correct state to execute the command.
-If yes, they publish events.
-If not, they throw an exception, ignore the command, or publish entirely different events,depending on business requirements.
-
-* **Event sourcing handlers** apply state changes based on events.
-They must *never* contain business logic—only state updates.
-
-State changes should *never* occur in command handling functions.
-Event sourcing handlers should be the only methods where state is updated.
-Failing to follow this principle means the handler will miss state changes when it is being sourced from its events.
-
-[source,java]
-----
-@EventSourcedEntity
-public class GiftCard {
-
-    private String id;
-    private int remainingValue;
-
-    @CommandHandler // Command handler: validation and decision-making
-    public void handle(RedeemCardCommand cmd, EventAppender eventAppender) {
-        // Business logic validation
-        if (cmd.amount() <= 0) {
-            throw new IllegalArgumentException("Amount must be positive");
-        }
-        if (cmd.amount() > remainingValue) { // <1>
-            throw new IllegalStateException("Insufficient balance");
-        }
-
-        // Decision: publish event
-        eventAppender.append(new CardRedeemedEvent(id, cmd.transactionId(), cmd.amount()));
-        // <2>
-    }
-
-    @EventSourcingHandler // Event sourcing handler: state changes only
-    private void on(CardRedeemedEvent event) {
-        this.remainingValue -= event.amount(); // <3>
-    }
-
-    @EntityCreator
-    protected GiftCard() {
-    }
-}
-----
-
-<1> Command handler reads current state to make decisions.
-
-<2> Command handler does not modify state directly.
-
-<3> Event sourcing handler is the only place where state is modified.
-
-[TIP]
-====
-The only state a stateful handler requires is the state it needs to make decisions.
-Handling an event is thus only required if the state change is necessary for future validation of other commands.
-====
-
-The xref:testing:index.adoc[Test Fixture] will guard against unintentional state changes in command handling functions.
-It is strongly advised to provide thorough test cases for any stateful handler implementation.
 
 == Injectable parameters
 
@@ -849,7 +392,7 @@ public class GiftCardTransferHandler {
 By specifying the `idProperty` attributes on `@InjectEntity` annotated parameters you can load an entity based on different field or getter present in the command. This is an example of how a command handler can load different entities.
 ====
 
-**Alternative: Manual loading with repository**
+=== Manual loading with repository
 
 If you have a different way of loading required state (for example, from a custom data source or with special loading logic), you can manually load entities using the repository.
 However, this is effectively the same as a stateless command handler—you're just using services to access state:
@@ -941,41 +484,30 @@ This is useful when:
 * You need payload conversion to a specific type.
 * You're integrating with external systems that use different message formats.
 
-== Configuration examples
+== Configuration
 
 === Spring Boot configuration
 
-When using Spring Boot, command handlers are automatically discovered and registered by using the `@CommandHandler` annotation on methods inside Spring beans:
+Annotate methods with `@CommandHandler` inside any Spring bean and Axon's auto-configuration discovers and registers them automatically:
 
 [source,java]
 ----
-@EventSourced // <1>
-public class GiftCard {
-    @CommandHandler
-    public GiftCard(IssueCardCommand cmd, EventAppender eventAppender) {
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount()));
-    }
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
+import org.springframework.stereotype.Component;
 
-    protected GiftCard() {
-    }
-}
-
-@Component // <2>
+@Component
 public class GiftCardValidationHandler {
+
     @CommandHandler
     public void handle(ValidateCardCommand cmd) {
-        // Stateless handler logic
+        // stateless handler logic
     }
 }
 ----
 
-<1> Stateful handlers are discovered via `@EventSourced` annotation.
+=== Without Spring
 
-<2> Stateless handlers are discovered when they are regular Spring beans, as in this example through use of the  `@Component` annotation.
-
-=== Configuration API
-
-Without Spring, you can register command handlers using the Configuration API:
+Register a stateless command handler using the Configuration API:
 
 [source,java]
 ----
@@ -1003,4 +535,5 @@ Without Spring, you can register command handlers using the Configuration API:
     }
 ----
 
+For registering event-sourced entities, see xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities].
 For more details on configuration, see xref:configuration.adoc[].

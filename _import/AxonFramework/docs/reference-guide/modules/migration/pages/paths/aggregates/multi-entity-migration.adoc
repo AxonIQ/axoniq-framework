@@ -128,7 +128,7 @@ private List<Transaction> transactions = new ArrayList<>();
 <1> `RoutingKeyEventTargetMatcherDefinition` routes events only to the child whose routing key matches a field on the event payload, preventing every child from receiving every event.
 
 There is no direct replacement for `ForwardNone`.
-If you need to suppress event forwarding entirely, do not declare `@EventSourcingHandler` methods on the child entity; Axon will offer events but nothing will handle them.
+If you need to suppress event forwarding entirely, do not declare `@EventSourcingHandler` methods on the child entity. Axon will offer events but nothing will handle them.
 
 == See also
 

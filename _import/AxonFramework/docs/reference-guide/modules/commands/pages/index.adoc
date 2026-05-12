@@ -40,15 +40,10 @@ Examples: Integration handlers that call external APIs, handlers that query read
 For stateful command handling, Axon Framework provides comprehensive **entity** support for state management.
 Entities are components that encapsulate state and the business logic that operates on that state.
 
-Axon supports two approaches to entity state management:
+Axon supports **event-sourced entities**, where state is derived from a sequence of events.
+State-stored entities are planned for a future release.
 
-* **Event-sourced entities** - State derived from a sequence of events
-* **State-stored entities** - State persisted directly to a database
-
-You can mix and match these approaches based on your needs.
-The choice depends on your specific requirements for state management, auditability, and consistency.
-
-Alternatively, you can implement stateful handlers without using entities, managing state through your own custom mechanisms.
+See xref:commands:entities/index.adoc[Entities] for full documentation.
 
 == Subsections
 
@@ -60,6 +55,7 @@ A summary of the various sections is given below.
 
 |xref:command-handlers.adoc[Handling] |How to write command handlers (stateless and stateful, with and without entities)
 |xref:command-dispatchers.adoc[Dispatching] |How to dispatch commands from your application code
+|xref:entities/index.adoc[Entities] |How to maintain state across commands and enforce business rules using event-sourced entities
 |xref:infrastructure.adoc[Infrastructure] |Command bus implementations, repositories, and other infrastructure components
 |xref:configuration.adoc[Configuration] |How to configure command handling in your application
 |===
