@@ -96,8 +96,8 @@ Maven wrapper is used (`./mvnw`). Key commands:
     - Do not add @DisplayName for test methods, try to make method names self-explanatory and add meaningful comments in given-when-then sections if needed
 
 Test naming conventions:
-- **Unit tests** (Surefire): `*Test.java`, `*Tests.java`, `*Test_*.java`, `*Tests_*.java`
-- **Integration tests** (Failsafe): `*IntegrationTest.java`, `*IntegrationTests.java`, `IT*.java`, `*IT.java`, `*ITCase.java`
+- **Unit tests** (Surefire): `*Test.java`, `*Tests.java`, `*TestCase.java`, `Test*.java`
+- **Integration tests** (Failsafe): `*IT.java`, `IT*.java`, `*ITCase.java`
 
 ## Module Dependency Hierarchy
 
