@@ -42,7 +42,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME_GLOBAL_ONLY;
+import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -184,7 +184,7 @@ class TerminalStateGuardTest {
         workflowState.evolve(EventMessageUtils.completedStep(workflowContext,
                                                              "step-1",
                                                              Map.of(),
-                                                             NAME_GLOBAL_ONLY,
+            NAME,
                                                              eventNameCustomizer),
                              processingContext);
 
@@ -200,7 +200,7 @@ class TerminalStateGuardTest {
     @Test
     void failedFutureContainsStepNameInMessage() {
         workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(),
-                                                             NAME_GLOBAL_ONLY, eventNameCustomizer),
+            NAME, eventNameCustomizer),
                              processingContext);
 
         var future = stepExecutor.testCompleted("my-step", Map.of(), eventNameCustomizer);

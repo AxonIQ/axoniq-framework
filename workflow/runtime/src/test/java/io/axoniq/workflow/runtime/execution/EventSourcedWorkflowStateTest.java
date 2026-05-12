@@ -34,7 +34,7 @@ import org.junit.jupiter.api.*;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -154,7 +154,7 @@ class EventSourcedWorkflowStateTest {
         Map<String, Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                              NAME_COMBINE_GLOBAL_AND_LOCAL);
+                                           NAME);
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);

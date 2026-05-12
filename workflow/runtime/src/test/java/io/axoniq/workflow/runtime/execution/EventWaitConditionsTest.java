@@ -36,7 +36,7 @@ import java.util.Collection;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME_GLOBAL_ONLY;
+import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -48,7 +48,7 @@ class EventWaitConditionsTest {
 
     private EventWaitConditions eventWaitConditions;
     private final PayloadReducerRegistry registry = new PayloadReducerRegistry();
-    private final PayloadReducer globalOnly = registry.get(NAME_GLOBAL_ONLY).orElseThrow();
+    private final PayloadReducer globalOnly = registry.get(NAME).orElseThrow();
 
     @BeforeEach
     void setUp() {

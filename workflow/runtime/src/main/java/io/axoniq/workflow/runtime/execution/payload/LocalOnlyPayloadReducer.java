@@ -25,8 +25,8 @@ import org.jspecify.annotations.NonNull;
 import java.util.Map;
 
 /**
- * Simple {@code PayloadReducer} that will only pass along the `local` payload, ignoring the `global` payload, without
- * modification.
+ * Simple {@code PayloadReducer} that will only pass along the {@code local} payload, ignoring the {@code global}
+ * payload, without modification.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -36,7 +36,7 @@ public class LocalOnlyPayloadReducer implements PayloadReducer {
     /**
      * Name of {@link LocalOnlyPayloadReducer} reducer.
      */
-    public static final String NAME_LOCAL_ONLY = "local_only";
+    public static final String NAME = "local_only";
 
     @Override
     public Map<String, Object> apply(@NonNull Map<String, Object> global,
@@ -46,6 +46,6 @@ public class LocalOnlyPayloadReducer implements PayloadReducer {
 
     @Override
     public @NonNull String name() {
-        return NAME_LOCAL_ONLY;
+        return NAME;
     }
 }

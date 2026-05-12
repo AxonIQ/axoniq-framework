@@ -34,7 +34,7 @@ import java.time.Clock;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
-import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME_LOCAL_ONLY;
+import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.completedStep;
 
 /**
@@ -80,7 +80,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
                                          var payloadEvent = completedStep(workflowContext,
                                                                           stepName,
                                                                           sanitize(newPayload),
-                                                                          NAME_LOCAL_ONLY, // replace later the entire payload
+                                           NAME, // replace later the entire payload
                                                                           merge(parentEventNameCustomizer, eventNameCustomizer));
                                          ProcessingContextUtils.executeWithResult(
                                                  workflowExecution.workflowId(),

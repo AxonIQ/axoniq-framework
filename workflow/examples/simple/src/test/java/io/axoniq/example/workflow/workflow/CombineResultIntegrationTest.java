@@ -28,6 +28,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -43,8 +45,6 @@ import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
-import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME_LOCAL_ONLY;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -122,8 +122,8 @@ class CombineResultIntegrationTest
             return super.execute(stepName,
                                  payload,
                                  action,
-                                 registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                                 registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL).orElseThrow(),
+                                 registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                                 registry.get(CombineGlobalAndLocalPayloadReducer.NAME).orElseThrow(),
                                  Duration.ofMinutes(5),
                                  defaults()
             );
@@ -143,8 +143,8 @@ class CombineResultIntegrationTest
             return super.execute(stepName,
                                  payload,
                                  action,
-                                 registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                                 registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL).orElseThrow(),
+                                 registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                                 registry.get(CombineGlobalAndLocalPayloadReducer.NAME).orElseThrow(),
                                  duration,
                                  eventNameCustomizer);
         }

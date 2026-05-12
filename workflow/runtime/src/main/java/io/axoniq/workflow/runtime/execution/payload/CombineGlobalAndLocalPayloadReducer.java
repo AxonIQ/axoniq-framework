@@ -39,7 +39,7 @@ public class CombineGlobalAndLocalPayloadReducer implements PayloadReducer {
     /**
      * Name of {@link CombineGlobalAndLocalPayloadReducer} reducer.
      */
-    public static final String NAME_COMBINE_GLOBAL_AND_LOCAL = "combine_local_and_global";
+    public static final String NAME = "combine_local_and_global";
 
 
     @Override
@@ -52,6 +52,6 @@ public class CombineGlobalAndLocalPayloadReducer implements PayloadReducer {
 
     @Override
     public @NonNull String name() {
-        return NAME_COMBINE_GLOBAL_AND_LOCAL;
+        return NAME;
     }
 }

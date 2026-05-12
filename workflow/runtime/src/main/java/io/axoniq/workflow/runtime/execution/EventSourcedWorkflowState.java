@@ -238,7 +238,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             processingContext
                     .component(PayloadReducerRegistry.class)
                     .get(reducerName)
-                    .ifPresent(resultReducer -> {
+                    .ifPresentOrElse(resultReducer -> {
                         Map<String, Object> stepPayload;
                         try {
                             stepPayload = eventMessage.payloadAs(new TypeReference<>() {
@@ -258,7 +258,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                          result);
                             this.payload = result;
                         }
-                    });
+                    }, () -> logger.warn("Unknown reducer detected {}. Skipping payload update.", reducerName));
         });
     }
 

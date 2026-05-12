@@ -22,9 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
-import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME_GLOBAL_ONLY;
-import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME_LOCAL_ONLY;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PayloadReducerRegistryTest {
@@ -36,17 +34,17 @@ class PayloadReducerRegistryTest {
         var global = Map.<String, Object>of("shared", "global", "globalOnly", true);
         var local = Map.<String, Object>of("shared", "local", "localOnly", true);
 
-        assertThat(registry.get(NAME_LOCAL_ONLY))
+        assertThat(registry.get(LocalOnlyPayloadReducer.NAME))
                 .hasValueSatisfying(reducer -> {
                     assertThat(reducer).isInstanceOf(LocalOnlyPayloadReducer.class);
                     assertThat(reducer.apply(global, local)).isSameAs(local);
                 });
-        assertThat(registry.get(NAME_GLOBAL_ONLY))
+        assertThat(registry.get(GlobalOnlyPayloadReducer.NAME))
                 .hasValueSatisfying(reducer -> {
                     assertThat(reducer).isInstanceOf(GlobalOnlyPayloadReducer.class);
                     assertThat(reducer.apply(global, local)).isSameAs(global);
                 });
-        assertThat(registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL))
+        assertThat(registry.get(NAME))
                 .hasValueSatisfying(reducer -> {
                     assertThat(reducer).isInstanceOf(CombineGlobalAndLocalPayloadReducer.class);
                     assertThat(reducer.apply(global, local))
@@ -67,8 +65,8 @@ class PayloadReducerRegistryTest {
     void doesNotLoadReducersWhenDisabled() {
         var registry = new PayloadReducerRegistry(false, getClass().getClassLoader());
 
-        assertThat(registry.get(NAME_LOCAL_ONLY)).isEmpty();
-        assertThat(registry.get(NAME_GLOBAL_ONLY)).isEmpty();
-        assertThat(registry.get(NAME_COMBINE_GLOBAL_AND_LOCAL)).isEmpty();
+        assertThat(registry.get(LocalOnlyPayloadReducer.NAME)).isEmpty();
+        assertThat(registry.get(GlobalOnlyPayloadReducer.NAME)).isEmpty();
+        assertThat(registry.get(NAME)).isEmpty();
     }
 }

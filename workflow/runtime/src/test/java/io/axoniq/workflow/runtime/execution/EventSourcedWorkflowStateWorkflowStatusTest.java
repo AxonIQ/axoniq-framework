@@ -35,7 +35,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -57,7 +57,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolvePayloadSuccess() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                              NAME_COMBINE_GLOBAL_AND_LOCAL);
+                                           NAME);
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             Map.of("newKey", "newValue"),
                                                             metadata);
@@ -72,7 +72,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
     void testEvolvePayloadWithNonMapPayloadDoesNotThrow() {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                              NAME_COMBINE_GLOBAL_AND_LOCAL);
+                                           NAME);
         // String payload cannot be converted to Map<String, Object> via Jackson as a root object if it is not a JSON object
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             "Not a Map",

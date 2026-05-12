@@ -32,7 +32,7 @@ import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.*;
@@ -95,7 +95,7 @@ class EventMessageUtilsTest {
         assertThat(message.payload()).isEqualTo(payload);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.STARTED);
-        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(NAME_COMBINE_GLOBAL_AND_LOCAL);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(NAME);
     }
 
     @Test

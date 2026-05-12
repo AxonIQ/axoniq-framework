@@ -22,6 +22,8 @@ import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -31,9 +33,6 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
 import java.util.Map;
-
-import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME_GLOBAL_ONLY;
-import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME_LOCAL_ONLY;
 
 /**
  * Commands helper.
@@ -140,8 +139,8 @@ public class PrimitiveCommands {
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                                                    registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                                                    registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                                                    registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                                                     duration,
                                                     eventNameCustomizer,
                                                     RetryPolicy.NONE);
@@ -160,8 +159,8 @@ public class PrimitiveCommands {
         return new WorkflowStepResultExecuteCommand(stepName,
                                                     local,
                                                     action,
-                                                    registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                                                    registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                                                    registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                                                    registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                                                     duration,
                                                     eventNameCustomizer,
                                                     retryPolicy);

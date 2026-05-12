@@ -32,6 +32,8 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.association.EqualsComparison;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
@@ -49,9 +51,7 @@ import java.util.function.Supplier;
 
 import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME_COMBINE_GLOBAL_AND_LOCAL;
-import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME_GLOBAL_ONLY;
-import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME_LOCAL_ONLY;
+import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 
 /**
  * Simple workflow DSL providing synchronous versions of step primitives.
@@ -121,7 +121,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         (em, pc) -> predicate.test(em.payloadAs(eventType))
                 ),
-                registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                 timeout,
                 defaults()
         );
@@ -149,7 +149,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
                         (em, pc) -> associationsUtils.build().test(em, pc)
                 ),
-                registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                 timeout,
                 defaults()
         );
@@ -174,7 +174,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .qualifiedName(),
                         (em, pc) -> predicate.test(em.payloadAs(eventType))
                 ),
-                registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(EventConverter.class),
@@ -201,7 +201,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                              .component(MessageTypeResolver.class).resolve(eventType).orElseThrow().qualifiedName(),
                         (em, pc) -> associationsUtils.build().test(em, pc)
                 ),
-                registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                 timeout,
                 TypeReference.fromType(eventType),
                 super.processingContext().component(EventConverter.class),
@@ -238,7 +238,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                     .orElseThrow()
                                     .qualifiedName()
                        ),
-                       registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
+                       registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(), timeout, defaults());
     }
 
     /**
@@ -261,7 +261,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                     .qualifiedName(),
                                (em, pc) -> predicate.test(em.payloadAs(eventType))
                        ),
-                       registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
+                       registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(), timeout, defaults());
     }
 
     /**
@@ -283,7 +283,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                                     .qualifiedName(),
                                (em, pc) -> associationsUtils.build().test(em, pc)
                        ),
-                       registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
+                       registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(), timeout, defaults());
     }
 
     /**
@@ -306,7 +306,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
     public void sleep(String stepName, Duration timeout, EventNameCustomizer eventNameCustomizer) {
         var result = waitFor(stepName,
                              EventConditions.never(),
-                             registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                             registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                              timeout,
                              defaults()
         );
@@ -337,7 +337,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
      * @return workflow step result that completes when the timeout expires.
      */
     public WorkflowStepResult sleepAsync(String stepName, Duration timeout, EventNameCustomizer eventNameCustomizer) {
-        return waitFor(stepName, EventConditions.never(), registry.get(NAME_GLOBAL_ONLY).orElseThrow(), timeout, defaults());
+        return waitFor(stepName, EventConditions.never(), registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(), timeout, defaults());
     }
 
     /**
@@ -364,8 +364,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return execute(stepName,
                        payload,
                        action,
-                       registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                       registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                       registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                       registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                        duration,
                        eventNameCustomizer);
     }
@@ -390,8 +390,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         return execute(stepName,
                        payload,
                        action,
-                       registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                       registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                       registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                       registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                        defaultTimeout,
                        defaults()
         );
@@ -420,8 +420,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 stepName,
                 payload,
                 action,
-                registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                 duration,
                 eventNameCustomizer,
                 retryPolicy
@@ -447,8 +447,8 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
                 stepName,
                 payload,
                 action,
-                registry.get(NAME_LOCAL_ONLY).orElseThrow(),
-                registry.get(NAME_GLOBAL_ONLY).orElseThrow(),
+                registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
+                registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
                 defaultTimeout,
                 defaults(),
                 retryPolicy
@@ -788,7 +788,7 @@ public class SimpleWorkflowContext extends AbstractDSLWorkflowContext {
         modifyPayload(stepName,
                       workflowPayload ->
                               super.processingContext().component(PayloadReducerRegistry.class)
-                                   .get(NAME_COMBINE_GLOBAL_AND_LOCAL).orElseThrow()
+                                   .get(NAME).orElseThrow()
                                    .apply(
                                            workflowPayload, payload.getValues()
                                    ),

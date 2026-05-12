@@ -28,7 +28,7 @@ import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Registry of payload reducers.
+ * Registry of payload reducers defined by {@link PayloadReducer}.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -67,6 +67,15 @@ public class PayloadReducerRegistry {
             var reducer = p.get();
             reducers.put(reducer.name(), reducer);
         });
+    }
+
+    /**
+     * Registers new payload reducer.
+     *
+     * @param reducer reducer to register.
+     */
+    public void register(@Nonnull PayloadReducer reducer) {
+        this.reducers.put(reducer.name(), reducer);
     }
 
     /**

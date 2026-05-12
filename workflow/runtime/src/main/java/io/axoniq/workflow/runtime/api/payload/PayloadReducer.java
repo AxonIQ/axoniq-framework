@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.api.payload;
 
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.annotation.Internal;
 
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -27,14 +26,13 @@ import java.util.function.BiFunction;
 /**
  * Payload reducer to combine two payloads into one. In general, there is a global payload (part of the state of the
  * workflow instance) and a local payload (part of the step execution). On the step invocation, the global and local
- * form the invocation parameters. After the step execution, the local result any global for, the resulting workflow
- * instance payload.
+ * form the invocation parameters. After the step execution, the local result and global payload form the resulting
+ * workflow instance payload.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-@Internal
 @FunctionalInterface
 public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
 
