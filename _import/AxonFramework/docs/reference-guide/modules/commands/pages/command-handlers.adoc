@@ -6,7 +6,7 @@ Command handlers can be either stateless or stateful, depending on whether they 
 
 This page explains how to define command handlers, handle commands, and work with the key concepts like `ProcessingContext`, `EventAppender`, and message types.
 
-In Axon Framework 5, commands are the primary driver of all state changes.
+In Axon Framework, commands are the primary driver of all state changes.
 A command handler decides whether a requested change is valid and applies it by updating the state directly or by appending events to a log.
 
 Some commands need no prior state: they validate the request on its own terms and apply the change.
