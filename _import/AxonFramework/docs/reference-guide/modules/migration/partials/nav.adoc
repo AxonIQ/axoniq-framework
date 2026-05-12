@@ -19,6 +19,7 @@
 *** xref:migration:paths/interceptors.adoc[]
 *** xref:migration:paths/configuration.adoc[]
 *** xref:migration:paths/sequencing-policies.adoc[]
+*** xref:migration:paths/token-store.adoc[]
 ifdef::advanced-framework[]
 include::advanced-migration:partial$nav.adoc[]
 endif::[]

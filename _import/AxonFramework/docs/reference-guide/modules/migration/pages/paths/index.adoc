@@ -23,6 +23,7 @@ Whether you are performing a straightforward version bump or a deep architectura
 * xref:migration:paths/configuration.adoc[Configuration migration]
 * xref:migration:paths/sequencing-policies.adoc[Sequencing Policy migration]
 * xref:migration:paths/dlq.adoc[Dead-Letter Queue migration]
+* xref:migration:paths/token-store.adoc[Token Store migration]
 ifdef::advanced-framework[]
 * xref:advanced-migration:paths/5.0-to-5.1.adoc[Axon Framework 5.0 to Axoniq Framework migration]
 endif::[]
