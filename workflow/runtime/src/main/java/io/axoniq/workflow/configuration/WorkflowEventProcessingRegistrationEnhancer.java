@@ -20,7 +20,6 @@ package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -58,25 +57,28 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      */
     public static final String DEFAULT_MODULE_NAME = "Workflow";
 
-    private final String engineComponentName;
-    private final String projectorComponentName;
     private final String moduleName;
+    @Nullable
+    private final String engineComponentName;
+    @Nullable
+    private final String projectorComponentName;
     private final boolean registerHistoryProjector;
 
     /**
      * Creates a workflow event processing registration enhancer, responsible for registering the workflow engine and
      * history projector components to the event processing module.
      *
-     * @param moduleName               name of the event processing module.
-     * @param engineComponentName      name of the workflow engine component.
-     * @param projectorComponentName   name of the workflow history projector component.
-     * @param registerHistoryProjector flag indicating whether to register the history projector component.
+     * @param moduleName               name of the event processing module
+     * @param engineComponentName      name of the workflow engine component
+     * @param projectorComponentName   name of the workflow history projector component
+     * @param registerHistoryProjector flag indicating whether to register the history projector component
      */
     public WorkflowEventProcessingRegistrationEnhancer(
-            @Nonnull String moduleName,
+            String moduleName,
             @Nullable String engineComponentName,
             @Nullable String projectorComponentName,
-            boolean registerHistoryProjector) {
+            boolean registerHistoryProjector
+    ) {
         this.moduleName = moduleName;
         this.engineComponentName = engineComponentName;
         this.projectorComponentName = projectorComponentName;
@@ -92,7 +94,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     public static final int WORKFLOW_EVENTING_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER + 20;
 
     @Override
-    public void enhance(@Nonnull ComponentRegistry componentRegistry) {
+    public void enhance(ComponentRegistry componentRegistry) {
         componentRegistry.registerModule(
                 EventProcessorModule
                         .pooledStreaming(moduleName)
@@ -102,9 +104,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                             .declarative(
                                                     engineComponentName != null
                                                             ? engineComponentName
-                                                              + "ExecutionEventing"
+                                                            + "ExecutionEventing"
                                                             : DEFAULT_MODULE_NAME
-                                                              + "ExecutionEventing",
+                                                            + "ExecutionEventing",
                                                     cfg -> {
                                                         if (engineComponentName != null) {
                                                             return new AllEventEventHandlingComponent(
@@ -125,9 +127,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                 declarative(
                                                         projectorComponentName != null ?
                                                                 projectorComponentName
-                                                                + "Eventing"
+                                                                        + "Eventing"
                                                                 : DEFAULT_MODULE_NAME
-                                                                  + "HistoryEventing",
+                                                                + "HistoryEventing",
                                                         cfg -> {
                                                             if (projectorComponentName
                                                                     != null) {
@@ -195,8 +197,8 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     private CompletableFuture<TrackingToken> ensureSegmentsInitialized(
-            @Nonnull TokenStore tokenStore,
-            @Nonnull StreamableEventSource eventSource
+            TokenStore tokenStore,
+            StreamableEventSource eventSource
     ) {
         return eventSource.latestToken(null)
                           .thenCompose(latestToken -> tokenStore.fetchSegments(moduleName, null)
@@ -216,9 +218,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     private CompletableFuture<Void> resetOrSwitchToLiveMode(
-            @Nonnull StreamableEventSource eventSource,
-            @Nonnull StreamingEventProcessor processor,
-            @Nonnull WorkflowEngine workflowEngine,
+            StreamableEventSource eventSource,
+            StreamingEventProcessor processor,
+            WorkflowEngine workflowEngine,
             @Nullable TrackingToken latestToken
     ) {
         return eventSource.firstToken(null)

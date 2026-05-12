@@ -24,12 +24,13 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeList
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.MessageWorkflowIdProvider;
-import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WorkflowCustomization {
 
     private final String workflowName;
-    protected final Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> workflowStatusListeners;
+    private final Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> workflowStatusListeners;
     protected EventNameCustomizer eventNameCustomizer;
     protected WorkflowIdProvider workflowIdProvider;
 
@@ -54,7 +55,7 @@ public class WorkflowCustomization {
      * @param configuration configuration to use.
      * @return workflow module configuration.
      */
-    public static WorkflowCustomization defaultConfiguration(@Nonnull String workflowName,
+    public static WorkflowCustomization defaultConfiguration(String workflowName,
                                                              @Nullable Configuration configuration) {
         return new WorkflowCustomization(workflowName, configuration);
     }
@@ -68,7 +69,7 @@ public class WorkflowCustomization {
      */
     @Internal
     WorkflowCustomization(
-            @Nonnull String workflowName,
+            String workflowName,
             @Nullable Configuration configuration
     ) {
         this.workflowName = Objects.requireNonNull(workflowName, "Workflow name must be provided");
@@ -93,7 +94,7 @@ public class WorkflowCustomization {
      * @param base base to copy.
      */
     @Internal
-    WorkflowCustomization(@Nonnull WorkflowCustomization base) {
+    WorkflowCustomization(WorkflowCustomization base) {
         Objects.requireNonNull(base, "Base configuration must not be null");
         this.workflowName = base.workflowName;
         this.eventNameCustomizer = base.eventNameCustomizer;
@@ -107,7 +108,7 @@ public class WorkflowCustomization {
      * @param eventNameCustomizer event name customizer to set.
      * @return module configuration instance.
      */
-    public WorkflowCustomization eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public WorkflowCustomization eventNameCustomizer(EventNameCustomizer eventNameCustomizer) {
         Objects.requireNonNull(eventNameCustomizer, "Event name customizer must not be null.");
         this.eventNameCustomizer = eventNameCustomizer;
         return this;
@@ -119,7 +120,7 @@ public class WorkflowCustomization {
      * @param workflowIdProvider workflow id provider to set.
      * @return module configuration instance.
      */
-    public WorkflowCustomization workflowIdProvider(@Nonnull WorkflowIdProvider workflowIdProvider) {
+    public WorkflowCustomization workflowIdProvider(WorkflowIdProvider workflowIdProvider) {
         Objects.requireNonNull(workflowIdProvider, "Workflow id provider must not be null.");
         this.workflowIdProvider = workflowIdProvider;
         return this;
@@ -132,8 +133,10 @@ public class WorkflowCustomization {
      * @param workflowStatusChangeListener workflow status change listener to register.
      * @return module configuration instance.
      */
-    public WorkflowCustomization registerWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus,
-                                                                      @Nonnull WorkflowStatusChangeListener workflowStatusChangeListener) {
+    public WorkflowCustomization registerWorkflowStatusChangeListener(
+            WorkflowStatus workflowStatus,
+            WorkflowStatusChangeListener workflowStatusChangeListener
+    ) {
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         Objects.requireNonNull(workflowStatusChangeListener, "Workflow status change listener must not be null");
         this.workflowStatusListeners.get(workflowStatus).addListener(workflowStatusChangeListener);
@@ -147,11 +150,29 @@ public class WorkflowCustomization {
      * @param workflowStatusChangeListener workflow status change listener to register.
      * @return module configuration instance.
      */
-    public WorkflowCustomization unregisterWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus,
-                                                                        @Nonnull WorkflowStatusChangeListener workflowStatusChangeListener) {
+    public WorkflowCustomization unregisterWorkflowStatusChangeListener(
+            WorkflowStatus workflowStatus,
+            WorkflowStatusChangeListener workflowStatusChangeListener
+    ) {
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         Objects.requireNonNull(workflowStatusChangeListener, "Workflow status change listener must not be null");
         this.workflowStatusListeners.get(workflowStatus).removeListener(workflowStatusChangeListener);
         return this;
+    }
+
+    /**
+     * Returns the workflow status change listeners as a map typed by the {@link WorkflowStatusChangeListener}
+     * interface.
+     *
+     * @return an unmodifiable view of the status change listeners
+     */
+    Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+        var filtered = new HashMap<WorkflowStatus, WorkflowStatusChangeListener>();
+        workflowStatusListeners.forEach((status, composite) -> {
+            if (!composite.isEmpty()) {
+                filtered.put(status, composite);
+            }
+        });
+        return Collections.unmodifiableMap(filtered);
     }
 }

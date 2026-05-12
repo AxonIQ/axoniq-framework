@@ -31,7 +31,6 @@ import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
-import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
@@ -45,6 +44,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -92,10 +92,10 @@ public class AutoDetectionUtils {
      * @param workflowContextType workflow context type.
      * @return workflow methods.
      */
-    @Nonnull
     public static <C extends WorkflowContext> Stream<MethodWithWorkflowAttributes> workflowMethods(
-            @Nonnull Class<?> type,
-            @Nonnull Class<C> workflowContextType) {
+            Class<?> type,
+            Class<C> workflowContextType
+    ) {
         Stream<Method> methodStream;
         try {
             methodStream = StreamSupport.stream(ReflectionUtils.methodsOf(type).spliterator(), false);
@@ -110,25 +110,29 @@ public class AutoDetectionUtils {
 
 
     /**
-     * Retrieves workflow lifecycle change listeners for this workflow.
+     * Retrieves  {@link WorkflowStatusChangeListener workflow lifecycle change listeners} for the workflow as contained
+     * in the given {@code instance}.
      *
-     * @param instance            instance to detect methods on.
-     * @param workflowContextType workflow context type.
-     * @param workflowName        name of the workflow.
-     * @return map of lifecycle change listeners.
+     * @param instance            instance to detect
+     *                            {@link WorkflowStatusChangeListener workflow lifecycle change listener} methods on
+     * @param workflowContextType the workflow context type
+     * @param workflowName        name of the workflow
+     * @return unmodifiable map of {@link WorkflowStatusChangeListener lifecycle change listeners}
      */
-    @Nonnull
-    public static <C extends WorkflowContext> Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> statusChangeListeners(
+    public static <C extends WorkflowContext> Map<WorkflowStatus, WorkflowStatusChangeListener> statusChangeListeners(
             @Nullable Object instance,
-            @Nonnull Class<C> workflowContextType,
-            @Nonnull String workflowName) {
-
+            Class<C> workflowContextType,
+            String workflowName
+    ) {
         var listeners = new ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener>();
-        Arrays.stream(WorkflowStatus.values()).forEach(workflowStatus -> {
-            listeners.put(workflowStatus, new CompositeWorkflowStatusChangeListener(workflowStatus));
-        });
+        Arrays.stream(WorkflowStatus.values())
+              .forEach(workflowStatus -> listeners.put(
+                      workflowStatus,
+                      new CompositeWorkflowStatusChangeListener(workflowStatus)
+              ));
+
         if (instance == null) {
-            return listeners;
+            return Collections.unmodifiableMap(listeners);
         }
         var type = instance.getClass();
 
@@ -142,16 +146,17 @@ public class AutoDetectionUtils {
                              workflowContextType,
                              listeners);
 
-        return listeners;
+        return Collections.unmodifiableMap(listeners);
     }
 
     private static <C extends WorkflowContext> void detectAndAddListener(
-            @Nonnull Collection<Method> methodCandidates,
-            @Nonnull Class<? extends Annotation> annotation,
-            @Nonnull String workflowName,
-            @Nonnull Object instance,
-            @Nonnull Class<C> workflowContextType,
-            @Nonnull ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners) {
+            Collection<Method> methodCandidates,
+            Class<? extends Annotation> annotation,
+            String workflowName,
+            Object instance,
+            Class<C> workflowContextType,
+            ConcurrentHashMap<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners
+    ) {
         methodCandidates.stream()
                         .filter(hasParameterOfType(WorkflowStatus.class).and(hasContextParameter(workflowContextType)))
                         .map(AutoDetectionUtils.annotatedMethods(annotation))
@@ -166,7 +171,7 @@ public class AutoDetectionUtils {
                                     new WorkflowStatusChangeListener() {
                                         @Override
                                         public <X extends WorkflowContext> void onWorkflowStatus(
-                                                @Nonnull WorkflowStatus state, @Nonnull X context) {
+                                                WorkflowStatus state, X context) {
                                             Method method = mwa.method();
                                             Class<?>[] parameterTypes = method.getParameterTypes();
                                             Object[] args = new Object[parameterTypes.length];
@@ -197,8 +202,7 @@ public class AutoDetectionUtils {
      * @param attributes attributes parsed from method annotation.
      * @return component builder for event condition.
      */
-    @Nonnull
-    static ComponentBuilder<EventCondition> eventConditionComponentBuilder(@Nonnull Map<String, Object> attributes) {
+    static ComponentBuilder<EventCondition> eventConditionComponentBuilder(Map<String, Object> attributes) {
         return c ->
         {
             var opRegistry = c.getComponent(ValueComparisonOperatorRegistry.class,
@@ -227,9 +231,8 @@ public class AutoDetectionUtils {
      * @param attributes attributes parsed from method annotation.
      * @return component builder for workflow id provider.
      */
-    @Nonnull
     static ComponentBuilder<WorkflowIdProvider> workflowIdProviderComponentBuilder(
-            @Nonnull Map<String, Object> attributes) {
+            Map<String, Object> attributes) {
         return c ->
                 getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
                         .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
@@ -248,8 +251,7 @@ public class AutoDetectionUtils {
      * @param <T>        type of workflow class.
      * @return default namespace.
      */
-    @Nonnull
-    static <T> DefaultEventNameCustomizer namespace(@Nonnull Class<T> type, @Nonnull Map<String, Object> attributes) {
+    static <T> DefaultEventNameCustomizer namespace(Class<T> type, Map<String, Object> attributes) {
         return DefaultEventNameCustomizer.Builder.namespace(
                 getIfNotDefault(attributes, ATTR_WORKFLOW_NAMESPACE, "").orElse(
                         type.getPackageName()
@@ -266,9 +268,8 @@ public class AutoDetectionUtils {
      * @param <T>        type of workflow class.
      * @return workflow name.
      */
-    @Nonnull
-    static <T> String workflowName(@Nonnull Class<T> type, @Nonnull Map<String, Object> attributes,
-                                   @Nonnull Method method) {
+    static <T> String workflowName(Class<T> type, Map<String, Object> attributes,
+                                   Method method) {
         return getIfNotDefault(attributes, ATTR_WORKFLOW_NAME, "").orElse(
                 type.getSimpleName() + "#" + StringUtils.capitalize(method.getName())
         );
@@ -281,8 +282,7 @@ public class AutoDetectionUtils {
      * @param expectedType type to check for.
      * @return predicate.
      */
-    @Nonnull
-    static Predicate<Method> hasContextParameter(@Nonnull Class<?> expectedType) {
+    static Predicate<Method> hasContextParameter(Class<?> expectedType) {
         return m -> {
             var parameterTypes = m.getParameterTypes();
             for (var type : parameterTypes) {
@@ -301,7 +301,7 @@ public class AutoDetectionUtils {
      * @param expectedType type to be wrapped.
      * @return true if it can.
      */
-    static boolean canWrap(@Nonnull Class<?> type, @Nonnull Class<?> expectedType) {
+    static boolean canWrap(Class<?> type, Class<?> expectedType) {
         try {
             for (var constructor : type.getConstructors()) {
                 if (constructor.getParameterCount() == 1) {
@@ -325,7 +325,7 @@ public class AutoDetectionUtils {
      * @return wrapped context or null.
      */
     @Nullable
-    public static Object wrapIfPossible(@Nonnull Class<?> type, @Nullable WorkflowContext context) {
+    public static Object wrapIfPossible(Class<?> type, @Nullable WorkflowContext context) {
         if (context == null) {
             return null;
         }
@@ -351,8 +351,7 @@ public class AutoDetectionUtils {
      * @param expectedType type to check for.
      * @return predicate.
      */
-    @Nonnull
-    static Predicate<Method> hasParameterOfType(@Nonnull Class<?> expectedType) {
+    static Predicate<Method> hasParameterOfType(Class<?> expectedType) {
         return m -> {
             var parameterTypes = m.getParameterTypes();
             return Arrays.stream(parameterTypes).anyMatch(expectedType::isAssignableFrom);
@@ -367,8 +366,7 @@ public class AutoDetectionUtils {
      * @param parameterIndex index of the parameter to check
      * @return predicate.
      */
-    @Nonnull
-    static Predicate<Method> parameterOfType(@Nonnull Class<?> expectedType, int parameterIndex) {
+    static Predicate<Method> parameterOfType(Class<?> expectedType, int parameterIndex) {
         return m -> {
             var parameterTypes = m.getParameterTypes();
             return parameterTypes.length > parameterIndex && expectedType.isAssignableFrom(
@@ -383,9 +381,7 @@ public class AutoDetectionUtils {
      * @return a function which applied to a method either returns a tuple of method to annotations or
      * <code>null</code>.
      */
-    @Nonnull
-    static Function<Method, MethodWithWorkflowAttributes> annotatedMethods(
-            @Nonnull Class<? extends Annotation> type) {
+    static Function<Method, MethodWithWorkflowAttributes> annotatedMethods(Class<? extends Annotation> type) {
         return m -> {
             var annotations = findAnnotationAttributes(m, type);
             return annotations
@@ -394,7 +390,7 @@ public class AutoDetectionUtils {
         };
     }
 
-    static Class<? extends WorkflowContext> findWorkflowContextType(@Nonnull Method method) {
+    static Class<? extends WorkflowContext> findWorkflowContextType(Method method) {
         var parameterTypes = method.getParameterTypes();
         return Stream.of(parameterTypes)
                      .filter(type -> WorkflowContext.class.isAssignableFrom(type) || isWrapper(type))
@@ -423,7 +419,7 @@ public class AutoDetectionUtils {
                      );
     }
 
-    static boolean isWrapper(@Nonnull Class<?> type) {
+    static boolean isWrapper(Class<?> type) {
         try {
             return Arrays.stream(type.getConstructors())
                          .anyMatch(c -> c.getParameterCount() == 1
@@ -440,9 +436,9 @@ public class AutoDetectionUtils {
      * @param method     method the annotation was read of.
      * @param type       class the method was present from which the annotation was read of.
      */
-    public static void validateAttributes(@Nonnull Map<String, Object> attributes,
-                                          @Nonnull Class<?> type,
-                                          @Nonnull Method method) {
+    public static void validateAttributes(Map<String, Object> attributes,
+                                          Class<?> type,
+                                          Method method) {
         if (!attributes.containsKey(ATTR_ID_PROPERTY_PROVIDER) || WorkflowIdProvider.class.equals(attributes.get(
                 ATTR_ID_PROPERTY_PROVIDER))) {
             if (!attributes.containsKey(ATTR_ID_PROPERTY)
@@ -484,20 +480,19 @@ public class AutoDetectionUtils {
      * @param <T>           value type.
      * @return optional with value if present and not equals to given, empty otherwise.
      */
-    @Nonnull
     public static <T> Optional<T> getIfNotDefault(
-            @Nonnull Map<String, Object> attributes,
-            @Nonnull String attributeName,
-            @Nonnull T defaultValue) {
+            Map<String, Object> attributes,
+            String attributeName,
+            T defaultValue
+    ) {
         //noinspection unchecked
-        return Optional.of(
-                (T) attributes.get(attributeName)
-        ).flatMap(o -> {
-            if (defaultValue.equals(o)) {
-                return Optional.empty();
-            } else {
-                return Optional.of(o);
-            }
-        });
+        return Optional.of((T) attributes.get(attributeName))
+                       .flatMap(o -> {
+                           if (defaultValue.equals(o)) {
+                               return Optional.empty();
+                           } else {
+                               return Optional.of(o);
+                           }
+                       });
     }
 }

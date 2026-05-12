@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.api.annotation.WorkflowStartedHandler;
 import io.axoniq.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.workflow.runtime.api.annotation.WorkflowTimedOutHandler;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.junit.jupiter.api.*;
 
@@ -48,7 +49,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void detectLifecycleListenersWithoutName() {
         var workflow = new WorkflowWithListeners();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow,
                                                          TestWorkflowContext.class,
                                                          "workflowName");
@@ -65,7 +66,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void detectLifecycleListenersWithNameMatching() {
         var workflow = new WorkflowWithNamedListeners();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflow-1");
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
@@ -80,7 +81,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void detectLifecycleListenersWithNameMismatch() {
         var workflow = new WorkflowWithNamedListeners();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "other-workflow");
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
@@ -95,7 +96,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void detectAllLifecycleListeners() {
         var workflow = new WorkflowWithAllListeners();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
@@ -111,7 +112,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void detectStatusHandlerListener() {
         var workflow = new WorkflowWithStatusHandler();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
 
         assertThat(listeners).containsKey(WorkflowStatus.STARTED);
@@ -126,7 +127,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void detectStartHandlerListener() {
         var workflow = new WorkflowWithStartHandler();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
 
         assertThat(listeners).containsKey(WorkflowStatus.STARTED);
@@ -141,7 +142,7 @@ class AutoDetectionLifecycleListenerTest {
     @Test
     void reproduceArgumentTypeMismatch() {
         var workflow = new WorkflowWithSpecializedContext();
-        Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> listeners =
+        Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, SpecializedWorkflowContext.class, "workflowName");
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);

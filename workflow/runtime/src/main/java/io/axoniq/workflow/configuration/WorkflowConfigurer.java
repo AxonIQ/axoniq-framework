@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.configuration;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -61,7 +60,7 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
 
     private final EventSourcingConfigurer delegate;
 
-    private WorkflowConfigurer(@Nonnull EventSourcingConfigurer delegate) {
+    private WorkflowConfigurer(EventSourcingConfigurer delegate) {
         this.delegate = requireNonNull(delegate, "The Event Sourcing Configurer cannot be null.");
     }
 
@@ -99,34 +98,30 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
      * @param workflowModule workflow module to register.
      * @return this configurer.
      */
-    public WorkflowConfigurer registerWorkflowModule(@Nonnull WorkflowModule<?> workflowModule) {
+    public WorkflowConfigurer registerWorkflowModule(WorkflowModule<?> workflowModule) {
         Objects.requireNonNull(workflowModule, "Workflow module must not be null");
         delegate.componentRegistry(cr -> cr.registerModule(workflowModule));
         return this;
     }
 
     @Override
-    @Nonnull
-    public WorkflowConfigurer componentRegistry(@Nonnull Consumer<ComponentRegistry> componentRegistrar) {
+    public WorkflowConfigurer componentRegistry(Consumer<ComponentRegistry> componentRegistrar) {
         delegate.componentRegistry(requireNonNull(componentRegistrar, "The configure task must no be null."));
         return this;
     }
 
     @Override
-    @Nonnull
-    public WorkflowConfigurer lifecycleRegistry(@Nonnull Consumer<LifecycleRegistry> lifecycleRegistrar) {
+    public WorkflowConfigurer lifecycleRegistry(Consumer<LifecycleRegistry> lifecycleRegistrar) {
         delegate.lifecycleRegistry(requireNonNull(lifecycleRegistrar, "The lifecycle registrar must not be null."));
         return this;
     }
 
     @Override
-    @Nonnull
     public AxonConfiguration start() {
         return delegate.start();
     }
 
     @Override
-    @Nonnull
     public AxonConfiguration build() {
         return delegate.build();
     }

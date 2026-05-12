@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.configuration;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -39,6 +38,7 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +55,6 @@ import java.util.function.BiFunction;
 public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
-    @SuppressWarnings("NullableProblems")
     public static final BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
             pcepc.eventCriteria(
@@ -74,6 +73,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
                  .batchSize(1); // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
+    @Nullable
     private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
@@ -81,7 +81,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
      *
      * @param eventHandler event handler to wrap.
      */
-    public AllEventEventHandlingComponent(@Nonnull EventHandler eventHandler) {
+    public AllEventEventHandlingComponent(EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
@@ -94,35 +94,33 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
         }
     }
 
-    @Nonnull
+
     @Override
-    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
         logger.debug("Handling event {}", event);
         return eventHandler.handle(event, context);
     }
 
     @Override
-    @Nonnull
     public Set<QualifiedName> supportedEvents() {
         return Set.of();
     }
 
     @Override
-    public boolean supports(@Nonnull QualifiedName eventName) {
+    public boolean supports(QualifiedName eventName) {
         return true;
     }
 
-    @Nonnull
+
     @Override
-    public Object sequenceIdentifierFor(@Nonnull EventMessage event,
-                                        @Nonnull ProcessingContext context) {
+    public Object sequenceIdentifierFor(EventMessage event,
+                                        ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
     @Override
-    @Nonnull
-    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
-                                               @Nonnull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(ReplayStatusChanged statusChange,
+                                               ProcessingContext context) {
         if (replayStatusChangedHandler != null) { // just forward
             return replayStatusChangedHandler.handle(statusChange, context);
         }
@@ -130,7 +128,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
         if (replayStatusChangedHandler != null) {
             descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());

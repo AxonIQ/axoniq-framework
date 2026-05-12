@@ -21,7 +21,6 @@ package io.axoniq.workflow.configuration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.List;
@@ -44,7 +43,7 @@ public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChan
      *
      * @param workflowStatus workflow status the listener will be propagating.
      */
-    CompositeWorkflowStatusChangeListener(@Nonnull WorkflowStatus workflowStatus) {
+    CompositeWorkflowStatusChangeListener(WorkflowStatus workflowStatus) {
         this.workflowStatus = workflowStatus;
     }
 
@@ -53,7 +52,7 @@ public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChan
      *
      * @param listener listener to add.
      */
-    public void addListener(@Nonnull WorkflowStatusChangeListener listener) {
+    public void addListener(WorkflowStatusChangeListener listener) {
         this.listeners.add(listener);
     }
 
@@ -62,7 +61,7 @@ public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChan
      *
      * @param listener listener to remove.
      */
-    public void removeListener(@Nonnull WorkflowStatusChangeListener listener) {
+    public void removeListener(WorkflowStatusChangeListener listener) {
         this.listeners.remove(listener);
     }
 
@@ -76,7 +75,7 @@ public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChan
     }
 
     @Override
-    public void onWorkflowStatus(@Nonnull WorkflowStatus workflowStatus, @Nonnull WorkflowContext workflowContext) {
+    public void onWorkflowStatus(WorkflowStatus workflowStatus, WorkflowContext workflowContext) {
         if (this.workflowStatus == workflowStatus) {
             this.listeners.forEach(l -> l.onWorkflowStatus(workflowStatus, workflowContext));
         }

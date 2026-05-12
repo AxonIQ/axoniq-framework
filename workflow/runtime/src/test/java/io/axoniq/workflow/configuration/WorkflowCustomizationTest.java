@@ -121,7 +121,7 @@ class WorkflowCustomizationTest {
 
         config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
 
-        assertThat(config.workflowStatusListeners.get(WorkflowStatus.STARTED).isEmpty()).isFalse();
+        assertThat(config.workflowStatusChangeListeners()).containsKey(WorkflowStatus.STARTED);
     }
 
     @Test
@@ -130,10 +130,10 @@ class WorkflowCustomizationTest {
         WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
 
         config.registerWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
-        assertThat(config.workflowStatusListeners.get(WorkflowStatus.STARTED).isEmpty()).isFalse();
+        assertThat(config.workflowStatusChangeListeners()).containsKey(WorkflowStatus.STARTED);
 
         config.unregisterWorkflowStatusChangeListener(WorkflowStatus.STARTED, listener);
-        assertThat(config.workflowStatusListeners.get(WorkflowStatus.STARTED).isEmpty()).isTrue();
+        assertThat(config.workflowStatusChangeListeners()).doesNotContainKey(WorkflowStatus.STARTED);
     }
 
     @Test

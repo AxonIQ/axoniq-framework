@@ -30,7 +30,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -40,7 +39,6 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.jspecify.annotations.NonNull;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
@@ -83,7 +81,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      * @param componentRegistry registry to use.
      */
     @Override
-    public void enhance(@Nonnull ComponentRegistry componentRegistry) {
+    public void enhance(ComponentRegistry componentRegistry) {
         registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
@@ -96,30 +94,30 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowStateParameterResolverFactory(componentRegistry);
     }
 
-    private void registerPayloadReducerRegistry(@NonNull ComponentRegistry componentRegistry) {
+    private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(PayloadReducerRegistry.class,
                                                cfg -> new PayloadReducerRegistry());
     }
 
-    void registerEventNameCustomizer(@Nonnull ComponentRegistry componentRegistry) {
+    void registerEventNameCustomizer(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(EventNameCustomizer.class,
                                                cfg -> DefaultEventNameCustomizer.Builder.defaults());
     }
 
-    void registerClock(@Nonnull ComponentRegistry componentRegistry) {
+    void registerClock(ComponentRegistry componentRegistry) {
         //  Issue AxonIQ/AxonFramework#3083 will introduce an ApplicationConfigurer wide Clock,
         //  which should replace the GenericEventMessage and subsequently this Clock.
         //noinspection deprecation
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> GenericEventMessage.clock);
     }
 
-    void registerWorkflowEngineExecutor(@Nonnull ComponentRegistry componentRegistry) {
+    void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(ExecutorService.class,
                                                WORKFLOW_ENGINE_EXECUTOR,
                                                cfg -> Executors.newVirtualThreadPerTaskExecutor());
     }
 
-    void registerWorkflowEngine(@Nonnull ComponentRegistry componentRegistry) {
+    void registerWorkflowEngine(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 ComponentDefinition
                         .ofType(WorkflowEngine.class)
@@ -131,31 +129,31 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         );
     }
 
-    void registerWorkflowHistoryProjector(@Nonnull ComponentRegistry componentRegistry) {
+    void registerWorkflowHistoryProjector(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(WorkflowHistoryProjector.class,
                                                cfg -> new WorkflowHistoryProjector(
                                                        cfg.getComponent(MutableWorkflowHistoryRepository.class)
                                                ));
     }
 
-    void registerWorkflowExecutionRepository(@Nonnull ComponentRegistry componentRegistry) {
+    void registerWorkflowExecutionRepository(ComponentRegistry componentRegistry) {
         componentRegistry
                 .registerComponent(WorkflowExecutionRepository.class,
                                    cfg -> new InMemoryWorkflowExecutionRepository());
     }
 
-    void registerMutableWorkflowHistoryRepository(@Nonnull ComponentRegistry componentRegistry) {
+    void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {
         componentRegistry
                 .registerIfNotPresent(MutableWorkflowHistoryRepository.class,
                                       cfg -> new InMemoryWorkflowHistoryRepository());
     }
 
-    void registerWorkflowConfigurationRegistry(@Nonnull ComponentRegistry componentRegistry) {
+    void registerWorkflowConfigurationRegistry(ComponentRegistry componentRegistry) {
         componentRegistry.registerComponent(WorkflowConfigurationRegistry.class,
                                             cfg -> new SimpleWorkflowConfigurationRegistry());
     }
 
-    void registerWorkflowStateParameterResolverFactory(@Nonnull ComponentRegistry componentRegistry) {
+    void registerWorkflowStateParameterResolverFactory(ComponentRegistry componentRegistry) {
         ParameterResolverFactoryUtils.registerToComponentRegistry(
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new
