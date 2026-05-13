@@ -123,6 +123,54 @@ Furthermore, embracing an ordering approach might lead to place _all_ event hand
 In all, you are free to use an ordering, but we recommend using it sparingly.
 ====
 
+[[lifecycle]]
+== Processor lifecycle
+
+Every `EventProcessor` exposes a common set of lifecycle methods to start, stop, and inspect state.
+These methods are available on all processor implementations, including the xref:event-processors/subscribing.adoc[Subscribing] and xref:event-processors/streaming.adoc[Streaming] Event Processor.
+
+=== Starting and stopping
+
+`start()` and `shutdown()` both return a `CompletableFuture<Void>` that completes when the operation has fully finished.
+
+[NOTE]
+====
+In most scenarios, you do not need to invoke `start()` or `shutdown()` manually.
+Axon Framework manages the processor lifecycle automatically as part of application startup and shutdown.
+Only call these methods directly when you need explicit control, for example when triggering a programmatic replay or conditionally pausing processing.
+====
+
+=== Checking state
+
+Two synchronous methods allow you to inspect the current state of a processor at any point:
+
+* `isRunning()`: returns `true` when the processor is active and processing events.
+Returns `false` after a clean `shutdown()` or before `start()` has been called.
+* `isError()`: returns `true` when the processor has gone into error mode due to an unhandled exception.
+Returns `false` after a clean `shutdown()`.
+See xref:event-processors/streaming.adoc#error-mode[Error mode] for more on how the Streaming Event Processor handles errors.
+
+[source,java]
+----
+import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.messaging.eventhandling.processing.EventProcessor;
+
+public class ProcessorStateChecker {
+
+    private final AxonConfiguration configuration;
+
+    public ProcessorStateChecker(AxonConfiguration configuration) {
+        this.configuration = configuration;
+    }
+
+    public void printState(String processorName) {
+        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
+        System.out.println("Running: " + processor.isRunning());
+        System.out.println("Error:   " + processor.isError());
+    }
+}
+----
+
 [[error-handling]]
 == Error handling
 

@@ -30,7 +30,6 @@ import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * A {@link CoordinatorTask} implementation dedicated to splitting a {@link Segment}.
@@ -116,35 +115,29 @@ class SplitTask extends CoordinatorTask {
 
     private CompletableFuture<Boolean> abortAndSplit(WorkPackage workPackage) {
         return workPackage.abort(null)
-                          .thenApply(e -> splitAndRelease(workPackage.segment()));
+                          .thenCompose(e -> splitAndRelease(workPackage.segment()));
     }
 
     private CompletableFuture<Boolean> fetchSegmentAndSplit(int segmentId) {
         return unitOfWorkFactory.create().executeWithResult(
                 context -> tokenStore.fetchSegment(name, segmentId, context)
-                                     .thenApply(this::splitAndRelease)
-        );
+        ).thenCompose(this::splitAndRelease);
     }
 
-    private boolean splitAndRelease(Segment segmentToSplit) {
-        try {
-            joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-                    context -> tokenStore.fetchToken(name, segmentToSplit.getSegmentId(), context)
-                                         .thenApply(tokenToSplit -> TrackerStatus.split(segmentToSplit, tokenToSplit))
-                                         .thenCompose(splitStatuses -> splitAndRelease(
-                                                 splitStatuses, segmentToSplit, context
-                                         ))
-            ));
-        } finally {
-            // Remove the segment from the releases deadlines to allow the Coordinator to claim the split segments
-            releasesDeadlines.remove(segmentToSplit.getSegmentId());
-        }
-        return true;
+    private CompletableFuture<Boolean> splitAndRelease(Segment segmentToSplit) {
+        return unitOfWorkFactory.create().executeWithResult(
+                context -> tokenStore.fetchToken(name, segmentToSplit.getSegmentId(), context)
+                                     .thenApply(tokenToSplit -> TrackerStatus.split(segmentToSplit, tokenToSplit))
+                                     .thenCompose(splitStatuses -> splitAndRelease(splitStatuses, segmentToSplit, context))
+        ).whenComplete((result, throwable) ->
+                 // Remove the segment from the releases deadlines to allow the Coordinator to claim the split segments
+                 releasesDeadlines.remove(segmentToSplit.getSegmentId())
+         );
     }
 
-    private CompletableFuture<Void> splitAndRelease(TrackerStatus[] splitStatuses,
-                                                    Segment segmentToSplit,
-                                                    ProcessingContext context) {
+    private CompletableFuture<Boolean> splitAndRelease(TrackerStatus[] splitStatuses,
+                                                     Segment segmentToSplit,
+                                                     ProcessingContext context) {
         return tokenStore.initializeSegment(
                                  splitStatuses[1].getTrackingToken(),
                                  name,
@@ -167,10 +160,13 @@ class SplitTask extends CoordinatorTask {
                                  splitStatuses[0].getSegment(),
                                  context
                          ))
-                         .thenRun(() -> logger.info(
-                                 "Processor [{}] successfully split {} into {} and {}.",
-                                 name, segmentToSplit, splitStatuses[0].getSegment(), splitStatuses[1].getSegment()
-                         ));
+                         .thenApply(ignored -> {
+                             logger.info(
+                                     "Processor [{}] successfully split {} into {} and {}.",
+                                     name, segmentToSplit, splitStatuses[0].getSegment(), splitStatuses[1].getSegment()
+                             );
+                             return true;
+                         });
     }
 
     @Override

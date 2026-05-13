@@ -17,13 +17,11 @@
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
 import org.axonframework.common.Assert;
-import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -43,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.time.Clock;
+import java.util.concurrent.CompletionException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -58,7 +57,6 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * Defines the process of handling {@link EventMessage}s for a specific {@link Segment}. This entails validating if the
@@ -108,8 +106,8 @@ class WorkPackage {
 
     private final Queue<ProcessingEntry> processingQueue = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean scheduled = new AtomicBoolean();
-    private final AtomicReference<CompletableFuture<Exception>> abortFlag = new AtomicReference<>();
-    private final AtomicReference<Exception> abortException = new AtomicReference<>();
+    private final AtomicReference<@Nullable CompletableFuture<Throwable>> abortFlag = new AtomicReference<>();
+    private final AtomicReference<@Nullable Throwable> abortException = new AtomicReference<>();
 
     /**
      * Instantiate a Builder to be able to create a {@code WorkPackage}. This builder <b>does not</b> validate the
@@ -331,34 +329,37 @@ class WorkPackage {
             return;
         }
         logger.debug("Scheduling Work Package [{}]-[{}] to process events.", segment.getSegmentId(), name);
-
-        executorService.submit(() -> {
-            CompletableFuture<Exception> aborting = abortFlag.get();
-            if (aborting != null) {
-                logger.debug("Work Package [{}]-[{}] should be aborted. Will shutdown this work package.",
-                             segment.getSegmentId(), name);
-                segmentStatusUpdater.accept(previousStatus -> null);
-                aborting.complete(abortException.get());
-                return;
-            }
-
-            try {
-                processEvents();
-            } catch (Exception e) {
-                logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
-                            segment.getSegmentId(), name, e);
-                abort(e);
-            }
-            scheduled.set(false);
-            if (!processingQueue.isEmpty() || abortFlag.get() != null) {
-                logger.debug("Rescheduling Work Package [{}]-[{}] since there are events left.",
-                             segment.getSegmentId(), name);
-                scheduleWorker();
-            }
-        });
+        executorService.submit(this::runWorker);
     }
 
-    private void processEvents() {
+    private void runWorker() {
+        CompletableFuture<Throwable> aborting = abortFlag.get();
+        if (aborting != null) {
+            logger.debug("Work Package [{}]-[{}] should be aborted. Will shutdown this work package.",
+                         segment.getSegmentId(), name);
+            segmentStatusUpdater.accept(previousStatus -> null);
+            aborting.complete(abortException.get());
+            return;
+        }
+        processEvents().whenCompleteAsync((unused, e) -> onProcessingComplete(e), executorService);
+    }
+
+    private void onProcessingComplete(@Nullable Throwable e) {
+        if (e != null) {
+            Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+            logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
+                        segment.getSegmentId(), name, cause);
+            abort(cause);
+        }
+        scheduled.set(false);
+        if (!processingQueue.isEmpty() || abortFlag.get() != null) {
+            logger.debug("Rescheduling Work Package [{}]-[{}] since there are events left.",
+                         segment.getSegmentId(), name);
+            scheduleWorker();
+        }
+    }
+
+    private CompletableFuture<Void> processEvents() {
         List<MessageStream.Entry<? extends EventMessage>> eventBatch = new ArrayList<>();
         while (!isAbortTriggered() && eventBatch.size() < batchSize && !processingQueue.isEmpty()) {
             ProcessingEntry entry = processingQueue.poll();
@@ -372,42 +373,35 @@ class WorkPackage {
         if (!eventBatch.isEmpty()) {
             logger.debug("Work Package [{}]-[{}] is processing a batch of {} events.",
                          segment.getSegmentId(), name, eventBatch.size());
+            processingEvents.set(true);
+            var unitOfWork = unitOfWorkFactory.create();
+            unitOfWork.runOnPreInvocation(ctx -> {
+                ctx.putResource(Segment.RESOURCE_KEY, segment);
+                ctx.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, lastConsumedToken);
+            });
+            unitOfWork.onInvocation(ctx -> batchProcessor.process(eventBatch, ctx).asCompletableFuture());
+            unitOfWork.onPrepareCommit(ctx -> storeToken(lastConsumedToken, ctx));
+            unitOfWork.runOnAfterCommit(ctx -> {
+                segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
+                if (batchProcessedCallback != null) {
+                    batchProcessedCallback.run();
+                }
+            });
+            CompletableFuture<Void> result;
             try {
-                processingEvents.set(true);
-                var unitOfWork = unitOfWorkFactory.create();
-                unitOfWork.runOnPreInvocation(ctx -> {
-                    ctx.putResource(Segment.RESOURCE_KEY, segment);
-                    ctx.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, lastConsumedToken);
-                });
-
-                unitOfWork.onInvocation(ctx -> batchProcessor.process(eventBatch, ctx).asCompletableFuture());
-
-                unitOfWork.runOnPrepareCommit(ctx -> storeToken(lastConsumedToken, ctx));
-                unitOfWork.runOnAfterCommit(
-                        ctx -> {
-                            segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
-                            if (batchProcessedCallback != null) {
-                                batchProcessedCallback.run();
-                            }
-                        }
-                );
-                FutureUtils.joinAndUnwrap(unitOfWork.execute());
-            } finally {
-                processingEvents.set(false);
+                result = unitOfWork.execute();
+            } catch (Exception e) {
+                result = CompletableFuture.failedFuture(e);
             }
+            return result.whenComplete((v, t) -> processingEvents.set(false));
         } else {
             segmentStatusUpdater.accept(status -> status.advancedTo(lastConsumedToken));
             if (lastStoredToken != lastConsumedToken && now() > nextClaimExtension.get()) {
-                joinAndUnwrap(
-                        unitOfWorkFactory
-                                .create()
-                                .executeWithResult(context -> {
-                                    storeToken(lastConsumedToken, context);
-                                    return emptyCompletedFuture();
-                                })
+                return unitOfWorkFactory.create().executeWithResult(
+                        context -> storeToken(lastConsumedToken, context)
                 );
             } else {
-                extendClaimIfThresholdIsMet();
+                return extendClaimIfThresholdIsMet();
             }
         }
     }
@@ -417,21 +411,23 @@ class WorkPackage {
      * {@link PooledStreamingEventProcessorConfiguration#claimExtensionThreshold(long) claim extension threshold} is
      * met.
      */
-    public void extendClaimIfThresholdIsMet() {
+    public CompletableFuture<Void> extendClaimIfThresholdIsMet() {
         if (now() > nextClaimExtension.get()) {
             logger.debug("Work Package [{}]-[{}] will extend its token claim.", name, segment.getSegmentId());
-            joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
+            return unitOfWorkFactory.create().executeWithResult(
                     context -> tokenStore.extendClaim(name, segment.getSegmentId(), context)
-            ));
-            nextClaimExtension.set(now() + claimExtensionThreshold);
+            ).thenRun(() -> nextClaimExtension.set(now() + claimExtensionThreshold));
         }
+        return emptyCompletedFuture();
     }
 
-    private void storeToken(TrackingToken token, ProcessingContext processingContext) {
+    private CompletableFuture<Void> storeToken(TrackingToken token, ProcessingContext processingContext) {
         logger.debug("Work Package [{}]-[{}] will store token [{}].", name, segment.getSegmentId(), token);
-        joinAndUnwrap(tokenStore.storeToken(token, name, segment.getSegmentId(), processingContext));
-        lastStoredToken = token;
-        nextClaimExtension.set(now() + claimExtensionThreshold);
+        return tokenStore.storeToken(token, name, segment.getSegmentId(), processingContext)
+                         .thenRun(() -> {
+                             lastStoredToken = token;
+                             nextClaimExtension.set(now() + claimExtensionThreshold);
+                         });
     }
 
     /**
@@ -482,7 +478,7 @@ class WorkPackage {
      * Indicates whether an abort has been triggered for this {@code WorkPackage}. When {@code true}, any events
      * scheduled for processing by this {@code WorkPackage} are likely to be ignored.
      * <p>
-     * Use {@link WorkPackage#abort(Exception)} (possibly with a {@code null} reason) to obtain a
+     * Use {@link WorkPackage#abort(Throwable)} (possibly with a {@code null} reason) to obtain a
      * {@link CompletableFuture} with a reference to the abort reason.
      *
      * @return {@code true} if an abort was scheduled, otherwise {@code false}
@@ -496,15 +492,15 @@ class WorkPackage {
      * abort reason once the {@code WorkPackage} has finished any processing that may had been started already.
      * <p>
      * If this {@code WorkPackage} was already aborted in another request, the returned {@code CompletableFuture} will
-     * complete with exception for the first request.
+     * complete with the first abort reason.
      * <p>
      * An aborted {@code WorkPackage} cannot be restarted.
      *
-     * @param abortReason the reason to request the {@code WorkPackage} to abort
+     * @param abortReason the reason to request the {@code WorkPackage} to abort, may be {@code null}
      * @return a {@link CompletableFuture} that completes with the first reason once the {@code WorkPackage} has stopped
      * processing
      */
-    public CompletableFuture<Exception> abort(Exception abortReason) {
+    public CompletableFuture<Throwable> abort(@Nullable Throwable abortReason) {
         if (abortReason != null) {
             logger.debug("Abort request received for Work Package [{}]-[{}].",
                          name, segment.getSegmentId(), abortReason);
@@ -518,7 +514,7 @@ class WorkPackage {
             );
         }
 
-        CompletableFuture<Exception> abortTask = abortFlag.updateAndGet(
+        CompletableFuture<Throwable> abortTask = Objects.requireNonNull(abortFlag.updateAndGet(
                 currentFlag -> {
                     if (currentFlag == null) {
                         abortException.set(abortReason);
@@ -530,7 +526,7 @@ class WorkPackage {
                         return currentFlag;
                     }
                 }
-        );
+        ));
         // Reschedule the worker to ensure the abort flag is processed
         scheduleWorker();
         return abortTask;

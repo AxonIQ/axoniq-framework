@@ -16,6 +16,7 @@
 
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
+import org.axonframework.common.ProcessUtils;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -49,6 +50,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -64,8 +66,6 @@ import java.util.function.UnaryOperator;
 
 import static org.axonframework.common.BuilderUtils.assertStrictPositive;
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
-import static org.axonframework.common.ProcessUtils.executeUntilTrue;
 
 /**
  * Coordinator for the {@link PooledStreamingEventProcessor}. Uses coordination tasks (separate threads) to start a work
@@ -97,6 +97,8 @@ class Coordinator {
     private final BiConsumer<Integer, UnaryOperator<TrackerStatus>> processingStatusUpdater;
     private final long tokenClaimInterval;
     private final long claimExtensionThreshold;
+    private final long tokenStoreInitRetryInterval;
+    private final long tokenStoreInitMaxRetries;
     private final Clock clock;
     private final MaxSegmentProvider maxSegmentProvider;
     private final int initialSegmentCount;
@@ -136,6 +138,8 @@ class Coordinator {
         this.processingStatusUpdater = builder.processingStatusUpdater;
         this.tokenClaimInterval = builder.tokenClaimInterval;
         this.claimExtensionThreshold = builder.claimExtensionThreshold;
+        this.tokenStoreInitRetryInterval = builder.tokenStoreInitRetryInterval;
+        this.tokenStoreInitMaxRetries = builder.tokenStoreInitMaxRetries;
         this.clock = builder.clock;
         this.maxSegmentProvider = builder.maxSegmentProvider;
         this.initialSegmentCount = builder.initialSegmentCount;
@@ -150,26 +154,30 @@ class Coordinator {
      * Start the event coordination task of this coordinator. Will shut down this service immediately if the
      * coordination task cannot be started.
      */
-    public void start() {
+    public CompletableFuture<Void> start() {
         RunState newState = this.runState.updateAndGet(RunState::attemptStart);
         if (newState.wasStarted()) {
             logger.debug("Processor [{}]. Starting Coordinator...", name);
-            try {
-                executeUntilTrue(Coordinator.this::initializeTokenStore, 100L, 30L);
-                CoordinationTask task = new CoordinationTask();
-                executorService.submit(task);
-                this.coordinationTask.set(task);
-            } catch (Exception e) {
-                // A failure starting the processor. We need to stop immediately.
-                runState.updateAndGet(RunState::attemptStop)
-                        .shutdownHandle()
-                        .complete(null);
-                throw e;
-            }
+            return ProcessUtils.executeUntilTrue(this::initializeTokenStore, tokenStoreInitRetryInterval, tokenStoreInitMaxRetries, executorService)
+                    .thenRun(() -> {
+                        CoordinationTask task = new CoordinationTask();
+                        executorService.submit(task);
+                        this.coordinationTask.set(task);
+                    })
+                    .exceptionally(e -> {
+                        runState.updateAndGet(RunState::attemptStop)
+                                .shutdownHandle()
+                                .complete(null);
+                        if (e instanceof CompletionException ce) {
+                            throw ce;
+                        }
+                        throw new CompletionException(e);
+                    });
         } else if (!newState.isRunning) {
             throw new IllegalStateException(String.format(
                     "Cannot start a processor [%s] while it's in process of shutting down.", name));
         }
+        return emptyCompletedFuture();
     }
 
     /**
@@ -319,32 +327,32 @@ class Coordinator {
         return result;
     }
 
-    private boolean initializeTokenStore() {
-        AtomicBoolean tokenStoreInitialized = new AtomicBoolean(false);
-        try {
-            joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-                    context -> {
-                        List<Segment> segments = joinAndUnwrap(tokenStore.fetchSegments(name, context));
-                        if (segments.isEmpty()) {
-                            logger.info("Processor [{}]. Initializing ({}) segments", name, initialSegmentCount);
-                            joinAndUnwrap(tokenStore.initializeTokenSegments(
-                                    name,
-                                    initialSegmentCount,
-                                    joinAndUnwrap(initialToken.apply(eventSource)),
-                                    context
-                            ));
-                        }
-                        tokenStoreInitialized.set(true);
-                        return emptyCompletedFuture();
-                    }
-            ));
-        } catch (Exception e) {
+    private CompletableFuture<Boolean> initializeTokenStore() {
+        return unitOfWorkFactory.create().executeWithResult(
+                context -> tokenStore.fetchSegments(name, context)
+                                     .thenCompose(segments -> {
+                                         if (!segments.isEmpty()) {
+                                             return CompletableFuture.completedFuture(true);
+                                         }
+                                         logger.info("Processor [{}]. Initializing ({}) segments",
+                                                     name, initialSegmentCount);
+                                         return initialToken.apply(eventSource)
+                                                            .thenCompose(token -> tokenStore.initializeTokenSegments(
+                                                                    name, initialSegmentCount, token, context
+                                                            ))
+                                                            .thenApply(ignored -> true);
+                                     })
+        ).exceptionally(e -> {
+            Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+            if (cause instanceof Error error) {
+                throw error;
+            }
             logger.warn(
                     "Error while initializing the Token Store. This may simply indicate concurrent attempts to initialize.",
-                    e
+                    cause
             );
-        }
-        return tokenStoreInitialized.get();
+            return false;
+        });
     }
 
     /**
@@ -426,6 +434,8 @@ class Coordinator {
         private BiConsumer<Integer, UnaryOperator<TrackerStatus>> processingStatusUpdater;
         private long tokenClaimInterval = 5000;
         private long claimExtensionThreshold = 5000;
+        private long tokenStoreInitRetryInterval = 100;
+        private long tokenStoreInitMaxRetries = 30;
         private Clock clock = GenericEventMessage.clock;
         private MaxSegmentProvider maxSegmentProvider;
         private int initialSegmentCount = 16;
@@ -551,6 +561,28 @@ class Coordinator {
          */
         Builder claimExtensionThreshold(long claimExtensionThreshold) {
             this.claimExtensionThreshold = claimExtensionThreshold;
+            return this;
+        }
+
+        /**
+         * Sets the retry interval in milliseconds between token store initialization attempts. Defaults to {@code 100}.
+         *
+         * @param tokenStoreInitRetryInterval the interval in milliseconds between token store initialization retries
+         * @return the current Builder instance, for fluent interfacing
+         */
+        Builder tokenStoreInitRetryInterval(long tokenStoreInitRetryInterval) {
+            this.tokenStoreInitRetryInterval = tokenStoreInitRetryInterval;
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of token store initialization attempts before giving up. Defaults to {@code 30}.
+         *
+         * @param tokenStoreInitMaxRetries the maximum number of token store initialization attempts
+         * @return the current Builder instance, for fluent interfacing
+         */
+        Builder tokenStoreInitMaxRetries(long tokenStoreInitMaxRetries) {
+            this.tokenStoreInitMaxRetries = tokenStoreInitMaxRetries;
             return this;
         }
 
@@ -783,20 +815,22 @@ class Coordinator {
                             .stream()
                             .filter(workPackage -> !workPackage.isAbortTriggered())
                             .filter(WorkPackage::isProcessingEvents)
-                            .forEach(workPackage -> {
-                                try {
-                                    workPackage.extendClaimIfThresholdIsMet();
-                                } catch (Exception e) {
-                                    logger.warn(
-                                            "Processor [{}] (Coordination Task [{}]). Error while extending claim for Work Package [{}]. "
-                                                    + "Aborting Work Package...",
-                                            name,
-                                            generation,
-                                            workPackage.segment().getSegmentId(),
-                                            e);
-                                    workPackage.abort(e);
-                                }
-                            });
+                            .forEach(workPackage -> workPackage.extendClaimIfThresholdIsMet()
+                                                               .whenComplete((ignored, e) -> {
+                                                                   if (e == null) {
+                                                                       return;
+                                                                   }
+                                                                   Throwable cause = e instanceof CompletionException ce
+                                                                           ? ce.getCause() : e;
+                                                                   logger.warn(
+                                                                           "Processor [{}] (Coordination Task [{}]). Error while extending claim for Work Package [{}]. "
+                                                                                   + "Aborting Work Package...",
+                                                                           name,
+                                                                           generation,
+                                                                           workPackage.segment().getSegmentId(),
+                                                                           cause);
+                                                                   workPackage.abort(cause);
+                                                               }));
             }
 
             if (!coordinatorTasks.isEmpty()) {
@@ -831,49 +865,66 @@ class Coordinator {
                 return;
             }
 
+            CompletableFuture<Void> claimAndStreamFuture;
             if (eventStream == null || unclaimedSegmentValidationThreshold <= clock.instant().toEpochMilli()) {
                 // Claim new segments, construct work packages per new segment, and open stream based on lowest segment
                 unclaimedSegmentValidationThreshold = clock.instant().toEpochMilli() + tokenClaimInterval;
-                try {
-                    TrackingToken streamStartPosition = lastScheduledToken;
-                    if (!releaseSegmentsIfTooManyClaimed()) {
-                        logger.debug("Processor [{}] (Coordination Task [{}]) will try to claim new segments.",
-                                     name,
-                                     generation);
-                        Map<Segment, TrackingToken> newSegments = claimNewSegments();
-
-                        for (Map.Entry<Segment, TrackingToken> entry : newSegments.entrySet()) {
-                            Segment segment = entry.getKey();
-                            TrackingToken token = entry.getValue();
-                            TrackingToken otherUnwrapped = WrappedToken.unwrapLowerBound(token);
-
-                            streamStartPosition = streamStartPosition == null || otherUnwrapped == null
-                                    ? null : streamStartPosition.lowerBound(otherUnwrapped);
-                            workPackages.computeIfAbsent(segment.getSegmentId(),
-                                                         wp -> createWorkPackage(segment, token));
-                        }
-
-                        if (logger.isInfoEnabled() && !newSegments.isEmpty()) {
-                            logger.info(
-                                    "Processor [{}] (Coordination Task [{}]) claimed {} new segments for processing.",
-                                    name,
-                                    generation,
-                                    newSegments.size());
-                        }
-                    }
-                    ensureOpenStream(streamStartPosition);
-                } catch (Exception e) {
+                TrackingToken streamStartPosition = lastScheduledToken;
+                if (releaseSegmentsIfTooManyClaimed()) {
+                    claimAndStreamFuture = ensureOpenStream(streamStartPosition);
+                } else {
+                    logger.debug("Processor [{}] (Coordination Task [{}]) will try to claim new segments.",
+                                 name,
+                                 generation);
+                    claimAndStreamFuture = claimNewSegments()
+                            .thenCompose(newSegments -> {
+                                AtomicReference<TrackingToken> position = new AtomicReference<>(streamStartPosition);
+                                CompletableFuture<Void> chain = emptyCompletedFuture();
+                                for (Map.Entry<Segment, TrackingToken> entry : newSegments.entrySet()) {
+                                    Segment segment = entry.getKey();
+                                    TrackingToken token = entry.getValue();
+                                    TrackingToken otherUnwrapped = WrappedToken.unwrapLowerBound(token);
+                                    position.updateAndGet(p -> p == null || otherUnwrapped == null
+                                            ? null : p.lowerBound(otherUnwrapped));
+                                    int segmentId = segment.getSegmentId();
+                                    if (!workPackages.containsKey(segmentId)) {
+                                        chain = chain.thenCompose(ignored ->
+                                                createWorkPackage(segment, token)
+                                                        .thenAccept(wp -> workPackages.putIfAbsent(segmentId, wp))
+                                        );
+                                    }
+                                }
+                                if (logger.isInfoEnabled() && !newSegments.isEmpty()) {
+                                    logger.info(
+                                            "Processor [{}] (Coordination Task [{}]) claimed {} new segments for processing.",
+                                            name,
+                                            generation,
+                                            newSegments.size());
+                                }
+                                return chain.thenCompose(ignored -> ensureOpenStream(position.get()));
+                            });
+                }
+            } else {
+                // Stream is already open; no claiming needed, proceed immediately.
+                claimAndStreamFuture = emptyCompletedFuture();
+            }
+            claimAndStreamFuture.whenComplete((ignored, e) -> {
+                if (e != null) {
+                    Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
                     logger.warn(
                             "Processor [{}] (Coordination Task [{}]). Exception occurred while starting work packages"
                                     + " and opening the event stream.",
                             name,
                             generation,
-                            e);
-                    abortAndScheduleRetry(e);
-                    return;
+                            cause);
+                    abortAndScheduleRetry(cause);
+                } else {
+                    coordinateEvents();
                 }
-            }
+            });
+        }
 
+        private void coordinateEvents() {
             if (workPackages.isEmpty()) {
                 // We didn't start any work packages. Retry later.
                 logger.debug(
@@ -985,21 +1036,22 @@ class Coordinator {
             }
         }
 
-        private WorkPackage createWorkPackage(Segment segment, TrackingToken token) {
+        private CompletableFuture<WorkPackage> createWorkPackage(Segment segment, TrackingToken token) {
             WorkPackage workPackage = workPackageFactory.apply(segment, token);
             workPackage.onBatchProcessed(() -> resetRetryExponentialBackoff(segment.getSegmentId()));
-            try {
-                joinAndUnwrap(segmentChangeListener.onSegmentClaimed(segment));
-            } catch (Exception e) {
-                logger.info(
-                        "Processor [{}] (Coordination Task [{}]). An exception occurred while invoking claim listeners for [{}].",
-                        name,
-                        generation,
-                        segment,
-                        e
-                );
-            }
-            return workPackage;
+            return segmentChangeListener.onSegmentClaimed(segment)
+                                        .handle((ignored, e) -> {
+                                            if (e != null) {
+                                                logger.info(
+                                                        "Processor [{}] (Coordination Task [{}]). An exception occurred while invoking claim listeners for [{}].",
+                                                        name,
+                                                        generation,
+                                                        segment,
+                                                        e
+                                                );
+                                            }
+                                            return workPackage;
+                                        });
         }
 
         private void resetRetryExponentialBackoff(int segmentId) {
@@ -1009,7 +1061,7 @@ class Coordinator {
                          segmentId);
         }
 
-        private CompletableFuture<Void> abortWorkPackages(Exception cause) {
+        private CompletableFuture<Void> abortWorkPackages(@Nullable Throwable cause) {
             return workPackages.values().stream()
                                .map(wp -> abortWorkPackage(wp, cause))
                                .reduce(CompletableFuture::allOf)
@@ -1049,23 +1101,35 @@ class Coordinator {
         /**
          * Attempts to claim new segments.
          *
-         * @return a Map with each {@link TrackingToken} for newly claimed {@link Segment}
+         * @return a {@link CompletableFuture} with each {@link TrackingToken} for newly claimed {@link Segment}
          */
-        private Map<Segment, TrackingToken> claimNewSegments() {
-            Map<Segment, TrackingToken> newClaims = new HashMap<>();
-            List<Segment> segments = joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
+        private CompletableFuture<Map<Segment, TrackingToken>> claimNewSegments() {
+            return unitOfWorkFactory.create().executeWithResult(
                     context -> tokenStore.fetchAvailableSegments(name, context)
-            ));
-            if (segments == null) {
-                return newClaims;
-            }
-            // As segments are used for Segment#computeSegment, we cannot filter out the WorkPackages upfront.
-            List<Segment> unClaimedSegments = segments.stream()
-                                                      .filter(segment -> !workPackages.containsKey(segment.getSegmentId()))
-                                                      .toList();
-            int maxSegmentsToClaim = maxSegmentProvider.apply(name) - workPackages.size();
-            for (Segment segment : unClaimedSegments) {
+            ).thenCompose(segments -> {
+                int maxSegmentsToClaim = maxSegmentProvider.apply(name) - workPackages.size();
+                List<Segment> candidates = selectClaimCandidates(segments);
+
+                CompletableFuture<Map<Segment, TrackingToken>> successfullyClaimedSegments = CompletableFuture.completedFuture(new HashMap<>());
+                for (Segment candidate : candidates) {
+                    successfullyClaimedSegments = successfullyClaimedSegments.thenCompose(successfulClaims -> {
+                        if (successfulClaims.size() >= maxSegmentsToClaim) {
+                            return CompletableFuture.completedFuture(successfulClaims);
+                        }
+                        return claimSegment(candidate, successfulClaims);
+                    });
+                }
+                return successfullyClaimedSegments;
+            });
+        }
+
+        private List<Segment> selectClaimCandidates(List<Segment> segments) {
+            List<Segment> candidates = new ArrayList<>();
+            for (Segment segment : segments) {
                 int segmentId = segment.getSegmentId();
+                if (workPackages.containsKey(segmentId)) {
+                    continue;
+                }
                 if (isSegmentBlockedFromClaim(segmentId)) {
                     logger.debug(
                             "Processor [{}] (Coordination Task [{}]). Segment {} is still marked to not be claimed till [{}].",
@@ -1073,32 +1137,45 @@ class Coordinator {
                             generation,
                             segmentId,
                             releasesDeadlines.get(segmentId));
-                    processingStatusUpdater.accept(segmentId, u -> null);
-                    continue;
-                }
-                if (newClaims.size() < maxSegmentsToClaim) {
-                    try {
-                        TrackingToken token = joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
-                                context -> tokenStore.fetchToken(name, segment, context)
-                        ));
-                        newClaims.put(segment, token);
-                        logger.debug("Processor [{}] (Coordination Task [{}]) claimed the token for segment {}.",
-                                     name,
-                                     generation,
-                                     segmentId);
-                    } catch (UnableToClaimTokenException e) {
-                        processingStatusUpdater.accept(segmentId, u -> null);
-                        logger.debug(
-                                "Processor [{}] (Coordination Task [{}]) is unable to claim the token for segment {}. "
-                                        + "It is owned by another process or has been split/merged concurrently.",
-                                name,
-                                generation,
-                                segmentId);
-                    }
+                    processingStatusUpdater.accept(segmentId, ignored -> null);
+                } else {
+                    candidates.add(segment);
                 }
             }
+            return candidates;
+        }
 
-            return newClaims;
+        private CompletableFuture<Map<Segment, TrackingToken>> claimSegment(
+                Segment segment, Map<Segment, TrackingToken> claims
+        ) {
+            int segmentId = segment.getSegmentId();
+            return unitOfWorkFactory.create().<TrackingToken>executeWithResult(
+                    context -> tokenStore.fetchToken(name, segment, context)
+            ).thenApply(token -> {
+                claims.put(segment, token);
+                logger.debug(
+                        "Processor [{}] (Coordination Task [{}]) claimed the token for segment {}.",
+                        name,
+                        generation,
+                        segmentId);
+                return claims;
+            }).exceptionally(e -> {
+                Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+                if (cause instanceof UnableToClaimTokenException) {
+                    processingStatusUpdater.accept(segmentId, ignored -> null);
+                    logger.debug(
+                            "Processor [{}] (Coordination Task [{}]) is unable to claim the token for segment {}. "
+                                    + "It is owned by another process or has been split/merged concurrently.",
+                            name,
+                            generation,
+                            segmentId);
+                    return claims;
+                }
+                if (e instanceof CompletionException ce) {
+                    throw ce;
+                }
+                throw new CompletionException(e);
+            });
         }
 
         private boolean isSegmentBlockedFromClaim(int segmentId) {
@@ -1109,7 +1186,7 @@ class Coordinator {
             return releaseDeadline != null;
         }
 
-        private void ensureOpenStream(TrackingToken trackingToken) {
+        private CompletableFuture<Void> ensureOpenStream(@Nullable TrackingToken trackingToken) {
             // We already had a stream and the token differs the last scheduled token, thus we started new WorkPackages.
             // Close old stream to start at the new position, if we have Work Packages left.
             if (eventStream != null && !Objects.equals(trackingToken, lastScheduledToken)) {
@@ -1121,27 +1198,30 @@ class Coordinator {
             }
 
             if (eventStream == null && !workPackages.isEmpty() && !(trackingToken instanceof NoToken)) {
-                var startStreamingFrom = Objects.requireNonNullElse(
-                        trackingToken, joinAndUnwrap(eventSource.firstToken(null))
-                );
-                eventStream = eventSource.open(
-                        StreamingCondition.conditionFor(startStreamingFrom, eventCriteria), null
-                );
-                logger.debug(
-                        "Processor [{}] (Coordination Task [{}]) opened stream with tracking token [{}] and criteria [{}].",
-                        name, generation, trackingToken, eventCriteria
-                );
-                availabilityCallbackSupported = true;
-                eventStream.setCallback(() -> {
-                    logger.trace(
-                            "Processor [{}] (Coordination Task [{}]). Events became available (callback triggered). "
-                                    + "Scheduling immediate coordination task (itself).",
-                            name, generation
+                CompletableFuture<TrackingToken> startPositionFuture = trackingToken != null
+                        ? CompletableFuture.completedFuture(trackingToken)
+                        : eventSource.firstToken(null);
+                return startPositionFuture.thenAccept(startStreamingFrom -> {
+                    eventStream = eventSource.open(
+                            StreamingCondition.conditionFor(startStreamingFrom, eventCriteria), null
                     );
-                    scheduleImmediateCoordinationTask();
+                    logger.debug(
+                            "Processor [{}] (Coordination Task [{}]) opened stream with tracking token [{}] and criteria [{}].",
+                            name, generation, startStreamingFrom, eventCriteria
+                    );
+                    availabilityCallbackSupported = true;
+                    eventStream.setCallback(() -> {
+                        logger.trace(
+                                "Processor [{}] (Coordination Task [{}]). Events became available (callback triggered). "
+                                        + "Scheduling immediate coordination task (itself).",
+                                name, generation
+                        );
+                        scheduleImmediateCoordinationTask();
+                    });
+                    lastScheduledToken = startStreamingFrom;
                 });
-                lastScheduledToken = trackingToken;
             }
+            return emptyCompletedFuture();
         }
 
         private boolean isSpaceAvailable() {
@@ -1317,7 +1397,7 @@ class Coordinator {
             }
         }
 
-        private void abortAndScheduleRetry(Exception cause) {
+        private void abortAndScheduleRetry(Throwable cause) {
             errorWaitBackOff = Math.min(errorWaitBackOff * 2, 60000);
             logger.info(
                     "Processor [{}] (Coordination Task [{}]) is releasing claims and scheduling a new coordination task in {}ms.",
@@ -1354,7 +1434,7 @@ class Coordinator {
             closeStreamQuietly();
         }
 
-        private CompletableFuture<Void> abortWorkPackage(WorkPackage work, Exception cause) {
+        private CompletableFuture<Void> abortWorkPackage(WorkPackage work, @Nullable Throwable cause) {
             int segmentId = work.segment().getSegmentId();
             return work.abort(cause)
                        .thenRun(() -> {
@@ -1363,17 +1443,21 @@ class Coordinator {
                                             name, generation, work.segment());
                            }
                        })
-                       .thenRun(() -> joinAndUnwrap(unitOfWorkFactory.create().executeWithResult(
+                       .thenCompose(unused -> unitOfWorkFactory.create().executeWithResult(
                                context -> tokenStore.releaseClaim(name, segmentId, context)
-                                                    .thenCompose(unused -> segmentChangeListener.onSegmentReleased(work.segment()))
-                       )))
+                                                    .thenCompose(r -> segmentChangeListener.onSegmentReleased(work.segment()))
+                       ))
                        .exceptionally(throwable -> {
+                           Throwable unwrapped = throwable instanceof CompletionException ce ? ce.getCause() : throwable;
+                           if (unwrapped instanceof Error error) {
+                               throw error;
+                           }
                            logger.warn(
                                    "Processor [{}] (Coordination Task [{}]). An exception occurred during the abort of work package [{}].",
                                    name,
                                    generation,
                                    segmentId,
-                                   throwable);
+                                   unwrapped);
                            return null;
                        });
         }

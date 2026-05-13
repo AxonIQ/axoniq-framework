@@ -190,7 +190,7 @@ class WorkPackageTest {
         assertTrue(trackerStatusUpdates.get(0).isErrorState());
         assertNull(trackerStatusUpdates.get(1));
 
-        CompletableFuture<Exception> abortResult = testSubject.abort(null);
+        CompletableFuture<Throwable> abortResult = testSubject.abort(null);
         assertTrue(abortResult.isDone());
         assertTrue(abortResult.get().getClass().isAssignableFrom(IllegalStateException.class));
     }
@@ -214,7 +214,7 @@ class WorkPackageTest {
         assertTrue(trackerStatusUpdates.get(0).isErrorState());
         assertNull(trackerStatusUpdates.get(1));
 
-        CompletableFuture<Exception> abortResult = testSubject.abort(null);
+        CompletableFuture<Throwable> abortResult = testSubject.abort(null);
         assertTrue(abortResult.isDone());
         assertTrue(abortResult.get().getClass().isAssignableFrom(IllegalStateException.class));
     }
@@ -376,7 +376,7 @@ class WorkPackageTest {
 
     @Test
     void scheduleWorkerForAbortedPackage() throws ExecutionException, InterruptedException {
-        CompletableFuture<Exception> result = testSubject.abort(null);
+        CompletableFuture<Throwable> result = testSubject.abort(null);
 
         testSubject.scheduleWorker();
 
@@ -415,7 +415,7 @@ class WorkPackageTest {
     void abortReturnsAbortReason() throws ExecutionException, InterruptedException {
         Exception expectedResult = new IllegalStateException();
 
-        CompletableFuture<Exception> result = testSubject.abort(expectedResult);
+        CompletableFuture<Throwable> result = testSubject.abort(expectedResult);
 
         await().atMost(TIMEOUT).untilAsserted(() -> assertTrue(result.isDone()));
         assertEquals(expectedResult, result.get());
@@ -427,7 +427,7 @@ class WorkPackageTest {
         Exception otherAbortReason = new IllegalArgumentException();
         testSubject.abort(originalAbortReason);
 
-        CompletableFuture<Exception> result = testSubject.abort(otherAbortReason);
+        CompletableFuture<Throwable> result = testSubject.abort(otherAbortReason);
 
         await().atMost(TIMEOUT).untilAsserted(() -> assertTrue(result.isDone()));
         assertEquals(originalAbortReason, result.get());
@@ -704,6 +704,77 @@ class WorkPackageTest {
             List<Runnable> snapshot = new ArrayList<>(tasks);
             tasks.clear();
             snapshot.forEach(Runnable::run);
+        }
+    }
+
+    @Nested
+    class ScheduleWorkerLifecycleTest {
+
+        @Test
+        void processingEventsIsFalseAfterSuccessfulProcessing() {
+            // given
+            TrackingToken testToken = new GlobalSequenceTrackingToken(1L);
+            var testEvent = new SimpleEntry<>(EventTestUtils.asEventMessage("some-event"), trackingTokenContext(testToken));
+
+            // when
+            testSubject.scheduleEvent(testEvent);
+
+            // then
+            await().atMost(TIMEOUT).untilAsserted(() -> {
+                verify(tokenStore).storeToken(any(), eq(PROCESSOR_NAME), eq(segment.getSegmentId()), any());
+                assertThat(testSubject.isProcessingEvents()).isFalse();
+            });
+        }
+
+        @Test
+        void processingEventsIsFalseAfterFailedProcessing() {
+            // given
+            TrackingToken testToken = new GlobalSequenceTrackingToken(1L);
+            var testEvent = new SimpleEntry<>(EventTestUtils.asEventMessage("some-event"), trackingTokenContext(testToken));
+            batchProcessorPredicate = (events, token) -> {
+                throw new IllegalStateException("processing failure");
+            };
+
+            // when
+            testSubject.scheduleEvent(testEvent);
+
+            // then - wait for abort to be fully processed (trackerStatus set to null by abort handler)
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(trackerStatus).isNull());
+            assertThat(testSubject.isProcessingEvents()).isFalse();
+        }
+
+        @Test
+        void workerReschedulesWhenQueueHasRemainingEventsAfterBatch() {
+            // given - two events with different tokens; batchSize is 1 so each is processed separately
+            TrackingToken tokenOne = new GlobalSequenceTrackingToken(1L);
+            TrackingToken tokenTwo = new GlobalSequenceTrackingToken(2L);
+            var eventOne = new SimpleEntry<>(EventTestUtils.asEventMessage("event-one"), trackingTokenContext(tokenOne));
+            var eventTwo = new SimpleEntry<>(EventTestUtils.asEventMessage("event-two"), trackingTokenContext(tokenTwo));
+
+            // when
+            testSubject.scheduleEvent(eventOne);
+            testSubject.scheduleEvent(eventTwo);
+
+            // then - second event is only reachable if scheduleWorker reschedules after the first batch
+            await().atMost(TIMEOUT).untilAsserted(
+                    () -> assertThat(batchProcessor.getProcessedEvents()).hasSize(2)
+            );
+        }
+
+        @Test
+        void tokenStoreFailureTriggersAbort() {
+            // given
+            TrackingToken testToken = new GlobalSequenceTrackingToken(1L);
+            var testEvent = new SimpleEntry<>(EventTestUtils.asEventMessage("some-event"), trackingTokenContext(testToken));
+            doReturn(CompletableFuture.failedFuture(new RuntimeException("store failure")))
+                    .when(tokenStore).storeToken(any(), anyString(), anyInt(), any());
+
+            // when
+            testSubject.scheduleEvent(testEvent);
+
+            // then
+            await().atMost(TIMEOUT).untilAsserted(() -> assertThat(trackerStatus).isNull());
+            assertThat(testSubject.abort(null)).isDone();
         }
     }
 

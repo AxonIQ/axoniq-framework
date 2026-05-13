@@ -55,18 +55,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.axonframework.common.BuilderUtils.assertThat;
-import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * A {@link StreamingEventProcessor} implementation which pools its resources to enhance processing speed. It utilizes a
@@ -183,8 +182,10 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
     @Override
     public CompletableFuture<Void> start() {
         logger.info("Starting PooledStreamingEventProcessor [{}].", name);
-        coordinator.start();
-        return FutureUtils.emptyCompletedFuture();
+        var unitOfWork = unitOfWorkFactory.create();
+        return unitOfWork.executeWithResult(tokenStore::retrieveStorageIdentifier)
+                         .thenAccept(tokenStoreIdentifier::set)
+                         .thenCompose(unused -> coordinator.start());
     }
 
     @Override
@@ -203,6 +204,13 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
         return coordinator.isError();
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * This implementation resolves the identifier eagerly during {@link #start()}. If called before {@code start()}
+     * has completed, the identifier is resolved lazily with a blocking call to the
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore}.
+     */
     @Override
     public String getTokenStoreIdentifier() {
         return tokenStoreIdentifier.updateAndGet(i -> i != null ? i : calculateIdentifier());
@@ -210,7 +218,7 @@ public class PooledStreamingEventProcessor implements StreamingEventProcessor {
 
     private String calculateIdentifier() {
         var unitOfWork = unitOfWorkFactory.create();
-        return joinAndUnwrap(unitOfWork.executeWithResult(tokenStore::retrieveStorageIdentifier));
+        return FutureUtils.joinAndUnwrap(unitOfWork.executeWithResult(tokenStore::retrieveStorageIdentifier));
     }
 
     @Override
