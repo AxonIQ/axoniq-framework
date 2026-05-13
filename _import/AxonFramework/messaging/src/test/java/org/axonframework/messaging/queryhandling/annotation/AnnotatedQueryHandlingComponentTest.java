@@ -31,6 +31,7 @@ import org.axonframework.messaging.core.annotation.ClasspathHandlerDefinition;
 import org.axonframework.messaging.core.annotation.ClasspathParameterResolverFactory;
 import org.axonframework.messaging.core.annotation.UnsupportedHandlerException;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
+import org.axonframework.messaging.core.interception.annotation.ExceptionHandler;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
@@ -946,6 +947,44 @@ class AnnotatedQueryHandlingComponentTest {
             assertThatThrownBy(() -> annotatedComponent(handler))
                     .isInstanceOf(AxonConfigurationException.class)
                     .hasMessageContaining("declare a parameter of type InterceptorChain");
+        }
+
+        @Test
+        void exceptionHandlerIsInvokedWhenQueryHandlerThrows() {
+            // given
+            var capturedExceptions = new ArrayList<Exception>();
+            var handler = new Object() {
+                @ExceptionHandler
+                void onException(RuntimeException e) { capturedExceptions.add(e); }
+                @QueryHandler
+                String handle(String payload) { throw new RuntimeException("handler failed"); }
+            };
+            var component = annotatedComponent(handler);
+            var query = queryMessage("hello");
+
+            // when - exception handler swallows the exception, so stream completes normally
+            component.handle(query, StubProcessingContext.forMessage(query))
+                     .first().asCompletableFuture().join();
+
+            // then
+            assertThat(capturedExceptions).hasSize(1);
+            assertThat(capturedExceptions.getFirst()).hasMessage("handler failed");
+        }
+
+        @Test
+        void exceptionHandlerWithChainParamIsRejected() {
+            // given - @ExceptionHandler is a result handler; combining it with a chain parameter is illegal
+            var handler = new Object() {
+                @ExceptionHandler
+                void handleException(Exception e, MessageHandlerInterceptorChain<?> chain) {}
+                @QueryHandler
+                String handle(String payload) { return payload; }
+            };
+
+            // when / then
+            assertThatThrownBy(() -> annotatedComponent(handler))
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("acting on the invocation result must not declare a parameter of type InterceptorChain");
         }
     }
 }

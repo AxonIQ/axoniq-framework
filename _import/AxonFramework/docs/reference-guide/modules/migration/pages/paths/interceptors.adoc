@@ -393,3 +393,45 @@ public class OrderCommandHandler {
 ====
 
 For full documentation and examples for all three message types, see xref:messaging-concepts:component-message-intercepting.adoc[Component Message Intercepting].
+
+=== Migration of `@ExceptionHandler`
+
+The `@ExceptionHandler` annotation works in Axon Framework 5 with the same intent as in Axon Framework 4: handling exceptions thrown from message handler methods in the same class.
+The `payloadType` attribute has been removed. Narrowing is now done solely by exception type via `resultType`, and optionally by message type (command, event, or query) via `messageType`.
+
+[tabs]
+====
+Axon Framework 4::
++
+[source,java]
+----
+public class OrderCommandHandler {
+
+    @ExceptionHandler(resultType = IllegalStateException.class)
+    public void handleIllegalState(IllegalStateException exception, CommandMessage<?> message) {
+        // Handle exception for all commands
+    }
+}
+----
+
+Axon Framework 5::
++
+[source,java]
+----
+public class OrderCommandHandler {
+
+    @ExceptionHandler(resultType = IllegalStateException.class)
+    public void handleIllegalState(IllegalStateException exception) {
+        // Handle exception for all commands on this component
+    }
+
+    // Narrow to a specific exception type
+    @ExceptionHandler(resultType = ValidationException.class)
+    public void handleValidation(ValidationException exception) {
+        // Only handles ValidationException (and its subtypes)
+    }
+}
+----
+====
+
+For full documentation on `@ExceptionHandler`, see xref:messaging-concepts:component-message-intercepting.adoc#ExceptionHandler[Component Message Intercepting - @ExceptionHandler].
