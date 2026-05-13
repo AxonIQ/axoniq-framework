@@ -83,12 +83,12 @@ public final class ProcessUtils {
      * @return a {@link CompletableFuture} that completes when the action returns {@code true}, or exceptionally with a
      *         {@link ProcessRetriesExhaustedException} if max tries is reached
      */
-    public static CompletableFuture<Void> executeUntilTrueAsync(Supplier<CompletableFuture<Boolean>> action,
+    public static CompletableFuture<Void> executeUntilTrue(Supplier<CompletableFuture<Boolean>> action,
                                                                  long retryInterval, long maxTries, Executor executor) {
-        return executeUntilTrueAsync(action, retryInterval, maxTries, maxTries, executor);
+        return executeUntilTrue(action, retryInterval, maxTries, maxTries, executor);
     }
 
-    private static CompletableFuture<Void> executeUntilTrueAsync(Supplier<CompletableFuture<Boolean>> action,
+    private static CompletableFuture<Void> executeUntilTrue(Supplier<CompletableFuture<Boolean>> action,
                                                                   long retryInterval, long originalMaxTries,
                                                                   long attemptsLeft, Executor executor) {
         if (attemptsLeft <= 0) {
@@ -103,7 +103,7 @@ public final class ProcessUtils {
             return CompletableFuture
                     .runAsync(() -> {}, CompletableFuture.delayedExecutor(retryInterval, TimeUnit.MILLISECONDS,
                                                                           executor))
-                    .thenCompose(ignored -> executeUntilTrueAsync(action, retryInterval, originalMaxTries,
+                    .thenCompose(ignored -> executeUntilTrue(action, retryInterval, originalMaxTries,
                                                                   attemptsLeft - 1, executor));
         });
     }

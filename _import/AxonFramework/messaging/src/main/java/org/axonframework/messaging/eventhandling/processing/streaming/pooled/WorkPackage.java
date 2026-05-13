@@ -106,8 +106,8 @@ class WorkPackage {
 
     private final Queue<ProcessingEntry> processingQueue = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean scheduled = new AtomicBoolean();
-    private final AtomicReference<CompletableFuture<Exception>> abortFlag = new AtomicReference<>();
-    private final AtomicReference<Exception> abortException = new AtomicReference<>();
+    private final AtomicReference<@Nullable CompletableFuture<Throwable>> abortFlag = new AtomicReference<>();
+    private final AtomicReference<@Nullable Throwable> abortException = new AtomicReference<>();
 
     /**
      * Instantiate a Builder to be able to create a {@code WorkPackage}. This builder <b>does not</b> validate the
@@ -333,7 +333,7 @@ class WorkPackage {
     }
 
     private void runWorker() {
-        CompletableFuture<Exception> aborting = abortFlag.get();
+        CompletableFuture<Throwable> aborting = abortFlag.get();
         if (aborting != null) {
             logger.debug("Work Package [{}]-[{}] should be aborted. Will shutdown this work package.",
                          segment.getSegmentId(), name);
@@ -349,7 +349,7 @@ class WorkPackage {
             Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
             logger.warn("Error while processing batch in Work Package [{}]-[{}]. Aborting Work Package...",
                         segment.getSegmentId(), name, cause);
-            abort(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
+            abort(cause);
         }
         scheduled.set(false);
         if (!processingQueue.isEmpty() || abortFlag.get() != null) {
@@ -478,7 +478,7 @@ class WorkPackage {
      * Indicates whether an abort has been triggered for this {@code WorkPackage}. When {@code true}, any events
      * scheduled for processing by this {@code WorkPackage} are likely to be ignored.
      * <p>
-     * Use {@link WorkPackage#abort(Exception)} (possibly with a {@code null} reason) to obtain a
+     * Use {@link WorkPackage#abort(Throwable)} (possibly with a {@code null} reason) to obtain a
      * {@link CompletableFuture} with a reference to the abort reason.
      *
      * @return {@code true} if an abort was scheduled, otherwise {@code false}
@@ -492,15 +492,15 @@ class WorkPackage {
      * abort reason once the {@code WorkPackage} has finished any processing that may had been started already.
      * <p>
      * If this {@code WorkPackage} was already aborted in another request, the returned {@code CompletableFuture} will
-     * complete with exception for the first request.
+     * complete with the first abort reason.
      * <p>
      * An aborted {@code WorkPackage} cannot be restarted.
      *
-     * @param abortReason the reason to request the {@code WorkPackage} to abort
+     * @param abortReason the reason to request the {@code WorkPackage} to abort, may be {@code null}
      * @return a {@link CompletableFuture} that completes with the first reason once the {@code WorkPackage} has stopped
      * processing
      */
-    public CompletableFuture<Exception> abort(Exception abortReason) {
+    public CompletableFuture<Throwable> abort(@Nullable Throwable abortReason) {
         if (abortReason != null) {
             logger.debug("Abort request received for Work Package [{}]-[{}].",
                          name, segment.getSegmentId(), abortReason);
@@ -514,7 +514,7 @@ class WorkPackage {
             );
         }
 
-        CompletableFuture<Exception> abortTask = abortFlag.updateAndGet(
+        CompletableFuture<Throwable> abortTask = Objects.requireNonNull(abortFlag.updateAndGet(
                 currentFlag -> {
                     if (currentFlag == null) {
                         abortException.set(abortReason);
@@ -526,7 +526,7 @@ class WorkPackage {
                         return currentFlag;
                     }
                 }
-        );
+        ));
         // Reschedule the worker to ensure the abort flag is processed
         scheduleWorker();
         return abortTask;

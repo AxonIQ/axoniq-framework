@@ -342,7 +342,7 @@ class CoordinatorTest {
 
     /**
      * Tests for the token store initialization retry logic delegated to
-     * {@link org.axonframework.common.ProcessUtils#executeUntilTrueAsync}:
+     * {@link org.axonframework.common.ProcessUtils#executeUntilTrue}:
      * single-failure-then-success path, and all-attempts-exhausted path.
      * <p>
      * Uses a 1 ms retry interval and 3 max retries to keep test execution fast.

@@ -190,7 +190,7 @@ class WorkPackageTest {
         assertTrue(trackerStatusUpdates.get(0).isErrorState());
         assertNull(trackerStatusUpdates.get(1));
 
-        CompletableFuture<Exception> abortResult = testSubject.abort(null);
+        CompletableFuture<Throwable> abortResult = testSubject.abort(null);
         assertTrue(abortResult.isDone());
         assertTrue(abortResult.get().getClass().isAssignableFrom(IllegalStateException.class));
     }
@@ -214,7 +214,7 @@ class WorkPackageTest {
         assertTrue(trackerStatusUpdates.get(0).isErrorState());
         assertNull(trackerStatusUpdates.get(1));
 
-        CompletableFuture<Exception> abortResult = testSubject.abort(null);
+        CompletableFuture<Throwable> abortResult = testSubject.abort(null);
         assertTrue(abortResult.isDone());
         assertTrue(abortResult.get().getClass().isAssignableFrom(IllegalStateException.class));
     }
@@ -376,7 +376,7 @@ class WorkPackageTest {
 
     @Test
     void scheduleWorkerForAbortedPackage() throws ExecutionException, InterruptedException {
-        CompletableFuture<Exception> result = testSubject.abort(null);
+        CompletableFuture<Throwable> result = testSubject.abort(null);
 
         testSubject.scheduleWorker();
 
@@ -415,7 +415,7 @@ class WorkPackageTest {
     void abortReturnsAbortReason() throws ExecutionException, InterruptedException {
         Exception expectedResult = new IllegalStateException();
 
-        CompletableFuture<Exception> result = testSubject.abort(expectedResult);
+        CompletableFuture<Throwable> result = testSubject.abort(expectedResult);
 
         await().atMost(TIMEOUT).untilAsserted(() -> assertTrue(result.isDone()));
         assertEquals(expectedResult, result.get());
@@ -427,7 +427,7 @@ class WorkPackageTest {
         Exception otherAbortReason = new IllegalArgumentException();
         testSubject.abort(originalAbortReason);
 
-        CompletableFuture<Exception> result = testSubject.abort(otherAbortReason);
+        CompletableFuture<Throwable> result = testSubject.abort(otherAbortReason);
 
         await().atMost(TIMEOUT).untilAsserted(() -> assertTrue(result.isDone()));
         assertEquals(originalAbortReason, result.get());

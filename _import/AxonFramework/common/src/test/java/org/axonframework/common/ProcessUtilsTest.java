@@ -104,7 +104,7 @@ class ProcessUtilsTest {
             var executor = Executors.newSingleThreadExecutor();
 
             // when
-            CompletableFuture<Void> result = ProcessUtils.executeUntilTrueAsync(
+            CompletableFuture<Void> result = ProcessUtils.executeUntilTrue(
                     () -> CompletableFuture.completedFuture(true), 10L, 3L, executor
             );
 
@@ -119,7 +119,7 @@ class ProcessUtilsTest {
             var executor = Executors.newSingleThreadExecutor();
 
             // when
-            CompletableFuture<Void> result = ProcessUtils.executeUntilTrueAsync(
+            CompletableFuture<Void> result = ProcessUtils.executeUntilTrue(
                     () -> CompletableFuture.completedFuture(callCount.incrementAndGet() >= 3),
                     10L, 5L, executor
             );
@@ -136,7 +136,7 @@ class ProcessUtilsTest {
             var executor = Executors.newSingleThreadExecutor();
 
             // when
-            CompletableFuture<Void> result = ProcessUtils.executeUntilTrueAsync(
+            CompletableFuture<Void> result = ProcessUtils.executeUntilTrue(
                     () -> {
                         callCount.incrementAndGet();
                         return CompletableFuture.completedFuture(false);
@@ -160,7 +160,7 @@ class ProcessUtilsTest {
             var cause = new RuntimeException("action failed");
 
             // when
-            CompletableFuture<Void> result = ProcessUtils.executeUntilTrueAsync(
+            CompletableFuture<Void> result = ProcessUtils.executeUntilTrue(
                     () -> {
                         callCount.incrementAndGet();
                         return CompletableFuture.failedFuture(cause);

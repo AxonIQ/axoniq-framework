@@ -158,7 +158,7 @@ class Coordinator {
         RunState newState = this.runState.updateAndGet(RunState::attemptStart);
         if (newState.wasStarted()) {
             logger.debug("Processor [{}]. Starting Coordinator...", name);
-            return ProcessUtils.executeUntilTrueAsync(this::initializeTokenStore, tokenStoreInitRetryInterval, tokenStoreInitMaxRetries, executorService)
+            return ProcessUtils.executeUntilTrue(this::initializeTokenStore, tokenStoreInitRetryInterval, tokenStoreInitMaxRetries, executorService)
                     .thenRun(() -> {
                         CoordinationTask task = new CoordinationTask();
                         executorService.submit(task);
@@ -825,9 +825,7 @@ class Coordinator {
                                                                            generation,
                                                                            workPackage.segment().getSegmentId(),
                                                                            cause);
-                                                                   workPackage.abort(cause instanceof Exception ex
-                                                                                             ? ex
-                                                                                             : new RuntimeException(String.valueOf(cause)));
+                                                                   workPackage.abort(cause);
                                                                }));
             }
 
@@ -915,7 +913,7 @@ class Coordinator {
                             name,
                             generation,
                             cause);
-                    abortAndScheduleRetry(cause instanceof Exception ex ? ex : new RuntimeException(String.valueOf(cause)));
+                    abortAndScheduleRetry(cause);
                 } else {
                     coordinateEvents();
                 }
@@ -1059,7 +1057,7 @@ class Coordinator {
                          segmentId);
         }
 
-        private CompletableFuture<Void> abortWorkPackages(Exception cause) {
+        private CompletableFuture<Void> abortWorkPackages(@Nullable Throwable cause) {
             return workPackages.values().stream()
                                .map(wp -> abortWorkPackage(wp, cause))
                                .reduce(CompletableFuture::allOf)
@@ -1395,7 +1393,7 @@ class Coordinator {
             }
         }
 
-        private void abortAndScheduleRetry(Exception cause) {
+        private void abortAndScheduleRetry(Throwable cause) {
             errorWaitBackOff = Math.min(errorWaitBackOff * 2, 60000);
             logger.info(
                     "Processor [{}] (Coordination Task [{}]) is releasing claims and scheduling a new coordination task in {}ms.",
@@ -1432,7 +1430,7 @@ class Coordinator {
             closeStreamQuietly();
         }
 
-        private CompletableFuture<Void> abortWorkPackage(WorkPackage work, Exception cause) {
+        private CompletableFuture<Void> abortWorkPackage(WorkPackage work, @Nullable Throwable cause) {
             int segmentId = work.segment().getSegmentId();
             return work.abort(cause)
                        .thenRun(() -> {
