@@ -22,6 +22,8 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.StubLifecycleRegistry;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.MessageHandlingExceptionHandler;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -317,6 +319,7 @@ class SimpleQueryHandlingModuleTest {
             assertThat(invocationLog).isEmpty();
         }
 
+        @SuppressWarnings("DataFlowIssue")
         @Test
         void interceptorNullThrowsNullPointerException() {
             // given / when / then
@@ -429,6 +432,31 @@ class SimpleQueryHandlingModuleTest {
             // then
             assertThat(result.error()).isPresent();
             assertThat(result.error().get()).isInstanceOf(RuntimeException.class).hasMessage("unexpected");
+        }
+
+        @Test
+        void genericMessageExceptionHandlerCanBeRegistered() {
+            // given - a generic handler typed at Message that could be shared across all message types
+            List<String> invocationLog = new ArrayList<>();
+            MessageHandlingExceptionHandler<Message> genericHandler = (msg, ctx, error) -> {
+                invocationLog.add("generic:" + msg.type().name() + ":" + error.getMessage());
+                return MessageStream.empty();
+            };
+            var component = buildComponent(
+                    QueryHandlingModule.named("test-ex")
+                                       .queryHandlers()
+                                       .queryHandler(QUERY_NAME_LOCAL,
+                                                     (q, ctx) -> MessageStream.failed(new RuntimeException("boom")))
+                                       .withExceptionHandler(c -> genericHandler)
+            );
+
+            // when
+            var result = component.handle(SAMPLE_QUERY, STUB_PROCESSING_CONTEXT);
+            result.peek();
+
+            // then
+            assertThat(invocationLog).containsExactly("generic:test-query:boom");
+            assertThat(result.error()).isEmpty();
         }
 
         @Test

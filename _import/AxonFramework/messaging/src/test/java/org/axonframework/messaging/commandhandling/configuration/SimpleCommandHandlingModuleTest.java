@@ -22,6 +22,8 @@ import org.axonframework.messaging.commandhandling.CommandHandlingComponent;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.commandhandling.interception.InterceptingCommandHandlingComponent;
+import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.MessageHandlingExceptionHandler;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -224,6 +226,7 @@ class SimpleCommandHandlingModuleTest {
             assertThat(invocationLog).isEmpty();
         }
 
+        @SuppressWarnings("DataFlowIssue")
         @Test
         void interceptorNullThrowsNullPointerException() {
             // given / when / then
@@ -356,6 +359,31 @@ class SimpleCommandHandlingModuleTest {
             // then
             assertThat(result.error()).isPresent();
             assertThat(result.error().get()).isInstanceOf(RuntimeException.class).hasMessage("unexpected");
+        }
+
+        @Test
+        void genericMessageExceptionHandlerCanBeRegistered() {
+            // given - a generic handler typed at Message (not CommandMessage) that could be shared across all message types
+            List<String> invocationLog = new ArrayList<>();
+            MessageHandlingExceptionHandler<Message> genericHandler = (msg, ctx, error) -> {
+                invocationLog.add("generic:" + msg.type().name() + ":" + error.getMessage());
+                return MessageStream.empty();
+            };
+            var component = buildComponent(
+                    CommandHandlingModule.named("test")
+                                        .commandHandlers()
+                                        .commandHandler(COMMAND_NAME_LOCAL,
+                                                        (cmd, ctx) -> MessageStream.failed(new RuntimeException("boom")))
+                                        .withExceptionHandler(c -> genericHandler)
+            );
+
+            // when
+            var result = component.handle(SAMPLE_COMMAND, STUB_PROCESSING_CONTEXT);
+            result.peek();
+
+            // then
+            assertThat(invocationLog).containsExactly("generic:test-command:boom");
+            assertThat(result.error()).isEmpty();
         }
 
         @Test

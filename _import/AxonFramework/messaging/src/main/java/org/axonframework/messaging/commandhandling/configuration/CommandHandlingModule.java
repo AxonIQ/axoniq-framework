@@ -29,6 +29,7 @@ import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.commandhandling.annotation.AnnotatedCommandHandlingComponent;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
+import org.axonframework.messaging.core.MessageHandlingExceptionHandler;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
@@ -228,6 +229,11 @@ public interface CommandHandlingModule extends Module, ModuleBuilder<CommandHand
          * {@link MessageStream#empty()} to suppress the error, {@link MessageStream#failed(Throwable)} to propagate
          * it, or a stream with a {@link CommandResultMessage} to substitute a result.
          * <p>
+         * Accepts either a {@link CommandHandlingExceptionHandler} (which narrows the return type for substituting a
+         * {@link CommandResultMessage}) or a generic {@link MessageHandlingExceptionHandler} typed at any supertype of
+         * {@link CommandMessage}, allowing a single handler implementation (such as a logger) to be reused across
+         * command, event, and query phases.
+         * <p>
          * Multiple calls accumulate handlers; later-registered handlers are applied closer to the handler and see
          * exceptions first.
          *
@@ -235,10 +241,10 @@ public interface CommandHandlingModule extends Module, ModuleBuilder<CommandHand
          * @return this phase for further configuration
          */
         default CommandHandlerPhase withExceptionHandler(
-                ComponentBuilder<CommandHandlingExceptionHandler> handlerBuilder) {
+                ComponentBuilder<? extends MessageHandlingExceptionHandler<? super CommandMessage>> handlerBuilder) {
             requireNonNull(handlerBuilder, "The exception handler builder must not be null.");
             return intercepted(c -> {
-                CommandHandlingExceptionHandler handler = handlerBuilder.build(c);
+                MessageHandlingExceptionHandler<? super CommandMessage> handler = handlerBuilder.build(c);
                 return (message, context, chain) ->
                         chain.proceed(message, context)
                              .cast()
