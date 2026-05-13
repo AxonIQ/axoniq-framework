@@ -343,9 +343,13 @@ class Coordinator {
                                                             .thenApply(ignored -> true);
                                      })
         ).exceptionally(e -> {
+            Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+            if (cause instanceof Error error) {
+                throw error;
+            }
             logger.warn(
                     "Error while initializing the Token Store. This may simply indicate concurrent attempts to initialize.",
-                    e
+                    cause
             );
             return false;
         });
@@ -1444,12 +1448,16 @@ class Coordinator {
                                                     .thenCompose(r -> segmentChangeListener.onSegmentReleased(work.segment()))
                        ))
                        .exceptionally(throwable -> {
+                           Throwable unwrapped = throwable instanceof CompletionException ce ? ce.getCause() : throwable;
+                           if (unwrapped instanceof Error error) {
+                               throw error;
+                           }
                            logger.warn(
                                    "Processor [{}] (Coordination Task [{}]). An exception occurred during the abort of work package [{}].",
                                    name,
                                    generation,
                                    segmentId,
-                                   throwable);
+                                   unwrapped);
                            return null;
                        });
         }
