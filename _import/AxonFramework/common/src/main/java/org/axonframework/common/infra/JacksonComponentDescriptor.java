@@ -196,7 +196,7 @@ public class JacksonComponentDescriptor implements ComponentDescriptor {
     /**
      * Provides a description of what has been described in this Descriptor as a String.
      *
-     * @return A description of what has been described in this Descriptor.
+     * @return a description of what has been described in this Descriptor
      */
     public String describe() {
         try {
