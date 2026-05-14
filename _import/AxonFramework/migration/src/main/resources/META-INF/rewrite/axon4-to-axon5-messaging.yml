@@ -209,6 +209,21 @@ recipeList:
   - org.axonframework.migration.RemoveTypeArguments:
       fullyQualifiedTypeName: org.axonframework.messaging.core.unitofwork.UnitOfWork
 
+  # ── Interceptor implementations: signature rewrite, body left alone ─────
+  # AF4 `MessageHandlerInterceptor.handle(UoW, InterceptorChain) → Object`
+  # becomes AF5
+  # `interceptOnHandle(M, ProcessingContext, MessageHandlerInterceptorChain<M>) → MessageStream<?>`
+  # (and likewise for the dispatch interceptor). The signature rewrite is
+  # deterministic; the method body is intentionally NOT touched because the
+  # lifecycle-hook semantics (`onCommit` vs `runOnAfterCommit`, no equivalent
+  # for `onRollback`) differ in ways a blind rewrite would get wrong. The
+  # dropped `unitOfWork`/`interceptorChain`/`messages` references in the body
+  # become compile errors — the desired outcome, since they surface every
+  # call site that needs review. A class-level `// TODO #LLM` comment points
+  # to the migration path doc. Runs AFTER the FQN renames above so the AF5
+  # supertypes are visible.
+  - org.axonframework.migration.MigrateMessageInterceptorSignatures
+
   # ── Message accessor renames: drop the AF4 `get` prefix, fix MetaData → Metadata ─
   # AF5 dropped JavaBean prefixes on Message accessors and renamed the metadata
   # methods from `MetaData` to `Metadata`. `matchOverrides: true` makes the

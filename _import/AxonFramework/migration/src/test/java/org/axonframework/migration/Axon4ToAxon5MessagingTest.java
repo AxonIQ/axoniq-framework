@@ -757,6 +757,139 @@ class Axon4ToAxon5MessagingTest implements RewriteTest {
     // ── EventProcessor lifecycle method rename: shutDown() → shutdown() ─────
 
     @Test
+    void rewritesMessageHandlerInterceptorSignatureLeavingBodyAlone() {
+        // The signature is deterministic: handle(UoW, InterceptorChain) -> Object becomes
+        // interceptOnHandle(M, ProcessingContext, MessageHandlerInterceptorChain<M>) ->
+        // MessageStream<?>. The body intentionally stays as-is; `uow` / `chain` become
+        // unresolved references at every call site, surfacing every line that needs review.
+        // Type-validation is disabled because the AF5 supertype isn't on the test classpath
+        // and because the body is expected to contain unresolved references.
+        rewriteRun(
+                spec -> spec.typeValidationOptions(TypeValidation.none()),
+                java(
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandMessage;
+                        import org.axonframework.messaging.InterceptorChain;
+                        import org.axonframework.messaging.MessageHandlerInterceptor;
+                        import org.axonframework.messaging.unitofwork.UnitOfWork;
+
+                        class LoggingHandlerInterceptor implements MessageHandlerInterceptor<CommandMessage<?>> {
+                            @Override
+                            public Object handle(UnitOfWork<? extends CommandMessage<?>> uow,
+                                                 InterceptorChain chain) throws Exception {
+                                uow.onCommit(u -> System.out.println("commit"));
+                                return chain.proceed();
+                            }
+                        }
+                        """,
+                        """
+                        package com.example;
+                        import org.axonframework.messaging.commandhandling.CommandMessage;
+                        import org.axonframework.messaging.core.MessageHandlerInterceptor;
+                        import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
+                        import org.axonframework.messaging.core.MessageStream;
+                        import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+
+                        // TODO #LLM: migrate the body of this interceptor to the AF5 API — the signature has been rewritten but the body still references the AF4 `unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with calls on `message`, `context`, `chain`. See docs/reference-guide/modules/migration/pages/paths/interceptors.adoc
+                        class LoggingHandlerInterceptor implements MessageHandlerInterceptor<CommandMessage> {
+                            @Override
+                            public MessageStream<?> interceptOnHandle(CommandMessage message, ProcessingContext context, MessageHandlerInterceptorChain<CommandMessage> chain) {
+                                uow.onCommit(u -> System.out.println("commit"));
+                                return chain.proceed();
+                            }
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
+    void rewritesMessageDispatchInterceptorSignatureLeavingBodyAlone() {
+        rewriteRun(
+                spec -> spec.typeValidationOptions(TypeValidation.none()),
+                java(
+                        """
+                        package com.example;
+                        import java.util.List;
+                        import java.util.function.BiFunction;
+                        import org.axonframework.commandhandling.CommandMessage;
+                        import org.axonframework.messaging.MessageDispatchInterceptor;
+
+                        class MyDispatchInterceptor implements MessageDispatchInterceptor<CommandMessage<?>> {
+                            @Override
+                            public BiFunction<Integer, CommandMessage<?>, CommandMessage<?>> handle(
+                                    List<? extends CommandMessage<?>> messages) {
+                                return (index, message) -> message;
+                            }
+                        }
+                        """,
+                        """
+                        package com.example;
+                        import java.util.List;
+                        import java.util.function.BiFunction;
+                        import org.axonframework.messaging.commandhandling.CommandMessage;
+                        import org.axonframework.messaging.core.MessageDispatchInterceptor;
+                        import org.axonframework.messaging.core.MessageDispatchInterceptorChain;
+                        import org.axonframework.messaging.core.MessageStream;
+                        import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+
+                        // TODO #LLM: migrate the body of this interceptor to the AF5 API — the signature has been rewritten but the body still references the AF4 `unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with calls on `message`, `context`, `chain`. See docs/reference-guide/modules/migration/pages/paths/interceptors.adoc
+                        class MyDispatchInterceptor implements MessageDispatchInterceptor<CommandMessage> {
+                            @Override
+                            public MessageStream<?> interceptOnDispatch(CommandMessage message, ProcessingContext context, MessageDispatchInterceptorChain<CommandMessage> chain) {
+                                return (index, message) -> message;
+                            }
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
+    void leavesEmptyBodyInterceptorImplementationsUntouched() {
+        // Empty-body classes that only declare `implements MessageHandlerInterceptor<X>` without
+        // the AF4 `handle` method are passed through (no signature rewrite, no class-level TODO
+        // comment). This protects test fixtures and abstract base classes that don't actually
+        // carry the AF4 signature.
+        rewriteRun(
+                spec -> spec.typeValidationOptions(TypeValidation.none()),
+                java(
+                        """
+                        package com.example;
+
+                        import org.axonframework.commandhandling.CommandMessage;
+                        import org.axonframework.messaging.MessageHandlerInterceptor;
+
+                        class Foo implements MessageHandlerInterceptor<CommandMessage<?>> {}
+                        """,
+                        """
+                        package com.example;
+
+                        import org.axonframework.messaging.commandhandling.CommandMessage;
+                        import org.axonframework.messaging.core.MessageHandlerInterceptor;
+
+                        class Foo implements MessageHandlerInterceptor<CommandMessage> {}
+                        """
+                )
+        );
+    }
+
+    @Test
+    void leavesNonInterceptorClassesUntouched() {
+        rewriteRun(
+                java(
+                        """
+                        package com.example;
+                        class Plain {
+                            void m() {}
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
     void renamesEventProcessorShutDownToShutdown() {
         // Verifies the AF5 camelCase normalisation: an AF4 `eventProcessor.shutDown()` call site
         // is rewritten to `shutdown()` while the receiver type binding is moved into the
