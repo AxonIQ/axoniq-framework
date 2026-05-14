@@ -15,9 +15,8 @@
 #
 
 # Axoniq event streaming (`io.axoniq.framework:axoniq-event-streaming`):
-# placeholder. This is a new Axoniq Framework 5 module with no direct
-# Axon Framework 4 counterpart; multi-stream event consumption was previously
-# scattered across `MultiStreamableMessageSource` and ad-hoc patterns.
+# placeholder. Consolidates `MultiStreamableMessageSource` (available since
+# Axon Framework 4.2) into a dedicated Axoniq Framework 5 module.
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
@@ -25,10 +24,10 @@ name: org.axonframework.migration.Axon4ToAxoniq5EventStreaming
 displayName: Migrate to Axoniq event streaming (placeholder)
 description: >-
   Placeholder. The Axoniq event streaming module
-  (`io.axoniq.framework:axoniq-event-streaming`) is new in Axoniq Framework 5
-  and has no direct Axon Framework 4 equivalent. AF4 applications that
-  composed `MultiStreamableMessageSource` instances by hand should manually
-  migrate to `axoniq-event-streaming` once they adopt Axoniq Framework 5;
-  this recipe will gain class-level mappings as that migration becomes
-  deterministic.
+  (`io.axoniq.framework:axoniq-event-streaming`) consolidates multi-stream
+  event consumption that lived in `MultiStreamableMessageSource` (available
+  since Axon Framework 4.2) into a dedicated module in Axoniq Framework 5.
+  AF4 applications using `MultiStreamableMessageSource` should migrate to
+  `axoniq-event-streaming` once they adopt Axoniq Framework 5; this recipe
+  will gain class-level mappings as that migration becomes deterministic.
 recipeList: []

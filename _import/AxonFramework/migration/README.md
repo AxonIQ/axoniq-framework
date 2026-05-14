@@ -134,6 +134,6 @@ files; they're no-ops today.
 | Distributed messaging           | `Axon4ToAxoniq5DistributedMessaging` |
 | Testcontainer (Axon Server)     | `Axon4ToAxoniq5Testcontainer`        |
 
-Placeholders for Axoniq-only Maven modules without finalized class-level mappings
-(`Axon4ToAxoniq5EventStreaming`, `Axon4ToAxoniq5Postgresql`) exist as
-`axon4-to-axoniq5-*.yml` files; they're no-ops today.
+A placeholder for the Axoniq-only event-streaming module without finalized
+class-level mappings (`Axon4ToAxoniq5EventStreaming`) exists as an
+`axon4-to-axoniq5-*.yml` file; it is a no-op today.
