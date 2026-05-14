@@ -52,7 +52,7 @@ class Axon4ToAxon5SpringAotExtensionTest implements RewriteTest {
                                 <dependency>
                                     <groupId>org.axonframework.extensions.spring-aot</groupId>
                                     <artifactId>axon-spring-aot</artifactId>
-                                    <version>4.11.0</version>
+                                    <version>4.12.0</version>
                                 </dependency>
                             </dependencies>
                         </project>

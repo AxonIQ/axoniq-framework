@@ -122,7 +122,7 @@ class Axon4ToAxon5BomTest implements RewriteTest {
                                     <dependency>
                                         <groupId>org.axonframework</groupId>
                                         <artifactId>axon-bom</artifactId>
-                                        <version>4.11.0</version>
+                                        <version>4.13.0</version>
                                         <type>pom</type>
                                         <scope>import</scope>
                                     </dependency>
@@ -173,7 +173,7 @@ class Axon4ToAxon5BomTest implements RewriteTest {
                                     <dependency>
                                         <groupId>org.axonframework</groupId>
                                         <artifactId>axon-bom</artifactId>
-                                        <version>4.11.0</version>
+                                        <version>4.13.0</version>
                                         <type>pom</type>
                                         <scope>import</scope>
                                     </dependency>

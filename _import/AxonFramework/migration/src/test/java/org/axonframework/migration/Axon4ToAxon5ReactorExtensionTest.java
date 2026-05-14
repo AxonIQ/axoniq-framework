@@ -65,7 +65,7 @@ class Axon4ToAxon5ReactorExtensionTest implements RewriteTest {
                                 <dependency>
                                     <groupId>org.axonframework.extensions.reactor</groupId>
                                     <artifactId>axon-reactor-spring-boot-starter</artifactId>
-                                    <version>4.11.0</version>
+                                    <version>4.12.0</version>
                                 </dependency>
                             </dependencies>
                         </project>
@@ -80,7 +80,7 @@ class Axon4ToAxon5ReactorExtensionTest implements RewriteTest {
                                 <dependency>
                                     <groupId>org.axonframework.extensions.reactor</groupId>
                                     <artifactId>axon-reactor</artifactId>
-                                    <version>4.11.0</version>
+                                    <version>4.12.0</version>
                                 </dependency>
                             </dependencies>
                         </project>
@@ -105,7 +105,7 @@ class Axon4ToAxon5ReactorExtensionTest implements RewriteTest {
                                 <dependency>
                                     <groupId>org.axonframework.extensions.reactor</groupId>
                                     <artifactId>axon-reactor</artifactId>
-                                    <version>4.11.0</version>
+                                    <version>4.12.0</version>
                                 </dependency>
                             </dependencies>
                         </project>

@@ -164,7 +164,7 @@ class Axon4ToAxon5BomGradleTest implements RewriteTest {
                             plugins { id 'java' }
                             repositories { mavenCentral() }
                             dependencies {
-                                implementation platform('org.axonframework:axon-bom:4.11.0')
+                                implementation platform('org.axonframework:axon-bom:4.13.0')
                             }
                             """,
                             """
@@ -191,7 +191,7 @@ class Axon4ToAxon5BomGradleTest implements RewriteTest {
                             repositories { mavenCentral() }
                             dependencyManagement {
                                 imports {
-                                    mavenBom 'org.axonframework:axon-bom:4.11.0'
+                                    mavenBom 'org.axonframework:axon-bom:4.13.0'
                                 }
                             }
                             """,
@@ -238,7 +238,7 @@ class Axon4ToAxon5BomGradleTest implements RewriteTest {
                             repositories { mavenCentral() }
                             dependencyManagement {
                                 imports {
-                                    mavenBom("org.axonframework:axon-bom:4.11.0")
+                                    mavenBom("org.axonframework:axon-bom:4.13.0")
                                 }
                             }
                             """,
@@ -317,7 +317,7 @@ class Axon4ToAxon5BomGradleTest implements RewriteTest {
                             repositories { mavenCentral() }
                             dependencyManagement {
                                 imports {
-                                    mavenBom 'org.axonframework:axon-bom:4.11.0'
+                                    mavenBom 'org.axonframework:axon-bom:4.13.0'
                                 }
                             }
                             """,

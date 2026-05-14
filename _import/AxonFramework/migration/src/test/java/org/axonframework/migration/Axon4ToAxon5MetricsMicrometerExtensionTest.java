@@ -46,16 +46,16 @@ class Axon4ToAxon5MetricsMicrometerExtensionTest implements RewriteTest {
                 java(
                         """
                         package com.example;
-                        import org.axonframework.micrometer.GlobalMetricRegistry;
+                        import org.axonframework.micrometer.MessageCountingMonitor;
                         class Foo {
-                            GlobalMetricRegistry registry;
+                            MessageCountingMonitor monitor;
                         }
                         """,
                         """
                         package com.example;
-                        import org.axonframework.extension.metrics.micrometer.GlobalMetricRegistry;
+                        import org.axonframework.extension.metrics.micrometer.MessageCountingMonitor;
                         class Foo {
-                            GlobalMetricRegistry registry;
+                            MessageCountingMonitor monitor;
                         }
                         """
                 )
