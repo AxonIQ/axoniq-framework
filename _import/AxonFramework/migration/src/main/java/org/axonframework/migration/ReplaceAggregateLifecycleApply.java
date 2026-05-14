@@ -59,8 +59,8 @@ import java.util.List;
  * by {@code ConvertCommandHandlerConstructorToStaticMethod}, not on the constructor) — the
  * leftover {@code apply(...)} call is left untouched so the developer can decide.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class ReplaceAggregateLifecycleApply extends Recipe {
 

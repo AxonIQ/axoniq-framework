@@ -45,8 +45,8 @@ import java.util.regex.Pattern;
  * touching the value. The recipe is idempotent — it skips entries whose preceding comment
  * already carries the marker.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class AnnotateObsoleteSequencingPolicyProperty extends Recipe {
 

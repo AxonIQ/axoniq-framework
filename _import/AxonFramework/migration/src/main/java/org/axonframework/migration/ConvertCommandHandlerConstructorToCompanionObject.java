@@ -60,8 +60,8 @@ import java.util.List;
  * Existing companion objects on the host class are NOT merged into; if the developer needs
  * to consolidate, that's a follow-up cleanup.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class ConvertCommandHandlerConstructorToCompanionObject extends Recipe {
 

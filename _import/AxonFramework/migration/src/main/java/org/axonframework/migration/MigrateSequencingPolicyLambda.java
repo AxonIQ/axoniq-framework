@@ -50,8 +50,8 @@ import org.openrewrite.java.tree.TypeUtils;
  * or anonymous inner classes implementing {@code SequencingPolicy} are left alone for manual rewriting —
  * the structural variety is too broad for a safe automatic transformation.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class MigrateSequencingPolicyLambda extends Recipe {
 

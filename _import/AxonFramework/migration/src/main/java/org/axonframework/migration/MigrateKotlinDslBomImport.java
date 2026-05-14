@@ -61,8 +61,8 @@ import java.util.List;
  * string-template's leading literal piece. The {@code ${...}} indirection
  * is preserved verbatim.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class MigrateKotlinDslBomImport extends Recipe {
 

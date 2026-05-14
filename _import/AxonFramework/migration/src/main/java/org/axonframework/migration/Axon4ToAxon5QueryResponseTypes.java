@@ -61,8 +61,8 @@ import java.util.List;
  * with still-untouched three-argument AF4 sites keep their imports until the per-construct skill
  * finishes the migration.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class Axon4ToAxon5QueryResponseTypes extends Recipe {
 

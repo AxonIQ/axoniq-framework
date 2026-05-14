@@ -57,8 +57,8 @@ import java.util.Set;
  * ({@code org.axonframework.messaging.commandhandling.annotation.CommandHandler}) FQNs are matched
  * so the recipe is safe to run before or after {@code Axon4ToAxon5Messaging}.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class AddCommandAnnotation extends ScanningRecipe<AddCommandAnnotation.Accumulator> {
 

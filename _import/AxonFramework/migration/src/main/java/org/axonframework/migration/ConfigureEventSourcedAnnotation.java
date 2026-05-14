@@ -65,8 +65,8 @@ import java.util.Map;
  * targets the AF5 {@code @EventSourced} FQN, so callers must also run after the AF4 Spring stereotype
  * {@code @Aggregate} → AF5 {@code @EventSourced} rename.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class ConfigureEventSourcedAnnotation
         extends ScanningRecipe<ConfigureEventSourcedAnnotation.Accumulator> {

@@ -63,8 +63,8 @@ import java.util.List;
  * branches, conditional dispatch, reactive return types) is left untouched: the build will still surface those
  * call sites as compile errors so the human can address them.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class MigrateCommandGatewayInEventHandler extends Recipe {
 

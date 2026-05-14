@@ -63,8 +63,8 @@ import java.util.List;
  * this recipe always emits a {@code static} method because that shape is correct for both the
  * mutable and the immutable entity patterns.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class ConvertCommandHandlerConstructorToStaticMethod extends Recipe {
 

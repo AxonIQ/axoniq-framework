@@ -37,8 +37,8 @@ import org.openrewrite.java.tree.TypeUtils;
  * {@code EventMessage<Foo>} → {@code EventMessage} (and the matching {@code <?>}/{@code <? extends X>}
  * forms) so source compiles against the AF5 raw type.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class RemoveTypeArguments extends Recipe {
 

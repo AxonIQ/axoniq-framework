@@ -70,8 +70,8 @@ import org.openrewrite.kotlin.tree.K;
  * carries the AF5 FQN that this recipe matches. Idempotent on re-runs:
  * a second pass detects the just-inserted {@code @AfterEach} and skips.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class AddAxonTestFixtureTearDown extends Recipe {
 

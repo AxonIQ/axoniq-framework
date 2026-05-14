@@ -63,8 +63,8 @@ import java.util.List;
  * also left alone — the AF4 matchers don't translate mechanically to AF5's
  * {@code Consumer}/{@code Predicate}-based {@code eventsSatisfy} / {@code eventsMatch}.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class MigrateAxonTestFixtureFluentApi extends Recipe {
 

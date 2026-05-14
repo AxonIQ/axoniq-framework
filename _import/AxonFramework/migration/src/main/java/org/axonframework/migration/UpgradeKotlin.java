@@ -47,8 +47,8 @@ import java.util.List;
  * {@value #MINIMUM_MAJOR_VERSION} are rejected so misconfigurations fail loudly rather than silently
  * pinning the build to a Kotlin 1.x line that Axon Framework 5 does not support.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class UpgradeKotlin extends Recipe {
 

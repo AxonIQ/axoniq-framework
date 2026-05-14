@@ -48,8 +48,8 @@ import java.util.List;
  * The {@link #targetVersion} option is overridable per invocation — see the module {@code README.md}
  * for instructions on raising the target above the default (e.g. Java 25).
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class UpgradeJava extends Recipe {
 

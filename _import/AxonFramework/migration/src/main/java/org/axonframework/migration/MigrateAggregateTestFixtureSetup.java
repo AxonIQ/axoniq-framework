@@ -63,8 +63,8 @@ import java.util.Map;
  * AggregateTestFixture → AxonTestFixture}. Once the type is renamed, the
  * AF4-specific match disappears and the recipe is a no-op.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class MigrateAggregateTestFixtureSetup extends Recipe {
 

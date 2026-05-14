@@ -31,7 +31,7 @@ import static org.openrewrite.java.Assertions.java;
  * (`fixture.given(...).when(...).expectEvents(...)`) are rewritten to the
  * AF5 fluent given/when/then form.
  */
-class Axon4ToAxon5TestTest implements RewriteTest {
+class Axon4ToAxon5TestFixtureTest implements RewriteTest {
 
     @Override
     public void defaults(RecipeSpec spec) {
