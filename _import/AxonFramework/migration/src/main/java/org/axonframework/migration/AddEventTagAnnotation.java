@@ -25,6 +25,8 @@ import org.openrewrite.internal.ListUtils;
 import org.openrewrite.java.JavaIsoVisitor;
 import org.openrewrite.java.JavaParser;
 import org.openrewrite.java.JavaTemplate;
+import org.openrewrite.java.MethodMatcher;
+import org.openrewrite.java.tree.Expression;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.JavaType;
 import org.openrewrite.java.tree.Space;
@@ -48,9 +50,14 @@ import java.util.Map;
  * The recipe runs in two phases:
  * <ol>
  *   <li><b>Scan</b> – visits entity classes (annotated with {@code @Aggregate},
- *       {@code @EventSourced}, or {@code @EventSourcedEntity}) and, for each
- *       {@code @EventSourcingHandler} method found, records the event payload type together with
- *       the entity's identifier field name and the entity's simple class name.</li>
+ *       {@code @EventSourced}, or {@code @EventSourcedEntity}) and records the event payload type
+ *       for every event used in the entity, together with the entity's identifier field name and
+ *       the entity's simple class name. Events are discovered from two sources:
+ *       (1) the first parameter of each {@code @EventSourcingHandler} method, and
+ *       (2) the first argument of every {@code AggregateLifecycle.apply(...)} call site in the
+ *       entity body. The second source catches events that are published but never re-sourced in
+ *       this entity (a valid AF4 pattern that would otherwise miss the {@code @EventTag}
+ *       treatment).</li>
  *   <li><b>Edit</b> – for every event class recorded in the scan, locates the field whose name
  *       matches the entity's identifier field name and annotates it with
  *       {@code @EventTag(key = "<EntitySimpleName>")}. If no field with that exact name is found,
@@ -66,8 +73,8 @@ import java.util.Map;
  * identifier (especially when the fallback path fires), and adjust {@code key} if the entity
  * simple name differs from the intended tag name.
  *
- * @author Axon Framework Team
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @since 5.1.1
  */
 public class AddEventTagAnnotation extends ScanningRecipe<AddEventTagAnnotation.Accumulator> {
 
@@ -89,6 +96,15 @@ public class AddEventTagAnnotation extends ScanningRecipe<AddEventTagAnnotation.
 
     private static final String EVENT_TAG_FQN =
             "org.axonframework.eventsourcing.annotation.EventTag";
+
+    private static final String AF4_AGGREGATE_LIFECYCLE =
+            "org.axonframework.modelling.command.AggregateLifecycle";
+    private static final String AF5_AGGREGATE_LIFECYCLE =
+            "org.axonframework.modelling.entity.AggregateLifecycle";
+    private static final MethodMatcher APPLY_AF4 =
+            new MethodMatcher(AF4_AGGREGATE_LIFECYCLE + " apply(..)");
+    private static final MethodMatcher APPLY_AF5 =
+            new MethodMatcher(AF5_AGGREGATE_LIFECYCLE + " apply(..)");
 
     /**
      * {@link ExecutionContext} key under which this recipe publishes a
@@ -193,6 +209,39 @@ public class AddEventTagAnnotation extends ScanningRecipe<AddEventTagAnnotation.
                     acc.targets.put(eventType.getFullyQualifiedName(),
                                     new Accumulator.EventTagTarget(idFieldName, entitySimpleName));
                 }
+
+                // Also collect event types from `AggregateLifecycle.apply(...)` call sites
+                // anywhere in the entity body. Catches events that are published but not
+                // re-sourced in this entity (no matching @EventSourcingHandler) — a valid
+                // AF4 pattern that would otherwise miss the @EventTag treatment.
+                final String capturedIdFieldName = idFieldName;
+                final String capturedEntitySimpleName = entitySimpleName;
+                new JavaIsoVisitor<ExecutionContext>() {
+                    @Override
+                    public J.MethodInvocation visitMethodInvocation(J.MethodInvocation mi,
+                                                                    ExecutionContext c) {
+                        J.MethodInvocation invocation = super.visitMethodInvocation(mi, c);
+                        if (!APPLY_AF4.matches(invocation) && !APPLY_AF5.matches(invocation)) {
+                            return invocation;
+                        }
+                        if (invocation.getArguments().isEmpty()
+                                || invocation.getArguments().get(0) instanceof J.Empty) {
+                            return invocation;
+                        }
+                        Expression payload = invocation.getArguments().get(0);
+                        JavaType.FullyQualified eventType =
+                                TypeUtils.asFullyQualified(payload.getType());
+                        if (eventType == null
+                                || eventType.getFullyQualifiedName().startsWith("org.axonframework")) {
+                            return invocation;
+                        }
+                        acc.targets.putIfAbsent(eventType.getFullyQualifiedName(),
+                                                new Accumulator.EventTagTarget(
+                                                        capturedIdFieldName,
+                                                        capturedEntitySimpleName));
+                        return invocation;
+                    }
+                }.visit(classDecl, ctx);
 
                 return super.visitClassDeclaration(classDecl, ctx);
             }

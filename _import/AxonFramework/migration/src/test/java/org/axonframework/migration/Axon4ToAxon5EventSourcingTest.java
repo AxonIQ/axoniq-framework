@@ -225,6 +225,71 @@ class Axon4ToAxon5EventSourcingTest implements RewriteTest {
     }
 
     @Test
+    void taggsEventPublishedViaApplyEvenWithoutEventSourcingHandler() {
+        // Reviewer scenario: an event is published via AggregateLifecycle#apply but the
+        // entity never re-sources it (no @EventSourcingHandler for that type). The
+        // @EventSourcingHandler-only scan would miss it; the apply-call-site scan picks
+        // it up and the event class still receives @EventTag(key="GiftCard").
+        rewriteRun(
+                spec -> spec.recipe(Environment.builder()
+                                            .scanRuntimeClasspath("org.axonframework.migration")
+                                            .build()
+                                            .activateRecipes(
+                                                    "org.axonframework.migration.UpgradeAxon4ToAxon5"))
+                        .typeValidationOptions(TypeValidation.none())
+                        .expectedCyclesThatMakeChanges(1),
+                java(
+                        """
+                        package com.example;
+                        import org.axonframework.modelling.command.AggregateIdentifier;
+                        import org.axonframework.spring.stereotype.Aggregate;
+                        import static org.axonframework.modelling.command.AggregateLifecycle.apply;
+                        @Aggregate
+                        class GiftCard {
+                            @AggregateIdentifier
+                            private String cardId;
+                            GiftCard() { }
+                            void handle(String cmd) {
+                                apply(new GiftCardIssued(cmd));
+                            }
+                        }
+                        class GiftCardIssued {
+                            private final String cardId;
+                            GiftCardIssued(String cardId) {
+                                this.cardId = cardId;
+                            }
+                        }
+                        """,
+                        """
+                        package com.example;
+                        import org.axonframework.eventsourcing.annotation.EventTag;
+                        import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
+                        import org.axonframework.extension.spring.stereotype.EventSourced;
+                        import org.axonframework.messaging.eventhandling.gateway.EventAppender;
+
+                        @EventSourced(tagKey = "GiftCard", idType = String.class)
+                        class GiftCard {
+                            private String cardId;
+
+                            @EntityCreator
+                            GiftCard() { }
+                            void handle(String cmd, EventAppender eventAppender) {
+                                eventAppender.append(new GiftCardIssued(cmd));
+                            }
+                        }
+                        class GiftCardIssued {
+                            @EventTag(key = "GiftCard")
+                            private final String cardId;
+                            GiftCardIssued(String cardId) {
+                                this.cardId = cardId;
+                            }
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
     void replacesAggregateLifecycleApplyWithInjectedEventAppender() {
         // AF4-style aggregate using the static `AggregateLifecycle.apply`
         // import — after the full migration, the call resolves to an
