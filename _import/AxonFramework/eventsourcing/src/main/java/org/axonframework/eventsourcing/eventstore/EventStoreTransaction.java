@@ -139,9 +139,11 @@ public interface EventStoreTransaction {
      * Returning {@link AppendCondition#none()} (or {@code null}) from the override function bypasses conflict detection
      * entirely.
      *
-     * @param conditionOverride A {@link UnaryOperator} that transforms the current {@link AppendCondition}.
+     * @param conditionOverride a {@link UnaryOperator} that transforms the current {@link AppendCondition}
      */
-    void overrideAppendCondition(UnaryOperator<AppendCondition> conditionOverride);
+    default void overrideAppendCondition(UnaryOperator<AppendCondition> conditionOverride) {
+        throw new UnsupportedOperationException();
+    }
 
     /**
      * Returns the position in the event store of the last {@link #appendEvent(EventMessage) appended} event by this
