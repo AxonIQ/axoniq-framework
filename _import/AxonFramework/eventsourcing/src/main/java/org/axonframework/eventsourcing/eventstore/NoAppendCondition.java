@@ -53,7 +53,7 @@ final class NoAppendCondition implements AppendCondition {
      * {@link EventCriteria#havingAnyTag()} criteria. This means <em>any</em> event appended after the marker is
      * considered a conflict — the strictest possible check from that marker onward.
      * <p>
-     * To narrow to specific criteria, chain with {@link AppendCondition#replacingCriteria(EventCriteria)}:
+     * To narrow to specific criteria, chain with {@link AppendCondition#replaceCriteria(EventCriteria)}:
      * <pre>{@code AppendCondition.none().withMarker(marker).replacingCriteria(specificCriteria)}</pre>
      */
     @Override
