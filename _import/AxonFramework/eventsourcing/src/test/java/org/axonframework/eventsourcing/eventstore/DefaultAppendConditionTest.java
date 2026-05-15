@@ -76,12 +76,12 @@ class DefaultAppendConditionTest {
     }
 
     @Nested
-    class WithCriteria {
+    class ReplaceCriteria {
 
         @Test
         void preservesMarkerAndReplacesCriteria() {
             // when
-            AppendCondition result = testSubject.replacingCriteria(OTHER_CRITERIA);
+            AppendCondition result = testSubject.replaceCriteria(OTHER_CRITERIA);
 
             // then
             assertEquals(TEST_CONSISTENCY_MARKER, result.consistencyMarker());
@@ -91,7 +91,7 @@ class DefaultAppendConditionTest {
         @Test
         void returnsSameInstanceWhenCriteriaUnchanged() {
             // when
-            AppendCondition result = testSubject.replacingCriteria(TEST_CRITERIA);
+            AppendCondition result = testSubject.replaceCriteria(TEST_CRITERIA);
 
             // then
             assertSame(testSubject, result);

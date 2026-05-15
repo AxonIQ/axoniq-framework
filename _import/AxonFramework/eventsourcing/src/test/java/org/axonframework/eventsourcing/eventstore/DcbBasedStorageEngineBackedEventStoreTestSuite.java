@@ -161,7 +161,7 @@ public abstract class DcbBasedStorageEngineBackedEventStoreTestSuite<E extends E
                 // only StudentSubscribedToCourse can cause conflicts;
                 // StudentUnsubscribedFromCourse just makes more places available
                 tx.overrideAppendCondition(condition ->
-                        condition.replacingCriteria(onlySubscribedEvents)
+                        condition.replaceCriteria(onlySubscribedEvents)
                 );
 
                 sourcingFinished.countDown();

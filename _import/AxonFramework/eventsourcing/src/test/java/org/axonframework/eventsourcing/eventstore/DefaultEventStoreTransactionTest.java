@@ -448,11 +448,11 @@ class DefaultEventStoreTransactionTest {
             uow.runOnPreInvocation(context -> {
                 EventStoreTransaction transaction = defaultEventStoreTransactionFor(context);
                 // first override: replace criteria with criteria1
-                transaction.overrideAppendCondition(condition -> condition.replacingCriteria(criteria1));
+                transaction.overrideAppendCondition(condition -> condition.replaceCriteria(criteria1));
                 // second override: receives output of first, replace with criteria2
                 transaction.overrideAppendCondition(condition -> {
                     receivedBySecondOverride.set(condition);
-                    return condition.replacingCriteria(criteria2);
+                    return condition.replaceCriteria(criteria2);
                 });
                 transaction.appendEvent(eventMessage(0));
             });
@@ -464,7 +464,7 @@ class DefaultEventStoreTransactionTest {
         }
 
         @Test
-        void overrideReplacingCriteriaPreservesMarker() {
+        void overrideReplaceCriteriaPreservesMarker() {
             // given - pre-populate an event so sourcing produces a non-ORIGIN marker
             var setupUow = aUnitOfWork();
             setupUow.runOnPreInvocation(context -> {
@@ -483,7 +483,7 @@ class DefaultEventStoreTransactionTest {
                 EventStoreTransaction transaction = defaultEventStoreTransactionFor(context);
                 FluxUtils.of(transaction.source(SourcingCondition.conditionFor(TEST_AGGREGATE_CRITERIA))).blockLast();
                 transaction.overrideAppendCondition(condition -> {
-                    AppendCondition narrowed = condition.replacingCriteria(narrowCriteria);
+                    AppendCondition narrowed = condition.replaceCriteria(narrowCriteria);
                     finalCondition.set(narrowed);
                     return narrowed;
                 });

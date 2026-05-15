@@ -68,9 +68,9 @@ public interface EventStoreTransaction {
      * {@link Position resume position} is only known when the stream reaches its terminal event. As such, the callback
      * is guaranteed to be invoked only if the stream is fully consumed.
      * <p>
-     * If sourcing completes and no events are found, the callback will be invoked with the position
-     * specified in {@code sourcingCondition} or with a greater position. Returning a greater position
-     * allows resuming from a point that already excludes positions known to be non-matching.
+     * If sourcing completes and no events are found, the callback will be invoked with the position specified in
+     * {@code sourcingCondition} or with a greater position. Returning a greater position allows resuming from a point
+     * that already excludes positions known to be non-matching.
      * <p>
      * If the stream terminates with an error, is closed prematurely, or is not consumed to completion, the callback is
      * not guaranteed to be invoked.
@@ -129,7 +129,7 @@ public interface EventStoreTransaction {
      *     against the entire event store).</li>
      *     <li><b>Narrowing (or broadening) the append condition</b> — sourcing events with broad criteria for state
      *     but only a subset causes real conflicts. The override can narrow the criteria via
-     *     {@link AppendCondition#replacingCriteria(EventCriteria)} while preserving the sourced marker.</li>
+     *     {@link AppendCondition#replaceCriteria(EventCriteria)} while preserving the sourced marker.</li>
      * </ol>
      * <p>
      * Multiple calls to this method compose: each subsequent override receives the output of the previous one.

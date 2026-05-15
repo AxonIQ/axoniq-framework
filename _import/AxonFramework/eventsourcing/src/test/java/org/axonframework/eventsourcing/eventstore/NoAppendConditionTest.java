@@ -56,9 +56,9 @@ class NoAppendConditionTest {
     }
 
     @Test
-    void replacingCriteriaReturnsDefaultAppendConditionWithInfinityMarker() {
+    void replaceCriteriaReturnsDefaultAppendConditionWithInfinityMarker() {
         // when
-        AppendCondition result = AppendCondition.none().replacingCriteria(TEST_CRITERIA);
+        AppendCondition result = AppendCondition.none().replaceCriteria(TEST_CRITERIA);
 
         // then
 
@@ -72,8 +72,8 @@ class NoAppendConditionTest {
         ConsistencyMarker marker = new GlobalIndexConsistencyMarker(42);
 
         // when
-        AppendCondition criteriaFirst = AppendCondition.none().replacingCriteria(TEST_CRITERIA).withMarker(marker);
-        AppendCondition markerFirst = AppendCondition.none().withMarker(marker).replacingCriteria(TEST_CRITERIA);
+        AppendCondition criteriaFirst = AppendCondition.none().replaceCriteria(TEST_CRITERIA).withMarker(marker);
+        AppendCondition markerFirst = AppendCondition.none().withMarker(marker).replaceCriteria(TEST_CRITERIA);
 
         // then
         assertThat(criteriaFirst).isEqualTo(markerFirst);
