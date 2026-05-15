@@ -58,6 +58,6 @@ final class NoAppendCondition implements AppendCondition {
      */
     @Override
     public AppendCondition withMarker(ConsistencyMarker consistencyMarker) {
-        return new DefaultAppendCondition(consistencyMarker, criteria());
+        return new DefaultAppendCondition(consistencyMarker, EventCriteria.havingAnyTag());
     }
 }
