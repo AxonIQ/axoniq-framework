@@ -20,6 +20,7 @@ State is typically held in an event-sourced entity that Axon loads automatically
 An entity is one way to provide that state, but it is an implementation choice, not an architectural requirement.
 For full documentation on defining and configuring entities, see xref:commands:entities/index.adoc[Entities].
 
+[#stateless-command-handlers]
 == Stateless command handlers
 
 Stateless command handlers are regular components with methods annotated with `@CommandHandler`.

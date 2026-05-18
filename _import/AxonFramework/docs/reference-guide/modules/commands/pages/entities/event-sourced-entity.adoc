@@ -7,7 +7,7 @@ This makes the event log the single source of truth, giving you a complete and i
 
 [TIP]
 ====
-If you are unfamiliar with event sourcing, see our explanation on link:https://www.axoniq.io/concepts/event-sourcing[**Event Sourcing**] for an introduction to the concept.
+If you are unfamiliar with event sourcing, see xref:events:index.adoc#core-concepts[Events core concepts] for an introduction to the concept.
 ====
 
 == Entity identification
@@ -29,7 +29,7 @@ public record EnrollStudentCommand(
 Not required on static creational command handlers, since no entity exists yet at that point.
 
 Axon also needs to know which events belong to this entity's stream.
-Set `tagKey` on the entity annotation to the tag key used on your events, and mark the corresponding event field with `@EventTag`:
+Mark the identifier field on your events with `@EventTag`, and set `tagKey` on the entity annotation to the same key:
 
 [source,java]
 ----
@@ -42,8 +42,18 @@ public record CourseCreatedEvent(
 ) {}
 ----
 
-<1> Marks this field as the entity's stream tag.
-Set `tagKey` on the entity annotation to the same key so Axon filters the event stream correctly.
+[source,java]
+----
+import org.axonframework.eventsourcing.annotation.EventSourcedEntity;
+
+@EventSourcedEntity(tagKey = "courseId") // <2>
+public class CourseEntity {
+    // ...
+}
+----
+
+<1> Marks the identifier field on the event so Axon can filter the event stream for this entity.
+<2> Must match the field name used in `@EventTag`.
 Set `tagKey` explicitly to keep it stable if the class is renamed.
 See xref:events:event-store-internals.adoc#tags[Event store internals] for details on how tag-based filtering works.
 
@@ -223,79 +233,88 @@ import org.axonframework.eventsourcing.EventSourcedEntityFactory;
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
 
 EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
 
 configurer.registerEntity(
     EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-        .messagingModel((config, model) -> model
-            .creationalCommandHandler( // <1>
-                new QualifiedName(CreateCourseCommand.class),
-                (command, context) -> {
-                    CreateCourseCommand cmd = command.payloadAs(CreateCourseCommand.class);
-                    EventAppender.forContext(context).append( // <2>
-                        new CourseCreatedEvent(cmd.courseId(), cmd.title(), cmd.capacity())
-                    );
-                    return MessageStream.empty().cast();
-                }
-            )
-            .instanceCommandHandler( // <3>
-                new QualifiedName(EnrollStudentCommand.class),
-                (command, entity, context) -> {
-                    if (entity.enrolledCount() >= entity.capacity()) {
-                        throw new IllegalStateException("Course is full");
+        .messagingModel((config, model) -> {
+            MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class); // <1>
+            return model
+                .creationalCommandHandler( // <2>
+                    resolver.resolveOrThrow(CreateCourseCommand.class).qualifiedName(),
+                    (command, context) -> {
+                        CreateCourseCommand cmd = command.payloadAs(CreateCourseCommand.class);
+                        EventAppender.forContext(context).append( // <3>
+                            new CourseCreatedEvent(cmd.courseId(), cmd.title(), cmd.capacity())
+                        );
+                        return MessageStream.empty().cast();
                     }
-                    EnrollStudentCommand cmd = command.payloadAs(EnrollStudentCommand.class);
-                    EventAppender.forContext(context).append(
-                        new StudentEnrolledEvent(entity.courseId(), cmd.studentId())
-                    );
-                    return MessageStream.empty().cast();
-                }
-            )
-            .entityEvolver((entity, event, context) -> { // <4>
-                if (event.type().qualifiedName().equals(new QualifiedName(CourseCreatedEvent.class))) {
-                    CourseCreatedEvent e = event.payloadAs(CourseCreatedEvent.class);
-                    return new CourseEntity(e.courseId(), e.title(), e.capacity(), 0);
-                }
-                if (event.type().qualifiedName().equals(new QualifiedName(StudentEnrolledEvent.class))) {
-                    return new CourseEntity(
-                        entity.courseId(), entity.title(), entity.capacity(), entity.enrolledCount() + 1
-                    );
-                }
-                return entity;
-            })
-            .build()
-        )
-        .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(CourseEntity::new)) // <5>
-        .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id))) // <6>
+                )
+                .instanceCommandHandler( // <4>
+                    resolver.resolveOrThrow(EnrollStudentCommand.class).qualifiedName(),
+                    (command, entity, context) -> {
+                        if (entity.enrolledCount() >= entity.capacity()) {
+                            throw new IllegalStateException("Course is full");
+                        }
+                        EnrollStudentCommand cmd = command.payloadAs(EnrollStudentCommand.class);
+                        EventAppender.forContext(context).append(
+                            new StudentEnrolledEvent(entity.courseId(), cmd.studentId())
+                        );
+                        return MessageStream.empty().cast();
+                    }
+                )
+                .entityEvolver((entity, event, context) -> { // <5>
+                    QualifiedName courseCreated = resolver.resolveOrThrow(CourseCreatedEvent.class).qualifiedName();
+                    QualifiedName studentEnrolled = resolver.resolveOrThrow(StudentEnrolledEvent.class).qualifiedName();
+                    if (event.type().qualifiedName().equals(courseCreated)) {
+                        CourseCreatedEvent e = event.payloadAs(CourseCreatedEvent.class);
+                        return new CourseEntity(e.courseId(), e.title(), e.capacity(), 0);
+                    }
+                    if (event.type().qualifiedName().equals(studentEnrolled)) {
+                        return new CourseEntity(
+                            entity.courseId(), entity.title(), entity.capacity(), entity.enrolledCount() + 1
+                        );
+                    }
+                    return entity;
+                })
+                .build();
+        })
+        .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(CourseEntity::new)) // <6>
+        .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id))) // <7>
+        .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <8>
         .build()
 );
 ----
 
-<1> Creational command handlers are invoked when no entity instance exists yet.
+<1> Resolve qualified names via `MessageTypeResolver` rather than constructing `QualifiedName` directly.
+This respects any custom name or namespace declared on `@Command`, `@Event`, or `@Query` annotations and falls back to the fully-qualified class name when none is present.
+
+<2> Creational command handlers are invoked when no entity instance exists yet.
 Use `command.payloadAs(Class)` to convert the raw command message to the expected type.
 
-<2> `EventAppender.forContext(context)` retrieves the event appender for the current processing context.
+<3> `EventAppender.forContext(context)` creates or retrieves the event appender bound to the current processing context.
 To append metadata alongside an event, see xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata].
 
-<3> Instance command handlers are invoked on an already-existing entity.
+<4> Instance command handlers are invoked on an already-existing entity.
 The loaded entity is passed as the second argument.
 
-<4> The entity evolver applies events to produce the next entity state.
+<5> The entity evolver applies events to produce the next entity state.
 Return the same instance or a new one; for immutable records, always return a new instance.
 
-<5> `EventSourcedEntityFactory.fromIdentifier` constructs the initial entity state from its identifier when the entity is first loaded.
+<6> `EventSourcedEntityFactory.fromIdentifier` wraps a constructor that takes only the entity identifier.
+Axon calls it each time the entity needs to be (re)constructed before replaying its events; the first event message is not passed to this factory.
 
-<6> The criteria resolver tells Axon which events belong to this entity's stream, using tag-based filtering.
+<7> The criteria resolver tells Axon which events belong to this entity's stream, using tag-based filtering.
 
-[NOTE]
-====
-If your command classes use `@Command` annotations with custom names or namespaces, use `config.getComponent(MessageTypeResolver.class).resolveOrThrow(YourCommand.class).qualifiedName()` instead of `new QualifiedName(YourCommand.class)` to ensure the correct qualified name is used.
-====
+<8> Enables command routing to this entity.
+Reads the `@TargetEntityId`-annotated field from each command payload to determine which entity instance to load or create.
 
 === Autodetected
 

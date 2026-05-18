@@ -153,7 +153,13 @@ This replaces the `@EntityCreator` static factory used in the autodetected appro
 === Autodetected
 
 Use `@EventSourcedEntity(concreteTypes = {...})` and register with `EventSourcedEntityModule.autodetected()`.
-Axon reads `concreteTypes` from the annotation and scans all subtypes automatically.
+Axon discovers concrete subtypes from `concreteTypes`.
+
+[TIP]
+====
+If the entity class is a sealed class or interface, `concreteTypes` is optional.
+Axon automatically collects all concrete (non-sealed) leaf types by recursively traversing the sealed hierarchy—no explicit listing is required.
+====
 
 [source,java]
 ----
@@ -223,7 +229,8 @@ Axon discovers the concrete subtypes from `concreteTypes` automatically.
 
 In Spring Boot, annotate the abstract parent with `@EventSourced(concreteTypes = {...})` instead of `@EventSourcedEntity(concreteTypes = {...})`.
 Axon's auto-configuration detects and registers it, including all listed subtypes—no explicit configuration class is required.
-Do *not* annotate the subtypes with `@EventSourced`—they are already discovered via `concreteTypes`, and since `@EventSourced` is a Spring `@Component`, annotating them would cause Spring to create unnecessary beans.
+For sealed classes, `concreteTypes` is optional—Axon collects subtypes from the sealed hierarchy automatically, the same as in the autodetected approach.
+Do *not* annotate the subtypes with `@EventSourced`—they are already discovered, and since `@EventSourced` is a Spring `@Component`, annotating them would cause Spring to create unnecessary beans.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 === Concrete subtypes
@@ -263,7 +270,8 @@ Parent fields must be at least `protected`—subtype constructors assign them wi
 
 == Constraints
 
-* Subtypes not listed in `concreteTypes` are silently ignored; their command and event handlers will not be registered and commands targeting them will fail at runtime.
+* For non-sealed entity classes, subtypes not listed in `concreteTypes` are silently ignored; their command and event handlers will not be registered and commands targeting them will fail at runtime.
+For sealed entity classes, all concrete (non-sealed) leaf types in the sealed hierarchy are discovered automatically—no explicit listing in `concreteTypes` is needed.
 * Each command may have at most one handler anywhere in the hierarchy.
 Axon throws `DuplicateCommandHandlerSubscriptionException` at startup if the same command appears in more than one class within the same entity type.
 This applies to both instance and creational command handlers.
