@@ -7,7 +7,7 @@ This makes the event log the single source of truth, giving you a complete and i
 
 [TIP]
 ====
-If you are unfamiliar with event sourcing, see xref:events:index.adoc[Events] for an introduction to the concept.
+If you are unfamiliar with event sourcing, see our explanation on link:https://www.axoniq.io/concepts/event-sourcing[**Event Sourcing**] for an introduction to the concept.
 ====
 
 == Entity identification
