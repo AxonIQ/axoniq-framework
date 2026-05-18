@@ -136,7 +136,7 @@ For how to define the entity itself—state fields, event sourcing handlers, `@E
 
 [TIP]
 ====
-The command-centric approach aligns closest with [Vertical Slice-based Architecture](https://www.baeldung.com/java-vertical-slice-architecture). This style is useful when:
+Keeping commands in a separate component and receive the loaded entity as a parameter aligns closest with [Vertical Slice-based Architecture](https://www.baeldung.com/java-vertical-slice-architecture). This style is useful when:
 
 * You want to keep command handling logic separate from entity state management.
 * You have multiple entities that share similar command handling patterns.
