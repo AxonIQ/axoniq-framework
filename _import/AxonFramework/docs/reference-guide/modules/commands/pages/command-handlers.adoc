@@ -56,8 +56,7 @@ Commands should focus on changing the conceptual state of a system.
 If a command only performs validation or queries without changing state, consider whether it should be implemented as a query instead.
 ====
 
-When command handling requires entity state, keep the handler in a separate component and receive the entity as a parameter via `@InjectEntity`.
-See xref:commands:entities/command-handler-components.adoc[Command handler components] for the full pattern, including how it supports Vertical Slice Architecture.
+When command handling requires entity state, you can use stateful command handlers as explained in more detail in xref:entities/event-sourced-entity.adoc[Event-Sourced Entities] and xref:entities/command-handler-components.adoc[Command Handler Components].
 
 == Command message types
 
