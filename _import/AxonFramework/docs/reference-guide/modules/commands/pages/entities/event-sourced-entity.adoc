@@ -152,6 +152,7 @@ Three approaches are available to wire this entity into Axon:
 . <<_autodetected,Autodetected>>: annotate with `@EventSourcedEntity`. Register with `EventSourcedEntityModule.autodetected()`.
 . <<_spring_boot,Spring Boot>>: annotate with `@EventSourced`. Axon's auto-configuration detects and registers it automatically.
 
+[#_declarative]
 === Declarative
 
 The declarative approach wires the entity's existing methods into Axon without touching the entity class.
