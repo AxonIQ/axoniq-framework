@@ -1,7 +1,7 @@
 = Entities
 :navtitle: Entities
 
-An entity maintains state across command invocations and uses that state to enforce business rules.
+In Axon Framework, an entity is a stateful component on the command side that accumulates state from prior commands and uses it to enforce business rules when handling new ones.
 
 == When to use entities
 

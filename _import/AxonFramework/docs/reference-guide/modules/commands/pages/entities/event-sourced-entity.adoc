@@ -13,7 +13,7 @@ If you are unfamiliar with event sourcing, see xref:events:index.adoc#core-conce
 == Entity identification
 
 Every command that targets an entity instance must identify which instance to load.
-Annotate the identifier field on the command with `@TargetEntityId`:
+To that end, we can annotate the identifier field on the command with `@TargetEntityId`:
 
 [source,java]
 ----
@@ -26,7 +26,8 @@ public record EnrollStudentCommand(
 ----
 
 <1> Axon reads this field to load the correct entity instance before invoking the handler.
-Not required on static creational command handlers, since no entity exists yet at that point.
+Note that this is not required on static creational command handlers, since no entity exists yet at that point.
+Hence, there is no entity to target yet!
 
 Axon also needs to know which events belong to this entity's stream.
 Mark the identifier field on your events with `@EventTag`, and set `tagKey` on the entity annotation to the same key:

@@ -41,7 +41,6 @@ For stateful command handling, Axon Framework provides comprehensive **entity** 
 Entities are components that encapsulate state and the business logic that operates on that state.
 
 Axon supports **event-sourced entities**, where state is derived from a sequence of events.
-State-stored entities are planned for a future release.
 
 See xref:commands:entities/index.adoc[Entities] for full documentation.
 
