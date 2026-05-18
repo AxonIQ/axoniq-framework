@@ -19,7 +19,7 @@ Do not use an entity when the command can be validated without reading prior sta
 * Creating a resource with a client-supplied identifier, with no existing state to check.
 * Forwarding a command to an external system that owns the state.
 
-These are xref:commands:command-handlers.adoc[stateless command handlers]—simpler and cheaper to run.
+These are xref:commands:command-handlers.adoc#stateless-command-handlers[stateless command handlers]—simpler and cheaper to run.
 If you are adding an entity only to hold a flag that is set once and never changes, that is a signal the command may not need an entity.
 
 == Subsections
