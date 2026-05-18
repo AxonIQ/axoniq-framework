@@ -18,41 +18,29 @@ The framework provides comprehensive support for:
 
 This approach emphasizes _what you want to accomplish_ (commands) rather than _how you structure your domain model_.
 
-== Command handlers: stateful and stateless
+== Command handlers: stateless and stateful
 
-Command handlers fall into two main categories based on how they manage state:
+Command handlers fall into two categories:
 
-**Stateful handlers** (most common)::
-Handlers where Axon Framework manages the state lifecycle automatically.
-Axon loads the current state, invokes your handler, and persists any changes.
-Your handler focuses on business logic while Axon handles state management.
-+
-Examples: Order handlers, user account handlers, payment handlers
+* **Stateless command handlers**: No prior state is needed to process the command.
+Each invocation is independent—for example, dispatching a batch of sub-commands, sending a notification, or forwarding a command to an external system.
+See xref:commands:command-handlers.adoc[Command handlers].
 
-**Stateless handlers**::
-Handlers where state is not managed by Axon Framework.
-These handlers must query and manage state themselves when needed, typically by calling external services or databases directly within the handler.
-+
-Examples: Integration handlers that call external APIs, handlers that query read models, notification handlers
+* **Stateful command handlers**: Prior state is required to enforce business rules.
+A course enrollment command needs the current student count to enforce capacity.
+A bank account command needs the current balance to prevent overdrafts.
+State is held in an event-sourced entity that Axon loads automatically before invoking the handler.
+See xref:commands:entities/index.adoc[Entities].
 
-=== Managing state with entities
-
-For stateful command handling, Axon Framework provides comprehensive **entity** support for state management.
-Entities are components that encapsulate state and the business logic that operates on that state.
-
-Axon supports **event-sourced entities**, where state is derived from a sequence of events.
-
-See xref:commands:entities/index.adoc[Entities] for full documentation.
+An entity is one way to provide that state, but it is an implementation choice, not an architectural requirement.
 
 == Subsections
-
-A summary of the various sections is given below.
 
 [cols="<,<"]
 |===
 |Sub-Section |Purpose
 
-|xref:command-handlers.adoc[Handling] |How to write command handlers (stateless and stateful, with and without entities)
+|xref:command-handlers.adoc[Handling] |How to write stateless command handlers: parameters, message types, event appending, and configuration
 |xref:command-dispatchers.adoc[Dispatching] |How to dispatch commands from your application code
 |xref:entities/index.adoc[Entities] |How to maintain state across commands and enforce business rules using event-sourced entities
 |xref:infrastructure.adoc[Infrastructure] |Command bus implementations, repositories, and other infrastructure components

@@ -314,9 +314,20 @@ In Spring Boot, annotate the entity with `@EventSourced` instead of `@EventSourc
 Axon's auto-configuration detects and registers it automatically—no explicit configuration class is required.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
+== Placing handlers on the entity vs. a separate component
+
+Command handlers can be placed directly on the entity class (as shown above) or kept in a separate component that receives the entity as a parameter via `@InjectEntity`.
+Both approaches are valid—choose based on how you want to structure your codebase.
+
+Placing handlers on the entity keeps all logic for that entity in one class.
+A separate component lets you organize code by use case rather than by entity, which aligns with Vertical Slice Architecture.
+
+See xref:commands:entities/command-handler-components.adoc[Command handler components] for the full pattern.
+
 == Further reading
 
 * xref:commands:command-handlers.adoc[Command handlers]
+* xref:commands:entities/command-handler-components.adoc[Command handler components]
 * xref:commands:entities/entity-hierarchies.adoc[Entity hierarchies]
 * xref:commands:entities/entity-polymorphism.adoc[Polymorphic entities]
 * xref:events:event-handlers.adoc[Event handlers]

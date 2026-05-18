@@ -2,6 +2,8 @@
 :navtitle: Entities
 
 In Axon Framework, an entity is a stateful component on the command side that accumulates state from prior commands and uses it to enforce business rules when handling new ones.
+Axon supports **event-sourced entities**, where state is rebuilt by replaying a sequence of events.
+If you are new to event sourcing, see xref:events:index.adoc#core-concepts[Events core concepts] for an introduction.
 
 == When to use entities
 
@@ -31,16 +33,14 @@ If you are adding an entity only to hold a flag that is set once and never chang
 |xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities]
 |How to define and configure an event-sourced entity: creational and instance command handlers, event sourcing handlers, `@EntityCreator` patterns, and the declarative approach.
 
+|xref:commands:entities/command-handler-components.adoc[Command handler components]
+|How to keep command handling logic in a dedicated class separate from the entity, using `@InjectEntity` to receive entity state as a parameter.
+This is the recommended approach for Vertical Slice Architecture.
+
 |xref:commands:entities/entity-hierarchies.adoc[Entity hierarchies]
 |How to structure a parent entity that owns child entities, including command and event routing, single vs. collection children, and custom routing strategies.
 
 |xref:commands:entities/entity-polymorphism.adoc[Polymorphic entities]
 |How to model multiple concrete entity types sharing a common abstract parent, with type selection at creation time.
 |===
-
-[NOTE]
-====
-State-stored entities (backed by a persistent store such as JPA) are not yet available in Axon Framework 5.
-Support is planned for a future release.
-====
 

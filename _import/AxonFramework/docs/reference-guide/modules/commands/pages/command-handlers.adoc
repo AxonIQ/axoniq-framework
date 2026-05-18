@@ -2,29 +2,11 @@
 :navtitle: Handling
 
 Command handlers process commands and perform the corresponding business logic.
-A command handler decides whether a requested change is valid and, if so, applies it—either by modifying state directly or by appending events.
-Handlers can be stateless or stateful depending on whether they need prior state to make that decision.
-
-== Stateless vs stateful command handlers
-
-Command handlers in Axon Framework fall into two categories:
-
-* **Stateless command handlers**: No prior state is needed to process the command.
-Each invocation is independent—for example, sending a notification or forwarding a command to an external system.
-
-* **Stateful command handlers**: Prior state is required to enforce business rules.
-A bank account command needs the current balance to prevent overdrafts.
-A course enrollment command needs the current student count to enforce capacity.
-State is typically held in an event-sourced entity that Axon loads automatically before invoking the handler.
-+
-An entity is one way to provide that state, but it is an implementation choice, not an architectural requirement.
-For full documentation on defining and configuring entities, see xref:commands:entities/index.adoc[Entities].
+A command handler decides whether a requested change is valid and, if so, applies it—by appending events, invoking services, or dispatching further commands.
 
 [#stateless-command-handlers]
-== Stateless command handlers
-
-Stateless command handlers are regular components with methods annotated with `@CommandHandler`.
-They may access state through injected services or repositories, but the handler instance itself is stateless.
+Command handlers are regular components with methods annotated with `@CommandHandler`.
+They may access state through injected services or repositories, but the handler instance itself holds no state between invocations.
 
 [source,java]
 ----
@@ -60,7 +42,7 @@ public class GiftCardBulkOperationsHandler {
 }
 ----
 
-<1> Stateless command handlers are regular objects registered via the Configuration API or Spring beans as is the case in this example.
+<1> Command handlers are regular objects registered via the Configuration API or as Spring beans, as in this example.
 
 <2> State is accessed through injected services, not maintained in the handler itself.
 
@@ -74,76 +56,8 @@ Commands should focus on changing the conceptual state of a system.
 If a command only performs validation or queries without changing state, consider whether it should be implemented as a query instead.
 ====
 
-Stateless handlers are useful for:
-
-* Commands that coordinate operations across multiple stateful handlers.
-* Commands that perform operations using state from external services or repositories.
-* Commands that don't require building up and maintaining state within the handler itself.
-
-[#stateful-command-handlers]
-== Stateful command handlers
-
-When a command needs prior state to make decisions, you can use an entity.
-Axon loads the entity automatically before invoking the handler.
-
-You can place `@CommandHandler` methods directly on the entity class, or keep them in a separate component and receive the loaded entity as a parameter via `@InjectEntity`:
-
-[source,java]
-----
-import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-import org.axonframework.modelling.annotation.InjectEntity;
-import org.springframework.stereotype.Component;
-
-// Separate command handlers that receive the entity as a parameter
-@Component // <1>
-public class GiftCardCommandHandlers {
-
-    @CommandHandler // <2>
-    public String handle(IssueCardCommand cmd, EventAppender eventAppender) {
-        // Creational handler - no entity parameter needed
-        eventAppender.append(new CardIssuedEvent(cmd.cardId(), cmd.amount()));
-        return cmd.cardId();
-    }
-
-    @CommandHandler
-    public void handle(RedeemCardCommand cmd,
-                       @InjectEntity GiftCard card, // <3>
-                       EventAppender eventAppender) {
-        // Instance handler - entity automatically loaded by Axon
-        if (cmd.amount() <= 0) {
-            throw new IllegalArgumentException("amount <= 0");
-        }
-        if (cmd.amount() > card.getRemainingValue()) { // <4>
-            throw new IllegalStateException("amount > remaining value");
-        }
-        eventAppender.append(new CardRedeemedEvent(card.getId(), cmd.transactionId(), cmd.amount()));
-    }
-}
-----
-
-<1> Command handlers are defined in a separate component (not on the entity itself).
-
-<2> Creational handlers don't receive an entity parameter—they create the entity through publication of the first event.
-
-<3> Instance handler receives entities when the parameter is annotated with `@InjectEntity`.
-Axon automatically loads it based on the command's routing key.
-To load by a different field, see <<_injecting_multiple_entities_with_injectentity,Injecting multiple entities>>.
-
-<4> The handler accesses the entity to make business decision.
-This can either be done by invoking entity-specific decision methods or by inspecting the state (as shown in the sample above).
-
-For how to define the entity itself—state fields, event sourcing handlers, `@EntityCreator` patterns, and configuration—see xref:commands:entities/index.adoc[Entities].
-
-[TIP]
-====
-Keeping commands in a separate component and receive the loaded entity as a parameter aligns closest with [Vertical Slice-based Architecture](https://www.baeldung.com/java-vertical-slice-architecture). This style is useful when:
-
-* You want to keep command handling logic separate from entity state management.
-* You have multiple entities that share similar command handling patterns.
-* You prefer to organize code by command/use case rather than by entity.
-* You want to easily test command handling logic without the entity class.
-====
+When command handling requires entity state, keep the handler in a separate component and receive the entity as a parameter via `@InjectEntity`.
+See xref:commands:entities/command-handler-components.adoc[Command handler components] for the full pattern, including how it supports Vertical Slice Architecture.
 
 == Command message types
 
@@ -255,7 +169,7 @@ public void handle(
 <1> The `ProcessingContext` is automatically injected by the framework.
 It provides access to correlation data, resources, and lifecycle management.
 
-For more details on `ProcessingContext`, see xref:messaging-concepts:unit-of-work.adoc[].
+For more details on `ProcessingContext`, see xref:messaging-concepts:processing-context.adoc[].
 
 [#publishing_events_with_eventappender]
 == Publishing events with `EventAppender`
@@ -335,53 +249,6 @@ public void handle(
 
 For a complete list of supported parameters, see xref:messaging-concepts:supported-parameters-annotated-handlers.adoc[].
 
-== Injecting multiple entities with `@InjectEntity`
-
-A single command handler can receive multiple entity instances as parameters.
-By default, `@InjectEntity` loads the entity whose ID matches the command's routing key.
-Use `idProperty` to load a second entity identified by a different command field:
-
-[source,java]
-----
-import org.axonframework.messaging.commandhandling.annotation.Command;
-import org.axonframework.modelling.annotation.InjectEntity;
-
-@Command(routingKey = "sourceCardId") // <1>
-public record TransferBalanceCommand(
-    String sourceCardId,
-    String destinationCardId,
-    int amount
-) {}
-
-@Component
-public class GiftCardTransferHandler {
-
-    @CommandHandler
-    public void handle(
-        TransferBalanceCommand cmd,
-        @InjectEntity GiftCard source,                                     // <2>
-        @InjectEntity(idProperty = "destinationCardId") GiftCard dest,    // <3>
-        EventAppender appender
-    ) {
-        if (source.getRemainingValue() < cmd.amount()) {
-            throw new IllegalStateException("Insufficient balance");
-        }
-        appender.append(
-            new BalanceDeducted(cmd.sourceCardId(), cmd.amount()),
-            new BalanceAdded(cmd.destinationCardId(), cmd.amount())
-        );
-    }
-}
-----
-
-<1> `routingKey` marks the primary entity identifier used to route the command to the correct node.
-
-<2> Without `idProperty`, Axon loads the entity whose ID matches the command's routing key (`sourceCardId`).
-
-<3> `idProperty = "destinationCardId"` tells Axon to load this entity using the `destinationCardId` field instead.
-
-For full details on entity configuration and lifecycle, see xref:commands:entities/index.adoc[Entities].
-
 == Explicit command handler subscription
 
 By default, Axon subscribes command handlers based on the `@CommandHandler` annotation, assuming that the fully qualified class name of the first parameter is the command you want to handle.
@@ -429,7 +296,7 @@ public class GiftCardValidationHandler {
 
     @CommandHandler
     public void handle(ValidateCardCommand cmd) {
-        // stateless handler logic
+        // handler logic
     }
 }
 ----

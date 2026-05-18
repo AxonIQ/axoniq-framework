@@ -5,6 +5,12 @@ The `@EntityCreator` annotation tells Axon how to construct the initial entity i
 It is mandatory for annotation-based entities (autodetected and Spring Boot approaches).
 In the declarative approach, entity construction is handled by the factory passed to `EventSourcedEntityModule.declarative()` instead—see xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative].
 
+[NOTE]
+====
+The examples below use `@EventSourcedEntity(tagKey = "courseId")Entity`, which is the non-Spring annotation.
+In Spring Boot, replace `@EventSourcedEntity(tagKey = "courseId")Entity` with `@EventSourcedEntity(tagKey = "courseId")`—the `@EntityCreator` patterns are identical.
+====
+
 There are three patterns:
 
 == Pattern 1: Empty instance
@@ -13,7 +19,7 @@ When placed on a no-arg constructor, Axon creates an empty instance and then app
 
 [source,java]
 ----
-@EventSourced
+@EventSourcedEntity(tagKey = "courseId")
 public class CourseEntity {
 
     private String courseId;
@@ -45,7 +51,7 @@ When placed on a constructor with an `@InjectEntityId`-annotated parameter, Axon
 
 [source,java]
 ----
-@EventSourced
+@EventSourcedEntity(tagKey = "courseId")
 public class CourseEntity {
 
     private final String courseId;
@@ -84,7 +90,7 @@ When placed on a constructor that takes an event type as its first parameter, Ax
 
 [source,java]
 ----
-@EventSourced
+@EventSourcedEntity(tagKey = "courseId")
 public class CourseEntity {
 
     private final String courseId;
