@@ -266,7 +266,7 @@ The `EventAppender` must be injected as a parameter in your command handlers:
 [source,java]
 ----
 @CommandHandler
-public String handle(IssueCardCommand cmd, EventAppender eventAppender) { // <1>
+public static String issue(IssueCardCommand cmd, EventAppender eventAppender) { // <1>
     if (cmd.amount() <= 0) {
         throw new IllegalArgumentException("Amount must be positive");
     }
