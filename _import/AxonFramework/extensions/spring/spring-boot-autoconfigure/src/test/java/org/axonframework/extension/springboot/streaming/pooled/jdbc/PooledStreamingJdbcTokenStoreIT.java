@@ -17,9 +17,7 @@
 package org.axonframework.extension.springboot.streaming.pooled.jdbc;
 
 import org.axonframework.conversion.GeneralConverter;
-import org.axonframework.messaging.core.annotation.Namespace;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
-import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.GenericTokenTableFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.JdbcTokenStore;
@@ -32,8 +30,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
-import org.springframework.stereotype.Component;
-import org.springframework.test.annotation.DirtiesContext;
 
 import javax.sql.DataSource;
 
@@ -46,6 +42,9 @@ import javax.sql.DataSource;
  * overridden to use JDBC (not JPA) by providing a custom {@code TokenStore} bean, preventing
  * {@link org.axonframework.extension.springboot.autoconfig.JpaAutoConfiguration}'s {@code @ConditionalOnMissingBean}
  * from registering a JPA token store.
+ * <p>
+ * Each test creates its own processor with a UUID-based name, giving natural token store row isolation without any
+ * schema teardown between tests.
  *
  * @since 5.1.1
  */
@@ -55,21 +54,14 @@ import javax.sql.DataSource;
                 "spring.main.banner-mode=off",
                 "spring.datasource.generate-unique-name=true",
                 "spring.jpa.hibernate.ddl-auto=create-drop",
-                "axon.eventstorage.jpa.polling-interval=0",
-                "axon.eventhandling.processors.PooledStreamingIT.initial-segment-count=1"
+                "axon.eventstorage.jpa.polling-interval=0"
         },
         webEnvironment = SpringBootTest.WebEnvironment.NONE
 )
 @SpringBootConfiguration
 @EnableAutoConfiguration
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
 public class PooledStreamingJdbcTokenStoreIT extends PooledStreamingEventProcessorSpringTestSuite {
-
-    @Override
-    protected void cleanTokenStore() {
-        // No-op: @DirtiesContext + spring.datasource.generate-unique-name=true gives a fresh in-memory DB per test
-    }
 
     @Configuration
     static class TestConfig {
@@ -88,16 +80,6 @@ public class PooledStreamingJdbcTokenStoreIT extends PooledStreamingEventProcess
             );
             store.createSchema(GenericTokenTableFactory.INSTANCE);
             return store;
-        }
-    }
-
-    @Component
-    @Namespace("PooledStreamingIT")
-    static class TestEventHandler {
-
-        @EventHandler
-        void on(Object event) {
-            // no-op — processor needs a handler to be assigned to the "PooledStreamingIT" namespace
         }
     }
 }

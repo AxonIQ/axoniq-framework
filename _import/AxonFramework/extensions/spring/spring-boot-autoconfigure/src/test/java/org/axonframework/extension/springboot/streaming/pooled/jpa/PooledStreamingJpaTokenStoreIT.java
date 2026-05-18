@@ -16,16 +16,12 @@
 
 package org.axonframework.extension.springboot.streaming.pooled.jpa;
 
-import org.axonframework.messaging.core.annotation.Namespace;
-import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.extension.springboot.streaming.pooled.PooledStreamingEventProcessorSpringTestSuite;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.EnableMBeanExport;
 import org.springframework.jmx.support.RegistrationPolicy;
-import org.springframework.stereotype.Component;
-import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Spring Boot integration test for {@link org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor}
@@ -33,6 +29,9 @@ import org.springframework.test.annotation.DirtiesContext;
  * <p>
  * Full JPA autoconfiguration is used: HSQLDB in-memory provides both the JPA event store and the JPA token store.
  * The token table is created by Hibernate via {@code ddl-auto=create-drop}.
+ * <p>
+ * Each test creates its own processor with a UUID-based name, giving natural token store row isolation without any
+ * schema teardown between tests.
  *
  * @since 5.1.1
  */
@@ -42,29 +41,13 @@ import org.springframework.test.annotation.DirtiesContext;
                 "spring.main.banner-mode=off",
                 "spring.datasource.generate-unique-name=true",
                 "spring.jpa.hibernate.ddl-auto=create-drop",
-                "axon.eventstorage.jpa.polling-interval=0",
-                "axon.eventhandling.processors.PooledStreamingIT.initial-segment-count=1"
+                "axon.eventstorage.jpa.polling-interval=0"
         },
         webEnvironment = SpringBootTest.WebEnvironment.NONE
 )
 @SpringBootConfiguration
 @EnableAutoConfiguration
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
 public class PooledStreamingJpaTokenStoreIT extends PooledStreamingEventProcessorSpringTestSuite {
 
-    @Override
-    protected void cleanTokenStore() {
-        // No-op: @DirtiesContext + create-drop recreates the JPA schema fresh per test
-    }
-
-    @Component
-    @Namespace("PooledStreamingIT")
-    static class TestEventHandler {
-
-        @EventHandler
-        void on(Object event) {
-            // no-op — processor needs a handler to be assigned to the "PooledStreamingIT" namespace
-        }
-    }
 }
