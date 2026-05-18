@@ -1,4 +1,4 @@
-= Command handler components
+= Command Handler Components
 :navtitle: Command handler components
 
 A command handler component keeps command handling logic in a dedicated class, separate from the entity that holds state.
@@ -160,7 +160,7 @@ The command in this example has no `@TargetEntityId` because there is no single 
 public record SubscribeStudentToCourse(String studentId, String courseId) {}
 ----
 
-== Vertical Slice Architecture
+== Vertical slice architecture
 
 Separate command handler components are the natural fit for https://www.jimmybogard.com/vertical-slice-architecture/[Vertical Slice Architecture] in Axon Framework.
 
@@ -168,7 +168,7 @@ In Vertical Slice Architecture, you organize code around use cases rather than t
 Each slice owns everything needed to fulfill one request: the command, the handler, the entity state it reads, and the events it appends.
 A slice cuts vertically through the application stack—from the incoming command down to the event store—rather than grouping code horizontally by layers such as controllers, services, and repositories.
 
-=== From Event Model to code
+=== From event model to code
 
 Event Storming and Event Modeling produce a sequence of commands, events, and the entities they act on.
 Each command-event pair on that model is a slice.

@@ -212,7 +212,7 @@ configurer.registerEntity(
 ----
 
 <1> Resolve qualified names via `MessageTypeResolver` rather than constructing `QualifiedName` directly.
-This respects any custom name or namespace declared on `@Command`, `@Event`, or `@Query` annotations and falls back to the fully-qualified class name when none is present.
+This respects any custom name or namespace declared on `@Command`, `@Event`, or `@Query` annotations and falls back to the fully qualified class name when none is present.
 
 <2> Creational command handlers are invoked when no entity instance exists yet.
 
