@@ -149,7 +149,7 @@ At least one threshold must be configured, either directly on the annotation or 
 ----
 @EventSourcedEntity
 @Snapshotting(afterEvents = 100)
-public class Account { ... }
+public class Course { ... }
 ----
 
 `afterEvents` sets the event-count threshold.
@@ -160,7 +160,7 @@ When both are set, either condition independently triggers a snapshot.
 ----
 @EventSourcedEntity
 @Snapshotting(afterEvents = 100, afterSourcingTime = "PT5S")
-public class Account { ... }
+public class Course { ... }
 ----
 
 A shared default can be provided at the package level, so individual entity classes can opt in with a bare `@Snapshotting` annotation:
@@ -169,14 +169,14 @@ A shared default can be provided at the package level, so individual entity clas
 ----
 // package-info.java
 @Snapshotting(afterEvents = 50)
-package com.example.orders;
+package com.example.faculty;
 ----
 
 [source,java]
 ----
 @EventSourcedEntity
 @Snapshotting  // inherits afterEvents = 50 from the package annotation
-public class Account { ... }
+public class Course { ... }
 ----
 
 If no concrete threshold can be resolved from the annotation hierarchy, configuration fails with an error at startup.
@@ -193,12 +193,12 @@ The example below shows how to configure snapshotting for an event-sourced entit
 SnapshotPolicy snapshotPolicy = SnapshotPolicy.afterEvents(5)
         .or(SnapshotPolicy.whenEventMatches(
                 msg -> msg.type().qualifiedName().equals(
-                        new QualifiedName(AccountClosed.class)
+                        new QualifiedName(CourseRenamed.class)
                 )
         ));
 
-EventSourcedEntityModule<String, Account> accountModule =
-        EventSourcedEntityModule.declarative(String.class, Account.class)
+EventSourcedEntityModule<CourseId, Course> courseModule =
+        EventSourcedEntityModule.declarative(CourseId.class, Course.class)
                                 // other entity configuration omitted
                                 .snapshotPolicy(c -> snapshotPolicy)
                                 .build();
@@ -223,17 +223,20 @@ Most JSON-based converters (such as Jackson, when compiled with parameter names 
 
 [source,java]
 ----
-public class Account {
-    private final String accountId;
-    private final int balance;
+public class Course {
+    private final String courseId;
+    private final String name;
+    private final int capacity;
 
-    public Account(String accountId, int balance) {
-        this.accountId = accountId;
-        this.balance = balance;
+    public Course(String courseId, String name, int capacity) {
+        this.courseId = courseId;
+        this.name = name;
+        this.capacity = capacity;
     }
 
-    public String getAccountId() { return accountId; }
-    public int getBalance() { return balance; }
+    public String getCourseId() { return courseId; }
+    public String getName() { return name; }
+    public int getCapacity() { return capacity; }
 }
 ----
 
@@ -241,7 +244,7 @@ Or using a `record`:
 
 [source,java]
 ----
-public record Account(String accountId, int balance) {}
+public record Course(String courseId, String name, int capacity) {}
 ----
 
 While setters and default constructors can still be used if necessary, the constructor-based approach ensures immutability and aligns with modern Java development practices.
