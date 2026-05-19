@@ -103,9 +103,9 @@ class Axon4ToAxon5BomGradleTest implements RewriteTest {
     private static RecipeSpec commercialLeg(RecipeSpec spec) {
         return spec.beforeRecipe(attachSyntheticGradleProject())
                    .recipe(Environment.builder()
-                                   .scanRuntimeClasspath("org.axonframework.migration")
+                                   .scanRuntimeClasspath("io.axoniq.framework.migration")
                                    .build()
-                                   .activateRecipes("org.axonframework.migration.Axon4ToAxoniq5Bom"));
+                                   .activateRecipes("io.axoniq.framework.migration.Axon4ToAxoniq5Bom"));
     }
 
     /**

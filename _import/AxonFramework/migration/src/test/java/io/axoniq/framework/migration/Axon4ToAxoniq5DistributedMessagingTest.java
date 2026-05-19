@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.axonframework.migration;
+package io.axoniq.framework.migration;
 
 import org.junit.jupiter.api.Test;
 import org.openrewrite.config.Environment;
@@ -34,10 +34,10 @@ class Axon4ToAxoniq5DistributedMessagingTest implements RewriteTest {
     @Override
     public void defaults(RecipeSpec spec) {
         spec.recipe(Environment.builder()
-                            .scanRuntimeClasspath("org.axonframework.migration")
+                            .scanRuntimeClasspath("io.axoniq.framework.migration")
                             .build()
                             .activateRecipes(
-                                    "org.axonframework.migration.Axon4ToAxoniq5DistributedMessaging"));
+                                    "io.axoniq.framework.migration.Axon4ToAxoniq5DistributedMessaging"));
     }
 
     @Test

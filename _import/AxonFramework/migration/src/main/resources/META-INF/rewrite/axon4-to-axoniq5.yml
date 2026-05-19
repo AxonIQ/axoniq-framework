@@ -29,7 +29,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.UpgradeAxon4ToAxoniq5
+name: io.axoniq.framework.migration.UpgradeAxon4ToAxoniq5
 displayName: Upgrade to Axoniq Framework 5 (commercial)
 description: >-
   Migrates an Axon Framework 4.x application to Axoniq Framework 5
@@ -44,19 +44,19 @@ recipeList:
   - org.axonframework.migration.UpgradeAxon4ToAxon5
 
   # ── 2. Swap the BOM to the Axoniq commercial BOM (and pin to AF5 line) ──
-  - org.axonframework.migration.Axon4ToAxoniq5Bom
+  - io.axoniq.framework.migration.Axon4ToAxoniq5Bom
 
   # ── 3. Commercial-only feature migrations (most foundational first) ─────
-  - org.axonframework.migration.Axon4ToAxoniq5AxonServerConnector
-  - org.axonframework.migration.Axon4ToAxoniq5DeadLetter
-  - org.axonframework.migration.Axon4ToAxoniq5DistributedMessaging
-  - org.axonframework.migration.Axon4ToAxoniq5EventStreaming
+  - io.axoniq.framework.migration.Axon4ToAxoniq5AxonServerConnector
+  - io.axoniq.framework.migration.Axon4ToAxoniq5DeadLetter
+  - io.axoniq.framework.migration.Axon4ToAxoniq5DistributedMessaging
+  - io.axoniq.framework.migration.Axon4ToAxoniq5EventStreaming
 
   # ── 4. Spring family — starter wraps the features above ─────────────────
-  - org.axonframework.migration.Axon4ToAxoniq5SpringBoot
+  - io.axoniq.framework.migration.Axon4ToAxoniq5SpringBoot
 
   # ── 5. Testing utilities ────────────────────────────────────────────────
-  - org.axonframework.migration.Axon4ToAxoniq5Testcontainer
+  - io.axoniq.framework.migration.Axon4ToAxoniq5Testcontainer
 
   # ── 6. Pin Axoniq commercial artifact versions ──────────────────────────
   # Coordinate moves above (BOM swap, starter swap, connector move) leave

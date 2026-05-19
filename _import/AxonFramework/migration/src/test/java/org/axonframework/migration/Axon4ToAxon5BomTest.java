@@ -157,10 +157,10 @@ class Axon4ToAxon5BomTest implements RewriteTest {
     void commercialLegRenamesAxon4BomAndBumpsManagedVersion() {
         rewriteRun(
                 spec -> spec.recipe(Environment.builder()
-                                            .scanRuntimeClasspath("org.axonframework.migration")
+                                            .scanRuntimeClasspath("io.axoniq.framework.migration")
                                             .build()
                                             .activateRecipes(
-                                                    "org.axonframework.migration.Axon4ToAxoniq5Bom")),
+                                                    "io.axoniq.framework.migration.Axon4ToAxoniq5Bom")),
                 pomXml(
                         """
                         <project>
@@ -211,10 +211,10 @@ class Axon4ToAxon5BomTest implements RewriteTest {
         // must still take it to io.axoniq.framework:axoniq-framework-bom at the Axoniq version.
         rewriteRun(
                 spec -> spec.recipe(Environment.builder()
-                                            .scanRuntimeClasspath("org.axonframework.migration")
+                                            .scanRuntimeClasspath("io.axoniq.framework.migration")
                                             .build()
                                             .activateRecipes(
-                                                    "org.axonframework.migration.Axon4ToAxoniq5Bom")),
+                                                    "io.axoniq.framework.migration.Axon4ToAxoniq5Bom")),
                 pomXml(
                         """
                         <project>

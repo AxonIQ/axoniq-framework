@@ -20,7 +20,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.Axon4ToAxoniq5EventStreaming
+name: io.axoniq.framework.migration.Axon4ToAxoniq5EventStreaming
 displayName: Migrate to Axoniq event streaming (placeholder)
 description: >-
   Placeholder. The Axoniq event streaming module

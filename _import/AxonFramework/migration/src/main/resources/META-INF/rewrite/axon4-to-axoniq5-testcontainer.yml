@@ -32,7 +32,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.Axon4ToAxoniq5Testcontainer
+name: io.axoniq.framework.migration.Axon4ToAxoniq5Testcontainer
 displayName: Migrate the Axon Server Testcontainer to Axoniq Framework 5
 description: >-
   Relocates the Axon Server Testcontainer types from the AF4 `axon-test`

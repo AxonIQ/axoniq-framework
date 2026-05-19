@@ -11,7 +11,8 @@ different, and the changes that can't be safely automated are left for you (or a
 hand. Concretely, the recipes do:
 
 - **Build files**: swaps the BOM (`axon-bom` → `axon-framework-bom` or `axoniq-framework-bom`), bumps the Java
-  source/target to the configured LTS (minimum Java 21), and removes dependencies with no AF5 port (e.g. `axon-spring-aot`).
+  source/target to the configured LTS (minimum Java 21), and removes dependencies with no AF5 port (e.g.
+  `axon-spring-aot`).
 - **Package and class renames**: moves handler annotations into `.annotation.*` subpackages, renames `EventBus` →
   `EventSink`, `ConfigurerModule` → `ConfigurationEnhancer`, and shifts extension packages
   (e.g. `org.axonframework.micrometer` → `org.axonframework.extension.metrics.micrometer`).
@@ -50,10 +51,10 @@ Run a top-level recipe against a target project with the Maven plugin:
 ```bash
 mvn -U org.openrewrite.maven:rewrite-maven-plugin:run \
   -Drewrite.recipeArtifactCoordinates=org.axonframework:axon-migration:5.2.0-SNAPSHOT \
-  -Drewrite.activeRecipes=org.axonframework.migration.UpgradeAxon4ToAxoniq5
+  -Drewrite.activeRecipes=io.axoniq.framework.migration.UpgradeAxon4ToAxoniq5
 ```
 
-Replace the recipe name with `UpgradeAxon4ToAxon5` for the free path.
+Replace the recipe name with `org.axonframework.migration.UpgradeAxon4ToAxoniq5` for the non-commercial path.
 
 ### Gradle
 
@@ -64,11 +65,11 @@ reference it by absolute path) and run:
 
 ```bash
 gradle rewriteRun --init-script init.gradle \
-  -Drewrite.activeRecipe=org.axonframework.migration.UpgradeAxon4ToAxoniq5
+  -Drewrite.activeRecipe=io.axoniq.framework.migration.UpgradeAxon4ToAxoniq5
 ```
 
 Replace the recipe name with `org.axonframework.migration.UpgradeAxon4ToAxon5`
-for the free path. Override the recipe artifact version (default
+for the non-commercial path. Override the recipe artifact version (default
 `5.2.0-SNAPSHOT`) with `-Drewrite.axonMigrationVersion=<version>` if you
 need a different release. The script also wires Sonatype Snapshots and
 Maven Local so `-SNAPSHOT` coordinates resolve without extra
@@ -90,17 +91,17 @@ For background, see the upstream guide on
 
 ### Two top-level recipes
 
-| Recipe                                              | What it does                                                                                                                                                                                                                                                                            | When to use                                                                                                                                                                                                                                  |
-|-----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `org.axonframework.migration.UpgradeAxon4ToAxon5`   | Migrates AF4 → free AF5. Renames packages/classes and updates Maven coordinates within the `org.axonframework.*` namespace.                                                                                                                                                             | You want to land on free AF5. **Warning**: if your AF4 app uses Axon Server / distributed command bus / DLQ, this recipe alone leaves your codebase non-compiling — those features moved to commercial. Use `UpgradeAxon4ToAxoniq5` instead. |
-| `org.axonframework.migration.UpgradeAxon4ToAxoniq5` | Composes `UpgradeAxon4ToAxon5` then layers commercial-only migrations on top: source rewrites for Axon Server / DLQ / distributed-messaging, BOM swap to `axoniq-framework-bom`, Spring Boot starter swap to `axoniq-spring-boot-starter`, conditional `AddDependency` for Axoniq jars. | Recommended default for AF4 applications using Axon Server / DLQ / distributed messaging.                                                                                                                                                    |
+| Recipe                                                | What it does                                                                                                                                                                                                                                                                            | When to use                                                                                                                                                                                                                                            |
+|-------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `org.axonframework.migration.UpgradeAxon4ToAxon5`     | Migrates AF4 → non-commercial AF5. Renames packages/classes and updates Maven coordinates within the `org.axonframework.*` namespace.                                                                                                                                                   | You want to land on non-commercial AF5. **Warning**: if your AF4 app uses Axon Server / distributed command bus / DLQ, this recipe alone leaves your codebase non-compiling — those features moved to commercial. Use `UpgradeAxon4ToAxoniq5` instead. |
+| `io.axoniq.framework.migration.UpgradeAxon4ToAxoniq5` | Composes `UpgradeAxon4ToAxon5` then layers commercial-only migrations on top: source rewrites for Axon Server / DLQ / distributed-messaging, BOM swap to `axoniq-framework-bom`, Spring Boot starter swap to `axoniq-spring-boot-starter`, conditional `AddDependency` for Axoniq jars. | Recommended default for AF4 applications using Axon Server / DLQ / distributed messaging.                                                                                                                                                              |
 
 ### Per-module recipes
 
 Each top-level recipe is a composition of per-module recipes that you can
 also run independently. Module names map 1:1 to published Maven modules.
 
-#### Group A — `axon4-to-axon5-*` (free AF5)
+#### Group A — `axon4-to-axon5-*` (non-commercial AF5)
 
 | Module                                                     | Recipe                                      |
 |------------------------------------------------------------|---------------------------------------------|
@@ -123,7 +124,7 @@ Placeholders for extensions without finalized AF5 mappings (Kafka, AMQP, Mongo,
 JGroups, Spring Cloud, Multitenancy, CDI, OpenTracing) exist as `axon4-to-axon5-extension-*.yml`
 files; they're no-ops today.
 
-#### Group B — `axon4-to-axoniq5-*` (commercial-only additions)
+#### Group B — `axon4-to-axoniq5-*` (commercial-only additions, namespace `io.axoniq.framework.migration`)
 
 | Module                          | Recipe                               |
 |---------------------------------|--------------------------------------|

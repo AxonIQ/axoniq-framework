@@ -25,7 +25,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.Axon4ToAxoniq5Bom
+name: io.axoniq.framework.migration.Axon4ToAxoniq5Bom
 displayName: Swap the BOM to Axoniq Framework 5 commercial
 description: >-
   Replaces the imported `org.axonframework:axon-bom` (AF4) or

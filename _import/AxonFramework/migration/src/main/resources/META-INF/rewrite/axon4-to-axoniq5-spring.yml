@@ -26,7 +26,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.Axon4ToAxoniq5SpringBoot
+name: io.axoniq.framework.migration.Axon4ToAxoniq5SpringBoot
 displayName: Swap the Spring Boot starter to Axoniq Framework 5 commercial
 description: >-
   Swaps the Spring Boot starter dependency to the Axoniq commercial variant

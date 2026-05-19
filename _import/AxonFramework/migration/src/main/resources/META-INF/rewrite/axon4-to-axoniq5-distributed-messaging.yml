@@ -25,7 +25,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.Axon4ToAxoniq5DistributedMessaging
+name: io.axoniq.framework.migration.Axon4ToAxoniq5DistributedMessaging
 displayName: Migrate distributed messaging components to Axoniq Framework 5
 description: >-
   Relocates the distributed command-bus components (DistributedCommandBus,

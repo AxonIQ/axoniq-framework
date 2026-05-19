@@ -23,7 +23,7 @@
 
 ---
 type: specs.openrewrite.org/v1beta/recipe
-name: org.axonframework.migration.Axon4ToAxoniq5AxonServerConnector
+name: io.axoniq.framework.migration.Axon4ToAxoniq5AxonServerConnector
 displayName: Migrate the Axon Server connector to Axoniq Framework 5
 description: >-
   Relocates the Axon Server connector from
