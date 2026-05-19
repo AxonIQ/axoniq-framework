@@ -153,6 +153,22 @@ Three approaches are available:
 In the declarative approach, both parent and child entities are plain Java classes or records with no framework annotations.
 Child entity metamodels are built separately and added to the parent metamodel using `EntityChildMetamodel`.
 
+[NOTE]
+====
+Even in the declarative approach, events must be tagged so the criteria resolver can filter the correct event stream.
+Mark the entity identifier field on each event with `@EventTag`:
+
+[source,java]
+----
+public record CourseCreated(@EventTag String courseId, String title, int capacity) {}
+public record StudentEnrolled(@EventTag String courseId, String studentId) {}
+public record EnrollmentDropped(@EventTag String courseId, String studentId, String reason) {}
+----
+
+The `tagKey` in the criteria resolver (`Tag.of("courseId", id)`) must match the field name used in `@EventTag`.
+See xref:commands:entities/event-sourced-entity.adoc#_entity_identification[Entity identification] for details.
+====
+
 [source,java]
 ----
 // Parent entity—plain record, no annotations
@@ -196,7 +212,7 @@ import org.axonframework.eventsourcing.EventSourcedEntityFactory;
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
@@ -205,113 +221,118 @@ import org.axonframework.modelling.entity.EntityMetamodel;
 import org.axonframework.modelling.entity.child.ChildEntityFieldDefinition;
 import org.axonframework.modelling.entity.child.EntityChildMetamodel;
 
-// 1. Build the child entity metamodel
-EntityMetamodel<EnrollmentEntity> enrollmentMetamodel = ConcreteEntityMetamodel
-    .forEntityClass(EnrollmentEntity.class)
-    .instanceCommandHandler(
-        new QualifiedName(DropEnrollment.class),
-        (command, entity, context) -> {
-            if (entity.dropped()) {
-                throw new IllegalStateException("Enrollment already dropped");
-            }
-            DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
-            EventAppender.forContext(context).append(
-                new EnrollmentDropped(cmd.courseId(), entity.studentId(), cmd.reason())
-            );
-            return MessageStream.empty().cast();
-        }
-    )
-    .entityEvolver((entity, event, context) -> {
-        if (event.type().qualifiedName().equals(new QualifiedName(EnrollmentDropped.class))) {
-            return new EnrollmentEntity(entity.studentId(), true);
-        }
-        return entity;
-    })
-    .build();
-
-// 2. Register the parent entity with the child attached
 EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
 
 configurer.registerEntity(
     EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-        .messagingModel((config, model) -> model
-            .creationalCommandHandler(
-                new QualifiedName(CreateCourse.class),
-                (command, context) -> {
-                    CreateCourse cmd = command.payloadAs(CreateCourse.class);
-                    EventAppender.forContext(context).append(
-                        new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity())
-                    );
-                    return MessageStream.empty().cast();
-                }
-            )
-            .instanceCommandHandler(
-                new QualifiedName(EnrollStudent.class),
-                (command, entity, context) -> {
-                    if (entity.enrollments().size() >= entity.capacity()) {
-                        throw new IllegalStateException("Course is full");
+        .messagingModel((config, model) -> {
+            MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class); // <1>
+
+            EntityMetamodel<EnrollmentEntity> enrollmentMetamodel = ConcreteEntityMetamodel
+                .forEntityClass(EnrollmentEntity.class)
+                .instanceCommandHandler(
+                    resolver.resolveOrThrow(DropEnrollment.class).qualifiedName(),
+                    (command, entity, context) -> {
+                        if (entity.dropped()) {
+                            throw new IllegalStateException("Enrollment already dropped");
+                        }
+                        DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
+                        EventAppender.forContext(context).append(
+                            new EnrollmentDropped(cmd.courseId(), entity.studentId(), cmd.reason())
+                        );
+                        return MessageStream.empty().cast();
                     }
-                    EnrollStudent cmd = command.payloadAs(EnrollStudent.class);
-                    EventAppender.forContext(context).append(
-                        new StudentEnrolled(entity.courseId(), cmd.studentId())
-                    );
-                    return MessageStream.empty().cast();
-                }
-            )
-            .entityEvolver((entity, event, context) -> {
-                if (event.type().qualifiedName().equals(new QualifiedName(CourseCreated.class))) {
-                    CourseCreated e = event.payloadAs(CourseCreated.class);
-                    return new CourseEntity(e.courseId(), e.capacity(), List.of());
-                }
-                if (event.type().qualifiedName().equals(new QualifiedName(StudentEnrolled.class))) {
-                    StudentEnrolled e = event.payloadAs(StudentEnrolled.class);
-                    var updated = new ArrayList<>(entity.enrollments());
-                    updated.add(new EnrollmentEntity(e.studentId()));
-                    return new CourseEntity(entity.courseId(), entity.capacity(), List.copyOf(updated));
-                }
-                return entity;
-            })
-            .addChild(EntityChildMetamodel // <1>
-                .list(CourseEntity.class, enrollmentMetamodel)
-                .childEntityFieldDefinition(ChildEntityFieldDefinition.forGetterEvolver(
-                    CourseEntity::getEnrollments,  // <2>
-                    CourseEntity::withEnrollments  // <3>
-                ))
-                .commandTargetResolver((candidates, command, ctx) -> { // <4>
-                    DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
-                    return candidates.stream()
-                                     .filter(e -> e.getStudentId().equals(cmd.studentId()))
-                                     .findFirst()
-                                     .orElse(null);
-                })
-                .eventTargetMatcher((child, event, ctx) -> { // <5>
-                    if (event.type().qualifiedName().equals(new QualifiedName(EnrollmentDropped.class))) {
-                        EnrollmentDropped e = event.payloadAs(EnrollmentDropped.class);
-                        return child.getStudentId().equals(e.studentId());
+                )
+                .entityEvolver((entity, event, context) -> {
+                    if (event.type().qualifiedName().equals(resolver.resolveOrThrow(EnrollmentDropped.class).qualifiedName())) {
+                        return new EnrollmentEntity(entity.studentId(), true);
                     }
-                    return false;
+                    return entity;
                 })
-                .build()
-            )
-            .build()
-        )
+                .build();
+
+            return model
+                .creationalCommandHandler(
+                    resolver.resolveOrThrow(CreateCourse.class).qualifiedName(),
+                    (command, context) -> {
+                        CreateCourse cmd = command.payloadAs(CreateCourse.class);
+                        EventAppender.forContext(context).append(
+                            new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity())
+                        );
+                        return MessageStream.empty().cast();
+                    }
+                )
+                .instanceCommandHandler(
+                    resolver.resolveOrThrow(EnrollStudent.class).qualifiedName(),
+                    (command, entity, context) -> {
+                        if (entity.enrollments().size() >= entity.capacity()) {
+                            throw new IllegalStateException("Course is full");
+                        }
+                        EnrollStudent cmd = command.payloadAs(EnrollStudent.class);
+                        EventAppender.forContext(context).append(
+                            new StudentEnrolled(entity.courseId(), cmd.studentId())
+                        );
+                        return MessageStream.empty().cast();
+                    }
+                )
+                .entityEvolver((entity, event, context) -> {
+                    if (event.type().qualifiedName().equals(resolver.resolveOrThrow(CourseCreated.class).qualifiedName())) {
+                        CourseCreated e = event.payloadAs(CourseCreated.class);
+                        return new CourseEntity(e.courseId(), e.capacity(), List.of());
+                    }
+                    if (event.type().qualifiedName().equals(resolver.resolveOrThrow(StudentEnrolled.class).qualifiedName())) {
+                        StudentEnrolled e = event.payloadAs(StudentEnrolled.class);
+                        var updated = new ArrayList<>(entity.enrollments());
+                        updated.add(new EnrollmentEntity(e.studentId()));
+                        return new CourseEntity(entity.courseId(), entity.capacity(), List.copyOf(updated));
+                    }
+                    return entity;
+                })
+                .addChild(EntityChildMetamodel // <2>
+                    .list(CourseEntity.class, enrollmentMetamodel)
+                    .childEntityFieldDefinition(ChildEntityFieldDefinition.forGetterEvolver(
+                        CourseEntity::getEnrollments,  // <3>
+                        CourseEntity::withEnrollments  // <4>
+                    ))
+                    .commandTargetResolver((candidates, command, ctx) -> { // <5>
+                        DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
+                        return candidates.stream()
+                                         .filter(e -> e.getStudentId().equals(cmd.studentId()))
+                                         .findFirst()
+                                         .orElse(null);
+                    })
+                    .eventTargetMatcher((child, event, ctx) -> { // <6>
+                        if (event.type().qualifiedName().equals(resolver.resolveOrThrow(EnrollmentDropped.class).qualifiedName())) {
+                            EnrollmentDropped e = event.payloadAs(EnrollmentDropped.class);
+                            return child.getStudentId().equals(e.studentId());
+                        }
+                        return false;
+                    })
+                    .build()
+                )
+                .build();
+        })
         .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(CourseEntity::new))
         .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id)))
         .build()
 );
 ----
 
-<1> `EntityChildMetamodel.list()` wires the child metamodel into the parent.
+<1> Resolve qualified names via `MessageTypeResolver` rather than constructing `QualifiedName` directly.
+This respects any custom name or namespace declared on `@Command`, `@Event`, or `@Query` annotations.
+Both the child and parent metamodels are built inside the callback so they share the same resolver.
+
+<2> `EntityChildMetamodel.list()` wires the child metamodel into the parent.
 The first argument is the parent entity type. The second is the previously built child metamodel.
 
-<2> The getter that reads the current child list from a parent instance.
+<3> The getter that reads the current child list from a parent instance.
 
-<3> The evolver that produces a new parent instance with an updated child list (needed for immutable records).
+<4> The evolver that produces a new parent instance with an updated child list (needed for immutable records).
 
-<4> `commandTargetResolver` finds which child should handle the incoming command.
+<5> `commandTargetResolver` finds which child should handle the incoming command.
 Return the matching child, or `null` if no child should handle it (Axon will then throw `ChildEntityNotFoundException`).
 
-<5> `eventTargetMatcher` determines whether a given child should receive the event.
+<6> `eventTargetMatcher` determines whether a given child should receive the event.
 Both resolvers are required. Without them the builder throws at startup.
 
 === Autodetected
