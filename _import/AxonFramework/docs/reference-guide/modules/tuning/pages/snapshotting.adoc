@@ -210,6 +210,7 @@ In the example, a snapshot is created after more than five events have been appl
 If no policy is provided, snapshotting is not used and the entity is always sourced from events only.
 
 Custom snapshot behavior can be achieved by using `whenEventMatches` for domain-specific triggers, as shown in the example, or by implementing the `SnapshotPolicy` interface directly.
+For a complete use of the declarative `EventSourcedEntityModule` API, please check xref:commands:command-handlers.adoc#stateful-command-handlers[here.]
 
 === Entity conversion for snapshots
 
