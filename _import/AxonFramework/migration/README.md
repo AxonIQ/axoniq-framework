@@ -10,6 +10,19 @@ files that can be transformed mechanically. It does **not** guarantee a compilin
 different, and the changes that can't be safely automated are left for you (or an AI-assisted follow-up) to finish by
 hand. Concretely, the recipes do:
 
+Where a recipe made a change that **the compiler will not flag** but that still needs your attention
+(for example: an annotation attribute that has no AF5 equivalent, a fallback value the recipe could
+not infer, or an interceptor body that compiles but still references AF4 APIs), it leaves a marker
+comment so the location is easy to find:
+
+- Java / Kotlin line comment: `// TODO(axon4to5): <action>`
+- Java / Kotlin inline (inside expressions): `/* TODO(axon4to5): <action> */`
+- Properties / YAML: `# TODO(axon4to5): <action>`
+
+After the migration run, search for every such location with:
+
+    grep -r "TODO(axon4to5)" src/
+
 - **Build files**: swaps the BOM (`axon-bom` → `axon-framework-bom` or `axoniq-framework-bom`), bumps the Java
   source/target to the configured LTS (minimum Java 21), and removes dependencies with no AF5 port (e.g.
   `axon-spring-aot`).

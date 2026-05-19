@@ -66,7 +66,7 @@ class MigrateAggregateTestFixtureSetupKotlinTest implements RewriteTest {
                         class FooTest {
                             lateinit var fixture: AggregateTestFixture<Foo>
                             fun setUp() {
-                                fixture = AxonTestFixture.with(EventSourcingConfigurer.create().registerEntity(EventSourcedEntityModule.autodetected(Object::class.java /* TODO #LLM: set to actual id type, e.g. String.class or UUID.class */, Foo::class.java)))
+                                fixture = AxonTestFixture.with(EventSourcingConfigurer.create().registerEntity(EventSourcedEntityModule.autodetected(Object::class.java /* TODO(axon4to5): set to actual id type, e.g. String.class or UUID.class */, Foo::class.java)))
                             }
                         }
                         class Foo

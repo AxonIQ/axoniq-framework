@@ -50,7 +50,7 @@ import java.util.Map;
  * by {@link AddEventTagAnnotation} (under {@link AddEventTagAnnotation#SHARED_ID_TYPES_KEY})
  * while {@code @AggregateIdentifier} is still on the source. When the id type is
  * unavailable (no annotated field, or an unresolvable type), the recipe falls
- * back to {@code Object.class} with a {@code TODO #LLM} comment so the developer
+ * back to {@code Object.class} with a {@code TODO(axon4to5):} comment so the developer
  * notices and supplies the correct type manually — same shape as
  * {@link ConfigureEventSourcedAnnotation}.
  *
@@ -78,7 +78,7 @@ public class MigrateAggregateTestFixtureSetup extends Recipe {
             "org.axonframework.eventsourcing.configuration.EventSourcedEntityModule";
 
     private static final String TODO_COMMENT =
-            " /* TODO #LLM: set to actual id type, e.g. String.class or UUID.class */";
+            " /* TODO(axon4to5): set to actual id type, e.g. String.class or UUID.class */";
     private static final String TODO_ID_TYPE_JAVA = "Object.class" + TODO_COMMENT;
     private static final String TODO_ID_TYPE_KOTLIN = "Object::class.java" + TODO_COMMENT;
 

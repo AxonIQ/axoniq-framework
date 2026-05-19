@@ -54,7 +54,7 @@ import java.util.Map;
  *   <li><b>Edit</b> – for every {@code @EventSourced} annotation without a {@code tagKey} attribute,
  *       generates {@code @EventSourced(tagKey = "<EntitySimpleName>", idType = <ResolvedType>.class)}.
  *       If no {@code @AggregateIdentifier} field was discovered for the enclosing class, falls back
- *       to {@code Object.class} with a {@code TODO #LLM} comment so the developer notices and
+ *       to {@code Object.class} with a {@code TODO(axon4to5):} comment so the developer notices and
  *       supplies the correct type manually.</li>
  * </ol>
  * <p>
@@ -82,7 +82,7 @@ public class ConfigureEventSourcedAnnotation
             "org.axonframework.modelling.entity.AggregateIdentifier";
 
     private static final String TODO_COMMENT =
-            " /* TODO #LLM: set to actual id type, e.g. String.class or UUID.class */";
+            " /* TODO(axon4to5): set to actual id type, e.g. String.class or UUID.class */";
     private static final String TODO_FALLBACK = "Object.class" + TODO_COMMENT;
     private static final String TODO_FALLBACK_KOTLIN = "Object::class.java" + TODO_COMMENT;
 
@@ -103,7 +103,7 @@ public class ConfigureEventSourcedAnnotation
                 + "the class simple name (matching the AF5 default). The idType is deduced from the "
                 + "type of the field annotated with @AggregateIdentifier in AF4. When that field is "
                 + "absent (e.g. POJO aggregate without an explicit identifier field) the idType "
-                + "falls back to Object.class and is flagged with a TODO #LLM comment.";
+                + "falls back to Object.class and is flagged with a TODO(axon4to5): comment.";
     }
 
     @Override
@@ -216,9 +216,8 @@ public class ConfigureEventSourcedAnnotation
                 }
                 if (snapshotTriggerSource != null) {
                     result = prependLineComment(result,
-                                                " TODO #LLM: reconfigure snapshot trigger "
-                                                        + "(AF4 had snapshotTriggerDefinition = "
-                                                        + snapshotTriggerSource + ")");
+                                                " TODO(axon4to5): reconfigure snapshot trigger — AF4 had snapshotTriggerDefinition = "
+                                                        + snapshotTriggerSource);
                 }
                 return result;
             }

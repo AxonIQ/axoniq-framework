@@ -58,7 +58,7 @@ class Axon4ToAxon5SpringExtensionTest implements RewriteTest {
 
                         import org.axonframework.extension.spring.stereotype.EventSourced;
 
-                        @EventSourced(tagKey = "Order", idType = Object.class /* TODO #LLM: set to actual id type, e.g. String.class or UUID.class */)
+                        @EventSourced(tagKey = "Order", idType = Object.class /* TODO(axon4to5): set to actual id type, e.g. String.class or UUID.class */)
                         class Order {}
                         """
                 )
@@ -105,7 +105,7 @@ class Axon4ToAxon5SpringExtensionTest implements RewriteTest {
         // AF4 `@Aggregate(snapshotTriggerDefinition = "...")` rewrites to
         // `@EventSourced(...)`, but AF5's `@EventSourced` has no
         // `snapshotTriggerDefinition` attribute. The recipe must NOT silently drop the
-        // configuration — instead, it surfaces a `// TODO #LLM` comment above the
+        // configuration — instead, it surfaces a `// TODO(axon4to5):` comment above the
         // annotation so a reviewer (human or LLM) can rewire the snapshot trigger
         // through AF5's configuration APIs.
         rewriteRun(
@@ -129,7 +129,7 @@ class Axon4ToAxon5SpringExtensionTest implements RewriteTest {
                         import org.axonframework.extension.spring.stereotype.EventSourced;
                         import org.axonframework.modelling.command.AggregateIdentifier;
 
-                        // TODO #LLM: reconfigure snapshot trigger (AF4 had snapshotTriggerDefinition = "dwellingSnapshotTrigger")
+                        // TODO(axon4to5): reconfigure snapshot trigger — AF4 had snapshotTriggerDefinition = "dwellingSnapshotTrigger"
                         @EventSourced(tagKey = "Dwelling", idType = String.class)
                         class Dwelling {
                             @AggregateIdentifier

@@ -791,7 +791,7 @@ class Axon4ToAxon5MessagingTest implements RewriteTest {
                         import org.axonframework.messaging.core.MessageStream;
                         import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
-                        // TODO #LLM: migrate the body of this interceptor to the AF5 API — the signature has been rewritten but the body still references the AF4 `unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with calls on `message`, `context`, `chain`. See docs/reference-guide/modules/migration/pages/paths/interceptors.adoc
+                        // TODO(axon4to5): migrate the body of this interceptor to the AF5 API — the signature has been rewritten but the body still references the AF4 `unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with calls on `message`, `context`, `chain`. See docs/reference-guide/modules/migration/pages/paths/interceptors.adoc
                         class LoggingHandlerInterceptor implements MessageHandlerInterceptor<CommandMessage> {
                             @Override
                             public MessageStream<?> interceptOnHandle(CommandMessage message, ProcessingContext context, MessageHandlerInterceptorChain<CommandMessage> chain) {
@@ -834,7 +834,7 @@ class Axon4ToAxon5MessagingTest implements RewriteTest {
                         import org.axonframework.messaging.core.MessageStream;
                         import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
-                        // TODO #LLM: migrate the body of this interceptor to the AF5 API — the signature has been rewritten but the body still references the AF4 `unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with calls on `message`, `context`, `chain`. See docs/reference-guide/modules/migration/pages/paths/interceptors.adoc
+                        // TODO(axon4to5): migrate the body of this interceptor to the AF5 API — the signature has been rewritten but the body still references the AF4 `unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with calls on `message`, `context`, `chain`. See docs/reference-guide/modules/migration/pages/paths/interceptors.adoc
                         class MyDispatchInterceptor implements MessageDispatchInterceptor<CommandMessage> {
                             @Override
                             public MessageStream<?> interceptOnDispatch(CommandMessage message, ProcessingContext context, MessageDispatchInterceptorChain<CommandMessage> chain) {

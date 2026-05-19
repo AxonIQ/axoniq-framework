@@ -196,7 +196,7 @@ class ConfigureEventSourcedAnnotationKotlinTest implements RewriteTest {
                         import org.axonframework.eventsourcing.annotation.reflection.EntityCreator
                         import org.axonframework.extension.spring.stereotype.EventSourced
 
-                        @EventSourced(tagKey = "Foo", idType = Object::class.java /* TODO #LLM: set to actual id type, e.g. String.class or UUID.class */)
+                        @EventSourced(tagKey = "Foo", idType = Object::class.java /* TODO(axon4to5): set to actual id type, e.g. String.class or UUID.class */)
                         class Foo {
                             @EntityCreator
                             private constructor()

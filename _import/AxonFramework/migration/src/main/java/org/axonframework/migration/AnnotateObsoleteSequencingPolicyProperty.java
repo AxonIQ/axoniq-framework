@@ -50,8 +50,8 @@ import java.util.regex.Pattern;
  */
 public class AnnotateObsoleteSequencingPolicyProperty extends Recipe {
 
-    private static final String COMMENT_MARKER = "AF5 migration: move to @SequencingPolicy on the handler class";
-    private static final String COMMENT_LINE = "# TODO " + COMMENT_MARKER + "; this property is obsolete.";
+    private static final String COMMENT_MARKER = "TODO(axon4to5): move sequencing-policy to @SequencingPolicy on the handler class";
+    private static final String COMMENT_LINE = "# " + COMMENT_MARKER + "; this property has no AF5 equivalent.";
 
     private static final Pattern PROPERTIES_KEY_PATTERN = Pattern.compile(
             "^axon\\.eventhandling\\.processors\\.[^.]+\\.sequencing-policy$"
@@ -64,7 +64,7 @@ public class AnnotateObsoleteSequencingPolicyProperty extends Recipe {
 
     @Override
     public String getDescription() {
-        return "Inserts a one-line `# TODO AF5 migration: ...` comment above any "
+        return "Inserts a one-line `# TODO(axon4to5): ...` comment above any "
                 + "`axon.eventhandling.processors.<group>.sequencing-policy` entry in "
                 + "`application.properties` / `application.yml`. AF5 moves the decision onto the "
                 + "handler class via `@SequencingPolicy`; deleting the property here would race the "
@@ -133,7 +133,7 @@ public class AnnotateObsoleteSequencingPolicyProperty extends Recipe {
                     entryPrefix,
                     org.openrewrite.marker.Markers.EMPTY,
                     Properties.Comment.Delimiter.HASH_TAG,
-                    " TODO " + COMMENT_MARKER + "; this property is obsolete."
+                    " " + COMMENT_MARKER + "; this property has no AF5 equivalent."
             );
         }
     }

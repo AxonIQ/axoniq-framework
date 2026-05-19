@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
  *       {@code interceptorChain} / {@code messages} parameters become compile errors, which is
  *       exactly the desired feedback: every line that needs review surfaces at compile time
  *       rather than via a silent rewrite.</li>
- *   <li><b>Class-level TODO</b> — a {@code // TODO #LLM} comment is prepended to the class with a
+ *   <li><b>Class-level TODO</b> — a {@code // TODO(axon4to5):} comment is prepended to the class with a
  *       pointer to {@code docs/reference-guide/modules/migration/pages/paths/interceptors.adoc}
  *       so a follow-up pass (LLM or human) knows where to look.</li>
  * </ul>
@@ -98,13 +98,13 @@ public class MigrateMessageInterceptorSignatures extends Recipe {
             "org.axonframework.messaging.core.Message";
 
     private static final String TODO_TEXT =
-            " TODO #LLM: migrate the body of this interceptor to the AF5 API — "
+            " TODO(axon4to5): migrate the body of this interceptor to the AF5 API — "
                     + "the signature has been rewritten but the body still references the AF4 "
                     + "`unitOfWork` / `interceptorChain` / `messages` parameters. Replace those with "
                     + "calls on `message`, `context`, `chain`. See "
                     + "docs/reference-guide/modules/migration/pages/paths/interceptors.adoc";
 
-    private static final String IDEMPOTENCY_MARKER = "TODO #LLM: migrate the body of this interceptor";
+    private static final String IDEMPOTENCY_MARKER = "TODO(axon4to5): migrate the body of this interceptor";
 
     @Override
     public String getDisplayName() {
@@ -120,7 +120,7 @@ public class MigrateMessageInterceptorSignatures extends Recipe {
                 + "MessageStream<?>` (and similarly for the dispatch interceptor). The method "
                 + "**body is left untouched** — the dropped `unitOfWork` / `interceptorChain` "
                 + "references become compile errors, surfacing every call site that needs review. "
-                + "A class-level `// TODO #LLM` comment points to the migration path doc. The "
+                + "A class-level `// TODO(axon4to5):` comment points to the migration path doc. The "
                 + "message type `M` is read from the `implements` clause; raw implementations fall "
                 + "back to `Message`. Runs after the AF4 -> AF5 FQN renames.";
     }

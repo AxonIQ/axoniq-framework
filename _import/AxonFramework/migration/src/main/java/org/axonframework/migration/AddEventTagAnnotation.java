@@ -62,7 +62,7 @@ import java.util.Map;
  *       matches the entity's identifier field name and annotates it with
  *       {@code @EventTag(key = "<EntitySimpleName>")}. If no field with that exact name is found,
  *       the recipe falls back to the first declared field and emits a
- *       {@code // TODO #LLM} comment so a human reviewer can verify the choice.</li>
+ *       {@code // TODO(axon4to5):} comment so a human reviewer can verify the choice.</li>
  * </ol>
  *
  * <p><b>Must run before {@code @AggregateIdentifier} is removed</b> (i.e. before the
@@ -317,7 +317,7 @@ public class AddEventTagAnnotation extends ScanningRecipe<AddEventTagAnnotation.
                     if (!hasExactFieldByName(enclosingClass, target.idFieldName)) {
                         // Annotate and add a TODO comment via the JavaTemplate approach.
                         return annotateWithEventTag(vd, target.tagKey,
-                                                    " // TODO #LLM: verify this is the aggregate-id field");
+                                                    " // TODO(axon4to5): verify this is the aggregate-id field");
                     }
                     return vd;
                 }

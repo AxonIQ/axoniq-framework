@@ -42,7 +42,7 @@ class AnnotateObsoleteSequencingPolicyPropertyTest implements RewriteTest {
                         axon.eventhandling.processors.bikes.sequencing-policy=full
                         """,
                         """
-                        # TODO AF5 migration: move to @SequencingPolicy on the handler class; this property is obsolete.
+                        # TODO(axon4to5): move sequencing-policy to @SequencingPolicy on the handler class; this property has no AF5 equivalent.
                         axon.eventhandling.processors.bikes.sequencing-policy=full
                         """,
                         spec -> spec.path("application.properties")
@@ -69,7 +69,7 @@ class AnnotateObsoleteSequencingPolicyPropertyTest implements RewriteTest {
         rewriteRun(
                 properties(
                         """
-                        # TODO AF5 migration: move to @SequencingPolicy on the handler class; this property is obsolete.
+                        # TODO(axon4to5): move sequencing-policy to @SequencingPolicy on the handler class; this property has no AF5 equivalent.
                         axon.eventhandling.processors.bikes.sequencing-policy=full
                         """,
                         spec -> spec.path("application.properties")
@@ -93,7 +93,7 @@ class AnnotateObsoleteSequencingPolicyPropertyTest implements RewriteTest {
                           eventhandling:
                             processors:
                               bikes:
-                                # TODO AF5 migration: move to @SequencingPolicy on the handler class; this property is obsolete.
+                                # TODO(axon4to5): move sequencing-policy to @SequencingPolicy on the handler class; this property has no AF5 equivalent.
                                 sequencing-policy: full
                         """,
                         spec -> spec.path("application.yml")
@@ -127,7 +127,7 @@ class AnnotateObsoleteSequencingPolicyPropertyTest implements RewriteTest {
                           eventhandling:
                             processors:
                               bikes:
-                                # TODO AF5 migration: move to @SequencingPolicy on the handler class; this property is obsolete.
+                                # TODO(axon4to5): move sequencing-policy to @SequencingPolicy on the handler class; this property has no AF5 equivalent.
                                 sequencing-policy: full
                         """,
                         spec -> spec.path("application.yml")

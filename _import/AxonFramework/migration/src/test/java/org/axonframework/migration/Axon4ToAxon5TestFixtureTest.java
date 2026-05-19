@@ -344,7 +344,7 @@ class Axon4ToAxon5TestFixtureTest implements RewriteTest {
     void rewritesAggregateTestFixtureSetupWithFallbackIdType() {
         // No `@AggregateIdentifier` field is visible to the recipe (the
         // aggregate class isn't part of the rewritten source set), so the
-        // id type falls back to `Object.class` with a TODO #LLM marker.
+        // id type falls back to `Object.class` with a TODO(axon4to5): marker.
         rewriteRun(
                 java(
                         """
@@ -367,7 +367,7 @@ class Axon4ToAxon5TestFixtureTest implements RewriteTest {
                         class FooTest {
                             AxonTestFixture fixture;
                             void setUp() {
-                                fixture = AxonTestFixture.with(EventSourcingConfigurer.create().registerEntity(EventSourcedEntityModule.autodetected(Object.class /* TODO #LLM: set to actual id type, e.g. String.class or UUID.class */, Foo.class)));
+                                fixture = AxonTestFixture.with(EventSourcingConfigurer.create().registerEntity(EventSourcedEntityModule.autodetected(Object.class /* TODO(axon4to5): set to actual id type, e.g. String.class or UUID.class */, Foo.class)));
                             }
                         }
                         class Foo {}
