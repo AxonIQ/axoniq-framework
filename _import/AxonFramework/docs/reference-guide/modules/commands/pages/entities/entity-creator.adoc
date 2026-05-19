@@ -7,8 +7,8 @@ In the declarative approach, entity construction is handled by the factory passe
 
 [NOTE]
 ====
-The examples below use `@EventSourcedEntity(tagKey = "courseId")Entity`, which is the non-Spring annotation.
-In Spring Boot, replace `@EventSourcedEntity(tagKey = "courseId")Entity` with `@EventSourcedEntity(tagKey = "courseId")`—the `@EntityCreator` patterns are identical.
+The examples below use `@EventSourcedEntity(tagKey = "courseId")`, which is the non-Spring annotation.
+In Spring Boot, replace `@EventSourcedEntity(tagKey = "courseId")` with `@EventSourced`—the `@EntityCreator` patterns are identical.
 ====
 
 There are three patterns:

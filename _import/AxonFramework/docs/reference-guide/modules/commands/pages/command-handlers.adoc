@@ -4,7 +4,12 @@
 Command handlers process commands and perform the corresponding business logic.
 A command handler decides whether a requested change is valid and, if so, applies it—by appending events, invoking services, or dispatching further commands.
 
+Command handlers can be **stateless** (not requiring any prior state) or **stateful** (depending on prior state to enforce business rules).
+The different patterns for implementing stateful command handlers are covered in xref:entities/event-sourced-entity.adoc[Event-sourced entities] and xref:entities/command-handler-components.adoc[Command handler components].
+
 [#stateless-command-handlers]
+== Stateless command handlers
+
 Command handlers are regular components with methods annotated with `@CommandHandler`.
 They may access state through injected services or repositories, but the handler instance itself holds no state between invocations.
 
