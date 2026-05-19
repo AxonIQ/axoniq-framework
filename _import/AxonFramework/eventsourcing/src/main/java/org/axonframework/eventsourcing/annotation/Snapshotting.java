@@ -68,7 +68,7 @@ import java.lang.annotation.Target;
  * @author John Hendrikx
  * @see SnapshotPolicy
  * @see org.axonframework.eventsourcing.configuration.EventSourcedEntityModule.OptionalPhase#snapshotPolicy(org.axonframework.common.configuration.ComponentBuilder)
- * @since 5.1.0
+ * @since 5.1.1
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
