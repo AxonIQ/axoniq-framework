@@ -52,7 +52,7 @@ This evaluation mode is intended for development, prototyping, testing, and proo
 Continued production use without a valid subscription is not permitted under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
 As such, once the evaluation period ends, your application will be forcefully shutdown as a result.
 
-Note that smaller organizations may qualify for complimentary access to Axoniq Framework modules.
+Xte that smaller organizations may qualify for complimentary access to Axoniq Framework modules.
 Contact the link:https://www.axoniq.io/pricing[Axoniq representative] to discuss your eligibility.
 
 [#individual_plan]
@@ -100,3 +100,890 @@ The specific throughput limits are dependent on the link:https://www.axoniq.io/p
 When a subscription becomes invalid, for example, because it has expired, payment has lapsed, or the credentials have been revoked, Axoniq Framework modules do not stop immediately.Instead, they enter a grace period during which the application continues to operate as if the subscription were still valid.
 
 The grace period gives operators time to renew the subscription or roll out new credentials without an outage.During the grace period the module logs warnings to make the situation visible.Once the grace period ends, the module reverts to its unlicensed behavior: blocked modules stop accepting operations, and rate-limited modules fall back to their unlicensed throughput.
+
+[#feature_comparison]
+== Feature comparison
+
+The table belows compares features between Axon Framework and Axoniq Framework.
+If a feature you expect is missing from this table, be sure to file a concern with the Framework team.
+
+The table mentions the feature in question, whether it is a part of Axon and/or Axoniq Framework, since what version it is or will be present, and an optional description. The version columns start at 5.0.0 and go up, regardless of whether the feature existed before Framework 5.
+
+The "Axon Framework" and "Axoniq Framework" columns may contain any of the following:
+
+* **✓** - The feature is present.
+* **X** - The feature is not present.
+* **Partial** - The feature is present partially. Expect a description
+* **TBD** - Stands for "to be determined." Will change accordingly once planned by the Framework team
+
+Lastly, some rows describe a feature that is no longer present in Framework 5.
+They are present in the table as a marker for people migrating from 4 (or lower) to 5.
+If you depended strongly on any of the removed features, be sure to reach out.
+
+[cols="2,1,1,1,1,3",options="header"]
+|===
+| Feature | Axon Framework | Axon Framework Version | Axoniq Framework | Axoniq Framework Version | Description
+
+6+h| Core API
+
+| Unit of Work
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Command / Event / Query messages
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Message metadata
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Message streams
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Message Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+| Supports both synchronous and asynchronous programming models
+
+6+h| Command Dispatching and Handling
+
+| Command Dispatching API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Declarative Command Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Annotated Command Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Stateful Command Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributed Command API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributing Commands - Axon Server integration
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Distributing Commands - Spring Cloud integration
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+| Distributed Command Priority
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributing Commands - JGroups integration
+| **X**
+| —
+| **X**
+| —
+| Deprecated and removed as of Axon Framework 5
+
+| Disruptor Command Bus
+| **X**
+| —
+| **X**
+| —
+| Deprecated and removed as of Axon Framework 5
+
+6+h| Event Publishing and Handling
+
+| Event Publishing API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Declarative Event Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Annotated Event Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Stateful Event Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Event publishing and handling - AMQP integration
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+| Event publishing and handling - Kafka integration
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+6+h| Query Dispatching and Handling
+
+| Query Publishing - Direct Query API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Query Publishing - Scatter-gather API
+| **X**
+| —
+| **X**
+| —
+| Deprecated and removed as of Axon Framework 5
+
+| Query Publishing - Subscription Query API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Query Publishing - Streaming Query API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Declarative Query Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Annotated Query Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Stateful Query Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributed Query API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributing Queries - Axon Server integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributing Queries - Spring Cloud integration
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+| Distributed Query Priority
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+6+h| Modeling / Entities
+
+| Command Model / Entity API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Declarative Entity Configuration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Annotated Entity Configuration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Entity Hierarchy API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Event Sourced Entity support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| State-based Entity support
+| **TBD**
+| —
+| **TBD**
+| —
+| This feature reflects the JPA storage support for Aggregates from previous versions
+
+| Entity Caching
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+| Entity Creation Policy
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Aggregate Conflict Resolution
+| **X**
+| —
+| **X**
+| —
+| Deprecated and removed as of Axon Framework 5
+
+6+h| Event Store
+
+| Event Store - DCB API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| DCB Event Storage - Axon Server integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| DCB Event Storage - JPA support
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| DCB Event Storage - PostgreSQL integration
+| **✓**
+| 5.1.0
+| **✓**
+| 5.1.0
+|
+
+| Event Store - Aggregate API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Aggregate-based Event Storage - Axon Server integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Aggregate-based Event Storage - JPA support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Aggregate-based Event Storage - JDBC support
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Aggregate-based Event Storage - Mongo integration
+| **X**
+| —
+| **X**
+| —
+| Deprecated and removed as of Axon Framework 5
+
+6+h| Event Processing
+
+| Event Processing API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Subscribing Event Processors
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Streaming Event Processors
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Event Sequencing
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Event Processing Replays
+| **✓**
+| 5.1.0
+| **✓**
+| 5.1.0
+|
+
+| Token Store API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| JPA Token Store
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| JDBC Token Store
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Mongo Token Store
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+| Persistent Stream integration
+| **X**
+| —
+| **✓**
+| 5.2.0
+|
+
+| Multi-Source Event Streaming
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Sequenced Dead-Letter Queue API
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Sequenced Dead-Letter Queue - JPA support
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Sequenced Dead-Letter Queue - JDBC support
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Sequenced Dead-Letter Queue - Mongo integration
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+6+h| Process Management
+
+| Saga pattern integration
+| **X**
+| —
+| **X**
+| —
+| Replaced fully with the Workflow integration
+
+| Workflows
+| **X**
+| —
+| **✓**
+| 5.1.0
+| Follows the "Durable Execution" paradigm, fully replacing Saga support from previous versions, as well as supporting many other process management styles
+
+6+h| Message Interceptors
+
+| Message Dispatch Interceptors
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Message Handler Interceptors
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Declarative Message Handling Component Interceptors
+| **✓**
+| 5.2.0
+| **✓**
+| 5.2.0
+|
+
+| Annotated Message Handling Component Interceptors
+| **✓**
+| 5.2.0
+| **✓**
+| 5.2.0
+|
+
+| Declarative Exception Handlers
+| **✓**
+| 5.2.0
+| **✓**
+| 5.2.0
+|
+
+| Annotated Exception Handlers
+| **✓**
+| 5.2.0
+| **✓**
+| 5.2.0
+|
+
+| Message Handler Timeout support
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| UnitOfWork Timeout support
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+6+h| Conversion, versioning, and upcasting
+
+| Conversion / Serialization
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Conversion - Jackson integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Conversion - Avro integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Conversion - Data Protection integration
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Command Versioning
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Event Versioning
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Query Versioning
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Upcasting
+| Partial
+| 5.2.0
+| **✓**
+| 5.2.0
+| Marked partial for Axon as message handlers can receive the payload in any format. Hence, upcasting can be done specific to a message handler at the user's discretion
+
+| Conversion - XStream integration
+| **X**
+| —
+| **X**
+| —
+| Deprecated and removed as of Axon Framework 5 due to incompatibility with new JDK versions
+
+6+h| Snapshotting
+
+| Integrated Command Model / Entity Snapshotting
+| Partial
+| 5.1.0
+| **✓**
+| 5.1.0
+| Marked partial for Axon as the component required to provide is the `SnapshotStore`. Furthermore, Axoniq Framework integration is optimized compared to Axon Framework
+
+| Generic Entity Snapshotting
+| **X**
+| —
+| **TBD**
+| —
+|
+
+6+h| Event Scheduling and Deadline Management
+
+| Event Scheduling API
+| **TBD**
+| —
+| **TBD**
+| —
+| To-be-decided given the ease to have a custom integration
+
+| Event Scheduling - Axon Server integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Event Scheduling - Quartz integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Event Scheduling - JobRunr integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Event Scheduling - db-scheduler integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Deadline Manager API
+| **TBD**
+| —
+| **TBD**
+| —
+| To-be-decided given the **relative** ease to have a custom integration
+
+| Deadline Manager - Quartz integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Deadline Manager - JobRunr integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Deadline Manager - db-scheduler integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+6+h| Test fixtures
+
+| Test Fixtures - Entity support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Test Fixtures - Workflow support
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+| Test Fixtures - Command Handler support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Test Fixtures - Event Handler support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Test Fixtures - Query Handler support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Configuration-based Testing
+| **TBD**
+| —
+| **✓**
+| TBD
+|
+
+6+h| Monitoring and tracing
+
+| Correlation Data
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Monitoring API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Monitoring - DropWizard integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Monitoring - Micrometer integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Distributed Tracing
+| **X**
+| —
+| **✓**
+| 5.2.0
+|
+
+6+h| Multi-tenancy
+
+| Multi-Tenancy support
+| **X**
+| —
+| **✓**
+| TBD
+|
+
+6+h| Dependency Injection integration
+
+| Spring Framework integration
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Spring AoT integration
+| **TBD**
+| —
+| **TBD**
+| —
+|
+
+| Quarkus integration
+| **✓**
+| TBD
+| **✓**
+| TBD
+|
+
+| Micronaut integration
+| **✓**
+| TBD
+| **✓**
+| TBD
+|
+
+6+h| Language/Library integration
+
+| Kotlin integration
+| **✓**
+| 5.1.0
+| **✓**
+| 5.1.0
+|
+
+| Reactor integration
+| **✓**
+| 5.1.0
+| **✓**
+| 5.1.0
+|
+
+6+h| Configuration and tooling
+
+| Configuration API
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Modularized Configuration support
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Lifecycle Handlers
+| **✓**
+| 5.0.0
+| **✓**
+| 5.1.0
+|
+
+| Migration support
+| **✓**
+| 5.1.1
+| **✓**
+| 5.1.1
+|
+
+| Feature-based modularization
+| **X**
+| —
+| **✓**
+| 5.1.0
+|
+
+|===
