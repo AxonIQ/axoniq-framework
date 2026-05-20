@@ -947,16 +947,16 @@
         "type": 3
       },
       "seed": 1466762628,
-      "version": 3194,
-      "versionNonce": 504663158,
-      "isDeleted": false,
+      "version": 3195,
+      "versionNonce": 1949708924,
+      "isDeleted": true,
       "boundElements": [
         {
           "id": "eDRF3-MLPdnijtwBh6kQd",
           "type": "text"
         }
       ],
-      "updated": 1777471890703,
+      "updated": 1779208456877,
       "link": null,
       "locked": false
     },
@@ -982,11 +982,11 @@
       "index": "b09",
       "roundness": null,
       "seed": 1782166788,
-      "version": 3224,
-      "versionNonce": 133664182,
-      "isDeleted": false,
+      "version": 3225,
+      "versionNonce": 928596804,
+      "isDeleted": true,
       "boundElements": [],
-      "updated": 1777471890703,
+      "updated": 1779208456877,
       "link": null,
       "locked": false,
       "text": "Tracing OpenTelemetry",
@@ -1186,12 +1186,7 @@
       "version": 3135,
       "versionNonce": 507234606,
       "isDeleted": true,
-      "boundElements": [
-        {
-          "id": "VWW8Finq5nU1EuCK9MHzH",
-          "type": "text"
-        }
-      ],
+      "boundElements": [],
       "updated": 1777559902477,
       "link": null,
       "locked": false
@@ -1265,12 +1260,7 @@
       "version": 3143,
       "versionNonce": 1896708914,
       "isDeleted": true,
-      "boundElements": [
-        {
-          "id": "X5GweBxqNxwV8NqH-RN-U",
-          "type": "text"
-        }
-      ],
+      "boundElements": [],
       "updated": 1777559908573,
       "link": null,
       "locked": false
@@ -1502,12 +1492,7 @@
       "version": 3290,
       "versionNonce": 358214894,
       "isDeleted": true,
-      "boundElements": [
-        {
-          "id": "YmB1QQf5f5xMEZtmuyYHa",
-          "type": "text"
-        }
-      ],
+      "boundElements": [],
       "updated": 1777560186880,
       "link": null,
       "locked": false
@@ -1872,8 +1857,8 @@
         "type": 3
       },
       "seed": 2025563818,
-      "version": 3081,
-      "versionNonce": 1394381942,
+      "version": 3083,
+      "versionNonce": 2054139900,
       "isDeleted": false,
       "boundElements": [
         {
@@ -1881,7 +1866,7 @@
           "type": "text"
         }
       ],
-      "updated": 1777471868559,
+      "updated": 1779208441764,
       "link": null,
       "locked": false
     },
@@ -1907,11 +1892,11 @@
       "index": "b0S",
       "roundness": null,
       "seed": 681918826,
-      "version": 3035,
-      "versionNonce": 1395586102,
+      "version": 3037,
+      "versionNonce": 1472528252,
       "isDeleted": false,
       "boundElements": [],
-      "updated": 1777471874357,
+      "updated": 1779208441764,
       "link": null,
       "locked": false,
       "text": "Workflow Engine",
