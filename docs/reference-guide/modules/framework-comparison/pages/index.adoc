@@ -18,3 +18,85 @@ So, in short:
 
 * *Axon Framework* — the open-source core. Free to use, including in production, covering the bases to support messaging, modeling, and event sourcing.
 * *Axoniq Framework* — the commercial modules on top of Axon Framework, providing advanced and production-grade capabilities.
+
+[#how-to-use]
+== How to use Axon and Axoniq Framework
+
+Just as any library or framework, to use Axon and Axoniq Framework, you can simply depend on either.
+Axon Framework modules are marked with `org.axonframework`, whereas Axoniq Framework modules are marked with `io.axoniq.framework`. For a full list of all the modules, be sure to check out xref:ROOT:modules.adoc[this page].
+
+However, there's a licensing difference between both.
+Axon Framework being Apache 2.0 means you can use it whenever, wherever.
+However, Axoniq Framework falls under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
+To that end, access to Axoniq Framework features is governed through a subscription.
+On start-up of an application using Axoniq Framework features, these features will validate if the application is entitled to use them.
+
+You can retrieve a subscription through link:https://platform.axoniq.io[Axoniq Platform] as a self-service means.
+A self-service subscription is associated with an environment and grants credentials (an environment identifier and an access token) that the application presents at runtime.
+As such, this flow will expect an active connection with Axoniq Platform to ensure the subscription entitles your application to the features you're using.
+
+If you are unable to form an active connection with Axoniq Platform or otherwise require a different feature set, be sure to check out our link:https://www.axoniq.io/pricing[pricing page]. Be sure to contact us when more information or help is required.
+
+When no active subscription is found, we assume you are xref:evaluating[evaluating] Axoniq Framework.
+Evaluating Axoniq Framework in a life system is allowed for a limited period of time.
+Do note that anybody can use the xref:individual_plan[individual plan] free of charge.
+This will entitle your application to run past the evaluation time window.
+
+For details on xref:configuring_credentials[configuring], how we xref:enforcing_subscription[enforce an entitlement], and xref:grace_period[grace periods], be sure to check out their respective sections.
+
+[#evaluating]
+=== Evaluating Axoniq Framework
+
+During evaluation, Axoniq Framework modules start without credentials, logging a warning as a result.
+This evaluation mode is intended for development, prototyping, testing, and proof-of-concept work.
+Continued production use without a valid subscription is not permitted under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
+As such, once the evaluation period ends, your application will be forcefully shutdown as a result.
+
+Note that smaller organizations may qualify for complimentary access to Axoniq Framework modules.
+Contact the link:https://www.axoniq.io/pricing[Axoniq representative] to discuss your eligibility.
+
+[#individual_plan]
+=== Testing Axoniq Framework - individual plan
+
+Every Axoniq Platform account includes a free developer plan.The developer plan is intended for learning, prototyping, and local development, and provides credentials that unlock the full set of Axoniq Framework modules at reduced throughput.
+
+The developer plan is free of charge and does not expire.It allows anyone to try out Axoniq Framework end-to-end, including modules that are otherwise blocked without credentials, before committing to a paid subscription.When an application outgrows the limits of the developer plan, the same credentials can be upgraded to a paid plan without changing the application configuration.
+
+[#configuring_credentials]
+=== Configuring credentials
+
+Credentials are provided to the application through the standard Axoniq Platform configuration.
+For Spring Boot applications, this is typically a single property:
+
+[source,properties]
+----
+axoniq.platform.credentials=<environment-id>:<access-token>
+----
+
+For plain Java applications, credentials are registered through an `AxoniqPlatformConfiguration` component.
+The same credentials are used by every Axoniq Framework module the application depends on.
+
+For a thorough explanation on how to set this up, we refer to the Axoniq Platform link:https://docs.axoniq.io/axoniq-platform-reference/connectors/axon-framework/#installation[installation page].
+
+[#enforcing_subscription]
+=== Feature entitlement and message throughput
+
+Some Axoniq Framework modules cannot be used at all without valid credentials.
+This is where so-called "feature entitlement" kicks in.
+When the application starts without a subscription, or with credentials that do not grant access to the module, the module refuses to operate and the application fails fast.
+
+This applies to modules whose value is tightly coupled to the commercial offering and where partial operation would be misleading.
+The Data Protection module is an example: without a valid subscription the cryptographic operations it provides are not available, and any attempt to use them is rejected.
+
+Other Axoniq Framework modules remain functional without a subscription but apply message throughput control to their operations.
+This allows evaluation, development, and small-scale use without paid credentials, while reserving full throughput for subscribed customers.
+
+When a throughput limit is reached, the module logs a warning and throttles further operations until the rate window resets or valid credentials are provided.
+The specific throughput limits are dependent on the link:https://www.axoniq.io/pricing[tier] the subscription is eligible too.
+
+[#grace_period]
+=== Grace period
+
+When a subscription becomes invalid, for example, because it has expired, payment has lapsed, or the credentials have been revoked, Axoniq Framework modules do not stop immediately.Instead, they enter a grace period during which the application continues to operate as if the subscription were still valid.
+
+The grace period gives operators time to renew the subscription or roll out new credentials without an outage.During the grace period the module logs warnings to make the situation visible.Once the grace period ends, the module reverts to its unlicensed behavior: blocked modules stop accepting operations, and rate-limited modules fall back to their unlicensed throughput.
