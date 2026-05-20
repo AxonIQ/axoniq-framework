@@ -11,7 +11,7 @@ These modules cover scenarios that go beyond the open-source baseline, such as P
 Axoniq Framework modules are commercial offerings under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service], and require an active xref:how-to-use[subscription] for production use.
 
 For an overview of the features in Axon Framework and Axoniq Framework, be sure to check the xref:feature_comparison[Feature comparison] table.
-However, you do not have to jump to this table time and time again to understand what is in Axon or in Axoniq Framework. The documentation will use of the [.axoniq-feature] icon marks Axoniq Framework features.
+However, you do not have to jump to this table time and time again to understand what is in Axon or in Axoniq Framework. The documentation will use of [.advanced-framework]#this# icon marks Axoniq Framework features.
 When no such icon is present, you are dealing with Axon Framework features.
 
 So, in short:
