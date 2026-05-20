@@ -67,11 +67,11 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
                 .withUserConfiguration(EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(EventStore.class);
-                    assertThat(context).getBean(EventStorageEngine.class).isInstanceOf(
-                            AxonServerEventStorageEngine.class);
+                    assertThat(context).getBean(EventStorageEngine.class)
+                                       .extracting("delegate")
+                                       .isInstanceOf(AxonServerEventStorageEngine.class);
                 });
     }
-
 
     @Test
     void notConstructIfEventStoreDefinitionPresent() {
