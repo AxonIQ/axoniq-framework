@@ -4,7 +4,7 @@ For those using or looking to use the Framework, you may be wondering: "What is 
 This page will break that down for you, as well as explain xref:how-to-use[how to use both] and which xref:feature_comparison[features can be found where].
 
 Axon Framework is the open-source foundation for building message-driven, event-sourced applications on the JVM.
-It provides the core messaging infrastructure (commands, events, and queries), modelling support, event sourcing, and test fixtures, and is released under the Apache 2.0 license.
+It provides the core messaging infrastructure (commands, events, and queries), modeling support, event sourcing, and test fixtures, and is released under the Apache 2.0 license.
 
 Axoniq Framework builds on top of Axon Framework and adds advanced modules.
 These modules cover scenarios that go beyond the open-source baseline, such as PostgreSQL-optimized event storage, distributed messaging, sequenced dead-letter queue support, data protection, and connectivity to Axon Server.
