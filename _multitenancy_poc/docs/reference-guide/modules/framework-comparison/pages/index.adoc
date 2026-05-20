@@ -1,0 +1,20 @@
+= Axon Framework and Axoniq Framework
+
+For those using or looking to use the Framework, you may be wondering: "What is the difference between Axon and Axoniq Framework?"
+This page will break that down for you, as well as explain xref:how-to-use[how to use both] and which xref:feature_comparison[features can be found where].
+
+Axon Framework is the open-source foundation for building message-driven, event-sourced applications on the JVM.
+It provides the core messaging infrastructure (commands, events, and queries), modelling support, event sourcing, and test fixtures, and is released under the Apache 2.0 license.
+
+Axoniq Framework builds on top of Axon Framework and adds advanced modules.
+These modules cover scenarios that go beyond the open-source baseline, such as PostgreSQL-optimized event storage, distributed messaging, sequenced dead-letter queue support, data protection, and connectivity to Axon Server.
+Axoniq Framework modules are commercial offerings under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service], and require an active xref:how-to-use[subscription] for production use.
+
+For an overview of the features in Axon Framework and Axoniq Framework, be sure to check the xref:feature_comparison[Feature comparison] table.
+However, you do not have to jump to this table time and time again to understand what is in Axon or in Axoniq Framework. The documentation will use of the [.axoniq-feature] icon marks Axoniq Framework features.
+When no such icon is present, you are dealing with Axon Framework features.
+
+So, in short:
+
+* *Axon Framework* — the open-source core. Free to use, including in production, covering the bases to support messaging, modeling, and event sourcing.
+* *Axoniq Framework* — the commercial modules on top of Axon Framework, providing advanced and production-grade capabilities.
