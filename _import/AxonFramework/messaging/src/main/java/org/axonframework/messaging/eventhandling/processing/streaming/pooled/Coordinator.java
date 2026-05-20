@@ -17,6 +17,7 @@
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
 import org.axonframework.common.ProcessUtils;
+import org.axonframework.common.ClockUtils;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -99,6 +100,7 @@ class Coordinator {
     private final long claimExtensionThreshold;
     private final long tokenStoreInitRetryInterval;
     private final long tokenStoreInitMaxRetries;
+    @Deprecated(forRemoval = true, since = "5.2.0")
     private final Clock clock;
     private final MaxSegmentProvider maxSegmentProvider;
     private final int initialSegmentCount;
@@ -360,22 +362,8 @@ class Coordinator {
      * {@link #start()} invocations do not restart this coordinator) and maintains a shutdown handler to complete
      * asynchronously through {@link #stop()}.
      */
-    private static class RunState {
-
-        private final boolean isRunning;
-        private final boolean wasStarted;
-        private final CompletableFuture<Void> shutdownHandle;
-        private final Runnable shutdownAction;
-
-        private RunState(boolean isRunning,
-                         boolean wasStarted,
-                         CompletableFuture<Void> shutdownHandle,
-                         Runnable shutdownAction) {
-            this.isRunning = isRunning;
-            this.wasStarted = wasStarted;
-            this.shutdownHandle = shutdownHandle;
-            this.shutdownAction = shutdownAction;
-        }
+    private record RunState(boolean isRunning, boolean wasStarted, @Nullable CompletableFuture<Void> shutdownHandle,
+                            Runnable shutdownAction) {
 
         public static RunState initial(Runnable shutdownAction) {
             return new RunState(false, false, emptyCompletedFuture(), shutdownAction);
@@ -403,18 +391,6 @@ class Coordinator {
             newShutdownHandle.whenComplete((r, e) -> shutdownAction.run());
             return new RunState(false, false, newShutdownHandle, shutdownAction);
         }
-
-        public boolean isRunning() {
-            return isRunning;
-        }
-
-        public boolean wasStarted() {
-            return wasStarted;
-        }
-
-        public CompletableFuture<Void> shutdownHandle() {
-            return shutdownHandle;
-        }
     }
 
     /**
@@ -436,7 +412,8 @@ class Coordinator {
         private long claimExtensionThreshold = 5000;
         private long tokenStoreInitRetryInterval = 100;
         private long tokenStoreInitMaxRetries = 30;
-        private Clock clock = GenericEventMessage.clock;
+        @Deprecated(forRemoval = true, since = "5.2.0")
+        private Clock clock = ClockUtils.get();
         private MaxSegmentProvider maxSegmentProvider;
         private int initialSegmentCount = 16;
         private Function<TrackingTokenSource, CompletableFuture<TrackingToken>> initialToken;
@@ -588,11 +565,13 @@ class Coordinator {
 
         /**
          * The {@link Clock} used for any time dependent operations in this {@link Coordinator}. For example used to
-         * define when to attempt claiming new tokens. Defaults to {@link GenericEventMessage#clock}.
+         * define when to attempt claiming new tokens. Defaults to {@link ClockUtils#get()}.
          *
+         * @deprecated Use {@link ClockUtils#set(Clock)} if you have to provide a non-default {@link Clock} instance.
          * @param clock a {@link Clock} used for any time dependent operations in this {@link Coordinator}
          * @return the current Builder instance, for fluent interfacing
          */
+        @Deprecated(forRemoval = true, since = "5.2.0")
         Builder clock(Clock clock) {
             this.clock = clock;
             return this;
@@ -1092,7 +1071,7 @@ class Coordinator {
                             .limit(workPackages.size() - maxSegmentsPerNode)
                             .forEach(workPackage -> releaseUntil(
                                     workPackage.segment().getSegmentId(),
-                                    GenericEventMessage.clock.instant().plusMillis(tokenClaimInterval)
+                                    clock.instant().plusMillis(tokenClaimInterval)
                             ));
             }
             return tooManySegmentsClaimed;
@@ -1149,7 +1128,7 @@ class Coordinator {
                 Segment segment, Map<Segment, TrackingToken> claims
         ) {
             int segmentId = segment.getSegmentId();
-            return unitOfWorkFactory.create().<TrackingToken>executeWithResult(
+            return unitOfWorkFactory.create().executeWithResult(
                     context -> tokenStore.fetchToken(name, segment, context)
             ).thenApply(token -> {
                 claims.put(segment, token);

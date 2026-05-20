@@ -17,6 +17,8 @@
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
 import org.axonframework.common.Assert;
+import org.axonframework.common.ClockUtils;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.LegacyResources;
@@ -96,6 +98,7 @@ class WorkPackage {
     private final Consumer<UnaryOperator<TrackerStatus>> segmentStatusUpdater;
     private final Supplier<ProcessingContext> schedulingProcessingContextProvider;
     private Runnable batchProcessedCallback;
+    @Deprecated(forRemoval = true, since = "5.2.0")
     private final Clock clock;
 
     private TrackingToken lastDeliveredToken; // For use only by event delivery threads, like Coordinator
@@ -605,7 +608,8 @@ class WorkPackage {
         private int batchSize = 1;
         private long claimExtensionThreshold = 5000;
         private @Nullable Consumer<UnaryOperator<TrackerStatus>> segmentStatusUpdater;
-        private Clock clock = GenericEventMessage.clock;
+        @Deprecated(forRemoval = true, since = "5.2.0")
+        private Clock clock = ClockUtils.get();
         private Supplier<ProcessingContext> schedulingProcessingContextProvider = () ->
                 new EventSchedulingProcessingContext(EmptyApplicationContext.INSTANCE);
 
@@ -739,12 +743,13 @@ class WorkPackage {
 
         /**
          * Defines the {@link Clock} used for time dependent operations. For example used to update whenever this
-         * {@code WorkPackage} updated the {@link TrackingToken} claim last. Defaults to
-         * {@link GenericEventMessage#clock}.
+         * {@code WorkPackage} updated the {@link TrackingToken} claim last.
          *
          * @param clock the {@link Clock} used for time dependent operations
          * @return the current Builder instance, for fluent interfacing
+         * @deprecated Use {@link ClockUtils#set(Clock)} if you have to provide a non-default {@link Clock} instance.
          */
+        @Deprecated(forRemoval = true, since = "5.2.0")
         Builder clock(Clock clock) {
             this.clock = clock;
             return this;
@@ -822,15 +827,8 @@ class WorkPackage {
      * handled in this package. The combination constitutes to a processing entry the {@code WorkPackage} should
      * ingest.
      */
-    private static class DefaultProcessingEntry implements ProcessingEntry {
-
-        private final MessageStream.Entry<? extends EventMessage> eventEntry;
-        private final boolean canHandle;
-
-        public DefaultProcessingEntry(MessageStream.Entry<? extends EventMessage> eventEntry, boolean canHandle) {
-            this.eventEntry = eventEntry;
-            this.canHandle = canHandle;
-        }
+    private record DefaultProcessingEntry(MessageStream.Entry<? extends EventMessage> eventEntry, boolean canHandle)
+            implements ProcessingEntry {
 
         @Override
         public TrackingToken trackingToken() {

@@ -16,6 +16,7 @@
 
 package org.axonframework.messaging.eventhandling.processing.streaming.pooled;
 
+import org.axonframework.common.ClockUtils;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
@@ -71,7 +72,6 @@ class MergeTaskTest {
     private MergeTask testSubject;
 
     private final Map<Integer, java.time.Instant> releasesDeadlines = new HashMap<>();
-    private final java.time.Clock clock = java.time.Clock.systemUTC();
 
     @BeforeEach
     void setUp() {
@@ -86,7 +86,7 @@ class MergeTaskTest {
 
         testSubject = new MergeTask(
                 result, PROCESSOR_NAME, SEGMENT_TO_MERGE, workPackages, releasesDeadlines, tokenStore,
-                new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE), clock
+                new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE), ClockUtils.get()
         );
     }
 
@@ -297,7 +297,8 @@ class MergeTaskTest {
 
         MergeTask mergeFromSegmentOne = new MergeTask(
                 new CompletableFuture<>(), PROCESSOR_NAME, SEGMENT_TO_BE_MERGED, workPackages,
-                releasesDeadlines, tokenStore, new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE), clock
+                releasesDeadlines, tokenStore, new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
+                ClockUtils.get()
         );
         when(tokenStore.fetchToken(eq(PROCESSOR_NAME), eq(SEGMENT_TO_MERGE), any()))
                 .thenReturn(completedFuture(tokenForSegment0));
