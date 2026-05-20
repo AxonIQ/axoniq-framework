@@ -1,35 +1,44 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.axonserver.connector.event.axon;
+package io.axoniq.framework.axonserver.connector.event;
 
+import io.axoniq.axonserver.connector.AxonServerConnection;
+import io.axoniq.axonserver.connector.event.EventChannel;
+import io.axoniq.axonserver.connector.event.PersistentStream;
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.common.Registration;
-import org.axonframework.common.configuration.Configuration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.extension.*;
-import org.mockito.*;
-import org.mockito.junit.jupiter.*;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
 import java.util.List;
@@ -45,28 +54,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.stream.IntStream;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.when;
 
-@Disabled("TODO #3520")
 @ExtendWith(MockitoExtension.class)
 class PersistentStreamMessageSourceTest {
 
     private static ScheduledExecutorService TEST_SCHEDULER;
     private static ExecutorService CONCURRENT_TEST_EXECUTOR;
     private static final int THREAD_COUNT = 10;
-    private static final Configuration DEFAULT_CONFIGURATION =
-            MessagingConfigurer.create().componentRegistry(
-                                       cr -> cr.registerComponent(AxonServerConfiguration.class, c -> new AxonServerConfiguration())
-                                               .registerComponent(AxonServerConnectionManager.class, c -> {
-                                                   AxonServerConfiguration serverConfig = c.getComponent(AxonServerConfiguration.class);
-                                                   return AxonServerConnectionManager.builder().
-                                                                                     routingServers(serverConfig.getServers())
-                                                                                     .axonServerConfiguration(serverConfig)
-                                                                                     .build();
-                                               })
-                               )
-                               .build();
 
     @Mock
     private BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> eventConsumer;
@@ -87,12 +90,24 @@ class PersistentStreamMessageSourceTest {
 
     @BeforeEach
     void setUp() {
+        // Use a mock connection manager so the source never actually connects to Axon Server
+        AxonServerConnectionManager mockConnectionManager = mock(AxonServerConnectionManager.class);
+        AxonServerConnection mockConnection = mock(AxonServerConnection.class);
+        EventChannel mockEventChannel = mock(EventChannel.class);
+        when(mockEventChannel.openPersistentStream(anyString(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(mock(PersistentStream.class));
+        when(mockConnection.eventChannel()).thenReturn(mockEventChannel);
+        when(mockConnectionManager.getConnection(anyString())).thenReturn(mockConnection);
+
         String streamName = UUID.randomUUID().toString();
         messageSource = new PersistentStreamMessageSource(
                 streamName,
-                DEFAULT_CONFIGURATION,
+                mockConnectionManager,
+                new AxonServerConfiguration(),
+                new DelegatingEventConverter(new JacksonConverter()),
                 new PersistentStreamProperties(streamName, 1, "example", Collections.emptyList(), "HEAD", null),
                 TEST_SCHEDULER,
+                UnitOfWorkTestUtils.SIMPLE_FACTORY,
                 1
         );
     }
@@ -103,8 +118,8 @@ class PersistentStreamMessageSourceTest {
         Registration registration = messageSource.subscribe(eventConsumer);
 
         // then
-        assertNotNull(registration);
-        assertTrue(registration.cancel());
+        assertThat(registration).isNotNull();
+        assertThat(registration.cancel()).isTrue();
     }
 
     @Test
@@ -112,19 +127,20 @@ class PersistentStreamMessageSourceTest {
         // given
         messageSource.subscribe(eventConsumer);
 
-        // when/then
-        Assertions.assertDoesNotThrow(() -> messageSource.subscribe(eventConsumer));
+        // when / then
+        assertThatCode(() -> messageSource.subscribe(eventConsumer)).doesNotThrowAnyException();
     }
 
     @Test
     void subscribingWithDifferentConsumerShouldThrowException() {
         // given
         messageSource.subscribe(eventConsumer);
-        BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> anotherConsumer = mock(BiFunction.class);
+        BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> anotherConsumer =
+                mock(BiFunction.class);
 
-        // when/then
-        assertThrows(IllegalStateException.class,
-                     () -> messageSource.subscribe(anotherConsumer));
+        // when / then
+        assertThatThrownBy(() -> messageSource.subscribe(anotherConsumer))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -132,10 +148,11 @@ class PersistentStreamMessageSourceTest {
         // given
         Registration registration = messageSource.subscribe(eventConsumer);
         registration.cancel();
-        BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> newConsumer = mock(BiFunction.class);
+        BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> newConsumer =
+                mock(BiFunction.class);
 
-        // when/then
-        Assertions.assertDoesNotThrow(() -> messageSource.subscribe(newConsumer));
+        // when / then
+        assertThatCode(() -> messageSource.subscribe(newConsumer)).doesNotThrowAnyException();
     }
 
     @Test
@@ -148,10 +165,9 @@ class PersistentStreamMessageSourceTest {
         boolean secondCancel = registration.cancel();
 
         // then
-        assertTrue(firstCancel);
-        assertTrue(secondCancel);
+        assertThat(firstCancel).isTrue();
+        assertThat(secondCancel).isTrue();
     }
-
 
     @Nested
     class ThreadSafety {
@@ -162,26 +178,22 @@ class PersistentStreamMessageSourceTest {
             CountDownLatch completionLatch = new CountDownLatch(THREAD_COUNT);
             ConcurrentLinkedQueue<Exception> exceptions = new ConcurrentLinkedQueue<>();
 
-            // Create multiple threads that try to subscribe simultaneously
             IntStream.range(0, THREAD_COUNT)
                      .forEach(i -> CONCURRENT_TEST_EXECUTOR.submit(() -> {
-                                  try {
-                                      startLatch.await(); // Wait for all threads to be ready
-                                      messageSource.subscribe(eventConsumer);
-                                  } catch (Exception e) {
-                                      exceptions.add(e);
-                                  } finally {
-                                      completionLatch.countDown();
-                                  }
-                              })
-                     );
+                         try {
+                             startLatch.await();
+                             messageSource.subscribe(eventConsumer);
+                         } catch (Exception e) {
+                             exceptions.add(e);
+                         } finally {
+                             completionLatch.countDown();
+                         }
+                     }));
 
-            // Start all threads simultaneously
             startLatch.countDown();
             completionLatch.await(5, TimeUnit.SECONDS);
 
-            assertTrue(exceptions.isEmpty(),
-                       "Concurrent subscription with same consumer should not throw exceptions: " + exceptions);
+            assertThat(exceptions).isEmpty();
         }
 
         @Test
@@ -191,43 +203,36 @@ class PersistentStreamMessageSourceTest {
             ConcurrentLinkedQueue<Exception> exceptions = new ConcurrentLinkedQueue<>();
             AtomicInteger successfulSubscriptions = new AtomicInteger(0);
 
-            // Create multiple threads that try to subscribe with different consumers
             IntStream.range(0, THREAD_COUNT)
-                     .forEach(i ->
-                                      CONCURRENT_TEST_EXECUTOR.submit(() -> {
-                                          try {
-                                              startLatch.await();
-                                              BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer = mock(
-                                                      BiFunction.class);
-                                              messageSource.subscribe(consumer);
-                                              successfulSubscriptions.incrementAndGet();
-                                          } catch (IllegalStateException e) {
-                                              // Expected for all but one subscription
-                                          } catch (Exception e) {
-                                              exceptions.add(e);
-                                          } finally {
-                                              completionLatch.countDown();
-                                          }
-                                      })
-                     );
+                     .forEach(i -> CONCURRENT_TEST_EXECUTOR.submit(() -> {
+                         try {
+                             startLatch.await();
+                             BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>
+                                     consumer = mock(BiFunction.class);
+                             messageSource.subscribe(consumer);
+                             successfulSubscriptions.incrementAndGet();
+                         } catch (IllegalStateException e) {
+                             // expected for all but one subscription
+                         } catch (Exception e) {
+                             exceptions.add(e);
+                         } finally {
+                             completionLatch.countDown();
+                         }
+                     }));
 
             startLatch.countDown();
             completionLatch.await(5, TimeUnit.SECONDS);
 
-            assertTrue(exceptions.isEmpty(),
-                       "Unexpected exceptions during concurrent subscription: " + exceptions);
-            assertEquals(1, successfulSubscriptions.get(),
-                         "Only one subscription should succeed with different consumers");
+            assertThat(exceptions).isEmpty();
+            assertThat(successfulSubscriptions.get()).isEqualTo(1);
         }
 
         @Test
         void concurrentSubscribeAndCancelShouldBeThreadSafe() throws InterruptedException {
             int iterationCount = 100;
-            CountDownLatch completionLatch = new CountDownLatch(
-                    iterationCount * 2); // For both subscribe and cancel operations
+            CountDownLatch completionLatch = new CountDownLatch(iterationCount * 2);
             ConcurrentLinkedQueue<Exception> exceptions = new ConcurrentLinkedQueue<>();
 
-            // Create pairs of threads - one subscribing and one cancelling
             IntStream.range(0, iterationCount).forEach(i -> {
                 CONCURRENT_TEST_EXECUTOR.submit(() -> {
                     try {
@@ -253,8 +258,7 @@ class PersistentStreamMessageSourceTest {
 
             completionLatch.await(10, TimeUnit.SECONDS);
 
-            assertTrue(exceptions.isEmpty(),
-                       "Concurrent subscribe and cancel operations should not throw exceptions: " + exceptions);
+            assertThat(exceptions).isEmpty();
         }
 
         @Test
@@ -264,7 +268,6 @@ class PersistentStreamMessageSourceTest {
             CountDownLatch cancellationCompleted = new CountDownLatch(1);
             CountDownLatch subscriptionAttempted = new CountDownLatch(1);
 
-            // Thread 1: Cancel registration
             CONCURRENT_TEST_EXECUTOR.submit(() -> {
                 try {
                     cancellationStarted.countDown();
@@ -274,7 +277,6 @@ class PersistentStreamMessageSourceTest {
                 }
             });
 
-            // Thread 2: Try to subscribe while cancellation is in progress
             CONCURRENT_TEST_EXECUTOR.submit(() -> {
                 try {
                     cancellationStarted.await();
@@ -286,9 +288,8 @@ class PersistentStreamMessageSourceTest {
                 }
             });
 
-            // Wait for both operations to complete
-            assertTrue(cancellationCompleted.await(5, TimeUnit.SECONDS));
-            assertTrue(subscriptionAttempted.await(5, TimeUnit.SECONDS));
+            assertThat(cancellationCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(subscriptionAttempted.await(5, TimeUnit.SECONDS)).isTrue();
         }
     }
 }
