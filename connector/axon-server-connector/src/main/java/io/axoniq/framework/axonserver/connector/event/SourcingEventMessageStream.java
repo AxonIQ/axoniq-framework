@@ -25,7 +25,7 @@ import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
-import org.axonframework.messaging.eventhandling.TerminalEventMessage;
+import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
