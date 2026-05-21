@@ -19,7 +19,7 @@ This immutability is a strength (complete audit trail, ability to replay history
 
 Axon Framework 5 addresses this with two complementary mechanisms that run in order when a message is read:
 
-1. A **message transformer** changes the *structure* of a message, splitting one event into two, renaming a message type, or reshaping a payload. It runs first, so every handler observes the same, up-to-date shape. A transformer is a decorator around the converter, intercepting messages as they flow through. Transformers are most commonly applied to events (where they have historically been called *upcasters*). The same mechanism extends to commands and queries (in scope, see US8/US9) and architecturally to snapshots (deferred for 5.2.0, see Part C).
+1. A **message transformer** changes the *structure* of a message, splitting one event into two, renaming a message type, or reshaping a payload. It runs first, so every handler observes the same, up-to-date shape. A transformer is a decorator wired at message-ingress: around the `EventStore` for events, around the command bus connector for incoming commands, and around the query bus connector for incoming queries. The SPI shape is uniform (`MessageStream<M> -> MessageStream<M>`), so the same mechanism applies to any `Message` subtype. Transformers are most commonly applied to events (where they have historically been called *upcasters*). The same mechanism extends to commands and queries (in scope, see US8/US9) and architecturally to snapshots (deferred for 5.2.0, see Part C).
 
 2. A **message converter** changes the *representation* of the payload, producing the concrete type a handler declared. It runs after the transformer, on the already-restructured message. The converter handles many common versioning scenarios automatically: for example, when you add a new optional field to an event class, old stored events simply receive a default value for that field when they are read. You do not need to do anything.
 
@@ -418,7 +418,8 @@ confirm correct wiring in production.
 
 **Plain-English explanation**: a receiver applies the transformation chain to an incoming
 command before dispatching it to the command handler, same mechanism as events, because the
-transformer is a decorator around the message converter and works for any `Message`. Common
+transformer operates on `MessageStream<M extends Message<?>>` and works for any `Message`
+subtype (here decorating the command bus connector instead of the `EventStore`). Common
 scenarios: structural field changes, renames, version bumps. Most relevant in rolling
 deployments where old and new service versions coexist.
 
@@ -535,8 +536,10 @@ sender, instead of old-to-new at the receiver. It introduces sender-awareness qu
 does the sender know what version the receiver understands?) that need their own specification.
 
 Command and query upcasting (the receiver-side, old-to-new direction) IS in scope for 5.2.0 --
-see US8 (commands) and US9 (queries) in Part B. The transformer is a decorator around the
-message converter, so the same mechanism works for any `Message` type.
+see US8 (commands) and US9 (queries) in Part B. The transformer operates on
+`MessageStream<M extends Message<?>>` and is wired at each message-ingress point (`EventStore`
+for events, bus connectors for commands and queries), so the same mechanism works for any
+`Message` type.
 
 **When to revisit**: when concrete rolling-deployment cases surface that cannot be solved by
 receiver-side upcasting alone.
@@ -549,12 +552,13 @@ receiver-side upcasting alone.
 state-schema change to a stored snapshot instead of discarding it and replaying all events.
 
 **Why deferred for 5.2.0**: scope and focus, NOT architecture. `SnapshotEventMessage extends
-GenericEventMessage` and `SnapshotCapableEventStorageEngine` delivers the snapshot as the first
-entry of the `MessageStream` returned by `EventStoreTransaction.source(...)`. The chain
-decorates the storage engine and processes `SnapshotEventMessage` entries like any other event
-in the stream, no special-casing. So a developer who registers a matching transformation in
-5.2.0 will see it fire on snapshots, what is deferred is the user-facing API/docs/test fixtures,
-not the chain wiring.
+GenericEventMessage` and `SnapshotCapableEventStorageEngine` (an engine-level decorator inside
+`axon-framework`) merges the snapshot as the first entry of the `MessageStream` returned by
+`EventStoreTransaction.source(...)`. By the time that stream reaches our chain -- which
+decorates the `EventStore`, sitting above the engine -- snapshot entries are already inline and
+are processed like any other event in the stream, no special-casing. So a developer who
+registers a matching transformation in 5.2.0 will see it fire on snapshots; what is deferred is
+the user-facing API/docs/test fixtures, not the chain wiring.
 
 **Ergonomic gap (not a blocker)**: `Snapshot` is a plain record without a `.payloadAs(Class<?>)`
 accessor. A future snapshot transformation either uses the `Converter` directly
@@ -708,10 +712,15 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1 scenario 3, US4 scenario 2._
 - **FR-013 (Reading-context consistency)**: The chain MUST be applied identically across all three
   event-reading contexts, event-sourced entity loads, DCB reads (`SourcingCondition`), and
-  tracking processor reads. `SourcingCondition` and `StreamingCondition` filtering runs at the
-  storage-engine level (SQL `WHERE`, in-memory pre-filter) BEFORE the chain, tag-based identity
-  is fixed at append time, so a transformation that changes message identity does NOT affect
-  which events match, use Copy and Replace if the stored stream itself must change.
+  tracking processor reads. The chain is wired as a decorator around the publicly-facing
+  `EventStore` (covering its `transaction(...).source(...)` path for entity loads and DCB reads,
+  and its `open(StreamingCondition, ...)` path for tracking-processor reads). `SourcingCondition`
+  and `StreamingCondition` filtering (SQL `WHERE`, in-memory pre-filter) plus `ConsistencyMarker`
+  / `TerminalEventMessage` bookkeeping run in the underlying storage engine BEFORE the chain
+  receives the stream; tag-based identity is fixed at append time, so a transformation that
+  changes message identity does NOT affect which events match, use Copy and Replace if the
+  stored stream itself must change. Any `EventStore` implementation -- engine-backed or not --
+  participates in upcasting through this same decorator.
   _Traces to: US1 scenario 4._
 - **FR-014 (Observability)**: The framework MUST emit:
   - **DEBUG once at startup**: total transformation count and each transformation's `from` (and
@@ -761,11 +770,13 @@ a last resort if the old stream must be fully replaced.
   subscribed to).
   _Traces to: US1, US6 scenario 7._
 - **FR-020 (Commands and queries)**: The transformer mechanism MUST support commands and queries
-  in addition to events, it is a decorator around the message converter and applies to any
-  `Message` subtype. The 1:1 patterns (FR-001, FR-002) apply to all three message types. The 1:N
-  / 1:0 patterns (FR-003) apply ONLY to events: commands and queries are single-intent messages,
-  and the framework MUST reject any `MultiEventTransformation`-equivalent registration for
-  command or query types. Downcasting is out of scope (Part C).
+  in addition to events. The SPI is uniform: `MessageStream<M extends Message<?>> ->
+  MessageStream<M>`, wired at each message-ingress point as a decorator (`EventStore` for events,
+  `CommandBusConnector` for incoming commands, `QueryBusConnector` for incoming queries). The 1:1
+  patterns (FR-001, FR-002) apply to all three message types. The 1:N / 1:0 patterns (FR-003)
+  apply ONLY to events: commands and queries are single-intent messages, and the framework MUST
+  reject any `MultiEventTransformation`-equivalent registration for command or query types.
+  Downcasting is out of scope (Part C).
   _Traces to: US8, US9._
 - **FR-021 (VersionComparator)**: Version strings are arbitrary non-empty strings, AF4
   compatibility (`@Revision` accepted any string) precludes format enforcement. A chain MAY

@@ -6,7 +6,9 @@
 
 ## Summary
 
-Add a transformer chain to AxonIQ Framework 5.2.0 that runs at three ingress sites (the event storage engine for reads, the command bus connector for incoming commands, the query bus connector for incoming queries) and rewrites a message's identity (`MessageType`) and/or payload before routing. The chain is a single shared object the developer registers once; the framework wires three thin decorators around it. No converter-side decoration; matching events are deserialized eagerly. FR-012 still protects the non-matching path.
+Add a transformer chain to AxonIQ Framework 5.2.0 that runs at three ingress sites (the `EventStore` for reads, the command bus connector for incoming commands, the query bus connector for incoming queries) and rewrites a message's identity (`MessageType`) and/or payload before routing. The chain is a single shared object the developer registers once; the framework wires three thin decorators around it. No converter-side decoration; matching events are deserialized eagerly. FR-012 still protects the non-matching path.
+
+The events decorator targets the publicly-facing `EventStore` interface, NOT the underlying `EventStorageEngine`. `EventStorageEngine` is `@Internal` and is an implementation detail of `StorageEngineBackedEventStore`; tying upcasting to it would restrict the feature to that one EventStore family. Decorating `EventStore` keeps upcasting available to any future `EventStore` implementation that does not route through an `EventStorageEngine`.
 
 The internal SPI mirrors AF4's stream-in / stream-out shape (`MessageStream<M> -> MessageStream<M>`), exposed via typed specializations (`EventTransformer`, `CommandTransformer`, `QueryTransformer`). User-facing factories (`EventTransformation`, `CommandTransformation`, `QueryTransformation`) produce these instances; users rarely touch the SPI directly.
 
@@ -22,7 +24,7 @@ The internal SPI mirrors AF4's stream-in / stream-out shape (`MessageStream<M> -
 
 **Integration points** (decorator-around-component, registered via `ComponentRegistry.registerDecorator(...)`):
 
-- **Events**: `EventStorageEngine` (covers local JPA / JDBC / in-memory engines AND the Axon Server event store connector, sharing the same component key). `SourcingCondition` and `StreamingCondition` filtering runs at the storage layer BEFORE the chain (FR-013).
+- **Events**: `EventStore` (publicly-facing interface; covers every `EventStore` implementation regardless of backend: local JPA / JDBC / in-memory via `StorageEngineBackedEventStore`, the Axon Server connector engine, the Postgres engine, and any future non-engine-backed implementation). The decorator wraps both `EventStore.open(StreamingCondition, ProcessingContext)` (tracking-processor reads) and `EventStore.transaction(ProcessingContext)` -- the latter returns a wrapping `EventStoreTransaction` whose `source(SourcingCondition, ...)` applies the chain (entity loads and DCB reads). Precedent: `InterceptingEventStore` in `axon-framework` follows the identical pattern (decorator on `EventStore` + wrapping `EventStoreTransaction` cached per `ProcessingContext`). `SourcingCondition` and `StreamingCondition` filtering plus `ConsistencyMarker` / `TerminalEventMessage` bookkeeping run in the underlying engine BEFORE the chain receives the stream (FR-013).
 - **Commands**: `CommandBusConnector`. Fires on `.handle()` (incoming), not `.dispatch()` (out-of-scope: downcasting).
 - **Queries**: `QueryBusConnector`. Same pattern.
 
@@ -56,14 +58,14 @@ Per `.specify/memory/constitution.md` v1.1.1.
 | II. Simpler than AF4 | No `IntermediateEventRepresentation`; SPI operates on `MessageStream<M extends Message<?>>` | PASS |
 | III. Message-Based API | `MessageTransformer<M extends Message<?>>` applies to any subtype (FR-020) | PASS |
 | IV. Registration Ordering | Registration order = sub-chain order (FR-007); optional `VersionComparator` adds a build-time order check (FR-021) | PASS |
-| V. Converter vs Upcaster | Transformer decorates storage engine / bus connector; the `Converter` runs unchanged after routing (FR-013) | PASS |
+| V. Converter vs Upcaster | Transformer decorates `EventStore` / bus connector; the `Converter` runs unchanged after routing (FR-013) | PASS |
 | VI. Immutability First | Storage engine is append-only; chain runs at READ, never mutates stored events (FR-013, FR-022) | PASS |
 | VII. Deterministic | FR-006 contract; SC-010 stress-test verifies | PASS |
 | VIII. SRP per upcaster | One transformation = one `from`/`to` (or one source identity for 1:N) | PASS |
 | IX. Prefer Chain over Direct | US5 explicitly tests v1->v2->v3 chained | PASS |
 | X. Type-Based Versioning forbidden | Part C "Wrong tool: new event cannot be derived from old" entry | PASS |
 | Scope Boundaries (5.2.0) | Events delivered; commands/queries architectural; snapshots deferred, matching Part C | PASS |
-| AF5 Anchoring Types | Public surface stays on the anchor list (`Message`, `MessageType`, `MessageConverter`, `EventMessage`, `MessageStream`). Integration types we depend on (`EventStorageEngine`, `CommandBusConnector`, `QueryBusConnector`, `SnapshotEventMessage`) are framework infrastructure we call into. | PASS (see Complexity Tracking) |
+| AF5 Anchoring Types | Public surface stays on the anchor list (`Message`, `MessageType`, `MessageConverter`, `EventMessage`, `MessageStream`). The events decorator targets the publicly-facing `EventStore` (+ its `EventStoreTransaction`); we do NOT depend on the `@Internal` `EventStorageEngine`. Integration types we depend on (`CommandBusConnector`, `QueryBusConnector`, `SnapshotEventMessage`) are framework infrastructure we call into. | PASS (see Complexity Tracking) |
 
 **Gates**: Phase 0 entry passes.
 
@@ -101,7 +103,8 @@ axoniq-framework/messaging/axoniq-message-transformation/   (NEW module)
 |     |-- CommandTransformation.java            # factory: rename(...), from(...).to(...)
 |     |-- QueryTransformation.java              # factory: rename(...), from(...).to(...)
 |     |
-|     |-- TransformingEventStorageEngine.java   # decorator (Phase 1, delivered in 5.2.0)
+|     |-- TransformingEventStore.java            # decorator on EventStore (Phase 1, delivered in 5.2.0)
+|     |-- TransformingEventStoreTransaction.java # inner wrapping transaction (source() applies the chain)
 |     |
 |     `-- configuration/
 |           `-- MessageTransformationConfigurationEnhancer.java
@@ -165,7 +168,7 @@ Snapshot delivery (deferred) may want one further small addition in a future rel
 
 | Phase | Scope | Deliverable |
 |---|---|---|
-| **Phase 1** (5.2.0) | Events end-to-end (US1-US7) | `MessageTransformer` SPI + `EventTransformer` + chain + `TransformingEventStorageEngine` + demo examples for US1-US5 + observability per US7 |
+| **Phase 1** (5.2.0) | Events end-to-end (US1-US7) | `MessageTransformer` SPI + `EventTransformer` + chain + `TransformingEventStore` (+ `TransformingEventStoreTransaction`) + demo examples for US1-US5 + observability per US7 |
 | **Phase 2** (follow-on issues, not 5.2.0) | Commands + Queries (US8, US9) | `CommandTransformer` + `QueryTransformer` + connector decorators + corresponding demo examples |
 | **Phase 3** (5.3+ candidate) | Snapshot payload upcasting | Either decorate `SnapshottingEntityLifecycleHandler`'s converter call site, or introduce a `SnapshotPayloadUpcaster` SPI hook. Small `axon-framework` change. |
 
@@ -175,6 +178,6 @@ The Phase 1 work is the issue tracked under AxonIQ/axoniq-framework#137 (ported 
 
 | Drift / decision | Why needed | Simpler alternative rejected because |
 |---|---|---|
-| AF5 Anchoring Types extended with integration types (`EventStorageEngine`, `CommandBusConnector`, `QueryBusConnector`) | The transformer decorates these; we MUST call into them | Wrapping them in a new abstraction would reintroduce the AF4 `IntermediateEventRepresentation` pattern (Constitution II forbids) |
+| AF5 Anchoring Types extended with integration types (`CommandBusConnector`, `QueryBusConnector`) | The transformer decorates these; we MUST call into them | Wrapping them in a new abstraction would reintroduce the AF4 `IntermediateEventRepresentation` pattern (Constitution II forbids). Events do NOT extend the anchor list -- they decorate the publicly-facing `EventStore`. |
 | One small additive change to `axon-framework` (`MessageStream.flatMap`) | Chain composition via per-QualifiedName sub-chains (FR-007) requires flatMap on `MessageStream` | Manually composing via existing `mapMessage` + reentrant calls is possible but uglier; flatMap is a standard stream operator the API was missing |
 | Constitution references "spec FR-008 / US5" for snapshot deferral; current spec has snapshots in Part C with no FR-008 | Constitution v1.1.1 predates the spec restart that moved snapshots to Part C | Fix is a separate `/speckit-constitution` PATCH bump (1.1.1 -> 1.1.2). Substantive alignment intact; snapshots deferred in both documents. |
