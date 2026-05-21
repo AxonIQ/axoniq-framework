@@ -1,7 +1,9 @@
 name: Announce release on Slack
 
 on:
-  # Triggers the workflow on new release
+# Triggers teh workflow manually
+  workflow_dispatch:
+# Triggers the workflow on new release
 #  release:
 #    types: [ published ]
 
