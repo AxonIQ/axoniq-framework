@@ -19,7 +19,7 @@ This immutability is a strength (complete audit trail, ability to replay history
 
 Axon Framework 5 addresses this with two complementary mechanisms that run in order when a message is read:
 
-1. A **message transformer** changes the *structure* of a message, splitting one event into two, renaming a message type, or reshaping a payload. It runs first, so every handler observes the same, up-to-date shape. A transformer is a decorator wired at message-ingress: around the `EventStore` for events, around the command bus connector for incoming commands, and around the query bus connector for incoming queries. The SPI shape is uniform (`MessageStream<M> -> MessageStream<M>`), so the same mechanism applies to any `Message` subtype. Transformers are most commonly applied to events. The same mechanism extends to commands and queries (in scope, see US8/US9) and architecturally to snapshots (deferred for 5.2.0, see Part C).
+1. A **message transformer** changes the *structure* of a message, splitting one event into two, renaming a message type, or reshaping a payload. It runs first, so every handler observes the same, up-to-date shape. A transformer is a decorator wired at message-ingress: around the `EventStore` for events; for commands and queries (delivered in 5.3+, see US8 / US9), the chain wraps at handler-registration level on `CommandBus` / `QueryBus` so every incoming command or query is transformed regardless of whether it arrived locally or via a connector. The SPI shape is uniform (`MessageStream<M> -> MessageStream<M>`), so the same mechanism applies to any `Message` subtype. Transformers are most commonly applied to events. Snapshots remain architecturally compatible (deferred for 5.2.0, see Part C).
 
 2. A **message converter** changes the *representation* of the payload, producing the concrete type a handler declared. It runs after the transformer, on the already-restructured message. The converter handles many common versioning scenarios automatically: for example, when you add a new optional field to an event class, old stored events simply receive a default value for that field when they are read. You do not need to do anything.
 
@@ -548,11 +548,13 @@ removes it before dispatch.
 sender, instead of old-to-new at the receiver. It introduces sender-awareness questions (how
 does the sender know what version the receiver understands?) that need their own specification.
 
-Command and query transformation (the receiver-side, old-to-new direction) IS in scope for 5.2.0 --
-see US8 (commands) and US9 (queries) in Part B. The transformer operates on
-`MessageStream<M extends Message<?>>` and is wired at each message-ingress point (`EventStore`
-for events, bus connectors for commands and queries), so the same mechanism works for any
-`Message` type.
+Command and query transformation (the receiver-side, old-to-new direction) is in scope for the
+overall design -- see US8 (commands) and US9 (queries) in Part B -- but delivery is held to
+5.3+ per scope decision; 5.2.0 ships events only. The transformer operates on
+`MessageStream<M extends Message<?>>` and is wired at each message-ingress point: `EventStore`
+for events; for commands and queries, at handler-registration level on `CommandBus` /
+`QueryBus` so every incoming command/query is transformed regardless of whether it arrived via
+a connector or was dispatched locally.
 
 **When to revisit**: when concrete rolling-deployment cases surface that cannot be solved by
 receiver-side transformation alone.
@@ -784,12 +786,16 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1, US6 scenario 7._
 - **FR-019 (Commands and queries)**: The transformer mechanism MUST support commands and queries
   in addition to events. The SPI is uniform: `MessageStream<M extends Message<?>> ->
-  MessageStream<M>`, wired at each message-ingress point as a decorator (`EventStore` for events,
-  `CommandBusConnector` for incoming commands, `QueryBusConnector` for incoming queries). The 1:1
-  patterns (FR-001, FR-002) apply to all three message types. The 1:N / 1:0 patterns (FR-003)
-  apply ONLY to events: commands and queries are single-intent messages, and the framework MUST
-  reject any `MultiEventTransformation`-equivalent registration for command or query types.
-  Sender-side transformation is out of scope (Part C).
+  MessageStream<M>`. Wiring points: for events the chain decorates `EventStore`; for commands
+  and queries (delivered in 5.3+) the chain MUST be applied at handler-registration level on
+  `CommandBus.subscribe(QualifiedName, CommandHandler)` / `QueryBus.subscribe(QualifiedName,
+  QueryHandler)` -- wrapping each registered handler -- so every incoming command/query is
+  transformed regardless of whether it arrived via a `CommandBusConnector` / `QueryBusConnector`
+  from a remote node or was dispatched locally. The 1:1 patterns (FR-001, FR-002) apply to all
+  three message types. The 1:N / 1:0 patterns (FR-003) apply ONLY to events: commands and
+  queries are single-intent messages, and the framework MUST reject any
+  `MultiEventTransformation`-equivalent registration for command or query types. Sender-side
+  transformation is out of scope (Part C).
   _Traces to: US8, US9._
 - **FR-020 (VersionComparator)**: Version strings are arbitrary non-empty strings, AF4
   compatibility (`@Revision` accepted any string) precludes format enforcement. A chain MAY
@@ -841,10 +847,14 @@ a last resort if the old stream must be fully replaced.
   verifiable across all in-scope use cases. Verifies FR-004.
 - **SC-002 (Conflicts)**: Every conflict class in FR-008 is detected and reported before any
   event is processed.
-- **SC-003 (Examples)**: All in-scope use cases, structural transform, rename, split, drop
-  (events), 1:1 command transformation (US8), and 1:1 query transformation (US9), are demonstrated in
-  `axoniq-framework/examples/` (the analogue of the `axon-framework` university demo) with
-  passing tests under `./mvnw -Pexamples clean verify` in CI, no manual configuration.
+- **SC-003 (Examples)**: All in-scope use cases for the delivered slice are demonstrated in a
+  new Maven sub-module under `axon-framework/examples/` (alongside `university-demo`,
+  `university-java`, `university-java-springboot-3`, etc.). For 5.2.0 this covers the events
+  user stories that ship (US1 always; US2 if it lands; US3, US4, US5, US6, US7 if they land as
+  nice-to-haves). Command and query example transformations (US8, US9) join when those user
+  stories deliver in 5.3+. The example module depends on
+  `io.axoniq.framework:axoniq-message-transformation` and runs with passing tests under
+  `./mvnw -Pexamples clean verify` in CI with no manual configuration.
 - **SC-004 (Migration)**: A developer migrating AF4 transformers can identify the equivalent AF5
   approach for each of their existing transformers from documentation alone.
 - **SC-005 (Decision tree)**: Part A of this spec serves as the Converter-vs-transformation
@@ -878,8 +888,11 @@ a last resort if the old stream must be fully replaced.
   chain implementation.
 - Transformations apply at read time only, the event store is append-only and stored events are
   never modified on disk.
-- The demo (`axoniq-framework/examples/`, plain Java, no Spring) is the target for
-  demonstrating all in-scope use cases. Spring Boot integration is follow-on work.
+- The demo lives as a new Maven sub-module under `axon-framework/examples/` (plain Java, no
+  Spring), alongside the existing example sub-modules. It depends on
+  `io.axoniq.framework:axoniq-message-transformation`. Spring Boot integration is follow-on
+  work, potentially mirrored in the existing `university-java-springboot-3` /
+  `university-java-springboot-4` examples.
 
 ## Addendum: Design Principles
 

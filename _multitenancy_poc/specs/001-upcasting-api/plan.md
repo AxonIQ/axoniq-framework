@@ -45,7 +45,7 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 
 **Target Platform**: JVM (Java 21+). Library code.
 
-**Project Type**: AxonIQ Framework feature module + decorator integrations in the Axon Server connector module + demo in `axoniq-framework/examples/`.
+**Project Type**: AxonIQ Framework feature module (`axoniq-framework/messaging/axoniq-message-transformation/`) + a new demo Maven sub-module under `axon-framework/examples/` that depends on `io.axoniq.framework:axoniq-message-transformation` to demonstrate the full feature surface.
 
 **Performance Goals**:
 
@@ -56,7 +56,7 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 
 - Programmatic registration only; chain locked once event processing begins (FR-004).
 - No `IntermediateEventRepresentation`-equivalent (Constitution II). Transformer operates on `MessageStream<M>` over typed `Message` subtypes.
-- Transformer is a decorator-around-`EventStore` / decorator-around-bus-connector (NOT a decorator around `MessageConverter`).
+- Transformer is a decorator-around-`EventStore` for events (5.2.0); for commands and queries (5.3+) the chain wraps at handler-registration level on `CommandBus` / `QueryBus`. Never a decorator around `MessageConverter`.
 - ASCII-only source files; LF line endings; JSpecify `@NullMarked` package-level (per CLAUDE.md).
 
 **Scale/Scope**: Hundreds of registered transformations per chain feasible (typically <50 per QualifiedName). Millions of events per replay must not allocate per-event on the non-matching path.
@@ -72,7 +72,7 @@ Validated against `.specify/memory/constitution.md` v2.0.0 (project-wide Foundat
 | Constitution v2.0.0 III | Java 21 Baseline | Sealed types, records, pattern matching (Tech Context) | PASS |
 | Constitution v2.0.0 IV | Dual Paradigm Support | Async-first `MessageStream<M>`; transformation functions are pure and callable from imperative or reactive composition | PASS |
 | Constitution v2.0.0 V | No ThreadLocals | Per-context bookkeeping on `ProcessingContext` (`Context.ResourceKey` cache for the wrapped `EventStoreTransaction`, mirroring `InterceptingEventStore`) | PASS |
-| Constitution v2.0.0 VI | Composition over Inheritance | Decorator-around-`EventStore` / decorator-around-bus-connector via `ComponentRegistry.registerDecorator(...)`; wrapping types delegate to inner targets | PASS |
+| Constitution v2.0.0 VI | Composition over Inheritance | Decorator-around-`EventStore` for events via `ComponentRegistry.registerDecorator(...)`; for commands and queries (5.3+) handler-registration-level wrapping via `CommandBus.subscribe(...)` / `QueryBus.subscribe(...)`. In both cases wrapping types delegate to inner targets. | PASS |
 | Constitution v2.0.0 VII | Declarative over Annotation-Heavy | Programmatic builder API (`EventTransformation.rename(...)`, `from(...).to(...)`, `split(...)`); annotation-based registration deferred (FR-004); chain is wired through a `ConfigurationEnhancer` | PASS |
 | Constitution v2.0.0 Upstream | Relationship to AxonFramework Upstream | No upstream type redefined; we depend on upstream `EventStore`, `MessageStream`, `Message`, `MessageType`, `Converter`; one small additive request to upstream (`MessageStream.flatMap`) tracked separately | PASS |
 | Constitution v2.0.0 AF5 Anchoring Types | Public surface stays on anchor list | Public surface uses: `Message`, `MessageType`, `MessageConverter`, `EventMessage`, `CommandMessage`, `QueryMessage`, `MessageStream`, `EventStore`, `ProcessingContext`, `TrackingToken`. We do NOT depend on `@Internal` `EventStorageEngine`. | PASS |
@@ -148,14 +148,32 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
                                                 # (nice-to-have), FR-020 comparator (nice-to-have),
                                                 # FR-007 sub-chain routing (nice-to-have), ...
 
-axoniq-framework/examples/                      # university-demo + analogous examples
-`-- src/{main,test}/java/.../transformation/
-      |-- CourseCreatedV1V2.java                # US1 -- MUST
-      |-- CourseOpenedRenamed.java              # US2 -- SHOULD
-      |-- StudentEnrolledSplit.java             # US3 -- nice-to-have
-      |-- SystemHeartbeatDropped.java           # US4 -- nice-to-have
-      `-- CourseCreatedChain.java               # US5 -- nice-to-have
 ```
+
+### Demo module (in `axon-framework` examples)
+
+The demo is a new Maven sub-module under `axon-framework/examples/`, sitting next to the existing `university-demo`, `university-java`, `university-java-springboot-3`, etc. modules. It depends on `io.axoniq.framework:axoniq-message-transformation` (the new module from `axoniq-framework`) and demonstrates the full feature surface as it ships.
+
+```text
+axon-framework/examples/
+|-- pom.xml                                     # add the new module to <modules>
+|-- university-demo/
+|-- university-java/
+|-- university-java-springboot-3/
+|-- university-java-springboot-4/
+|-- university-demo-kotlin/
+`-- university-message-transformation/          # (NEW sub-module, 5.2.0)
+      |-- pom.xml                               # parent: axon-framework-examples; depends on
+      |                                         # io.axoniq.framework:axoniq-message-transformation
+      `-- src/{main,test}/java/.../transformation/
+            |-- CourseCreatedV1V2.java          # US1 -- MUST
+            |-- CourseOpenedRenamed.java        # US2 -- SHOULD
+            |-- StudentEnrolledSplit.java       # US3 -- nice-to-have
+            |-- SystemHeartbeatDropped.java     # US4 -- nice-to-have
+            `-- CourseCreatedChain.java         # US5 -- nice-to-have
+```
+
+The existing examples-parent pom already imports `axoniq-framework-bom`, so version management of the new axoniq-message-transformation dependency is already handled. Four of five current example modules already depend on `io.axoniq.framework` artifacts (`axon-server-connector`), so this is no new pattern -- just a new sibling.
 
 **Structure Decision**: One module in `axoniq-framework/messaging/` -- `axoniq-message-transformation` -- following the existing axoniq-framework convention (cf. `axoniq-dead-letter`, `axoniq-event-streaming`, and especially `axoniq-distributed-messaging` which holds `commandhandling/` + `queryhandling/` together in one module). The shared SPI base sits in the top-level `transformation/` package; `events/` and `cqrs/` sub-packages carry the message-type specializations. Note that `axon-server-connector` already hard-depends on `axoniq-distributed-messaging`, so any axoniq user running against Axon Server (the typical deployment) already has that dependency on the classpath -- the events-only "save the dep" benefit of a module split is largely theoretical (pure-Postgres / pure-JPA setups only).
 
@@ -225,7 +243,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 - **US8 command transformation**, **US9 query transformation**, **FR-019**. Lives in the `cqrs/` sub-package of `axoniq-message-transformation` (the module gains an `axoniq-distributed-messaging` dependency in 5.3+). Design constraint: chain MUST fire on every incoming command/query reaching a handler -- including local-dispatched ones that bypass `CommandBusConnector` / `QueryBusConnector`. The decoration point therefore needs to be at handler-registration level (see "Integration points 5.3+" above).
 - **Snapshot payload transformation**. Architecturally compatible with the 5.2.0 chain (snapshots flow through the same `EventStore.transaction().source(...)` stream merged in by `SnapshotCapableEventStorageEngine`), but the user-facing API / docs / fixtures (and a `Snapshot.payloadAs(Class<?>)` ergonomic accessor) are deferred. Either decorate `SnapshottingEntityLifecycleHandler`'s converter call site or introduce a `SnapshotPayloadTransformer` SPI hook.
 - **Annotation-based registration**. Programmatic only for now (FR-004); annotations may return if added through an explicit `EventTransformationChain` registry bean (see Part C "Annotation-Based Transformation Registration" in spec for the forward-direction note).
-- **Sender-side transformation** (sender-side new-to-old). Out of scope per Part C of spec.
+- **Sender-side transformation** (new-to-old at the sender). Out of scope per Part C of spec.
 
 ## Forward-compatibility invariants
 
