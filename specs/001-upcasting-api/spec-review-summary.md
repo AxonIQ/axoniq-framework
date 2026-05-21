@@ -1,4 +1,4 @@
-# Event Upcasting API — Spec Summary
+# Event Upcasting API: Spec Summary
 
 **Feature**: Axoniq Framework 5.2.0, issue AxonIQ/axoniq-framework#137 (ported from AxonIQ/AxonFramework#3597)
 **Branch**: `enhancement/137/implementation-message-transformator`
@@ -7,16 +7,16 @@
 
 Event-sourced systems store events permanently and immutably, but applications evolve. When schemas change, old stored events must still work with new code. AF5 handles this with two layered mechanisms:
 
-1. **Message converter** — handles representation changes (adding optional fields, renaming via aliases, type coercion, etc.) automatically.
-2. **Message transformer** *(this spec)* — handles structural changes the converter can't (splits, drops, required fields, payload restructuring).
+1. **Message converter**. Handles representation changes (adding optional fields, renaming via aliases, type coercion, etc.) automatically.
+2. **Message transformer** *(this spec)*. Handles structural changes the converter can't (splits, drops, required fields, payload restructuring).
 
-The transformer is wired in front of routing/dispatch at three sites: a decorator around the event storage engine for events, around the command bus connector for incoming commands, around the query bus connector for incoming queries. The same SPI shape (`MessageStream<M> -> MessageStream<M>`) handles all three. Ships from `axoniq-framework` (commercial).
+The transformer is wired in front of routing/dispatch at three sites: a decorator around the `EventStore` for events, around the command bus connector for incoming commands, and around the query bus connector for incoming queries. The same SPI shape (`MessageStream<M> -> MessageStream<M>`) handles all three. Ships from `axoniq-framework` (commercial).
 
 ## Scope (the three-part structure)
 
-- **Part A — Converter-only**: decision tree showing what the converter handles natively (no transformer needed).
-- **Part B — Transformer needed**: 9 user stories, the heart of the spec.
-- **Part C — Out of scope**: deferred features and scenarios where a transformer is the wrong tool.
+- **Part A, Converter-only**: decision tree showing what the converter handles natively (no transformer needed).
+- **Part B, Transformer needed**: 9 user stories, the heart of the spec.
+- **Part C, Out of scope**: deferred features and scenarios where a transformer is the wrong tool.
 
 ### Part A: What the converter handles (no transformer needed)
 
@@ -37,11 +37,11 @@ as on the change itself.** A loose configuration absorbs more; a strict one reje
 
 | # | Story | Priority |
 |---|---|---|
-| US1 | Structural payload transformation (e.g. `capacity` → `min/maxCapacity`) | P1 |
+| US1 | Structural payload transformation (e.g. `capacity` -> `min/maxCapacity`) | P1 |
 | US2 | MessageType rename / version bump, payload unchanged | P2 |
-| US3 | Event splitting (1 event → N events, ordered) | P3 |
-| US4 | Event dropping (1 → 0, tracking token still advances) | P4 |
-| US5 | Chaining transformations across versions (v1→v2→v3) | P2 |
+| US3 | Event splitting (1 event -> N events, ordered) | P3 |
+| US4 | Event dropping (1 -> 0, tracking token still advances) | P4 |
+| US5 | Chaining transformations across versions (v1 -> v2 -> v3) | P2 |
 | US6 | Misconfiguration & runtime failure feedback (fail fast, clear errors) | P1 |
 | US7 | Startup observability (INFO at boot, DEBUG per event) | P2 |
 | US8 | Command upcasting (1:1 only; reject splits/drops) | P3 |
@@ -50,7 +50,7 @@ as on the change itself.** A loose configuration absorbs more; a strict one reje
 ### Deferred / Out of Scope (Part C)
 
 - **Deferred**: N-to-1 merge, moving data between events, downcasting (sender-side), snapshot upcasting, annotation-based registration. Each has a documented "memory-scope" or "scope/focus" reason, with guidance on what to do instead (often: Copy-and-Replace migration, or stateful projection).
-- **Wrong tool**: silent semantic-meaning changes, and events that can't be derived from the old payload — both corrupt the audit trail. Solution: a new event type.
+- **Wrong tool**: silent semantic-meaning changes, and events that can't be derived from the old payload. Both corrupt the audit trail. Solution: a new event type.
 
 ## Functional Requirements (highlights)
 
@@ -58,35 +58,34 @@ as on the change itself.** A loose configuration absorbs more; a strict one reje
 - **FR-004**: Registration is programmatic and startup-only; chain locks once processing begins; registration order = application order.
 - **FR-005**: Exact `MessageType` (`QualifiedName` + `version`) matching, by string equality; non-matching events pass through. Naming consistency with the configured `MessageTypeResolver` is the user's responsibility; the framework does not enforce a naming convention.
 - **FR-006**: Transformations must be deterministic and thread-safe (contract, not enforced).
-- **FR-009**: Four hard-error classes detected before any event is processed — duplicate `from`, self-loop (at `register()`), multi-step cycle, version-order violation (at `.build()` lock). Naming mismatches are not detectable at startup and are the user's responsibility.
 - **FR-007**: Per-`QualifiedName` sub-chains; non-matching events skip the chain (O(1)); 1:N outputs re-enter their own sub-chain.
-- **FR-010**: Developer-chosen target type resolved via `Converter` (typically structured: `JsonNode`, POJO; `byte[]` permitted).
-- **FR-011**: Message envelope (entity id, token, sequence) preserved; 1:N outputs share input's token + sequence (no renumber); metadata may be modified.
-- **FR-012**: Lazy deserialization — non-matching events never deserialized; O(1) per-event lookup, no allocations on the non-matching path (benchmark thresholds in plan.md).
-- **FR-013**: Same output across all three read contexts (entity load, DCB read, tracking processor).
-- **FR-014**: DEBUG once at startup; TRACE per applied transformation; observability can be disabled entirely.
-- **FR-015**: Tracking token advances past dropped events.
-- **FR-016**: Exceptions propagate immediately with full context; no silent skip.
-- **FR-017**: Unversioned legacy events treated as version `0.0.1`.
-- **FR-018**: Unit-testable without bootstrapping the framework.
-- **FR-019**: Output identity verified against declared `to`; no silent coercion (1:1 only).
-- **FR-020**: Mechanism extends to commands and queries; splits/drops rejected for those.
-- **FR-021**: Optional `VersionComparator` (default: registration order alone); `SemverComparator` ships as a builder convenience; when registered, enforces version-order at lock time.
-- **FR-022**: Data-protection (PII redaction etc.) runs *after* the transformer.
+- **FR-008**: Four hard-error classes detected before any event is processed. Duplicate `from`, self-loop (at `register()`), multi-step cycle, version-order violation (at `.build()` lock). Naming mismatches are not detectable at startup and are the user's responsibility.
+- **FR-009**: Developer-chosen target type resolved via `Converter` (typically structured: `JsonNode`, POJO; `byte[]` permitted).
+- **FR-010**: Message envelope (entity id, token, sequence) preserved; 1:N outputs share input's token + sequence (no renumber); metadata may be modified.
+- **FR-011**: Lazy deserialization. Non-matching events never deserialized; O(1) per-event lookup, no allocations on the non-matching path (benchmark thresholds in plan.md).
+- **FR-012**: Same output across all three read contexts (entity load, DCB read, tracking processor).
+- **FR-013**: DEBUG once at startup; TRACE per applied transformation; observability can be disabled entirely.
+- **FR-014**: Tracking token advances past dropped events.
+- **FR-015**: Exceptions propagate immediately with full context; no silent skip.
+- **FR-016**: Unversioned legacy events treated as version `0.0.1`.
+- **FR-017**: Unit-testable without bootstrapping the framework.
+- **FR-018**: Output identity verified against declared `to`; no silent coercion (1:1 only).
+- **FR-019**: Mechanism extends to commands and queries; splits/drops rejected for those.
+- **FR-020**: Optional `VersionComparator` (default: registration order alone); `SemverComparator` ships as a builder convenience; when registered, enforces version-order at lock time.
+- **FR-021**: Data-protection (PII redaction etc.) runs *after* the transformer.
 
 ## Success Criteria (highlights)
 
-- **SC-004**: Every FR-009 conflict class detected before any event processed.
-- **SC-005**: All in-scope use cases demonstrated in `axoniq-framework/examples/` with passing CI tests.
-- **SC-010**: Concurrency test — multiple threads × sufficient iterations produce identical outputs (specific N/M in plan.md).
-- **SC-011**: DEBUG (startup) + TRACE (per applied) observability + disable mechanism verified by automated tests.
+- **SC-002**: Every FR-008 conflict class detected before any event processed.
+- **SC-003**: All in-scope use cases demonstrated in `axoniq-framework/examples/` with passing CI tests.
+- **SC-008**: Concurrency test, multiple threads x sufficient iterations produce identical outputs (specific N/M in plan.md).
+- **SC-009**: DEBUG (startup) + TRACE (per applied) observability + disable mechanism verified by automated tests.
 
 ## Key design choices worth a reviewer's attention
 
-1. **Programmatic registration only** for 5.2.0 — explicit reaction to AF4's Spring-Bean ordering issues. Annotations deferred.
-2. **Fail-fast philosophy** — three FR-009 misconfiguration classes caught at startup (`register()` + `.build()` lock); a fourth class (version-order violation) is added when an optional `VersionComparator` is registered (FR-021).
-3. **No context-aware transformations** — N-to-1 merge and field-borrowing across events deferred because per-entity vs. cross-entity memory scope was a known AF4 bug source.
-4. **Single SPI for events, commands, queries** — `MessageTransformer<M extends Message<?>>` operating on `MessageStream<M>`, wired in front of routing/dispatch at three sites (event storage engine + command/query bus connectors). Split/drop restricted to events.
-5. **Snapshots architecturally ready but deferred** — design must not preclude future snapshot transformations without redesign.
-6. **Commercial-only feature** — ships from `axoniq-framework`; pure Axon Framework users must add the dependency. `axon-framework` itself stays untouched except for one small `MessageStream.flatMap` addition needed by the chain implementation.
-
+1. **Programmatic registration only** for 5.2.0. Explicit reaction to AF4's Spring-Bean ordering issues. Annotations deferred.
+2. **Fail-fast philosophy**. Three FR-008 misconfiguration classes caught at startup (`register()` + `.build()` lock); a fourth class (version-order violation) is added when an optional `VersionComparator` is registered (FR-020).
+3. **No context-aware transformations**. N-to-1 merge and field-borrowing across events deferred because per-entity vs. cross-entity memory scope was a known AF4 bug source.
+4. **Single SPI for events, commands, queries**. `MessageTransformer<M extends Message<?>>` operating on `MessageStream<M>`, wired in front of routing/dispatch at three sites (`EventStore` + command/query bus connectors). Split/drop restricted to events.
+5. **Snapshots architecturally ready but deferred**. Design must not preclude future snapshot transformations without redesign.
+6. **Commercial-only feature**. Ships from `axoniq-framework`; pure Axon Framework users must add the dependency. `axon-framework` itself stays untouched except for one small `MessageStream.flatMap` addition needed by the chain implementation.
