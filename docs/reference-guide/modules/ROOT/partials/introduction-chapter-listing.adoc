@@ -1,0 +1,1 @@
+|xref:framework-comparison:index.adoc[Axon and Axoniq Framework Comparison] |Dedicated page describing the differences between Axon Framework and Axoniq Framework
