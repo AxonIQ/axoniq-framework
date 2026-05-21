@@ -49,10 +49,10 @@ A summary of the various chapters is given below.
 |xref:tuning:index.adoc[Tuning] |Chapter describing several specific tuning capabilities of the Framework
 |xref:monitoring:index.adoc[Monitoring and Metrics] |Chapter mentioning the monitoring and metric capabilities provided by the Framework
 |xref:spring-boot-integration.adoc[Spring Boot Integration] |Chapter around the Framework's integration with Spring Boot
-|xref:modules.adoc[Modules] |Complete listing of all the modules provided for the Framework
-|xref:release-notes:index.adoc[Release notes] |Listing of all the release notes for Framework
-|xref:known-issues-and-workarounds.adoc[Known Issue and Workarounds] |Listing of several known issues and their workaround within the Framework
 ifdef::advanced-framework[]
 include::ROOT:partial$introduction-chapter-listing.adoc[]
 endif::[]
+|xref:modules.adoc[Modules] |Complete listing of all the modules provided for the Framework
+|xref:release-notes:index.adoc[Release notes] |Listing of all the release notes for Framework
+|xref:known-issues-and-workarounds.adoc[Known Issue and Workarounds] |Listing of several known issues and their workaround within the Framework
 |===
