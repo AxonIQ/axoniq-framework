@@ -26,13 +26,13 @@ import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
 import io.axoniq.framework.axonserver.connector.configuration.ManagedChannelCustomizer;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
-import io.axoniq.framework.springboot.util.GrpcServerStub;
-import io.axoniq.framework.springboot.util.TcpUtils;
-import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -170,8 +170,10 @@ class AxonServerAutoConfigurationTest {
             assertThat(context).hasBean(AxonServerConnectionManager.class.getName());
             assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
             assertThat(context).hasBean(ManagedChannelCustomizer.class.getName());
-            assertThat(context).hasSingleBean(AxonServerEventStorageEngine.class);
+            assertThat(context).hasSingleBean(EventStorageEngine.class);
             assertThat(context).hasBean(EventStorageEngine.class.getName());
+            assertThat(context).getBean(EventStorageEngine.class).extracting("delegate")
+                               .isInstanceOf(AxonServerEventStorageEngine.class);
             assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
             assertThat(context).hasBean(CommandBusConnector.class.getName());
         });
@@ -185,7 +187,6 @@ class AxonServerAutoConfigurationTest {
             assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
             assertThat(context).hasBean("customManagedChannelCustomizer");
             assertThat(context).hasSingleBean(EventStorageEngine.class);
-            assertThat(context).hasSingleBean(AxonServerEventStorageEngine.class);
             assertThat(context).hasBean("customAxonServerEventStorageEngine");
             assertThat(context).hasSingleBean(CommandBusConnector.class);
             assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
