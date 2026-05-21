@@ -129,7 +129,7 @@ class Axon4ToAxon5SpringExtensionTest implements RewriteTest {
                         import org.axonframework.extension.spring.stereotype.EventSourced;
                         import org.axonframework.modelling.command.AggregateIdentifier;
 
-                        // TODO(axon4to5): reconfigure snapshot trigger — AF4 had snapshotTriggerDefinition = "dwellingSnapshotTrigger"
+                        // TODO(axon4to5): Custom SnapshotTriggerDefinition "dwellingSnapshotTrigger" cannot be migrated automatically.
                         @EventSourced(tagKey = "Dwelling", idType = String.class)
                         class Dwelling {
                             @AggregateIdentifier
