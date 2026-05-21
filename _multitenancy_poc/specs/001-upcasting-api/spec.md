@@ -1,12 +1,13 @@
 # Feature Specification: Event Upcasting API
 
-**Feature Branch**: `feature/3597/upcasting-api`
+**Feature Branch**: `enhancement/137/spec-message-transformator`
 
 **Created**: 2026-05-18
 
 **Status**: Draft
 
-**Input**: User description: "Upcasting API for Axon Framework 5.2.0 (issue #3597)"
+**Input**: User description: "Upcasting API for Axoniq Framework 5.2.0
+(issue AxonIQ/axoniq-framework#137; ported from AxonIQ/AxonFramework#3597)"
 
 ---
 
@@ -850,3 +851,60 @@ a last resort if the old stream must be fully replaced.
   never modified on disk.
 - The university demo (`examples/university-demo`, plain Java, no Spring) is the target for
   demonstrating all in-scope use cases. Spring Boot integration is follow-on work.
+## addendum: Design Principles
+
+Some principles taken into account for writing spec file below
+
+### Simpler than AF4 — no `IntermediateEventRepresentation`
+
+The new upcasting API MUST NOT reintroduce `IntermediateEventRepresentation` or any
+equivalent intermediary abstraction. AF5's `Message` already carries payload, `MessageType`
+(name + version), and metadata — this is sufficient.
+
+Any proposed abstraction MUST be justified by a scenario that cannot be served by
+`Message` directly. If no such scenario exists, the abstraction is rejected.
+
+The upcasting operation SHOULD build on `Message#withConvertedPayload(...)` (extended to
+support same-Type transforms and a mapping operation, per issue #137) rather than
+introducing a new transformation primitive.
+
+### Single Responsibility per Upcaster (Uncle Bob — SRP)
+
+Each upcaster class MUST do exactly one transformation and have exactly one reason to
+change. Bundling multiple transformations into one upcaster is forbidden. A rename
+upcaster renames; a structural transform restructures; a split splits. Never combined.
+
+This keeps upcasters small, readable, independently testable, and composable.
+
+### Prefer Chain over Direct (Gregory Young)
+
+When multiple version steps exist (v1 → v2 → v3), prefer chained individual upcasters over
+a single direct upcaster (v1 → v3). Chains are easier to maintain: adding v4 means writing
+one new upcaster, not rewriting all direct converters.
+
+Direct upcasters (v1 → v3, skipping v2) are only acceptable when the intermediate version
+no longer exists in any live system and the performance gain is measurable and required.
+
+### ES Versioning Decision Guide
+
+Use this table to determine which strategy to apply before reaching for an upcaster.
+Upcasting is not always the right tool. (Source: Gregory Young.)
+
+| Problem | Recommended strategy |
+|---|---|
+| Adding a new field to an event | Weak schema — consumers use a default for the missing field. No upcaster needed. |
+| Renaming a field | Support both names temporarily; drop old name after all old events are processed. |
+| Event class name changed | Upcaster (rename transform). |
+| Payload structure changed | Upcaster (1→1 structural transform). |
+| One event split into two | Upcaster (1→N split). Separate transform from split — two steps. |
+| Multiple events merged into one | Upcaster (N→1 merge). |
+| Snapshot format changed | Upcaster (snapshot upcasting) — deferred from 5.2.0, see Part C. |
+| Business logic changed (e.g., tax rate) | Store calculated value at creation time — not a versioning problem. |
+| Semantic meaning of a field changed | New event type, not a new version. Never silently change field semantics. |
+| Serialization format changed | `MessageConverter` — not an upcaster. |
+| System too large for any migration | Copy-Transform (parallel systems). This is the last resort. |
+
+**Key mindset (Gregory Young)**: Versioning is not an occasional problem. It is a
+constant, normal part of building event-sourced systems. Design for it from the start.
+
+---
