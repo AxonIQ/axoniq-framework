@@ -11,7 +11,8 @@ These modules cover scenarios that go beyond the open-source baseline, such as P
 Axoniq Framework modules are commercial offerings under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service], and require an active xref:how-to-use[subscription] for production use.
 
 For an overview of the features in Axon Framework and Axoniq Framework, be sure to check the xref:feature_comparison[Feature comparison] table.
-However, you do not have to jump to this table time and time again to understand what is in Axon or in Axoniq Framework. The documentation will use of [.advanced-framework]#this# icon marks Axoniq Framework features.
+However, you do not have to jump to this table time and time again to understand what is in Axon or in Axoniq Framework.
+You will find [.advanced-framework]#this icon# to mark Axoniq Framework features throughout the documentation.
 When no such icon is present, you are dealing with Axon Framework features.
 
 So, in short:
@@ -35,32 +36,36 @@ You can retrieve a subscription through link:https://platform.axoniq.io[Axoniq P
 A self-service subscription is associated with an environment and grants credentials (an environment identifier and an access token) that the application presents at runtime.
 As such, this flow will expect an active connection with Axoniq Platform to ensure the subscription entitles your application to the features you're using.
 
-If you are unable to form an active connection with Axoniq Platform or otherwise require a different feature set, be sure to check out our link:https://www.axoniq.io/pricing[pricing page]. Be sure to contact us when more information or help is required.
+If you are unable to form an active connection with Axoniq Platform or otherwise require a different feature set, be sure to check out our link:https://www.axoniq.io/pricing[pricing page].
+Be sure to link:https://www.axoniq.io/contact[contact us] when more information or help is required.
 
 When no active subscription is found, we assume you are xref:evaluating[evaluating] Axoniq Framework.
-Evaluating Axoniq Framework in a life system is allowed for a limited period of time.
+Evaluating Axoniq Framework in a live system is allowed for a limited period of time.
 Do note that anybody can use the xref:individual_plan[individual plan] free of charge.
-This will entitle your application to run past the evaluation time window.
+This will entitle your application to run past the evaluation time window for non-production use.
 
-For details on xref:configuring_credentials[configuring], how we xref:enforcing_subscription[enforce an entitlement], and xref:grace_period[grace periods], be sure to check out their respective sections.
+For details on xref:configuring_credentials[configuring], how we xref:enforcing_subscription[enforce a subscription], and xref:runtime_subscription_changes[runtime subscription changes], be sure to check out their respective sections.
 
 [#evaluating]
 === Evaluating Axoniq Framework
 
 During evaluation, Axoniq Framework modules start without credentials, logging a warning as a result.
 This evaluation mode is intended for development, prototyping, testing, and proof-of-concept work.
-Continued production use without a valid subscription is not permitted under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
+Continued use for development, testing, or production without a valid subscription is not permitted under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service].
 As such, once the evaluation period ends, your application will be forcefully shutdown as a result.
 
-Xte that smaller organizations may qualify for complimentary access to Axoniq Framework modules.
-Contact the link:https://www.axoniq.io/pricing[Axoniq representative] to discuss your eligibility.
+Note that smaller organizations may qualify for complimentary access to Axoniq Framework modules.
+Contact a link:https://www.axoniq.io/contact[Axoniq representative] to discuss your eligibility.
 
 [#individual_plan]
 === Testing Axoniq Framework - individual plan
 
-Every Axoniq Platform account includes a free developer plan.The developer plan is intended for learning, prototyping, and local development, and provides credentials that unlock the full set of Axoniq Framework modules at reduced throughput.
+Every Axoniq Platform account includes our free **Individual** plan.
+The Individual plan is intended for learning, prototyping, and local development, and provides credentials that unlock the full set of Axoniq Framework modules at reduced throughput.
 
-The developer plan is free of charge and does not expire.It allows anyone to try out Axoniq Framework end-to-end, including modules that are otherwise blocked without credentials, before committing to a paid subscription.When an application outgrows the limits of the developer plan, the same credentials can be upgraded to a paid plan without changing the application configuration.
+The Individual plan is free of charge and does not expire.
+It allows you to try out Axoniq Framework end-to-end, including modules that are otherwise blocked without credentials, before committing to a paid subscription.
+When going to production, the Workspace can be upgraded to a paid plan.
 
 [#configuring_credentials]
 === Configuring credentials
@@ -81,25 +86,48 @@ For a thorough explanation on how to set this up, we refer to the Axoniq Platfor
 [#enforcing_subscription]
 === Feature entitlement and message throughput
 
-Some Axoniq Framework modules cannot be used at all without valid credentials.
-This is where so-called "feature entitlement" kicks in.
-When the application starts without a subscription, or with credentials that do not grant access to the module, the module refuses to operate and the application fails fast.
+Axoniq Framework features validate their entitlement at runtime based on the configured credentials.
+Most subscription link:https://www.axoniq.io/pricing[tiers] require a connection to Axoniq Platform to validate the credentials.
+If you are not able to have an active connection to Axoniq Platform, you will need a "license" file in your environment to be entitled.
+Be sure to link:https://www.axoniq.io/contact[contact us] if this is a requirement for you.
 
-This applies to modules whose value is tightly coupled to the commercial offering and where partial operation would be misleading.
-The Data Protection module is an example: without a valid subscription the cryptographic operations it provides are not available, and any attempt to use them is rejected.
+Assuming you are able to connect to Axoniq Platform, the runtime behavior for feature entitlement differs depending on the scenario you're in:
 
-Other Axoniq Framework modules remain functional without a subscription but apply message throughput control to their operations.
-This allows evaluation, development, and small-scale use without paid credentials, while reserving full throughput for subscribed customers.
+*No credentials configured*::
+The application is treated as xref:evaluating[evaluating] Axoniq Framework.
+All Axoniq Framework features operate for a 15-minute evaluation window, regardless of which features are in use.
+This includes features such as Data Protection.
+Once the evaluation window closes, the application is forcefully shut down.
 
-When a throughput limit is reached, the module logs a warning and throttles further operations until the rate window resets or valid credentials are provided.
-The specific throughput limits are dependent on the link:https://www.axoniq.io/pricing[tier] the subscription is eligible too.
+*Credentials configured, without an active connection to Axoniq Platform*::
+The application continues to operate for 24-hour grace period without an active connection.
+This window allows transient connectivity issues to be resolved without an immediate outage.
+If the connection is not restored within the window, the application is forcefully shut down.
 
-[#grace_period]
-=== Grace period
+*Credentials configured, with an active connection to Axoniq Platform*::
+The Axoniq Framework modules included in the subscription operate normally.
+This is where so-called "feature entitlement" kicks in: if the application depends on an Axoniq Framework feature that is not part of the subscription, the application is shut down immediately.
+The Data Protection feature is an example: if it is used by the application but not covered by the subscription, the application will not continue to run.
 
-When a subscription becomes invalid, for example, because it has expired, payment has lapsed, or the credentials have been revoked, Axoniq Framework modules do not stop immediately.Instead, they enter a grace period during which the application continues to operate as if the subscription were still valid.
+Beyond entitlement, Axoniq Framework features apply message throughput control to their operations based on the link:https://www.axoniq.io/pricing[tier] of the subscription.
+When a throughput limit is reached, the module logs a warning and throttles further operations until the rate window resets or higher-tier credentials are provided.
 
-The grace period gives operators time to renew the subscription or roll out new credentials without an outage.During the grace period the module logs warnings to make the situation visible.Once the grace period ends, the module reverts to its unlicensed behavior: blocked modules stop accepting operations, and rate-limited modules fall back to their unlicensed throughput.
+[#runtime_subscription_changes]
+=== Runtime subscription changes
+
+Once an application has validated its entitlement, two scenarios can change that entitlement while the application is running.
+The application will respond differently to each.
+
+*Connection to Axoniq Platform is lost*::
+When the application can no longer reach Axoniq Platform, it enters a 24-hour grace period and continues to operate as if the connection were still established.
+This gives operators time to resolve transient connectivity issues without an immediate outage.
+During the grace period the modules log warnings to make the situation visible.
+Once the grace period ends, the application is forcefully shut down.
+
+*Subscription is cancelled or payment lapses*::
+The license is updated immediately to a non-Production license, and the application falls out of compliance for production use.
+If the application depends on an Axoniq Framework feature that requires a subscription regardless of whether it is development or production use (like the Data Protection feature), the application is shut down immediately.
+Other features continue to operate under the non-Production license, with warnings logged to indicate the changed situation, until new credentials are provided or the application is stopped.
 
 [#feature_comparison]
 == Feature comparison
@@ -336,8 +364,8 @@ If you depended strongly on any of the removed features, be sure to reach out.
 |
 
 | Distributing Queries - Axon Server integration
-| **✓**
-| 5.0.0
+| **X**
+| —
 | **✓**
 | 5.1.0
 |
@@ -431,8 +459,8 @@ If you depended strongly on any of the removed features, be sure to reach out.
 |
 
 | DCB Event Storage - Axon Server integration
-| **✓**
-| 5.0.0
+| **X**
+| —
 | **✓**
 | 5.1.0
 |
@@ -445,8 +473,8 @@ If you depended strongly on any of the removed features, be sure to reach out.
 |
 
 | DCB Event Storage - PostgreSQL integration
-| **✓**
-| 5.1.0
+| **X**
+| —
 | **✓**
 | 5.1.0
 |
@@ -459,8 +487,8 @@ If you depended strongly on any of the removed features, be sure to reach out.
 |
 
 | Aggregate-based Event Storage - Axon Server integration
-| **✓**
-| 5.0.0
+| **X**
+| —
 | **✓**
 | 5.1.0
 |
@@ -723,7 +751,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | 5.2.0
 | **✓**
 | 5.2.0
-| Marked partial for Axon as message handlers can receive the payload in any format. Hence, upcasting can be done specific to a message handler at the user's discretion
+| Marked partial for Axon Framework as message handlers can receive the payload in any format. Hence, upcasting can be done specific to a message handler at the user's discretion. Support in Axoniq Framework is more extensive, with implementable components and guard rails
 
 | Conversion - XStream integration
 | **X**
@@ -739,7 +767,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | 5.1.0
 | **✓**
 | 5.1.0
-| Marked partial for Axon as the component required to provide is the `SnapshotStore`. Furthermore, Axoniq Framework integration is optimized compared to Axon Framework
+| Marked partial for Axon Framework, as it solely provides the API for snapshot storage (the `SnapshotStore`) but a concrete implementations needs to be provided at the user's discretion. Axoniq Framework provides an actual implementation optimized for Axon Server.
 
 | Generic Entity Snapshotting
 | **X**
@@ -827,6 +855,13 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | —
 | **✓**
 | 5.1.0
+|
+
+| Test Fixtures - Projection support
+| **TBD**
+| —
+| **TBD**
+| —
 |
 
 | Test Fixtures - Command Handler support
@@ -979,11 +1014,11 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | 5.1.1
 |
 
-| Feature-based modularization
+| Feature-based project modularization
 | **X**
 | —
 | **✓**
 | 5.1.0
-|
+| Means a module-per-feature is used, providing more granular dependencies when desired.
 
 |===
