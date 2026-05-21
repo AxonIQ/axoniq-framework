@@ -11,14 +11,14 @@ These modules cover scenarios that go beyond the open-source baseline, such as P
 Axoniq Framework modules are commercial offerings under the link:https://www.axoniq.io/legal/terms-of-service[Axoniq Terms of Service], and require an active xref:how-to-use[subscription] for production use.
 
 For an overview of the features in Axon Framework and Axoniq Framework, be sure to check the xref:feature_comparison[Feature comparison] table.
-However, you do not have to jump to this table time and time again to understand what is in Axon or in Axoniq Framework.
+However, you do not have to jump to this table to understand what is in Axon or in Axoniq Framework.
 You will find [.advanced-framework]#this icon# to mark Axoniq Framework features throughout the documentation.
 When no such icon is present, you are dealing with Axon Framework features.
 
 So, in short:
 
-* *Axon Framework* — the open-source core. Free to use, including in production, covering the bases to support messaging, modeling, and event sourcing.
-* *Axoniq Framework* — the commercial modules on top of Axon Framework, providing advanced and production-grade capabilities.
+* *Axon Framework*: the open-source core. Free to use, including in production, covering the bases to support messaging, modeling, and event sourcing.
+* *Axoniq Framework*: the commercial modules on top of Axon Framework, providing advanced and production-grade capabilities.
 
 [#how-to-use]
 == How to use Axon and Axoniq Framework
@@ -908,7 +908,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | 5.1.0
 |
 
-| Monitoring - DropWizard integration
+| Monitoring - Dropwizard integration
 | **✓**
 | 5.0.0
 | **✓**
@@ -947,7 +947,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | 5.1.0
 |
 
-| Spring AoT integration
+| Spring AOT integration
 | **TBD**
 | —
 | **TBD**
