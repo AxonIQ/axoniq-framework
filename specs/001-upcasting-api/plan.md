@@ -31,7 +31,7 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 
 **Primary Dependencies**: `axon-framework` core modules (`common`, `messaging`, `modelling`, `eventsourcing`). JUnit 5, AssertJ, Awaitility for tests; JMH for FR-011 chain-cost benchmarks.
 
-**Target Repo**: `axoniq-framework`. One NEW module ships in 5.2.0: `messaging/axoniq-message-transformation/`. Depends on `axon-framework`'s `messaging` + `eventsourcing` modules. Internal package layout follows the `axoniq-distributed-messaging` precedent (`commandhandling/` + `queryhandling/` in one module): a shared `transformation/` base + an `events/` sub-package for 5.2.0. A `cqrs/` sub-package is filled in for 5.3+ when command and query transformation are delivered; that release also adds `axoniq-distributed-messaging` as a module dependency.
+**Target Repo**: `axoniq-framework`. One NEW module ships in 5.2.0: `messaging/axoniq-message-transformation/`. Depends on `axon-framework`'s `messaging` + `eventsourcing` modules. Internal package layout follows the `axoniq-distributed-messaging` precedent (`commandhandling/` + `queryhandling/` in one module): a shared `transformation/` base + an `events/` sub-package for 5.2.0. A `cqrs/` sub-package is filled in for 5.3+ when command and query transformation are delivered. Because the handler-registration decoration target lives in `axon-framework` (`CommandBus` / `QueryBus` are upstream types), no additional axoniq dependency is needed in 5.3+ either -- the module dependency set stays constant.
 
 **Integration point (5.2.0)** -- single decorator, registered via `ComponentRegistry.registerDecorator(EventStore.class, TransformingEventStore.DECORATION_ORDER, ...)`:
 
@@ -106,12 +106,13 @@ specs/001-upcasting-api/
 
 ### Source code (in `axoniq-framework`)
 
-5.2.0 ships **one new module** -- `axoniq-message-transformation` -- following the existing axoniq-framework convention (one module per feature; sub-features as internal packages, as `axoniq-distributed-messaging` does with `commandhandling/` + `queryhandling/`). In 5.2.0 only the shared `transformation/` base and the `events/` sub-package contain code; the `cqrs/` sub-package is reserved and filled in in 5.3+ (at which point the module also gains an `axoniq-distributed-messaging` dependency).
+5.2.0 ships **one new module** -- `axoniq-message-transformation` -- following the existing axoniq-framework convention (one module per feature; sub-features as internal packages, as `axoniq-distributed-messaging` does with `commandhandling/` + `queryhandling/`). In 5.2.0 only the shared `transformation/` base and the `events/` sub-package contain code; the `cqrs/` sub-package is reserved and filled in in 5.3+. The module's dependency footprint does NOT change between 5.2.0 and 5.3+ (`CommandBus` / `QueryBus` are upstream `axon-framework` types).
 
 ```text
 axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
-|-- depends on: axon-framework (messaging + eventsourcing modules) -- in 5.2.0
-|              (axoniq-distributed-messaging added in 5.3+ when the cqrs/ sub-package is filled in)
+|-- depends on: axon-framework (messaging + eventsourcing modules) -- in 5.2.0 AND 5.3+
+|              (the cqrs/ sub-package decorates CommandBus/QueryBus from axon-framework,
+|              so no axoniq-distributed-messaging dependency is needed)
 |-- src/main/java/io/axoniq/framework/messaging/transformation/
 |     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message<?>>
 |     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004)
@@ -175,7 +176,7 @@ axon-framework/examples/
 
 The existing examples-parent pom already imports `axoniq-framework-bom`, so version management of the new axoniq-message-transformation dependency is already handled. Four of five current example modules already depend on `io.axoniq.framework` artifacts (`axon-server-connector`), so this is no new pattern -- just a new sibling.
 
-**Structure Decision**: One module in `axoniq-framework/messaging/` -- `axoniq-message-transformation` -- following the existing axoniq-framework convention (cf. `axoniq-dead-letter`, `axoniq-event-streaming`, and especially `axoniq-distributed-messaging` which holds `commandhandling/` + `queryhandling/` together in one module). The shared SPI base sits in the top-level `transformation/` package; `events/` and `cqrs/` sub-packages carry the message-type specializations. Note that `axon-server-connector` already hard-depends on `axoniq-distributed-messaging`, so any axoniq user running against Axon Server (the typical deployment) already has that dependency on the classpath -- the events-only "save the dep" benefit of a module split is largely theoretical (pure-Postgres / pure-JPA setups only).
+**Structure Decision**: One module in `axoniq-framework/messaging/` -- `axoniq-message-transformation` -- following the existing axoniq-framework convention (cf. `axoniq-dead-letter`, `axoniq-event-streaming`, and especially `axoniq-distributed-messaging` which holds `commandhandling/` + `queryhandling/` together in one module). The shared SPI base sits in the top-level `transformation/` package; `events/` and `cqrs/` sub-packages carry the message-type specializations. The module's dependency footprint (`axon-framework` `messaging` + `eventsourcing`) is identical in 5.2.0 and 5.3+: because command/query decoration happens at handler-registration level on the upstream `CommandBus` / `QueryBus` types (not on `CommandBusConnector` / `QueryBusConnector`), no `axoniq-distributed-messaging` dependency is needed when the `cqrs/` sub-package fills in.
 
 ## SPI shape
 
@@ -203,6 +204,29 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage<?>
 `EventTransformer` and `QueryTransformer` follow the same shape.
 
 Users almost never touch this SPI. They use the factories (`EventTransformation.rename(...)`, `EventTransformation.from(...).to(...).transform(...)`, `EventTransformation.split(...)`, `CommandTransformation.rename(...)`, etc.) which produce typed `MessageTransformer` instances internally.
+
+### Chain usage (user-facing)
+
+There is exactly **one** `MessageTransformerChain` object per application. The user builds it once with all their transformations (events, and in 5.3+ commands and queries) and the framework wires it into the three decoration points behind the scenes:
+
+```java
+MessageTransformerChain chain = MessageTransformerChain.builder()
+    .register(EventTransformation.from(MT.of("com.example.X", "1.0.0"))
+                                 .to(MT.of("com.example.X", "2.0.0"))
+                                 .transform(payload -> ...))
+    .register(EventTransformation.rename(MT.of("com.example.Y", "1.0.0"),
+                                          MT.of("com.example.Z", "1.0.0")))
+    // 5.3+:
+    .register(CommandTransformation.rename(...))
+    .register(QueryTransformation.from(...).to(...).transform(...))
+    .build();
+```
+
+The `ConfigurationEnhancer` registers this single chain instance and wires:
+- `TransformingEventStore` decorator around `EventStore` (5.2.0)
+- handler-registration-level decoration on `CommandBus` / `QueryBus` (5.3+)
+
+Each decoration point invokes the chain with a typed `MessageStream<M>` (M is the relevant message subtype at that ingress); the chain internally routes to the sub-chain for that message type. The user-facing model stays simple: register everything once, the framework dispatches.
 
 ## Required axon-framework additions
 
@@ -240,7 +264,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 
 ### 5.3+ -- explicitly deferred
 
-- **US8 command transformation**, **US9 query transformation**, **FR-019**. Lives in the `cqrs/` sub-package of `axoniq-message-transformation` (the module gains an `axoniq-distributed-messaging` dependency in 5.3+). Design constraint: chain MUST fire on every incoming command/query reaching a handler -- including local-dispatched ones that bypass `CommandBusConnector` / `QueryBusConnector`. The decoration point therefore needs to be at handler-registration level (see "Integration points 5.3+" above).
+- **US8 command transformation**, **US9 query transformation**, **FR-019**. Lives in the `cqrs/` sub-package of `axoniq-message-transformation`. Because the decoration target (`CommandBus` / `QueryBus`) lives in `axon-framework`, no additional axoniq dependency is added when this work lands. Design constraint: chain MUST fire on every incoming command/query reaching a handler -- including local-dispatched ones that bypass `CommandBusConnector` / `QueryBusConnector`. The decoration point therefore needs to be at handler-registration level (see "Integration points 5.3+" above).
 - **Snapshot payload transformation**. Architecturally compatible with the 5.2.0 chain (snapshots flow through the same `EventStore.transaction().source(...)` stream merged in by `SnapshotCapableEventStorageEngine`), but the user-facing API / docs / fixtures (and a `Snapshot.payloadAs(Class<?>)` ergonomic accessor) are deferred. Either decorate `SnapshottingEntityLifecycleHandler`'s converter call site or introduce a `SnapshotPayloadTransformer` SPI hook.
 - **Annotation-based registration**. Programmatic only for now (FR-004); annotations may return if added through an explicit `EventTransformationChain` registry bean (see Part C "Annotation-Based Transformation Registration" in spec for the forward-direction note).
 - **Sender-side transformation** (new-to-old at the sender). Out of scope per Part C of spec.
@@ -257,7 +281,7 @@ The 5.2.0 deliverable is a thin slice of the full design described in the spec. 
 
 4. **Factory method names reserved**. `EventTransformation.from(...).to(...)`, `EventTransformation.rename(...)`, `EventTransformation.split(...)`, `EventTransformation.drop(...)` are reserved on the factory API. Even if `split(...)` and `drop(...)` are not implemented in 5.2.0, the methods either (a) exist as `throw new UnsupportedOperationException("FR-003 deferred")` stubs or (b) are simply absent so adding them later is additive. **Never** ship a different shape that would have to be renamed. Protects US3 / US4 / US2.
 
-5. **Registration goes through an `EventTransformationChain` object**. Builder + `.build()` returns an immutable chain. Holds the door open for the FR-019 / Part C annotation-based registration alternative: any future annotation discovery must produce the same chain object the programmatic API produces. Protects deferred annotation work.
+5. **Registration goes through a single `MessageTransformerChain` object**. Builder + `.build()` returns an immutable chain that holds transformations for events (5.2.0) and -- when delivered -- commands and queries (5.3+). Internally the chain routes by message type to per-`QualifiedName` sub-chains; the user sees one chain, one builder, one registration call style. Holds the door open for the FR-019 / Part C annotation-based registration alternative: any future annotation discovery must produce the same chain object the programmatic API produces. Protects deferred annotation work and the 5.3+ command/query rollout.
 
 6. **Snapshot pass-through is automatic**. Because the decorator wraps `EventStore` and `SnapshotCapableEventStorageEngine` merges snapshots into the source stream below it, snapshot entries reach the chain inline. The chain MUST treat unknown `MessageType`s (including snapshot types) as pass-through per FR-005. Adding a snapshot transformation in 5.3+ then needs no wiring change. Protects deferred snapshot transformation.
 
@@ -273,4 +297,4 @@ The 5.2.0 deliverable is a thin slice of the full design described in the spec. 
 |---|---|---|
 | One conditional additive change to `axon-framework` (`MessageStream.flatMap`) -- only triggered if 1:N split (FR-003, MAY) lands in 5.2.0 | Chain composition where 1:N split outputs re-enter their own per-`QualifiedName` sub-chain (FR-007) requires `flatMap` on `MessageStream` | Manually composing via existing `mapMessage` + a recursive sub-chain entry is possible but uglier; flatMap is a standard stream operator the API was missing. Fallback path (internal helper) documented in "Required axon-framework additions". |
 | SPI base is generic over `Message<?>` even though only `EventTransformer` ships in 5.2.0 | Forward-compatibility invariant #1 -- avoids an SPI break when commands/queries arrive in 5.3+ | Shipping an event-specific SPI now (`EventTransformer` as the root) would force a refactor of every user-extended transformer when commands land. |
-| `axoniq-distributed-messaging` is added as a module dependency in 5.3+ (not present in 5.2.0) | The `cqrs/` sub-package is empty in 5.2.0; pulling `axoniq-distributed-messaging` in advance would force the dep on every event-only user (pure-Postgres / pure-JPA setups) for code that doesn't exist yet. | Adding the dep from day one is cleaner stability-wise but pollutes the dependency graph for users that never need it. A separate module split (`-spi` / `-events` / `-cqrs`) was considered but rejected: `axon-server-connector` already hard-depends on `axoniq-distributed-messaging`, so the typical axoniq deployment has the dep on the classpath regardless -- the split's benefit is largely theoretical. |
+| Single module hosts both events (5.2.0) and the deferred cqrs/ sub-package (5.3+), matching `axoniq-distributed-messaging` precedent | The handler-registration decoration for commands/queries targets `CommandBus` and `QueryBus` -- both upstream `axon-framework` types -- so the module dependency set does not change between 5.2.0 and 5.3+. No `axoniq-distributed-messaging` dependency is needed. | A separate `-spi` / `-events` / `-cqrs` module split was considered for a different reason (isolating the event ingress from the connector decoration originally proposed for commands/queries). Once the design moved to handler-registration on the bus itself, that dep concern evaporated and the single-module convention applies straightforwardly. |
