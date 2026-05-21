@@ -1,4 +1,4 @@
-# Event Upcasting API: Spec Summary
+# Event Transformation API: Spec Summary
 
 **Feature**: Axoniq Framework 5.2.0, issue AxonIQ/axoniq-framework#137 (ported from AxonIQ/AxonFramework#3597)
 **Branch**: `enhancement/137/implementation-message-transformator`
@@ -44,12 +44,12 @@ as on the change itself.** A loose configuration absorbs more; a strict one reje
 | US5 | Chaining transformations across versions (v1 -> v2 -> v3) | P2 |
 | US6 | Misconfiguration & runtime failure feedback (fail fast, clear errors) | P1 |
 | US7 | Startup observability (INFO at boot, DEBUG per event) | P2 |
-| US8 | Command upcasting (1:1 only; reject splits/drops) | P3 |
-| US9 | Query upcasting (1:1 only; reject splits/drops) | P3 |
+| US8 | Command transformation (1:1 only; reject splits/drops) | P3 |
+| US9 | Query transformation (1:1 only; reject splits/drops) | P3 |
 
 ### Deferred / Out of Scope (Part C)
 
-- **Deferred**: N-to-1 merge, moving data between events, downcasting (sender-side), snapshot upcasting, annotation-based registration. Each has a documented "memory-scope" or "scope/focus" reason, with guidance on what to do instead (often: Copy-and-Replace migration, or stateful projection).
+- **Deferred**: N-to-1 merge, moving data between events, sender-side transformation, snapshot transformation, annotation-based registration. Each has a documented "memory-scope" or "scope/focus" reason, with guidance on what to do instead (often: Copy-and-Replace migration, or stateful projection).
 - **Wrong tool**: silent semantic-meaning changes, and events that can't be derived from the old payload. Both corrupt the audit trail. Solution: a new event type.
 
 ## Functional Requirements (highlights)

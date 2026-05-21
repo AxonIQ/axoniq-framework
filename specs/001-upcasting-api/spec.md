@@ -1,4 +1,4 @@
-# Feature Specification: Event Upcasting API
+# Feature Specification: Event Transformation API
 
 **Feature Branch**: `enhancement/137/spec-message-transformator`
 
@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: User description: "Upcasting API for Axoniq Framework 5.2.0
+**Input**: User description: "Transformation API for Axoniq Framework 5.2.0
 (issue AxonIQ/axoniq-framework#137; ported from AxonIQ/AxonFramework#3597)"
 
 ---
@@ -19,7 +19,7 @@ This immutability is a strength (complete audit trail, ability to replay history
 
 Axon Framework 5 addresses this with two complementary mechanisms that run in order when a message is read:
 
-1. A **message transformer** changes the *structure* of a message, splitting one event into two, renaming a message type, or reshaping a payload. It runs first, so every handler observes the same, up-to-date shape. A transformer is a decorator wired at message-ingress: around the `EventStore` for events, around the command bus connector for incoming commands, and around the query bus connector for incoming queries. The SPI shape is uniform (`MessageStream<M> -> MessageStream<M>`), so the same mechanism applies to any `Message` subtype. Transformers are most commonly applied to events (where they have historically been called *upcasters*). The same mechanism extends to commands and queries (in scope, see US8/US9) and architecturally to snapshots (deferred for 5.2.0, see Part C).
+1. A **message transformer** changes the *structure* of a message, splitting one event into two, renaming a message type, or reshaping a payload. It runs first, so every handler observes the same, up-to-date shape. A transformer is a decorator wired at message-ingress: around the `EventStore` for events, around the command bus connector for incoming commands, and around the query bus connector for incoming queries. The SPI shape is uniform (`MessageStream<M> -> MessageStream<M>`), so the same mechanism applies to any `Message` subtype. Transformers are most commonly applied to events. The same mechanism extends to commands and queries (in scope, see US8/US9) and architecturally to snapshots (deferred for 5.2.0, see Part C).
 
 2. A **message converter** changes the *representation* of the payload, producing the concrete type a handler declared. It runs after the transformer, on the already-restructured message. The converter handles many common versioning scenarios automatically: for example, when you add a new optional field to an event class, old stored events simply receive a default value for that field when they are read. You do not need to do anything.
 
@@ -266,7 +266,7 @@ jump. Register them in order, the framework chains them automatically, a v1.0.0 
 through v1->v2 first, then v2->v3, arriving at the handler as v3.0.0. When v4 arrives, add one
 v3->v4 transformation, existing ones stay untouched.
 
-**Why this priority**: chaining keeps upcasting maintainable over time, otherwise every new
+**Why this priority**: chaining keeps transformation maintainable over time, otherwise every new
 version requires updating all previous transformations.
 
 **Acceptance Scenarios**:
@@ -414,18 +414,25 @@ confirm correct wiring in production.
 
 ---
 
-#### User Story 8 - Command Upcasting (Priority: P3)
+#### User Story 8 - Command Transformation (Priority: P3) `[Delivery: 5.3+]`
+
+**Delivery note**: Per scope decision 2026-05-21, command transformation is held back to a 5.3+
+release; the 5.2.0 issue (#137) delivers events only. This user story remains in the spec as
+the design target for the future `axoniq-message-transformation-cqrs` module.
 
 **Plain-English explanation**: a receiver applies the transformation chain to an incoming
 command before dispatching it to the command handler. The mechanism is the same as for
-events: the transformer SPI is `MessageStream<M extends Message<?>> -> MessageStream<M>`, and
-for commands it is wired as a decorator around the command bus connector instead of the
-`EventStore`. Common scenarios: structural field changes, renames, version bumps. Most
-relevant in rolling deployments where old and new service versions coexist.
+events: the transformer SPI is `MessageStream<M extends Message<?>> -> MessageStream<M>`. For
+commands the chain MUST fire on every incoming command that reaches a handler -- whether it
+arrived via a `CommandBusConnector` from a remote node or via a local-process dispatch that
+bypasses the connector. The decoration point is therefore at handler-registration level on
+`CommandBus`, not on `CommandBusConnector` alone. Common scenarios: structural field changes,
+renames, version bumps. Most relevant in rolling deployments where old and new service
+versions coexist.
 
-**Why this priority**: deliverable on top of the event upcasting infrastructure. 1:1 only (1:N
+**Why this priority**: deliverable on top of the event transformation infrastructure. 1:1 only (1:N
 split / 1:0 drop do NOT apply, each command is a single intent expecting a response).
-Downcasting (new-to-old at the sender) is deferred (see Part C).
+Sender-side transformation (new-to-old) is deferred (see Part C).
 
 **Acceptance Scenarios**:
 
@@ -442,15 +449,21 @@ Downcasting (new-to-old at the sender) is deferred (see Part C).
 
 ---
 
-#### User Story 9 - Query Upcasting (Priority: P3)
+#### User Story 9 - Query Transformation (Priority: P3) `[Delivery: 5.3+]`
+
+**Delivery note**: Per scope decision 2026-05-21, query transformation is held back to a 5.3+
+release; the 5.2.0 issue (#137) delivers events only. This user story remains in the spec as
+the design target for the future `axoniq-message-transformation-cqrs` module.
 
 **Plain-English explanation**: a receiver applies the transformation chain to an incoming
 query before dispatching it to the query handler, same mechanism as commands and events.
+The chain MUST fire on every incoming query that reaches a handler (local-routed or via
+`QueryBusConnector`), so the decoration point is at handler-registration level on `QueryBus`.
 Common scenario: a new optional filter parameter (e.g., `includeArchived`) is added and the
 handler needs a default value for queries sent by older callers.
 
 **Why this priority**: deliverable on top of the same `Message`-based transformer mechanism.
-1:1 only (1:N split / 1:0 drop do NOT apply). Downcasting is deferred (see Part C).
+1:1 only (1:N split / 1:0 drop do NOT apply). Sender-side transformation is deferred (see Part C).
 
 **Acceptance Scenarios**:
 
@@ -492,7 +505,7 @@ reading later ones. Two unresolved problems:
 1. **Memory scope is context-dependent.** Entity loads are bounded streams (per-entity, finite);
    tracking processors are unbounded streams (every entity, continuous). Memory that resets
    per-entity is predictable for the first, cross-entity memory in the second would silently
-   mix unrelated entities, exactly the AF4 context-aware-upcaster bug class the team has
+   mix unrelated entities, exactly the AF4 context-aware-transformer bug class the team has
    chosen not to repeat.
 
 2. **`MessageStream` has no grouping / windowing today.** Adding it would touch core streaming
@@ -515,7 +528,7 @@ example, when reading `TuitionPaid`, attach the `scholarshipCode` that was prese
 **Why deferred for 5.2.0**: this requires a **context-aware transformation**: one that
 remembers data from earlier events and uses it when transforming a later event. Same memory-scope
 problem as the N-to-1 entry above, applied at the field level: per-entity scope works for entity
-loads but silently mixes data across entities on tracking processors. AF4 context-aware upcasters
+loads but silently mixes data across entities on tracking processors. AF4 context-aware transformers
 had this exact inconsistency, causing subtle and hard-to-reproduce bugs.
 
 **What to do instead**: **Copy and Replace**: read existing events, rewrite them with the
@@ -524,29 +537,29 @@ migration, not ongoing transformation.
 
 ---
 
-#### Downcasting `[Deferred]`
+#### Sender-side transformation `[Deferred]`
 
 **Scenario**: in a rolling deployment, a newer sender strips fields that an older receiver does
 not yet understand. For example, service v2 sends a `FindCoursesByFaculty` query with a new
 `includeArchived` filter, service v1's handler does not know the field. Ideally the sender
 removes it before dispatch.
 
-**Why deferred for 5.2.0**: downcasting is new-to-old at the
+**Why deferred for 5.2.0**: sender-side transformation is new-to-old at the
 sender, instead of old-to-new at the receiver. It introduces sender-awareness questions (how
 does the sender know what version the receiver understands?) that need their own specification.
 
-Command and query upcasting (the receiver-side, old-to-new direction) IS in scope for 5.2.0 --
+Command and query transformation (the receiver-side, old-to-new direction) IS in scope for 5.2.0 --
 see US8 (commands) and US9 (queries) in Part B. The transformer operates on
 `MessageStream<M extends Message<?>>` and is wired at each message-ingress point (`EventStore`
 for events, bus connectors for commands and queries), so the same mechanism works for any
 `Message` type.
 
 **When to revisit**: when concrete rolling-deployment cases surface that cannot be solved by
-receiver-side upcasting alone.
+receiver-side transformation alone.
 
 ---
 
-#### Snapshot Upcasting `[Deferred]`
+#### Snapshot Transformation `[Deferred]`
 
 **Use case**: a 1:1 `Snapshot -> Snapshot` transformer would let the framework apply a
 state-schema change to a stored snapshot instead of discarding it and replaying all events.
@@ -566,7 +579,7 @@ accessor. A future snapshot transformation either uses the `Converter` directly
 on `Snapshot` later. Both options remain open.
 
 **When justified** (Gregory Young): snapshots are a cache, not a source of truth.
-Discard-and-replay is the correct primary strategy, snapshot upcasting is the optimisation,
+Discard-and-replay is the correct primary strategy, snapshot transformation is the optimisation,
 worth it only when the event history is huge AND replay is slow AND the snapshot schema changed.
 
 ---
@@ -720,7 +733,7 @@ a last resort if the old stream must be fully replaced.
   receives the stream; tag-based identity is fixed at append time, so a transformation that
   changes message identity does NOT affect which events match, use Copy and Replace if the
   stored stream itself must change. Any `EventStore` implementation -- engine-backed or not --
-  participates in upcasting through this same decorator.
+  participates in transformation through this same decorator.
   _Traces to: US1 scenario 4._
 - **FR-013 (Observability)**: The framework MUST emit:
   - **DEBUG once at startup**: total transformation count and each transformation's `from` (and
@@ -776,7 +789,7 @@ a last resort if the old stream must be fully replaced.
   patterns (FR-001, FR-002) apply to all three message types. The 1:N / 1:0 patterns (FR-003)
   apply ONLY to events: commands and queries are single-intent messages, and the framework MUST
   reject any `MultiEventTransformation`-equivalent registration for command or query types.
-  Downcasting is out of scope (Part C).
+  Sender-side transformation is out of scope (Part C).
   _Traces to: US8, US9._
 - **FR-020 (VersionComparator)**: Version strings are arbitrary non-empty strings, AF4
   compatibility (`@Revision` accepted any string) precludes format enforcement. A chain MAY
@@ -829,11 +842,11 @@ a last resort if the old stream must be fully replaced.
 - **SC-002 (Conflicts)**: Every conflict class in FR-008 is detected and reported before any
   event is processed.
 - **SC-003 (Examples)**: All in-scope use cases, structural transform, rename, split, drop
-  (events), 1:1 command upcasting (US8), and 1:1 query upcasting (US9), are demonstrated in
+  (events), 1:1 command transformation (US8), and 1:1 query transformation (US9), are demonstrated in
   `axoniq-framework/examples/` (the analogue of the `axon-framework` university demo) with
   passing tests under `./mvnw -Pexamples clean verify` in CI, no manual configuration.
-- **SC-004 (Migration)**: A developer migrating AF4 upcasters can identify the equivalent AF5
-  approach for each of their existing upcasters from documentation alone.
+- **SC-004 (Migration)**: A developer migrating AF4 transformers can identify the equivalent AF5
+  approach for each of their existing transformers from documentation alone.
 - **SC-005 (Decision tree)**: Part A of this spec serves as the Converter-vs-transformation
   decision tree, (a) one Converter-only scenario, (b) one transformation scenario, and (c) the
   boundary rule in one sentence. A developer new to AF5 transformations can classify their own
@@ -860,7 +873,7 @@ a last resort if the old stream must be fully replaced.
   Framework 5, comfortable with Java and basic event-sourcing concepts.
 - This feature ships as a commercial AxonIQ Framework module
   (`axoniq-framework/messaging/axoniq-message-transformation/`). Pure Axon Framework users do
-  not get upcasting, they must add the `axoniq-framework` dependency. `axon-framework` itself
+  not get transformation, they must add the `axoniq-framework` dependency. `axon-framework` itself
   is untouched except for one small additive change (`MessageStream.flatMap`) needed by the
   chain implementation.
 - Transformations apply at read time only, the event store is append-only and stored events are
@@ -874,51 +887,51 @@ Some principles taken into account for writing spec file below
 
 ### Simpler than AF4 -- no `IntermediateEventRepresentation`
 
-The new upcasting API MUST NOT reintroduce `IntermediateEventRepresentation` or any
+The new transformation API MUST NOT reintroduce `IntermediateEventRepresentation` or any
 equivalent intermediary abstraction. AF5's `Message` already carries payload, `MessageType`
 (name + version), and metadata -- this is sufficient.
 
 Any proposed abstraction MUST be justified by a scenario that cannot be served by
 `Message` directly. If no such scenario exists, the abstraction is rejected.
 
-The upcasting operation SHOULD build on `Message#withConvertedPayload(...)` (extended to
+The transformation operation SHOULD build on `Message#withConvertedPayload(...)` (extended to
 support same-Type transforms and a mapping operation, per issue #137) rather than
 introducing a new transformation primitive.
 
-### Single Responsibility per Upcaster (Uncle Bob -- SRP)
+### Single Responsibility per Transformer (Uncle Bob -- SRP)
 
-Each upcaster class MUST do exactly one transformation and have exactly one reason to
-change. Bundling multiple transformations into one upcaster is forbidden. A rename
-upcaster renames; a structural transform restructures; a split splits. Never combined.
+Each transformer class MUST do exactly one transformation and have exactly one reason to
+change. Bundling multiple transformations into one transformer is forbidden. A rename
+transformer renames; a structural transform restructures; a split splits. Never combined.
 
-This keeps upcasters small, readable, independently testable, and composable.
+This keeps transformers small, readable, independently testable, and composable.
 
 ### Prefer Chain over Direct (Gregory Young)
 
-When multiple version steps exist (v1 -> v2 -> v3), prefer chained individual upcasters over
-a single direct upcaster (v1 -> v3). Chains are easier to maintain: adding v4 means writing
-one new upcaster, not rewriting all direct converters.
+When multiple version steps exist (v1 -> v2 -> v3), prefer chained individual transformers over
+a single direct transformer (v1 -> v3). Chains are easier to maintain: adding v4 means writing
+one new transformer, not rewriting all direct converters.
 
-Direct upcasters (v1 -> v3, skipping v2) are only acceptable when the intermediate version
+Direct transformers (v1 -> v3, skipping v2) are only acceptable when the intermediate version
 no longer exists in any live system and the performance gain is measurable and required.
 
 ### ES Versioning Decision Guide
 
-Use this table to determine which strategy to apply before reaching for an upcaster.
-Upcasting is not always the right tool. (Source: Gregory Young.)
+Use this table to determine which strategy to apply before reaching for an transformer.
+Transformation is not always the right tool. (Source: Gregory Young.)
 
 | Problem | Recommended strategy |
 |---|---|
-| Adding a new field to an event | Weak schema -- consumers use a default for the missing field. No upcaster needed. |
+| Adding a new field to an event | Weak schema -- consumers use a default for the missing field. No transformer needed. |
 | Renaming a field | Support both names temporarily; drop old name after all old events are processed. |
-| Event class name changed | Upcaster (rename transform). |
-| Payload structure changed | Upcaster (1->1 structural transform). |
-| One event split into two | Upcaster (1->N split). Separate transform from split -- two steps. |
-| Multiple events merged into one | Upcaster (N->1 merge). |
-| Snapshot format changed | Upcaster (snapshot upcasting) -- deferred from 5.2.0, see Part C. |
+| Event class name changed | Transformer (rename transform). |
+| Payload structure changed | Transformer (1->1 structural transform). |
+| One event split into two | Transformer (1->N split). Separate transform from split -- two steps. |
+| Multiple events merged into one | Transformer (N->1 merge). |
+| Snapshot format changed | Transformer (snapshot transformation) -- deferred from 5.2.0, see Part C. |
 | Business logic changed (e.g., tax rate) | Store calculated value at creation time -- not a versioning problem. |
 | Semantic meaning of a field changed | New event type, not a new version. Never silently change field semantics. |
-| Serialization format changed | `MessageConverter` -- not an upcaster. |
+| Serialization format changed | `MessageConverter` -- not an transformer. |
 | System too large for any migration | Copy-Transform (parallel systems). This is the last resort. |
 
 **Key mindset (Gregory Young)**: Versioning is not an occasional problem. It is a
