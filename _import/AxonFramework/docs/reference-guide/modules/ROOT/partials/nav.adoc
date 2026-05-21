@@ -27,3 +27,7 @@ include::monitoring:partial$nav.adoc[]
 include::release-notes:partial$nav.adoc[]
 
 * xref:ROOT:known-issues-and-workarounds.adoc[]
+
+ifdef::advanced-framework[]
+include::ROOT:partial$nav.adoc[]
+endif::[]
