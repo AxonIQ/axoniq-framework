@@ -38,6 +38,13 @@ recipeList:
       oldPackageName: org.axonframework.spring
       newPackageName: org.axonframework.extension.spring
       recursive: true
+  # Runs after ChangePackage (so the @Aggregate FQN is at its post-move location)
+  # but BEFORE the ChangeType rename below. Converts @Bean SnapshotTriggerDefinition
+  # methods and their corresponding @Aggregate(snapshotTriggerDefinition = "...")
+  # references to AF5's @Snapshotting annotation, removing the Spring bean entirely
+  # for the two framework-provided types (EventCount, AggregateLoadTime). Custom
+  # implementations receive a TODO comment for manual review.
+  - org.axonframework.migration.MigrateSnapshotTriggerDefinitionToAnnotation
   - org.openrewrite.java.ChangeType:
       oldFullyQualifiedTypeName: org.axonframework.spring.stereotype.Aggregate
       newFullyQualifiedTypeName: org.axonframework.extension.spring.stereotype.EventSourced
@@ -48,6 +55,9 @@ recipeList:
   # tagKey = "<EntitySimpleName>" and idType = Object.class (placeholder)
   # to every @EventSourced annotation that has no tagKey yet, so developers
   # and LLM post-processors can see and verify the configuration.
+  # When MigrateSnapshotTriggerDefinitionToAnnotation runs first (normal ordering),
+  # it removes the snapshotTriggerDefinition attribute before this recipe sees the
+  # annotation, so no duplicate TODO comment is emitted for known types.
   - org.axonframework.migration.ConfigureEventSourcedAnnotation
   # Build-tool coordinate move: axon-spring artifact moves from groupId
   # `org.axonframework` to `org.axonframework.extensions.spring`. The unified

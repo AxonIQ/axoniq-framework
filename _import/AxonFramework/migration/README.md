@@ -47,8 +47,12 @@ After the migration run, search for every such location with:
 - **Command handling**: converts `@CommandHandler` constructors to `public static void handle(...)` methods, and swaps
   in-handler `CommandGateway` fields for injected `CommandDispatcher` parameters.
 - **Spring config**: renames `axon.serializer.*` properties to `axon.converter.*` in `application.properties`/YAML, and
-  adds advisory TODOs above obsolete `sequencing-policy` settings and lost aggregate config (e.g.
-  `snapshotTriggerDefinition`).
+  adds advisory TODOs above obsolete `sequencing-policy` settings. Also **migrates Spring Boot snapshotting
+  configuration** from the AF4 two-step pattern (`@Bean SnapshotTriggerDefinition` + `@Aggregate(snapshotTriggerDefinition
+  = "…")`) to the AF5 `@Snapshotting` annotation on the entity class, removing the bean definition:
+  `EventCountSnapshotTriggerDefinition(snapshotter, N)` → `@Snapshotting(afterEvents = N)`;
+  `AggregateLoadTimeSnapshotTriggerDefinition(snapshotter, millis)` → `@Snapshotting(afterSourcingTime = "PTxS")`.
+  Custom implementations that cannot be inferred automatically receive a `// TODO(axon4to5):` comment instead.
 - **Test fixtures**: replaces `AggregateTestFixture`/`SagaTestFixture` with `AxonTestFixture` and rewrites the fluent
   Given-When-Then chain to the new phase-aware API.
 - **Commercial path** (`UpgradeAxon4ToAxoniq5` only): additionally re-namespaces Axon Server connector, DLQ,
