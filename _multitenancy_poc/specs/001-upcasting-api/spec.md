@@ -851,7 +851,8 @@ a last resort if the old stream must be fully replaced.
   never modified on disk.
 - The university demo (`examples/university-demo`, plain Java, no Spring) is the target for
   demonstrating all in-scope use cases. Spring Boot integration is follow-on work.
-## addendum: Design Principles
+
+## Addendum: Design Principles
 
 Some principles taken into account for writing spec file below
 
