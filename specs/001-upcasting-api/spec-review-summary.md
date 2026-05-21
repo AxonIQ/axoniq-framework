@@ -77,7 +77,7 @@ as on the change itself.** A loose configuration absorbs more; a strict one reje
 ## Success Criteria (highlights)
 
 - **SC-002**: Every FR-008 conflict class detected before any event processed.
-- **SC-003**: All in-scope use cases demonstrated in `axoniq-framework/examples/` with passing CI tests.
+- **SC-003**: All in-scope use cases demonstrated in a new Maven sub-module under `axon-framework/examples/` (sibling to `university-demo`, etc.) that depends on `io.axoniq.framework:axoniq-message-transformation`, with passing CI tests.
 - **SC-008**: Concurrency test, multiple threads x sufficient iterations produce identical outputs (specific N/M in plan.md).
 - **SC-009**: DEBUG (startup) + TRACE (per applied) observability + disable mechanism verified by automated tests.
 
