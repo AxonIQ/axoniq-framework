@@ -158,11 +158,13 @@
                     <mavenExecutorId>forked-path</mavenExecutorId>
                     <localCheckout>true</localCheckout>
                     <releaseProfiles>javadoc,sources,sign</releaseProfiles>
-                    <!-- The migration module's AF4 test-stub dependencies share the
-                         org.axonframework groupId with reactor modules, which causes
-                         the release plugin's version-consistency check to fail.
-                         Deactivating the profile that provides those stubs removes
-                         the conflict; the stubs are validated in CI before release. -->
+                    <!-- Skip the AF4 recipe tests in the forked release build.
+                         The stubs are downloaded via maven-dependency-plugin:copy
+                         (not as <dependency> elements) so the release plugin's
+                         version-consistency scanner does not see them. The
+                         -DskipAf4RecipeTests flag skips the copy execution and
+                         the tests that depend on those JARs; they are validated
+                         in CI before release. -->
                     <arguments>-DskipAf4RecipeTests</arguments>
                 </configuration>
             </plugin>
