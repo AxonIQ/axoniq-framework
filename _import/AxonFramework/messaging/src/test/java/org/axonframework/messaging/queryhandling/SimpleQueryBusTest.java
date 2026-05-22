@@ -605,6 +605,37 @@ class SimpleQueryBusTest {
         }
 
         @Test
+        void emittingUpdateWithErroredProcessingContextDropsUpdate() {
+            // given
+            QueryMessage testQuery = new GenericQueryMessage(QUERY_TYPE, QUERY_PAYLOAD);
+            Predicate<QueryMessage> queryFilter = query -> query.identifier().equals(testQuery.identifier());
+            AtomicBoolean updateSupplierInvoked = new AtomicBoolean(false);
+            Supplier<SubscriptionQueryUpdateMessage> updateSupplier = () -> {
+                updateSupplierInvoked.set(true);
+                return new GenericSubscriptionQueryUpdateMessage(UPDATE_PAYLOAD_TYPE, UPDATE_PAYLOAD);
+            };
+
+            AtomicReference<ProcessingContext> testContextReference = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                testContextReference.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            // An exceptionally completed UnitOfWork/ProcessingContext
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            testSubject.subscribe(QUERY_NAME, (query, context) -> MessageStream.empty().cast());
+            testSubject.subscriptionQuery(testQuery, null, Queues.SMALL_BUFFER_SIZE);
+            
+            // when
+            testSubject.emitUpdate(queryFilter, updateSupplier, testContextReference.get()).join();
+            
+            // then - errored context: update must be silently dropped
+            assertThat(updateSupplierInvoked).isFalse();
+        }
+
+        @Test
         void emittingUpdatesDoesNotRetrieveUpdateWhenNoQueriesMatch() {
             // given...
             QueryMessage testQuery =
@@ -690,6 +721,35 @@ class SimpleQueryBusTest {
             
             // then...
             assertThat(filterInvoked).isTrue();
+        }
+
+        @Test
+        void completingSubscriptionsWithErroredProcessingContextDropsCompletion() {
+            // given
+            AtomicBoolean filterInvoked = new AtomicBoolean(false);
+            QueryMessage testQuery = new GenericQueryMessage(QUERY_TYPE, QUERY_PAYLOAD);
+            Predicate<QueryMessage> queryFilter = query -> {
+                filterInvoked.set(true);
+                return query.identifier().equals(testQuery.identifier());
+            };
+            
+            AtomicReference<ProcessingContext> testContextReference = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                testContextReference.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            // An exceptionally completed UnitOfWork/ProcessingContext
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+            
+            testSubject.subscriptionQuery(testQuery, null, Queues.SMALL_BUFFER_SIZE);
+            
+            // when
+            testSubject.completeSubscriptions(queryFilter, testContextReference.get()).join();
+            
+            // then - errored context: completion must be silently dropped
+            assertThat(filterInvoked).isFalse();
         }
 
         @Test
@@ -790,6 +850,36 @@ class SimpleQueryBusTest {
 
             // then...
             assertThat(filterInvoked).isTrue();
+        }
+
+        @Test
+        void completingSubscriptionsExceptionallyWithErroredProcessingContextDropsCompletion() {
+            // given
+            AtomicBoolean filterInvoked = new AtomicBoolean(false);
+            QueryMessage testQuery = new GenericQueryMessage(QUERY_TYPE, QUERY_PAYLOAD);
+            Predicate<QueryMessage> queryFilter = query -> {
+                filterInvoked.set(true);
+                return query.identifier().equals(testQuery.identifier());
+            };
+            MockException mockException = new MockException("Mock");
+
+            AtomicReference<ProcessingContext> testContextReference = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                testContextReference.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            // An exceptionally completed UnitOfWork/ProcessingContext
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            testSubject.subscriptionQuery(testQuery, null, Queues.SMALL_BUFFER_SIZE);
+
+            // when
+            testSubject.completeSubscriptionsExceptionally(queryFilter, mockException, testContextReference.get()).join();
+
+            // then - errored context: exceptional completion must be silently dropped
+            assertThat(filterInvoked).isFalse();
         }
 
         @Test
