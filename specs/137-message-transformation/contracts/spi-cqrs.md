@@ -20,11 +20,8 @@ import org.axonframework.messaging.core.MessageStream;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Command-specific specialization of {@link MessageTransformer}. 1:1 only -- split / drop
- * are forbidden for commands and queries (FR-019). Produced by the {@code CommandTransformation}
- * factory; users almost never implement this directly. The base SPI contract from
- * {@link MessageTransformer} applies, plus the output identity check (FR-018) on every
- * 1:1 invocation.
+ * Command-specific {@link MessageTransformer}. 1:1 only -- split / drop do not apply to
+ * commands. Use the {@code CommandTransformation} factory rather than implementing directly.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -33,18 +30,14 @@ import org.jspecify.annotations.NullMarked;
 public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 
     /**
-     * Single-entry convenience overload -- commands always arrive as one message.
+     * Single-entry convenience overload; commands arrive one at a time.
      *
      * @param stream a single-element command stream
-     * @return a single-element transformed command stream
+     * @return the transformed single-element stream
      */
     MessageStream.Single<CommandMessage> transform(MessageStream.Single<CommandMessage> stream);
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Default implementation that adapts to the single-entry overload above.
-     */
+    /** Adapts the base SPI to the single-entry overload. */
     @Override
     default MessageStream<CommandMessage> transform(MessageStream<CommandMessage> stream) {
         return transform(stream.first());
@@ -72,9 +65,9 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Query-specific specialization of {@link MessageTransformer}. Same shape as
- * {@link CommandTransformer}; subscription-query update streams flowing back to subscribers
- * are NOT transformed -- only the incoming query is. 1:1 only (FR-019).
+ * Query-specific {@link MessageTransformer}. 1:1 only. Subscription-query update streams
+ * flowing back to subscribers are NOT transformed -- only the incoming query is. Use the
+ * {@code QueryTransformation} factory rather than implementing directly.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -83,18 +76,14 @@ import org.jspecify.annotations.NullMarked;
 public interface QueryTransformer extends MessageTransformer<QueryMessage> {
 
     /**
-     * Single-entry convenience overload -- queries always arrive as one message.
+     * Single-entry convenience overload; queries arrive one at a time.
      *
      * @param stream a single-element query stream
-     * @return a single-element transformed query stream
+     * @return the transformed single-element stream
      */
     MessageStream.Single<QueryMessage> transform(MessageStream.Single<QueryMessage> stream);
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Default implementation that adapts to the single-entry overload above.
-     */
+    /** Adapts the base SPI to the single-entry overload. */
     @Override
     default MessageStream<QueryMessage> transform(MessageStream<QueryMessage> stream) {
         return transform(stream.first());
@@ -121,15 +110,10 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Decorator on {@link CommandBus} that wraps every registered {@link CommandHandler} at
- * subscription time so the chain fires on every incoming command -- whether dispatched
- * locally or routed via a {@code CommandBusConnector} from a remote node. Marked
- * {@link Internal}; produced by {@code CqrsTransformationConfigurationEnhancer}.
- * <p>
- * Annotation-based subscriptions also go through {@link CommandBus#subscribe} (via
- * {@code AnnotatedCommandHandlingComponent.registerHandler(...)}), so no path is missed.
- * The outbound {@code CommandBus.dispatch(...)} path is NOT decorated (sender-side
- * transformation is out of scope per Part C of spec).
+ * {@link CommandBus} decorator that wraps each registered {@link CommandHandler} at
+ * subscription time so the chain fires on every incoming command -- local or remote.
+ * Installed automatically by {@code CqrsTransformationConfigurationEnhancer}; not
+ * constructed by users. Outbound dispatch is not decorated.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -138,28 +122,16 @@ import org.jspecify.annotations.NullMarked;
 @Internal
 public final class TransformingCommandBus implements CommandBus {
 
-    /**
-     * Decorator ordering: outer (later) than {@code InterceptingCommandBus}
-     * (which uses {@code MIN_VALUE + 100}) so dispatch interceptors observe transformed
-     * commands.
-     */
+    /** Decoration order: outer (later) than {@code InterceptingCommandBus}. */
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 110;
 
     /**
-     * Construct the decorator. Internal use only; produced by
-     * {@code CqrsTransformationConfigurationEnhancer} via {@code ComponentRegistry}.
-     *
      * @param delegate the inner {@link CommandBus} to wrap
      * @param chain    the application's {@link MessageTransformerChain}
      */
     public TransformingCommandBus(CommandBus delegate, MessageTransformerChain chain) { /* ... */ }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Wraps the supplied {@code handler} so {@code chain.transform(...)} fires before
-     * the delegate's handler is invoked.
-     */
+    /** Wraps {@code handler} so the chain runs before the delegate handler. */
     @Override
     public TransformingCommandBus subscribe(QualifiedName name, CommandHandler handler) {
         // wraps handler so chain.transform fires before delegate.handle
@@ -190,9 +162,9 @@ import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Mirror of {@link TransformingCommandBus} for queries: decorator on {@link QueryBus} that
- * wraps every registered {@link QueryHandler} at subscription time. Marked {@link Internal};
- * produced by {@code CqrsTransformationConfigurationEnhancer}.
+ * Mirror of {@link TransformingCommandBus} for queries: {@link QueryBus} decorator wrapping
+ * each registered {@link QueryHandler} at subscription time. Installed automatically by
+ * {@code CqrsTransformationConfigurationEnhancer}; not constructed by users.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -201,24 +173,16 @@ import org.jspecify.annotations.NullMarked;
 @Internal
 public final class TransformingQueryBus implements QueryBus {
 
-    /** Decorator ordering aligned with {@link TransformingCommandBus#DECORATION_ORDER}. */
+    /** Decoration order aligned with {@link TransformingCommandBus#DECORATION_ORDER}. */
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 110;
 
     /**
-     * Construct the decorator. Internal use only; produced by
-     * {@code CqrsTransformationConfigurationEnhancer} via {@code ComponentRegistry}.
-     *
      * @param delegate the inner {@link QueryBus} to wrap
      * @param chain    the application's {@link MessageTransformerChain}
      */
     public TransformingQueryBus(QueryBus delegate, MessageTransformerChain chain) { /* ... */ }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Wraps the supplied {@code handler} so {@code chain.transform(...)} fires before
-     * the delegate's handler is invoked.
-     */
+    /** Wraps {@code handler} so the chain runs before the delegate handler. */
     @Override
     public TransformingQueryBus subscribe(QualifiedName name, QueryHandler handler) {
         // wraps handler so chain.transform fires before delegate.handle
@@ -244,11 +208,9 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * ServiceLoader-discovered {@link ConfigurationEnhancer} (5.3+) that registers
- * {@code TransformingCommandBus} and {@code TransformingQueryBus} as decorators on
- * {@code CommandBus} and {@code QueryBus}, sharing the same {@code MessageTransformerChain}
- * instance that {@code EventTransformationConfigurationEnhancer} already exposes. A no-op
- * if no chain is registered.
+ * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs
+ * {@link TransformingCommandBus} and {@link TransformingQueryBus} decorators, sharing the
+ * same chain instance as the event-side enhancer. A no-op if no chain is registered.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -256,9 +218,6 @@ import org.jspecify.annotations.NullMarked;
 @NullMarked
 public final class CqrsTransformationConfigurationEnhancer implements ConfigurationEnhancer {
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void enhance(ComponentRegistry registry) { /* ... */ }
 }
