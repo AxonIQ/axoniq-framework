@@ -22,6 +22,7 @@ import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -43,6 +44,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -576,6 +578,33 @@ class SimpleQueryBusTest {
         }
 
         @Test
+        void emittingUpdateWithAlreadyCommittedProcessingContextEmitsImmediately() {
+            // given...
+            QueryMessage testQuery = new GenericQueryMessage(QUERY_TYPE, QUERY_PAYLOAD);
+            Predicate<QueryMessage> queryFilter = query -> query.identifier().equals(testQuery.identifier());
+            SubscriptionQueryUpdateMessage updateMessage =
+                    new GenericSubscriptionQueryUpdateMessage(UPDATE_PAYLOAD_TYPE, UPDATE_PAYLOAD);
+            
+            AtomicReference<ProcessingContext> testContextReference = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(testContextReference::set);
+            // A completed UnitOfWork == a committed ProcessingContext
+            uow.execute().join();
+            
+            testSubject.subscribe(QUERY_NAME, (query, context) -> MessageStream.empty().cast());
+            MessageStream<QueryResponseMessage> result = 
+                    testSubject.subscriptionQuery(testQuery, null, Queues.SMALL_BUFFER_SIZE);
+            
+            // when emitting with an already-completed context...
+            testSubject.emitUpdate(queryFilter, () -> updateMessage, testContextReference.get()).join();
+            
+            // then...
+            StepVerifier.create(FluxUtils.of(result).map(MessageStream.Entry::message))
+                        .expectNextMatches(response -> Objects.equals(response.payload(), UPDATE_PAYLOAD))
+                        .verifyTimeout(Duration.ofMillis(100));
+        }
+
+        @Test
         void emittingUpdatesDoesNotRetrieveUpdateWhenNoQueriesMatch() {
             // given...
             QueryMessage testQuery =
@@ -635,6 +664,32 @@ class SimpleQueryBusTest {
             StepVerifier.create(FluxUtils.of(thirdResponses).map(MessageStream.Entry::message))
                         .expectNextMatches(response -> Objects.equals(response.payload(), UPDATE_PAYLOAD))
                         .verifyTimeout(Duration.ofMillis(100));
+        }
+
+        @Test
+        void completingSubscriptionsWithAlreadyCommittedProcessingContextExecutesImmediately() {
+            // given...
+            AtomicBoolean filterInvoked = new AtomicBoolean(false);
+            QueryMessage testQuery = new GenericQueryMessage(QUERY_TYPE, QUERY_PAYLOAD);
+            Predicate<QueryMessage> queryFilter =
+                    query -> {
+                        filterInvoked.set(true);
+                        return query.identifier().equals(testQuery.identifier());
+                    };
+            
+            AtomicReference<ProcessingContext> testContextReference = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(testContextReference::set);
+            // A completed UnitOfWork == a committed ProcessingContext
+            uow.execute().join();
+            
+            testSubject.subscriptionQuery(testQuery, null, Queues.SMALL_BUFFER_SIZE);
+
+            // when completing with an already-completed context...
+            testSubject.completeSubscriptions(queryFilter, testContextReference.get()).join();
+            
+            // then...
+            assertThat(filterInvoked).isTrue();
         }
 
         @Test
@@ -707,6 +762,34 @@ class SimpleQueryBusTest {
                         .expectNextCount(1)
                         .expectNextMatches(response -> Objects.equals(response.payload(), UPDATE_PAYLOAD))
                         .verifyTimeout(Duration.ofMillis(100));
+        }
+
+        @Test
+        void completingSubscriptionsExceptionallyWithAlreadyCommittedProcessingContextExecutesImmediately() {
+            // given...
+            AtomicBoolean filterInvoked = new AtomicBoolean(false);
+            QueryMessage testQuery = new GenericQueryMessage(QUERY_TYPE, QUERY_PAYLOAD);
+            Predicate<QueryMessage> queryFilter =
+                    query -> {
+                        filterInvoked.set(true);
+                        return query.identifier().equals(testQuery.identifier());
+                    };
+            MockException mockException = new MockException("Mock");
+
+            AtomicReference<ProcessingContext> testContextReference = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(testContextReference::set);
+            // A completed UnitOfWork == a committed ProcessingContext
+            uow.execute().join();
+
+            testSubject.subscriptionQuery(testQuery, null, Queues.SMALL_BUFFER_SIZE);
+
+            // when completing exceptionally with an already-committed context...
+            testSubject.completeSubscriptionsExceptionally(queryFilter, mockException, testContextReference.get())
+                       .join();
+
+            // then...
+            assertThat(filterInvoked).isTrue();
         }
 
         @Test
