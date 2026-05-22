@@ -74,7 +74,7 @@ They validate the command and append the creation event.
 They validate the command against current state and append events.
 * **Event sourcing handlers**: instance methods that apply events to update the entity's state fields.
 They must never contain business logic, only state assignments.
-* **Entity creator**: a constructor or static factory method annotated with `@EntityCreator` that tells Axon how to construct the initial entity instance before replaying events.
+* **Entity creator**: a constructor or static factory method that tells Axon how to construct the initial entity instance before replaying events.
 
 The following plain Java class illustrates all four members with no framework annotations:
 
