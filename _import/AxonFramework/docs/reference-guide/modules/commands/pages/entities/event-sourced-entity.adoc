@@ -210,7 +210,7 @@ public class CourseEntityConfiguration {
                         })
                         .build();
                 })
-                .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(id -> new CourseEntity())) // <7>
+                .entityFactory(c -> EventSourcedEntityFactory.fromNoArgument(CourseEntity::new)) // <7>
                 .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id))) // <8>
                 .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <9>
                 .build()
@@ -220,9 +220,9 @@ public class CourseEntityConfiguration {
 ----
 
 <1> Resolve qualified names via `MessageTypeResolver` rather than constructing `QualifiedName` directly.
-This respects any custom name or namespace declared on `@Command`, `@Event`, or `@Query` annotations and falls back to the fully qualified class name when none is present.
+This respects any custom name or namespace defined in the used `MessageTypeResolver`, or on `@Command`, `@Event`, or `@Query` annotations when the automated type resolution is used.
 
-<2> Creational command handlers are invoked when no entity instance exists yet.
+<2> Creational command handlers are invoked as the starting point for a new entity instance.
 
 <3> Delegates to the entity's `create` method—business logic stays in the entity.
 `EventAppender.forContext(context)` creates or retrieves the event appender bound to the current processing context.
@@ -235,8 +235,9 @@ The loaded entity is passed as the second argument.
 
 <6> The entity evolver delegates to the entity's own `on` methods and returns the same instance.
 
-<7> `EventSourcedEntityFactory.fromIdentifier` wraps a constructor that takes only the entity identifier.
-Axon calls it each time the entity needs to be (re)constructed before replaying its events; the first event message is not passed to this factory.
+<7> `EventSourcedEntityFactory.fromNoArgument` wraps the entity's no-argument constructor.
+Axon calls it each time the entity needs to be (re)constructed before replaying its events.
+Use `fromIdentifier` when the constructor needs the identifier, or `fromEventMessage` for immutable entities created from the first event.
 
 <8> The criteria resolver tells Axon which events belong to this entity's stream, using tag-based filtering.
 
