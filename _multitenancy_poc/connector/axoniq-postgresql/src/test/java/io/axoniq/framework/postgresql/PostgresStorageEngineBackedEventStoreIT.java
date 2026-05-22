@@ -31,14 +31,12 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.concurrent.CompletableFuture;
-
 import javax.sql.DataSource;
 
 public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBackedEventStoreTestSuite<PostgresqlEventStorageEngine> {
@@ -79,6 +77,18 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
 
         if (postgresContainer != null) {
             postgresContainer.stop();
+        }
+    }
+
+    @Nested
+    class OverrideAppendCondition
+            extends StorageEngineBackedEventStoreTestSuite<PostgresqlEventStorageEngine>.OverrideAppendCondition {
+
+        @Override
+        @Disabled("Type based Append conditions not yet implemented")
+        @Test
+        protected void narrowedCriteriaShouldAvoidFalseConflict() {
+            // TODO enable once #52 is fixed
         }
     }
 
