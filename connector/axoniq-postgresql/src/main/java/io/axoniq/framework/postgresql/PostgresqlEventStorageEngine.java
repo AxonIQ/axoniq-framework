@@ -987,7 +987,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         Set<Tag> lockedTags = new HashSet<>();
 
         for(EventCriterion criterion : condition.criteria().flatten()) {
-            // TODO #10 Support type based append transactions
+            // TODO #52 Support type based append transactions
             for (Tag tag : criterion.tags()) {
                 // Only lock the tag if it wasn't already locked in this batch:
                 if (!batchLockedTags.contains(tag)) {
