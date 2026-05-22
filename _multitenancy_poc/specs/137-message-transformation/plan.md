@@ -116,6 +116,8 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004)
 |     |-- VersionComparator.java                # optional (FR-020) -- nice-to-have
 |     |-- SemverComparator.java                 # builder convenience -- nice-to-have
+|     |-- ChainConfigurationException.java      # thrown by Builder on FR-008 conflicts (nice-to-have)
+|     |-- Observability.java                    # sealed interface: enabled() / disabled() switch (FR-013, nice-to-have)
 |     |
 |     |-- events/                               # 5.2.0
 |     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>
