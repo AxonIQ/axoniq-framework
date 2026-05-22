@@ -33,7 +33,7 @@ If you are adding an entity only to hold a flag that is set once and never chang
 |xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities]
 |How to define and configure an event-sourced entity: creational and instance command handlers, event sourcing handlers, `@EntityCreator` patterns, and the declarative approach.
 
-|xref:commands:entities/command-handler-components.adoc[Command handler components]
+|xref:commands:entities/stateful-command-handler.adoc[Stateful command handlers]
 |How to keep command handling logic in a dedicated class separate from the entity, using `@InjectEntity` to receive entity state as a parameter.
 This is the recommended approach for Vertical Slice Architecture.
 

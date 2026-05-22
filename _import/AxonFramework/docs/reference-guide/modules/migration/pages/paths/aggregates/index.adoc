@@ -303,7 +303,7 @@ New entities are created when a command appends an event that can be routed to a
 For more information on command handling and modeling patterns in Axon Framework 5, refer to:
 
 - xref:commands:entities/index.adoc[Entities]: stateful command handlers that enforce business rules using prior state
-- xref:commands:entities/command-handler-components.adoc[Command handler components]: how to structure handlers by use case using Vertical Slice Architecture
+- xref:commands:entities/stateful-command-handler.adoc[Stateful command handlers]: how to structure handlers by use case using Vertical Slice Architecture
 - xref:migration:understanding-architecture-principles.adoc#moving-away-from-aggregates[Architecture Principles: Moving away from Aggregates]
 - xref:events:event-store-internals.adoc[Event Store Internals and DCB]
 - xref:commands:command-handlers.adoc[Command handlers]: stateless command handlers that need no prior state

@@ -1,15 +1,15 @@
-= Command Handler Components
-:navtitle: Command handler components
+= Stateful Command Handlers
+:navtitle: Stateful command handlers
 
-A command handler component keeps command handling logic in a dedicated class, separate from the entity that holds state.
+A stateful command handler keeps command handling logic in a dedicated class, separate from the entity that holds state.
 The entity is loaded automatically by Axon and injected as a parameter via `@InjectEntity`.
 
 This separates two concerns:
 
 * The **entity** maintains state fields and event sourcing handlers.
-* The **command handler component** contains decision logic, validates the command against entity state, and appends events.
+* The **stateful command handler** contains decision logic, validates the command against entity state, and appends events.
 
-== Defining a command handler component
+== Defining a stateful command handler
 
 Declare command handlers in a regular class.
 Annotate entity parameters with `@InjectEntity` to tell Axon to load the correct entity instance before the handler is invoked.
@@ -51,7 +51,7 @@ public class Course {
 }
 ----
 
-The command handler component is a plain class.
+The stateful command handler is a plain class.
 Its methods receive the `Course` entity as a parameter whenever prior state is needed:
 
 [source,java]
@@ -162,7 +162,7 @@ public record SubscribeStudentToCourse(String studentId, String courseId) {}
 
 == Vertical slice architecture
 
-Separate command handler components are the natural fit for https://www.jimmybogard.com/vertical-slice-architecture/[Vertical Slice Architecture] in Axon Framework.
+Stateful command handlers are the natural fit for https://www.jimmybogard.com/vertical-slice-architecture/[Vertical Slice Architecture] in Axon Framework.
 
 In Vertical Slice Architecture, you organize code around use cases rather than technical layers.
 Each slice owns everything needed to fulfill one request: the command, the handler, the entity state it reads, and the events it appends.

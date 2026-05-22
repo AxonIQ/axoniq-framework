@@ -323,7 +323,7 @@ Both approaches are valid—choose based on how you want to structure your codeb
 Placing handlers on the entity keeps all logic for that entity in one class.
 A separate component lets you organize code by use case rather than by entity, which aligns with Vertical Slice Architecture.
 
-See xref:commands:entities/command-handler-components.adoc[Command handler components] for the full pattern.
+See xref:commands:entities/stateful-command-handler.adoc[Stateful command handlers] for the full pattern.
 
 == Further reading
 

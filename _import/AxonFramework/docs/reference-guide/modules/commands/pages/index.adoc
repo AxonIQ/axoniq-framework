@@ -18,21 +18,21 @@ The framework provides comprehensive support for:
 
 This approach emphasizes _what you want to accomplish_ (commands) rather than _how you structure your domain model_.
 
-== Command handlers: stateless and stateful
+== Command handler styles
 
-Command handlers fall into two categories:
+Command handlers come in three styles, depending on whether they need prior state and where that state lives:
 
-* **Stateless command handlers**: No prior state is needed to process the command.
+* **Stateless command handlers**: no prior state is needed.
 Each invocation is independent—for example, dispatching a batch of sub-commands, sending a notification, or forwarding a command to an external system.
 See xref:commands:command-handlers.adoc[Command handlers].
 
-* **Stateful command handlers**: Prior state is required to enforce business rules.
-A course enrollment command needs the current student count to enforce capacity.
-A bank account command needs the current balance to prevent overdrafts.
-State is held in an event-sourced entity that Axon loads automatically before invoking the handler.
-See xref:commands:entities/index.adoc[Entities].
+* **Event-sourced entities**: command handlers live on the entity class itself, alongside its state fields and event sourcing handlers.
+All logic for the entity lives in one place.
+See xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities].
 
-An entity is one way to provide that state, but it is an implementation choice, not an architectural requirement.
+* **Stateful command handlers**: command handlers live in a dedicated class and receive the entity as a parameter via `@InjectEntity`.
+Logic is organized by use case rather than by entity, which aligns with Vertical Slice Architecture.
+See xref:commands:entities/stateful-command-handler.adoc[Stateful command handlers].
 
 == Subsections
 

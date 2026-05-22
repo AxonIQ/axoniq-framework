@@ -4,8 +4,8 @@
 Command handlers process commands and perform the corresponding business logic.
 A command handler decides whether a requested change is valid and, if so, applies it—by appending events, invoking services, or dispatching further commands.
 
-Command handlers can be **stateless** (not requiring any prior state) or **stateful** (depending on prior state to enforce business rules).
-The different patterns for implementing stateful command handlers are covered in xref:entities/event-sourced-entity.adoc[Event-sourced entities] and xref:entities/command-handler-components.adoc[Command handler components].
+Command handlers are **stateless** when they do not need prior state to process the command (this page).
+When prior state is required, the handler either lives on the entity itself (see xref:entities/event-sourced-entity.adoc[Event-sourced entities]) or receives the entity as a parameter via `@InjectEntity` (see xref:entities/stateful-command-handler.adoc[Stateful command handlers]).
 
 [#stateless-command-handlers]
 == Stateless command handlers
@@ -51,7 +51,7 @@ Commands should focus on changing the conceptual state of a system.
 If a command only performs validation or queries without changing state, consider whether it should be implemented as a query instead.
 ====
 
-When command handling requires entity state, you can use stateful command handlers as explained in more detail in xref:entities/event-sourced-entity.adoc[Event-Sourced Entities] and xref:entities/command-handler-components.adoc[Command Handler Components].
+When command handling requires entity state, see xref:entities/event-sourced-entity.adoc[Event-sourced entities] for handlers placed directly on the entity class, or xref:entities/stateful-command-handler.adoc[Stateful command handlers] for the `@InjectEntity` pattern.
 
 == Command message types
 
