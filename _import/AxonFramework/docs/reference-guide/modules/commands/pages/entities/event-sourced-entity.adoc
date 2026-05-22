@@ -76,7 +76,7 @@ They validate the command against current state and append events.
 They must never contain business logic, only state assignments.
 * **Entity creator**: a constructor or static factory method that tells Axon how to construct the initial entity instance before replaying events.
 
-The following plain Java class illustrates all four members with no framework annotations:
+The following plain Java class illustrates all four members:
 
 [source,java]
 ----
@@ -136,13 +136,15 @@ An entity only needs the state required to make decisions about incoming command
 An event sourcing handler is only needed when the resulting state change is relevant for validating future commands.
 ====
 
-[#entity-creation-with-entitycreator]
 === Entity creator
 
-`@EntityCreator` tells Axon how to construct the initial entity instance before replaying events.
-It is mandatory for annotation-based entities; the declarative approach uses a factory instead—see <<_declarative,Declarative>>.
+The entity creator method can come in several forms.
+You can choose a no-argument, identifier-based, or first-event-based entity creator method.
+These options allow you to derive a mutable **and** immutable entity depending on the preferred structure.
 
-See xref:commands:entities/entity-creator.adoc[Entity creator] for the three supported construction patterns.
+Depending on the configuration style, you either use the `EventSourcedEntityFactory` (declarative) or `@EntityCreator` (automated) to define the entity creator method.
+
+For more details on the options, see the xref:commands:entities/entity-creator.adoc[Entity creator] section.
 
 == Configuring an entity
 
@@ -157,6 +159,8 @@ Three approaches are available to wire this entity into Axon:
 
 The declarative approach wires the entity's existing methods into Axon without touching the entity class.
 
+The registration is wrapped in a helper method that receives the application's `EventSourcingConfigurer` as a parameter—the configurer itself is constructed only once, in `main()`, and threaded through each entity's configuration class.
+
 [source,java]
 ----
 import org.axonframework.eventsourcing.EventSourcedEntityFactory;
@@ -170,46 +174,49 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
 
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+public class CourseEntityConfiguration {
 
-configurer.registerEntity(
-    EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-        .messagingModel((config, model) -> {
-            MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class); // <1>
-            return model
-                .creationalCommandHandler( // <2>
-                    resolver.resolveOrThrow(CreateCourseCommand.class).qualifiedName(),
-                    (command, context) -> {
-                        CourseEntity.create(command.payloadAs(CreateCourseCommand.class), // <3>
-                                           EventAppender.forContext(context));
-                        return MessageStream.empty().cast();
-                    }
-                )
-                .instanceCommandHandler( // <4>
-                    resolver.resolveOrThrow(EnrollStudentCommand.class).qualifiedName(),
-                    (command, entity, context) -> {
-                        entity.enroll(command.payloadAs(EnrollStudentCommand.class), // <5>
-                                      EventAppender.forContext(context));
-                        return MessageStream.empty().cast();
-                    }
-                )
-                .entityEvolver((entity, event, context) -> { // <6>
-                    QualifiedName courseCreated = resolver.resolveOrThrow(CourseCreatedEvent.class).qualifiedName();
-                    QualifiedName studentEnrolled = resolver.resolveOrThrow(StudentEnrolledEvent.class).qualifiedName();
-                    if (event.type().qualifiedName().equals(courseCreated)) {
-                        entity.on(event.payloadAs(CourseCreatedEvent.class));
-                    } else if (event.type().qualifiedName().equals(studentEnrolled)) {
-                        entity.on(event.payloadAs(StudentEnrolledEvent.class));
-                    }
-                    return entity;
+    public static EventSourcingConfigurer configure(EventSourcingConfigurer configurer) {
+        return configurer.registerEntity(
+            EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
+                .messagingModel((config, model) -> {
+                    MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class); // <1>
+                    return model
+                        .creationalCommandHandler( // <2>
+                            resolver.resolveOrThrow(CreateCourseCommand.class).qualifiedName(),
+                            (command, context) -> {
+                                CourseEntity.create(command.payloadAs(CreateCourseCommand.class), // <3>
+                                                   EventAppender.forContext(context));
+                                return MessageStream.empty().cast();
+                            }
+                        )
+                        .instanceCommandHandler( // <4>
+                            resolver.resolveOrThrow(EnrollStudentCommand.class).qualifiedName(),
+                            (command, entity, context) -> {
+                                entity.enroll(command.payloadAs(EnrollStudentCommand.class), // <5>
+                                              EventAppender.forContext(context));
+                                return MessageStream.empty().cast();
+                            }
+                        )
+                        .entityEvolver((entity, event, context) -> { // <6>
+                            QualifiedName courseCreated = resolver.resolveOrThrow(CourseCreatedEvent.class).qualifiedName();
+                            QualifiedName studentEnrolled = resolver.resolveOrThrow(StudentEnrolledEvent.class).qualifiedName();
+                            if (event.type().qualifiedName().equals(courseCreated)) {
+                                entity.on(event.payloadAs(CourseCreatedEvent.class));
+                            } else if (event.type().qualifiedName().equals(studentEnrolled)) {
+                                entity.on(event.payloadAs(StudentEnrolledEvent.class));
+                            }
+                            return entity;
+                        })
+                        .build();
                 })
-                .build();
-        })
-        .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(id -> new CourseEntity())) // <7>
-        .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id))) // <8>
-        .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <9>
-        .build()
-);
+                .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(id -> new CourseEntity())) // <7>
+                .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id))) // <8>
+                .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <9>
+                .build()
+        );
+    }
+}
 ----
 
 <1> Resolve qualified names via `MessageTypeResolver` rather than constructing `QualifiedName` directly.
