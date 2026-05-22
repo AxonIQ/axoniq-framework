@@ -65,6 +65,32 @@ We strongly recommend making your event handlers idempotent when using the dead-
 
 The principle of **exactly once** delivery is no longer guaranteed; at-least-once delivery is the reality to cope with.
 
+== Transactionality
+
+The event processor runs all work for a processing batch within a single database transaction.
+That transaction covers three things atomically:
+
+* event handler execution, including any database writes the handler performs (like projection updates)
+* the tracking token update
+* any DLQ enqueue operations for events that failed earlier in the same batch
+
+[IMPORTANT]
+====
+The DLQ cannot protect against database exceptions that break the active transaction, regardless of whether the exception originates in the handler or in the DLQ persistence itself.
+====
+
+The `JpaSequencedDeadLetterQueue` and `JdbcSequencedDeadLetterQueue` obtain their database connection from the active `ProcessingContext`, so they join the same transaction as the event handler.
+Because all three participate in the same transaction, a failure in any one of them rolls back all the others.
+
+This has two practical consequences:
+
+* *Handler failure rolls back the DLQ entry.* When a handler's database write fails with a transaction-breaking exception (for example, a projection write where a value is too large for a column), the entire transaction is rolled back.
+Any DLQ entries added earlier in the same batch are undone along with the handler's work and the tracking token update.
+The processor retries the same batch from its last committed position.
+
+* *DLQ persistence failure rolls back the handler's transactional work.* If the DLQ itself fails to persist a dead letter, that also breaks the transaction.
+Any transactional work performed by the handler earlier in the same batch (such as a projection update) is rolled back as well.
+
 == Configuration
 
 Dead-letter queue configuration happens through the `DeadLetterQueueConfiguration` class, which provides a fluent API for enabling and customizing the queue.
