@@ -32,9 +32,8 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 }
 ```
 
-**Contract** (in addition to base contract in [spi-base.md](spi-base.md)):
+**Contract** (in addition to base contract in [spi-base.md](spi-base.md), which already covers FR-018 output identity check):
 - **1:1 only** (FR-019): `CommandTransformation` does not expose `split(...)` or `drop(...)`. The chain Builder also rejects any multi-output / zero-output `MessageTransformer<CommandMessage>` at `.build()` lock time, in case one is constructed via the SPI directly.
-- **Output identity check** (FR-018): a 1:1 transformer whose output identity does not match the declared `to` raises a clear error.
 
 **Cross-references**: FR-018, FR-019, US8.
 
