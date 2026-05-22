@@ -77,19 +77,19 @@ as on the change itself.** A loose configuration absorbs more, a strict one reje
 
 *Payload can't be bridged at the converter level:*
 
-- **Add REQUIRED field, no usable default** -> `SingleEventTransformation` (populate from existing payload data).
-- **Change optional -> required, no usable default** -> `SingleEventTransformation`.
-- **Rename triggers payload restructure beyond a simple alias** -> `SingleEventTransformation`.
-- **Incompatible type change** (e.g., `String -> int` requiring a parse step) -> `SingleEventTransformation`.
-- **Payload restructure** (one field -> 2, combining fields, complex shape) -> `SingleEventTransformation`.
-- **Strict converter config rejects an otherwise-bridgeable difference** (`FAIL_ON_UNKNOWN_PROPERTIES = true`, Avro `NONE`, JAXB without an alias) -> relax the config, or write a `SingleEventTransformation`.
+- **Add REQUIRED field, no usable default** -> `EventTransformation.from(...).to(...).transform(...)` (populate from existing payload data).
+- **Change optional -> required, no usable default** -> `EventTransformation.from(...).to(...).transform(...)`.
+- **Rename triggers payload restructure beyond a simple alias** -> `EventTransformation.from(...).to(...).transform(...)`.
+- **Incompatible type change** (e.g., `String -> int` requiring a parse step) -> `EventTransformation.from(...).to(...).transform(...)`.
+- **Payload restructure** (one field -> 2, combining fields, complex shape) -> `EventTransformation.from(...).to(...).transform(...)`.
+- **Strict converter config rejects an otherwise-bridgeable difference** (`FAIL_ON_UNKNOWN_PROPERTIES = true`, Avro `NONE`, JAXB without an alias) -> relax the config, or write an `EventTransformation.from(...).to(...).transform(...)`.
 
 *Identity / cardinality changes:*
 
 - **Event identity changed (name or version), payload unchanged** -> `EventTransformation.rename(from, to)`.
-- **Event identity changed, payload also changes** -> `SingleEventTransformation`.
-- **One event becomes multiple events** -> `MultiEventTransformation`.
-- **Drop event entirely** -> `MultiEventTransformation` returning an empty list.
+- **Event identity changed, payload also changes** -> `EventTransformation.from(from).to(to).transform(...)`.
+- **One event becomes multiple events** -> `EventTransformation.split(source).transform(...)`.
+- **Drop event entirely** -> `EventTransformation.drop(source)`.
 
 ---
 
@@ -422,7 +422,7 @@ the design target for the future `axoniq-message-transformation-cqrs` module.
 
 **Plain-English explanation**: a receiver applies the transformation chain to an incoming
 command before dispatching it to the command handler. The mechanism is the same as for
-events: the transformer SPI is `MessageStream<M extends Message<?>> -> MessageStream<M>`. For
+events: the transformer SPI is `MessageStream<M extends Message> -> MessageStream<M>`. For
 commands the chain MUST fire on every incoming command that reaches a handler -- whether it
 arrived via a `CommandBusConnector` from a remote node or via a local-process dispatch that
 bypasses the connector. The decoration point is therefore at handler-registration level on
@@ -551,7 +551,7 @@ does the sender know what version the receiver understands?) that need their own
 Command and query transformation (the receiver-side, old-to-new direction) is in scope for the
 overall design -- see US8 (commands) and US9 (queries) in Part B -- but delivery is held to
 5.3+ per scope decision; 5.2.0 ships events only. The transformer operates on
-`MessageStream<M extends Message<?>>` and is wired at each message-ingress point: `EventStore`
+`MessageStream<M extends Message>` and is wired at each message-ingress point: `EventStore`
 for events; for commands and queries, at handler-registration level on `CommandBus` /
 `QueryBus` so every incoming command/query is transformed regardless of whether it arrived via
 a connector or was dispatched locally.
@@ -791,7 +791,7 @@ a last resort if the old stream must be fully replaced.
   subscribed to).
   _Traces to: US1, US6 scenario 7._
 - **FR-019 (Commands and queries)**: The transformer mechanism MUST support commands and queries
-  in addition to events. The SPI is uniform: `MessageStream<M extends Message<?>> ->
+  in addition to events. The SPI is uniform: `MessageStream<M extends Message> ->
   MessageStream<M>`. Wiring points: for events the chain decorates `EventStore`; for commands
   and queries (delivered in 5.3+) the chain MUST be applied at handler-registration level on
   `CommandBus.subscribe(QualifiedName, CommandHandler)` / `QueryBus.subscribe(QualifiedName,
@@ -799,9 +799,11 @@ a last resort if the old stream must be fully replaced.
   transformed regardless of whether it arrived via a `CommandBusConnector` / `QueryBusConnector`
   from a remote node or was dispatched locally. The 1:1 patterns (FR-001, FR-002) apply to all
   three message types. The 1:N / 1:0 patterns (FR-003) apply ONLY to events: commands and
-  queries are single-intent messages, and the framework MUST reject any
-  `MultiEventTransformation`-equivalent registration for command or query types. Sender-side
-  transformation is out of scope (Part C).
+  queries are single-intent messages: `CommandTransformation` and `QueryTransformation`
+  factories do NOT expose `split(...)` or `drop(...)` (a compile-time guarantee), and the
+  framework MUST reject any multi-output / zero-output `MessageTransformer` registered for
+  command or query types at chain `.build()` lock time. Sender-side transformation is out of
+  scope (Part C).
   _Traces to: US8, US9._
 - **FR-020 (VersionComparator)**: Version strings are arbitrary non-empty strings, AF4
   compatibility (`@Revision` accepted any string) precludes format enforcement. A chain MAY

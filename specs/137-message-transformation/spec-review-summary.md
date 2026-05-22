@@ -10,7 +10,7 @@ Event-sourced systems store events permanently and immutably, but applications e
 1. **Message converter**. Handles representation changes (adding optional fields, renaming via aliases, type coercion, etc.) automatically.
 2. **Message transformer** *(this spec)*. Handles structural changes the converter can't (splits, drops, required fields, payload restructuring).
 
-The transformer is wired in front of routing/dispatch at three sites: a decorator around the `EventStore` for events, around the command bus connector for incoming commands, and around the query bus connector for incoming queries. The same SPI shape (`MessageStream<M> -> MessageStream<M>`) handles all three. Ships from `axoniq-framework` (commercial).
+The transformer is wired in front of routing/dispatch at three ingress sites: a decorator around the `EventStore` for events (5.2.0); for commands and queries (5.3+), the chain wraps at handler-registration level on `CommandBus` / `QueryBus`, so every incoming command/query is transformed regardless of whether it arrived via a connector or was dispatched locally. The same SPI shape (`MessageStream<M> -> MessageStream<M>`) handles all three. Ships from `axoniq-framework` (commercial).
 
 ## Scope (the three-part structure)
 
@@ -86,6 +86,6 @@ as on the change itself.** A loose configuration absorbs more; a strict one reje
 1. **Programmatic registration only** for 5.2.0. Explicit reaction to AF4's Spring-Bean ordering issues. Annotations deferred.
 2. **Fail-fast philosophy**. Three FR-008 misconfiguration classes caught at startup (`register()` + `.build()` lock); a fourth class (version-order violation) is added when an optional `VersionComparator` is registered (FR-020).
 3. **No context-aware transformations**. N-to-1 merge and field-borrowing across events deferred because per-entity vs. cross-entity memory scope was a known AF4 bug source.
-4. **Single SPI for events, commands, queries**. `MessageTransformer<M extends Message<?>>` operating on `MessageStream<M>`, wired in front of routing/dispatch at three sites (`EventStore` + command/query bus connectors). Split/drop restricted to events.
+4. **Single SPI for events, commands, queries**. `MessageTransformer<M extends Message>` operating on `MessageStream<M>`, wired at three sites: `EventStore` decorator for events (5.2.0); handler-registration-level wrapping on `CommandBus` / `QueryBus` for commands/queries (5.3+). Split/drop restricted to events.
 5. **Snapshots architecturally ready but deferred**. Design must not preclude future snapshot transformations without redesign.
 6. **Commercial-only feature**. Ships from `axoniq-framework`; pure Axon Framework users must add the dependency. `axon-framework` itself stays untouched except for one small `MessageStream.flatMap` addition needed by the chain implementation.
