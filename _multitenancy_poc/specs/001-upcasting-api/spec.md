@@ -679,9 +679,15 @@ a last resort if the old stream must be fully replaced.
   `QualifiedName` matches no registered transformation skip the chain entirely (O(1) lookup,
   no allocations, FR-011). Within a sub-chain, transformations are applied in registration
   order, filtering by `version`. Each transformation's output MUST feed into the next as input.
-  For 1:N splits, every replacement event MUST re-enter routing at its own `QualifiedName`
-  sub-chain and continue through the remaining chain independently.
-  _Traces to: US1 scenario 4, US3 scenario 4, US5._
+  **Re-entry on `QualifiedName` change**: any transformation output whose `QualifiedName` differs
+  from its input's `QualifiedName` MUST re-enter routing at the OUTPUT's sub-chain (NOT continue
+  in the input's sub-chain). This applies uniformly to: 1:N splits (every replacement event with
+  its own identity re-enters routing per FR-003), and 1:1 transformations / renames whose `to`
+  declares a different `QualifiedName` than `from` (the renamed output re-enters the target
+  sub-chain so multi-step chains across renames work). 1:1 transformations whose `to` keeps the
+  same `QualifiedName` as `from` (pure version bumps within one name) stay in the current
+  sub-chain and continue with the next entry by registration order.
+  _Traces to: US1 scenario 4, US2, US3 scenario 4, US5._
 - **FR-008 (Conflict detection)**: The framework MUST detect and report the following conflicts
   before any event is processed, none are deferred to event-processing time:
   - **Duplicate `from`**: two 1:1 transformations targeting the same `(name, version)`.
