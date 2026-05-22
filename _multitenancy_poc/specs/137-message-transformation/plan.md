@@ -10,7 +10,7 @@ Add an event transformation chain to AxonIQ Framework 5.2.0 that runs as a decor
 
 The events decorator targets the publicly-facing `EventStore` interface, NOT the underlying `EventStorageEngine`. `EventStorageEngine` is `@Internal` and is an implementation detail of `StorageEngineBackedEventStore`; tying transformation to it would restrict the feature to that one EventStore family. Decorating `EventStore` keeps transformation available to any future `EventStore` implementation that does not route through an `EventStorageEngine`.
 
-The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M>`), exposed for events as `EventTransformer extends MessageTransformer<EventMessage<?>>`. User-facing factory `EventTransformation` (`rename(...)`, `from(...).to(...)`, `split(...)`) produces transformer instances; users rarely touch the SPI directly. The SPI is intentionally generic over `Message<?>` so commands and queries can join the design in 5.3+ without an SPI break.
+The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M>`), exposed for events as `EventTransformer extends MessageTransformer<EventMessage>`. User-facing factory `EventTransformation` (`from(...).to(...).transform(...)`, `rename(...)`, `split(...).transform(...)`, `drop(...)`) produces transformer instances; users rarely touch the SPI directly. The SPI is intentionally generic over `Message` so commands and queries can join the design in 5.3+ without an SPI break.
 
 ### Delivery scope
 
@@ -73,12 +73,12 @@ Validated against `.specify/memory/constitution.md` v2.0.0 (project-wide Foundat
 | Constitution v2.0.0 IV | Dual Paradigm Support | Async-first `MessageStream<M>`; transformation functions are pure and callable from imperative or reactive composition | PASS |
 | Constitution v2.0.0 V | No ThreadLocals | Per-context bookkeeping on `ProcessingContext` (`Context.ResourceKey` cache for the wrapped `EventStoreTransaction`, mirroring `InterceptingEventStore`) | PASS |
 | Constitution v2.0.0 VI | Composition over Inheritance | Decorator-around-`EventStore` for events via `ComponentRegistry.registerDecorator(...)`; for commands and queries (5.3+) handler-registration-level wrapping via `CommandBus.subscribe(...)` / `QueryBus.subscribe(...)`. In both cases wrapping types delegate to inner targets. | PASS |
-| Constitution v2.0.0 VII | Declarative over Annotation-Heavy | Programmatic builder API (`EventTransformation.rename(...)`, `from(...).to(...)`, `split(...)`); annotation-based registration deferred (FR-004); chain is wired through a `ConfigurationEnhancer` | PASS |
+| Constitution v2.0.0 VII | Declarative over Annotation-Heavy | Programmatic builder API (`EventTransformation.rename(...)`, `from(...).to(...).transform(...)`, `split(...).transform(...)`, `drop(...)`); annotation-based registration deferred (FR-004); chain is wired through a `ConfigurationEnhancer` | PASS |
 | Constitution v2.0.0 Upstream | Relationship to AxonFramework Upstream | No upstream type redefined; we depend on upstream `EventStore`, `MessageStream`, `Message`, `MessageType`, `Converter`; one small additive request to upstream (`MessageStream.flatMap`) tracked separately | PASS |
 | Constitution v2.0.0 AF5 Anchoring Types | Public surface stays on anchor list | Public surface uses: `Message`, `MessageType`, `MessageConverter`, `EventMessage`, `CommandMessage`, `QueryMessage`, `MessageStream`, `EventStore`, `ProcessingContext`, `TrackingToken`. We do NOT depend on `@Internal` `EventStorageEngine`. | PASS |
 | Constitution v2.0.0 API VI | Interface Segregation | Per-type specializations (`EventTransformer`, `CommandTransformer`, `QueryTransformer`) so clients only see the message variant they need | PASS |
 | Constitution v2.0.0 API VII | Dependency Inversion | Transformations operate on `Message` / `MessageStream`, not concrete payload classes or serialization internals | PASS |
-| spec.md Addendum | Simpler than AF4 -- no `IntermediateEventRepresentation` | SPI operates on `MessageStream<M extends Message<?>>` directly; no IER-equivalent introduced | PASS |
+| spec.md Addendum | Simpler than AF4 -- no `IntermediateEventRepresentation` | SPI operates on `MessageStream<M extends Message>` directly; no IER-equivalent introduced | PASS |
 | spec.md Addendum | Single Responsibility per Transformer (Uncle Bob -- SRP) | One transformation = one `from`/`to` (1:1) or one source identity (1:N/1:0); composition via the chain, not bundled transforms | PASS |
 | spec.md Addendum | Prefer Chain over Direct (Gregory Young) | US5 acceptance scenarios explicitly verify v1 -> v2 -> v3 chained, not a direct v1 -> v3 transform | PASS |
 | spec.md Addendum | ES Versioning Decision Guide | Part A (converter handles natively) and Part B (transformer needed) decision tree implement the guide as a runnable contract | PASS |
@@ -114,16 +114,19 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |              (the cqrs/ sub-package decorates CommandBus/QueryBus from axon-framework,
 |              so no axoniq-distributed-messaging dependency is needed)
 |-- src/main/java/io/axoniq/framework/messaging/transformation/
-|     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message<?>>
+|     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message>
 |     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004)
 |     |-- VersionComparator.java                # optional (FR-020) -- nice-to-have
 |     |-- SemverComparator.java                 # builder convenience -- nice-to-have
 |     |
 |     |-- events/                               # 5.2.0
-|     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage<?>>
+|     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>
 |     |     |
-|     |     |-- EventTransformation.java        # factory: rename(...) (FR-002, SHOULD), from(...).to(...)
-|     |     |                                   # (FR-001, MUST), split(...) (FR-003, nice-to-have)
+|     |     |-- EventTransformation.java        # factory: from(...).to(...).transform(...) (FR-001, MUST),
+|     |     |                                   # rename(...) (FR-002, SHOULD), split(...).transform(...)
+|     |     |                                   # and drop(...) (FR-003, nice-to-have)
+|     |     |
+|     |     |-- TransformedEvent.java           # value type: output of 1:N split mappers
 |     |     |
 |     |     |-- TransformingEventStore.java     # decorator on EventStore (events read path);
 |     |     |                                   # DECORATION_ORDER = Integer.MIN_VALUE + 100
@@ -136,8 +139,8 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |     |                                         # registers the chain + wires the EventStore decorator
 |     |
 |     `-- cqrs/                                 # 5.3+ (sub-package reserved; empty in 5.2.0)
-|           |-- CommandTransformer.java         # extends MessageTransformer<CommandMessage<?>>
-|           |-- QueryTransformer.java           # extends MessageTransformer<QueryMessage<?>>
+|           |-- CommandTransformer.java         # extends MessageTransformer<CommandMessage>
+|           |-- QueryTransformer.java           # extends MessageTransformer<QueryMessage>
 |           |-- CommandTransformation.java
 |           |-- QueryTransformation.java
 |           |-- TransformingCommandBus.java     # handler-registration-level decorator (NOT connector-only,
@@ -183,7 +186,7 @@ The existing examples-parent pom already imports `axoniq-framework-bom`, so vers
 The internal SPI is stream-in / stream-out and reuses AF5's `MessageStream`:
 
 ```java
-public interface MessageTransformer<M extends Message<?>> {
+public interface MessageTransformer<M extends Message> {
     MessageStream<M> transform(MessageStream<M> stream);
 }
 ```
@@ -191,11 +194,11 @@ public interface MessageTransformer<M extends Message<?>> {
 Per-type specializations expose convenience overloads for single-entry streams (commands and queries are single-intent):
 
 ```java
-public interface CommandTransformer extends MessageTransformer<CommandMessage<?>> {
-    MessageStream.Single<CommandMessage<?>> transform(MessageStream.Single<CommandMessage<?>> stream);
+public interface CommandTransformer extends MessageTransformer<CommandMessage> {
+    MessageStream.Single<CommandMessage> transform(MessageStream.Single<CommandMessage> stream);
 
     @Override
-    default MessageStream<CommandMessage<?>> transform(MessageStream<CommandMessage<?>> stream) {
+    default MessageStream<CommandMessage> transform(MessageStream<CommandMessage> stream) {
         return transform(stream.first());
     }
 }
@@ -203,7 +206,7 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage<?>
 
 `EventTransformer` and `QueryTransformer` follow the same shape.
 
-Users almost never touch this SPI. They use the factories (`EventTransformation.rename(...)`, `EventTransformation.from(...).to(...).transform(...)`, `EventTransformation.split(...)`, `CommandTransformation.rename(...)`, etc.) which produce typed `MessageTransformer` instances internally.
+Users almost never touch this SPI. They use the factories (`EventTransformation.from(...).to(...).transform(...)`, `EventTransformation.rename(...)`, `EventTransformation.split(...).transform(...)`, `EventTransformation.drop(...)`, plus the cqrs counterparts `CommandTransformation` / `QueryTransformation` in 5.3+) which produce typed `MessageTransformer` instances internally.
 
 ### Chain usage (user-facing)
 
@@ -211,11 +214,11 @@ There is exactly **one** `MessageTransformerChain` object per application. The u
 
 ```java
 MessageTransformerChain chain = MessageTransformerChain.builder()
-    .register(EventTransformation.from(MT.of("com.example.X", "1.0.0"))
-                                 .to(MT.of("com.example.X", "2.0.0"))
+    .register(EventTransformation.from(new MessageType("com.example.X", "1.0.0"))
+                                 .to(new MessageType("com.example.X", "2.0.0"))
                                  .transform(payload -> ...))
-    .register(EventTransformation.rename(MT.of("com.example.Y", "1.0.0"),
-                                          MT.of("com.example.Z", "1.0.0")))
+    .register(EventTransformation.rename(new MessageType("com.example.Y", "1.0.0"),
+                                          new MessageType("com.example.Z", "1.0.0")))
     // 5.3+:
     .register(CommandTransformation.rename(...))
     .register(QueryTransformation.from(...).to(...).transform(...))
@@ -273,7 +276,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 
 The 5.2.0 deliverable is a thin slice of the full design described in the spec. Everything held to SHOULD / MAY / 5.3+ MUST land as a **pure additive change**, not a breaking rewrite. The 5.2.0 implementation therefore COMMITS to these architectural invariants from day one:
 
-1. **SPI generic over `Message<?>` from day one**. `MessageTransformer<M extends Message<?>>` is the base type, even though `EventTransformer` is the only specialization shipped in 5.2.0. `CommandTransformer` and `QueryTransformer` (5.3+) extend the same base without forcing a refactor. Protects US8 / US9 / FR-019.
+1. **SPI generic over `Message` from day one**. `MessageTransformer<M extends Message>` is the base type, even though `EventTransformer` is the only specialization shipped in 5.2.0. `CommandTransformer` and `QueryTransformer` (5.3+) extend the same base without forcing a refactor. Protects US8 / US9 / FR-019.
 
 2. **Chain models 0..N outputs per transformation**. Even though 5.2.0 only ships 1:1, the internal data structures and decorator return shape MUST treat "one transformation produces a `MessageStream` of zero or more outputs" -- never "exactly one output". Implementing it as 1:1-only would force a chain rewrite when FR-003 (split / drop) lands. The decorator wraps as `MessageStream<EventMessage> -> MessageStream<EventMessage>`, not `EventMessage -> EventMessage`. Protects US3 / US4 / FR-003 / FR-014.
 
@@ -296,5 +299,5 @@ The 5.2.0 deliverable is a thin slice of the full design described in the spec. 
 | Drift / decision | Why needed | Simpler alternative rejected because |
 |---|---|---|
 | One conditional additive change to `axon-framework` (`MessageStream.flatMap`) -- only triggered if 1:N split (FR-003, MAY) lands in 5.2.0 | Chain composition where 1:N split outputs re-enter their own per-`QualifiedName` sub-chain (FR-007) requires `flatMap` on `MessageStream` | Manually composing via existing `mapMessage` + a recursive sub-chain entry is possible but uglier; flatMap is a standard stream operator the API was missing. Fallback path (internal helper) documented in "Required axon-framework additions". |
-| SPI base is generic over `Message<?>` even though only `EventTransformer` ships in 5.2.0 | Forward-compatibility invariant #1 -- avoids an SPI break when commands/queries arrive in 5.3+ | Shipping an event-specific SPI now (`EventTransformer` as the root) would force a refactor of every user-extended transformer when commands land. |
+| SPI base is generic over `Message` even though only `EventTransformer` ships in 5.2.0 | Forward-compatibility invariant #1 -- avoids an SPI break when commands/queries arrive in 5.3+ | Shipping an event-specific SPI now (`EventTransformer` as the root) would force a refactor of every user-extended transformer when commands land. |
 | Single module hosts both events (5.2.0) and the deferred cqrs/ sub-package (5.3+), matching `axoniq-distributed-messaging` precedent | The handler-registration decoration for commands/queries targets `CommandBus` and `QueryBus` -- both upstream `axon-framework` types -- so the module dependency set does not change between 5.2.0 and 5.3+. No `axoniq-distributed-messaging` dependency is needed. | A separate `-spi` / `-events` / `-cqrs` module split was considered for a different reason (isolating the event ingress from the connector decoration originally proposed for commands/queries). Once the design moved to handler-registration on the bus itself, that dep concern evaporated and the single-module convention applies straightforwardly. |
