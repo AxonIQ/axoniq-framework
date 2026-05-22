@@ -224,14 +224,7 @@ public class RenameCourseHandler {
 
 The result is a codebase where finding the code for a use case is trivial—look for the handler class named after the command.
 
-=== Benefits
-
 * **Navigability**: each use case lives in one place. No need to trace through service layers to find where a command is processed.
 * **Testability**: a handler class with a single method is straightforward to test in isolation, with a stub or mock entity.
 * **Parallel development**: slices are independent. Multiple developers can work on different commands without touching the same files.
 * **Alignment with the domain model**: the code structure mirrors the Event Model, keeping implementation and design in sync.
-
-== Further reading
-
-* xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities]—how to define entity state, event sourcing handlers, and configuration
-* xref:commands:command-handlers.adoc[Command handlers]—command handlers and handler parameters
