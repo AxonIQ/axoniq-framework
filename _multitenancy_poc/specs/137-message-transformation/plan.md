@@ -79,7 +79,7 @@ Validated against `.specify/memory/constitution.md` v2.0.0 (project-wide Foundat
 | Constitution v2.0.0 API VI | Interface Segregation | Per-type specializations (`EventTransformer`, `CommandTransformer`, `QueryTransformer`) so clients only see the message variant they need | PASS |
 | Constitution v2.0.0 API VII | Dependency Inversion | Transformations operate on `Message` / `MessageStream`, not concrete payload classes or serialization internals | PASS |
 | spec.md Addendum | Simpler than AF4 -- no `IntermediateEventRepresentation` | SPI operates on `MessageStream<M extends Message>` directly; no IER-equivalent introduced | PASS |
-| spec.md Addendum | Single Responsibility per Transformer (Uncle Bob -- SRP) | One transformation = one `from`/`to` (1:1) or one source identity (1:N/1:0); composition via the chain, not bundled transforms | PASS |
+| spec.md Addendum | Single Responsibility per Transformer (Uncle Bob -- SRP) | One transformation = one `from`/`to` (1:1) or one `from` (1:N/1:0); composition via the chain, not bundled transforms | PASS |
 | spec.md Addendum | Prefer Chain over Direct (Gregory Young) | US5 acceptance scenarios explicitly verify v1 -> v2 -> v3 chained, not a direct v1 -> v3 transform | PASS |
 | spec.md Addendum | ES Versioning Decision Guide | Part A (converter handles natively) and Part B (transformer needed) decision tree implement the guide as a runnable contract | PASS |
 | spec.md Addendum scope | Append-only event store; chain at READ only | Storage engine is append-only; chain runs at READ on `EventStore.transaction(...).source(...)` and `EventStore.open(...)` (FR-012, FR-021); stored events never mutated | PASS |
@@ -207,13 +207,13 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 
 ### 5.2.0 -- MUST (blocks the issue closing)
 
-- **US1 (1:1 structural payload transform)**, **FR-001** -- user can declare `from`/`to` identity and a payload rule.
+- **US1 (1:1 structural payload transform)**, **FR-001** -- user can declare `from`/`to` identity and a payload mapper.
 - **FR-004** -- programmatic registration, startup-only, chain locks at `.build()`.
-- Supporting invariants without which US1 is unsafe: **FR-005** (exact matching, pass-through for non-matches), **FR-010** (envelope preservation), **FR-011** (lazy deserialization on non-matching path), **FR-012** (same result across entity load / DCB read / tracking processor), **FR-016** (unversioned legacy events default to `0.0.1`), **FR-017** (unit-testable), **FR-018** (output identity check), **FR-021** (data-protection ordering -- transformer runs before any handler-side interceptor).
+- Supporting invariants without which US1 is unsafe: **FR-005** (exact matching, pass-through for non-matches), **FR-009 declarative target type** (`transform(Class<T>, Function<T, U>)`: framework converts stored bytes to the declared input type via the registered `Converter` before invocation -- the only way the user can write a typed payload mapper for US1), **FR-010** (envelope preservation), **FR-011** (lazy deserialization on non-matching path), **FR-012** (same result across entity load / DCB read / tracking processor), **FR-016** (unversioned legacy events default to `0.0.1`), **FR-017** (unit-testable), **FR-018** (output identity check), **FR-021** (data-protection ordering -- transformer runs before any handler-side interceptor).
 
 ### 5.2.0 -- SHOULD (deliver if it fits in the window)
 
-- **US2 (rename)**, **FR-002** -- pure rename without a payload rule. Small additive surface on the same factory.
+- **US2 (rename)**, **FR-002** -- pure rename without a payload mapper. Small additive surface on the same factory.
 
 ### 5.2.0 -- MAY (nice-to-have for 5.2.0, else slip to 5.3.0)
 
@@ -229,6 +229,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 - **Snapshot payload transformation**. Architecturally compatible with the 5.2.0 chain (snapshots flow through the same `EventStore.transaction().source(...)` stream merged in by `SnapshotCapableEventStorageEngine`), but the user-facing API / docs / fixtures (and a `Snapshot.payloadAs(Class<?>)` ergonomic accessor) are deferred. Either decorate `SnapshottingEntityLifecycleHandler`'s converter call site or introduce a `SnapshotPayloadTransformer` SPI hook.
 - **Annotation-based registration**. Programmatic only for now (FR-004); annotations may return if added through an explicit `EventTransformationChain` registry bean (see Part C "Annotation-Based Transformation Registration" in spec for the forward-direction note).
 - **Sender-side transformation** (new-to-old at the sender). Out of scope per Part C of spec.
+- **FR-009 converter-access entry point**. Spec FR-009 describes two entry points for typed payload access. 5.2.0 ships only the declarative target type variant (`transform(Class<T>, Function<T, U>)`). The converter-access variant -- where the transformation receives a `Converter` and converts inline (useful when a single transformation needs multiple representations of the same payload) -- is deferred. Adding it later is purely additive: a new overload on the existing factory.
 
 ## Forward-compatibility invariants
 

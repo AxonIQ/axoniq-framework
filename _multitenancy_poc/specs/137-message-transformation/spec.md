@@ -86,7 +86,7 @@ as on the change itself.** A loose configuration absorbs more, a strict one reje
 
 *Identity / cardinality changes:*
 
-- **Event identity changed (name or version), payload unchanged** -> 1:1 rename (no payload rule).
+- **Event identity changed (name or version), payload unchanged** -> 1:1 rename (no payload mapper).
 - **Event identity changed, payload also changes** -> 1:1 structural transformation.
 - **One event becomes multiple events** -> 1:N split transformation.
 - **Drop event entirely** -> 1:0 drop transformation.
@@ -630,18 +630,18 @@ a last resort if the old stream must be fully replaced.
 
 ## Requirements
 
-- **FR-001 (1:1 transformations)**: Developers MUST declare a source identity (`from`: a
-  `MessageType`, i.e. `QualifiedName` + `version`) and a target identity (`to`: same shape),
-  plus an optional payload rule. With no rule the payload passes through unchanged. The
-  mechanism applies to any message type (event, command, query).
+- **FR-001 (1:1 transformations)**: Developers MUST declare a `from` identity (a `MessageType`,
+  i.e. `QualifiedName` + `version`) and a `to` identity (same shape), plus an optional payload
+  mapper. With no mapper the payload passes through unchanged. The mechanism applies to any
+  message type (event, command, query).
   _Traces to: US1, US2._
-- **FR-002 (Rename)**: A pure rename is FR-001 with no payload rule, no separate API needed.
+- **FR-002 (Rename)**: A pure rename is FR-001 with no payload mapper, no separate API needed.
   _Traces to: US2._
 - **FR-003 (1:N / 1:0 transformations)**: For splits and drops, developers MUST declare only the
-  source identity together with a rule that produces 0..N replacement events. Each replacement
-  carries its own identity and payload as the rule determines, the framework imposes no constraint
-  on output identities for this pattern. Self-loop detection (FR-008) does not apply since no
-  target identity is declared.
+  `from` identity together with a mapper that produces 0..N replacement events. Each replacement
+  carries its own identity and payload as the mapper determines, the framework imposes no
+  constraint on output identities for this pattern. Self-loop detection (FR-008) does not apply
+  since no `to` identity is declared.
   _Traces to: US3, US4._
 - **FR-004 (Ordering and lifecycle)**: Registration order MUST be the chain application order, the
   framework MUST NOT reorder. Registration is programmatic and valid only at application startup;
@@ -679,27 +679,28 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1 scenario 4, US2, US3 scenario 4, US5._
 - **FR-008 (Conflict detection)**: The framework MUST detect and report the following conflicts
   before any event is processed, none are deferred to event-processing time:
-  - **Duplicate source identity**: two 1:1 transformations targeting the same `(name, version)`.
+  - **Duplicate `from`**: two 1:1 transformations targeting the same `(name, version)`.
     Detected at registration time.
-  - **Self-loop**: source and target identical on a single transformation. Detected at
+  - **Self-loop**: `from` and `to` identical on a single transformation. Detected at
     registration time.
-  - **Multi-step cycle**: a cycle in the graph of declared 1:1 source -> target edges (e.g.,
+  - **Multi-step cycle**: a cycle in the graph of declared 1:1 `from -> to` edges (e.g.,
     `X@1.0.0 -> X@2.0.0` then `X@2.0.0 -> X@1.0.0`). Detected at chain lock time; the error MUST
     surface the full edge list. 1:N/1:0 transformations are excluded, their replacement
-    identities are rule-determined and cannot be inspected statically.
+    identities are mapper-determined and cannot be inspected statically.
   _Traces to: US6._
 - **FR-009 (Typed payload access)**: Transformations operate on a developer-chosen target type,
-  resolved via the registered `Converter`. Typical choices are structured representations (JSON
-  tree, Avro generic record, POJO) or raw bytes for advanced cases (e.g., custom binary
-  formats). The framework does not prescribe an intermediate format, that decision belongs to
-  the developer and their `Converter`. The framework offers two entry points, the developer
-  chooses one per transformation:
+  resolved via the registered `Converter` used as a tool *inside* the transformer (the chain is
+  wired around the message ingress, not around the converter; see FR-012). Typical choices are
+  structured representations (JSON tree, Avro generic record, POJO) or raw bytes for advanced
+  cases (e.g., custom binary formats). The framework does not prescribe an intermediate format,
+  that decision belongs to the developer and their `Converter`. The framework offers two entry
+  points, the developer chooses one per transformation:
   - **Declarative target type**: the transformation declares a target Java type at registration;
     the framework resolves the stored payload to that type via the registered `Converter` before
-    invocation.
+    invocation. (5.2.0 scope.)
   - **Converter access**: the transformation receives a `Converter` and converts inline, intended
     for transformations needing multiple representations of the same payload (e.g., a structural
-    view for branching, then a POJO output).
+    view for branching, then a POJO output). (Deferred to 5.3+; see [plan.md](plan.md).)
   Conversion is on-demand in both cases, the framework does NOT pre-convert all events. Valid
   target types are whatever the registered `Converter` for the stored event's format can
   produce.
@@ -733,8 +734,8 @@ a last resort if the old stream must be fully replaced.
   - **DEBUG once at startup**: total transformation count and each transformation's source (and
     target for 1:1) identity.
   - **TRACE per applied transformation**: transformation identifier (implementation class name,
-    or the source identity for builder-based registrations, which is unique by FR-008 conflict
-    1), the matched source identity, and the event's stream position (sequence number or
+    or the `from` identity for builder-based registrations, which is unique by FR-008 conflict
+    1), the matched `from` identity, and the event's stream position (sequence number or
     tracking token).
 
   The framework MUST provide a mechanism to disable observability entirely. When disabled, no
@@ -766,14 +767,14 @@ a last resort if the old stream must be fully replaced.
   test fixture API is deferred, this requirement is an invariant on the transformation API
   itself.
   _Traces to: US1, US3, US4, US5._
-- **FR-018 (Output identity check)**: For 1:1 transformations that supply a payload rule, the
+- **FR-018 (Output identity check)**: For 1:1 transformations that supply a payload mapper, the
   framework MUST verify after invocation that the output payload's identity matches the declared
-  target. A mismatch MUST be propagated under FR-015 with full context (declared target, actual
+  `to`. A mismatch MUST be propagated under FR-015 with full context (declared `to`, actual
   output identity, stream position). The framework MUST NOT silently coerce. The check is
   satisfied trivially for pure renames (FR-002), the framework sets the output identity itself.
-  It does NOT apply to 1:N/1:0 transformations, output identities are rule-determined by design,
-  and the developer has full responsibility for each replacement event's identity (the framework
-  does not validate that the chosen identity is meaningful or subscribed to).
+  It does NOT apply to 1:N/1:0 transformations, output identities are mapper-determined by
+  design, and the developer has full responsibility for each replacement event's identity (the
+  framework does not validate that the chosen identity is meaningful or subscribed to).
   _Traces to: US1, US6 scenario 7._
 - **FR-019 (Commands and queries)**: The transformer mechanism MUST support commands and queries
   in addition to events, using the same uniform stream-in / stream-out shape. The chain MUST
@@ -809,8 +810,8 @@ a last resort if the old stream must be fully replaced.
 ## Key Entities
 
 - **Event transformation**: A single unit of logic targeting one event type at one version. Two
-  patterns: **1:1** (source + target identity + optional payload rule, structural change or
-  rename) and **1:N/1:0** (source identity + rule producing 0..N replacement events, split or
+  patterns: **1:1** (`from` + `to` identity + optional payload mapper, structural change or
+  rename) and **1:N/1:0** (`from` identity + mapper producing 0..N replacement events, split or
   drop). Detailed contract: FR-001 to FR-003.
 - **Transformation chain**: The ordered sequence of registered transformations applied when
   reading messages. Order = registration sequence (FR-004).

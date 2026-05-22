@@ -42,9 +42,10 @@ public interface MessageTransformer<M extends Message> {
 **Contract**:
 - **Deterministic + thread-safe** (FR-006): no external services, no time/randomness, no mutable shared state. Constant in-process data is fine. The framework MAY invoke `transform` concurrently. Not enforced at runtime.
 - **Non-matching elements pass through unchanged** (FR-005) with no payload conversion (FR-011).
+- **Output identity check** (FR-018): for any 1:1 transformer that supplies a payload mapper, the framework MUST verify after invocation that the output's resolved `MessageType` matches the declared `to`. A mismatch raises a clear error under FR-015 with full context (declared `to`, actual output identity, stream position). Pure renames (no payload mapper) satisfy this trivially because the framework sets the output identity itself. Does NOT apply to 1:N / 1:0 transformers (events only, FR-003): output identities there are mapper-determined by design.
 - Users almost never implement this directly -- they use the typed factories declared in [public-api.md](public-api.md).
 
-**Cross-references**: FR-001, FR-005, FR-006, FR-011, FR-019, US1.
+**Cross-references**: FR-001, FR-005, FR-006, FR-011, FR-018, FR-019, US1.
 
 ---
 
