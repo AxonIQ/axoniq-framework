@@ -24,16 +24,27 @@ import org.jspecify.annotations.NullMarked;
  * {@link org.axonframework.messaging.core.MessageType} identity (rename / version bump),
  * the payload's Java type or structure, and the cardinality (1:N split / 1:0 drop;
  * commands and queries are 1:1 only, FR-019).
+ * <p>
+ * Users almost never implement this interface directly; the typed factories in
+ * {@code io.axoniq.framework.messaging.transformation.events.EventTransformation} (and the
+ * deferred {@code CommandTransformation} / {@code QueryTransformation} for 5.3+) produce
+ * {@link MessageTransformer} instances for the common patterns. See
+ * {@code contracts/public-api.md} for the user-facing usage.
  *
  * @param <M> the {@link Message} subtype this transformer accepts and emits
+ * @author AxonIQ
  * @since 5.2.0
  */
 @NullMarked
 public interface MessageTransformer<M extends Message> {
 
     /**
-     * Apply this transformation. The output stream MAY contain zero, one, or more
-     * elements per input element (Forward-compatibility invariant #2).
+     * Apply this transformation to the given stream. The output stream MAY contain zero, one,
+     * or more elements per input element (Forward-compatibility invariant #2). Non-matching
+     * elements MUST pass through unchanged (FR-005) with no payload conversion (FR-011).
+     *
+     * @param stream the input stream of messages to transform
+     * @return a stream of transformed messages of the same {@link Message} subtype
      */
     MessageStream<M> transform(MessageStream<M> stream);
 }
@@ -60,26 +71,95 @@ import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.jspecify.annotations.NullMarked;
 
+/**
+ * Immutable chain of registered {@link MessageTransformer} instances grouped by source
+ * {@link org.axonframework.messaging.core.QualifiedName} (FR-007). One chain per application,
+ * built once at startup via {@link Builder} and locked on {@link Builder#build()} (FR-004).
+ * <p>
+ * The chain is registered with the Axon configuration as a single component; the
+ * {@code EventTransformationConfigurationEnhancer} (5.2.0) and -- when delivered -- the
+ * {@code CqrsTransformationConfigurationEnhancer} (5.3+) discover it and install the
+ * decorators that invoke {@link #transform(MessageStream)} on every read / receive path.
+ * See {@code contracts/public-api.md} for end-to-end usage.
+ *
+ * @author AxonIQ
+ * @since 5.2.0
+ */
 @NullMarked
 public final class MessageTransformerChain {
 
-    /** Apply the relevant sub-chain. Non-matching elements pass through in O(1). */
+    /**
+     * Apply the relevant per-{@link org.axonframework.messaging.core.QualifiedName} sub-chain
+     * to the given stream. Events whose {@link org.axonframework.messaging.core.QualifiedName}
+     * matches no registered transformer skip the chain entirely in {@code O(1)} with no
+     * per-event allocation (FR-005, FR-011). Output elements whose
+     * {@link org.axonframework.messaging.core.QualifiedName} differs from the input's
+     * re-enter routing at the output's sub-chain (FR-007).
+     *
+     * @param stream the input stream of messages to route through the chain
+     * @param <M>    the {@link Message} subtype of the stream
+     * @return a stream of transformed messages of the same subtype
+     */
     public <M extends Message> MessageStream<M> transform(MessageStream<M> stream) { /* ... */ }
 
+    /**
+     * Start building a new chain.
+     *
+     * @return a fresh {@link Builder}
+     */
     public static Builder builder() { /* ... */ }
 
+    /**
+     * Fluent builder for {@link MessageTransformerChain}. Collects transformers, enforces
+     * registration order = application order (FR-004), and on {@link #build()} runs the
+     * applicable conflict (FR-008) and version-order (FR-020) checks before returning
+     * an immutable chain.
+     */
     public static final class Builder {
 
-        /** Add a transformer. Throws if the chain is already locked (FR-004). */
+        /**
+         * Register a transformer with the chain. Registration order is preserved as
+         * application order within each per-{@link org.axonframework.messaging.core.QualifiedName}
+         * sub-chain (FR-004).
+         *
+         * @param transformer the {@link MessageTransformer} to add to the chain
+         * @return this builder, for chaining
+         * @throws ChainConfigurationException if the chain is already locked, if the
+         *                                     transformer's {@code from} duplicates an already-registered
+         *                                     {@code from}, or if {@code from == to} (self-loop) -- per FR-008
+         */
         public Builder register(MessageTransformer<?> transformer) { /* ... */ }
 
-        /** Optionally enforce version ordering at lock time (FR-020). */
+        /**
+         * Optionally enforce version ordering at lock time (FR-020). When set, the comparator
+         * orders transformers within each sub-chain by {@code from.version()}; mismatches with
+         * registration order surface at {@link #build()} as a {@link ChainConfigurationException}.
+         * When omitted (the default), registration order alone determines apply order.
+         *
+         * @param ordering the {@link VersionComparator} to apply, or {@code null} to clear
+         * @return this builder, for chaining
+         */
         public Builder versionOrder(VersionComparator ordering) { /* ... */ }
 
-        /** Switch chain-level logging on or off (FR-013). Default: enabled. */
+        /**
+         * Switch chain-level logging on or off (FR-013). Default is {@link Observability#enabled()};
+         * use {@link Observability#disabled()} on performance-critical paths to suppress all
+         * per-event allocation from the observability hook (Forward-compatibility invariant #9).
+         *
+         * @param observability the {@link Observability} mode to apply
+         * @return this builder, for chaining
+         */
         public Builder observability(Observability observability) { /* ... */ }
 
-        /** Lock the chain. Runs FR-008 conflict detection and FR-020 ordering check. */
+        /**
+         * Lock the chain and return an immutable instance. Runs FR-008 multi-step cycle detection
+         * and -- if a {@link VersionComparator} was registered via {@link #versionOrder(VersionComparator)}
+         * -- the FR-020 ordering check.
+         *
+         * @return the locked, immutable {@link MessageTransformerChain}
+         * @throws ChainConfigurationException if a multi-step cycle is detected (FR-008) or the
+         *                                     registered transformers violate the version ordering (FR-020)
+         */
         public MessageTransformerChain build() { /* ... */ }
     }
 }
@@ -106,9 +186,29 @@ package io.axoniq.framework.messaging.transformation;
 
 import org.jspecify.annotations.NullMarked;
 
+/**
+ * Thrown by {@link MessageTransformerChain.Builder} when an FR-008 conflict is detected
+ * (duplicate {@code from}, self-loop, multi-step cycle) or when the FR-020 version-order
+ * check fails. Also thrown on registration after the chain has been locked (FR-004).
+ * Runtime exceptions raised from inside a transformer's mapper propagate to the caller
+ * with full context per FR-015; this exception type is reserved for chain-configuration
+ * errors detected at registration or lock time.
+ *
+ * @author AxonIQ
+ * @since 5.2.0
+ */
 @NullMarked
 public final class ChainConfigurationException extends RuntimeException {
+
+    /**
+     * @param message human-readable description of the chain configuration problem
+     */
     public ChainConfigurationException(String message) { super(message); }
+
+    /**
+     * @param message human-readable description of the chain configuration problem
+     * @param cause   the underlying cause, may be {@code null}
+     */
     public ChainConfigurationException(String message, Throwable cause) { super(message, cause); }
 }
 ```
@@ -134,10 +234,24 @@ package io.axoniq.framework.messaging.transformation;
 import java.util.Comparator;
 import org.jspecify.annotations.NullMarked;
 
+/**
+ * Optional {@link Comparator} over version strings used by
+ * {@link MessageTransformerChain.Builder#versionOrder(VersionComparator)} to enforce
+ * version ordering at lock time (FR-020). Without one, registration order alone determines
+ * apply order. AF4 compatibility allows arbitrary version strings, so the comparator is
+ * pluggable; {@link SemverComparator} ships as a convenience for the common case.
+ *
+ * @author AxonIQ
+ * @since 5.2.0
+ */
 @NullMarked
 public interface VersionComparator extends Comparator<String> {
 
-    /** Convenience factory returning a {@link SemverComparator}. */
+    /**
+     * Convenience factory returning the {@link SemverComparator} singleton.
+     *
+     * @return a {@link VersionComparator} that orders versions by MAJOR.MINOR.PATCH semver
+     */
     static VersionComparator semver() { /* ... */ }
 }
 ```
@@ -148,18 +262,34 @@ package io.axoniq.framework.messaging.transformation;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Semver (MAJOR.MINOR.PATCH) implementation. Non-parseable versions throw at `.build()`
- * lock -- no silent lexicographic fallback. Remediation: fix to semver, or supply a
- * custom {@link VersionComparator}.
+ * Semver (MAJOR.MINOR.PATCH) implementation of {@link VersionComparator}. Non-parseable
+ * versions raise a {@link ChainConfigurationException} at
+ * {@link MessageTransformerChain.Builder#build()} -- no silent lexicographic fallback.
+ * Remediation: fix the version to semver, or supply a custom {@link VersionComparator}
+ * via {@link MessageTransformerChain.Builder#versionOrder(VersionComparator)}.
  *
+ * @author AxonIQ
  * @since 5.2.0
  */
 @NullMarked
 public final class SemverComparator implements VersionComparator {
 
-    /** Singleton instance. */
+    /**
+     * Return the shared singleton instance.
+     *
+     * @return the {@link SemverComparator} singleton
+     */
     public static SemverComparator instance() { /* ... */ }
 
+    /**
+     * Compare two semver-formatted version strings by MAJOR, then MINOR, then PATCH.
+     *
+     * @param version1 the first version string (e.g. {@code "1.0.0"})
+     * @param version2 the second version string (e.g. {@code "2.0.0"})
+     * @return a negative integer, zero, or a positive integer as {@code version1} is less than,
+     *         equal to, or greater than {@code version2}
+     * @throws ChainConfigurationException if either argument is not a valid semver string
+     */
     @Override
     public int compare(String version1, String version2) { /* ... */ }
 }
@@ -178,16 +308,37 @@ package io.axoniq.framework.messaging.transformation;
 
 import org.jspecify.annotations.NullMarked;
 
+/**
+ * Chain-level logging switch supplied to
+ * {@link MessageTransformerChain.Builder#observability(Observability)}. The chain emits a
+ * single DEBUG entry at lock time listing all registered transformers, and one TRACE entry
+ * per applied transformation (FR-013). When {@link #disabled()}, the chain MUST NOT allocate
+ * per event from the observability hook (Forward-compatibility invariant #9).
+ *
+ * @author AxonIQ
+ * @since 5.2.0
+ */
 @NullMarked
 public sealed interface Observability {
 
-    /** Default: DEBUG-at-startup + TRACE-per-applied. */
+    /**
+     * Default mode: DEBUG once at startup + TRACE per applied transformation.
+     *
+     * @return an {@link Enabled} instance
+     */
     static Observability enabled() { /* ... */ }
 
-    /** No chain logging; no per-event allocation. */
+    /**
+     * Suppress all chain-level logging. No per-event allocation from the observability hook.
+     *
+     * @return a {@link Disabled} instance
+     */
     static Observability disabled() { /* ... */ }
 
+    /** Marker record indicating chain-level logging is enabled. */
     record Enabled() implements Observability {}
+
+    /** Marker record indicating chain-level logging is suppressed. */
     record Disabled() implements Observability {}
 }
 ```
