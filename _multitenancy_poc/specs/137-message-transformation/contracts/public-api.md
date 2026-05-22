@@ -79,15 +79,23 @@ public final class EventTransformation {
     /* US1 -- 1:1 structural transformation (FR-001, MUST in 5.2.0) ----------------- */
 
     /**
-     * Begin a 1:1 transformation from the given source identity. Returns a fluent
-     * builder requiring a {@code to(...)} call to set the target identity, then a
+     * Begin a 1:1 transformation from the given {@code from} identity. Returns a fluent
+     * builder requiring a {@code to(...)} call to set the {@code to} identity, then a
      * {@code transform(...)} call to supply the payload mapping behaviour.
+     *
+     * @param source the {@code from} identity (a {@link MessageType}) the transformation matches
+     * @return a builder awaiting a {@code to(...)} call
      */
     public static SingleEventTransformationBuilder from(MessageType source) { /* ... */ }
 
     public static final class SingleEventTransformationBuilder {
 
-        /** Declare the target identity. */
+        /**
+         * Declare the {@code to} identity.
+         *
+         * @param target the {@code to} identity (a {@link MessageType}) the transformation produces
+         * @return a builder awaiting a {@code transform(...)} call
+         */
         public SingleEventTransformationWithTargetBuilder to(MessageType target) { /* ... */ }
     }
 
@@ -100,12 +108,15 @@ public final class EventTransformation {
          * be wrapped as the new event. The input and output Java types MAY differ -- e.g.,
          * mapping a {@code CourseCreatedV1} POJO to a {@code CourseCreatedV2} POJO, or
          * reading bytes and producing a {@code JsonNode}. The framework uses the returned
-         * object's runtime type to convert back for downstream consumers.
+         * object's runtime type to convert back for downstream consumers and verifies that
+         * the resolved {@link MessageType} of the output matches the declared {@code to}
+         * (FR-018); a mismatch raises a runtime error.
          *
-         * @param <T>          the input payload type (what the framework converts the stored payload to)
-         * @param <U>          the output payload type (whatever the mapper produces)
-         * @param inputType    the type to convert the input payload to before invocation
+         * @param <T>           the input payload type (what the framework converts the stored payload to)
+         * @param <U>           the output payload type (whatever the mapper produces)
+         * @param inputType     the type to convert the input payload to before invocation
          * @param payloadMapper maps the input payload to its transformed output
+         * @return an {@link EventTransformer} ready to register with a {@code MessageTransformerChain}
          */
         public <T, U> EventTransformer transform(Class<T> inputType, Function<T, U> payloadMapper) { /* ... */ }
     }
@@ -113,10 +124,12 @@ public final class EventTransformation {
     /* US2 -- pure rename (FR-002, SHOULD in 5.2.0) --------------------------------- */
 
     /**
-     * Pure identity rename without a payload mapping. Equivalent to {@code from(source).to(target)}
-     * with an identity payload function; the framework's rename factory sets the
+     * Pure identity rename without a payload mapping. Equivalent to chaining {@code from(...)} +
+     * {@code to(...)} with an identity payload mapper; the framework's rename factory sets the
      * output identity itself, so FR-018 (output identity check) is trivially satisfied.
      *
+     * @param source the {@code from} identity (a {@link MessageType}) the rename matches
+     * @param target the {@code to} identity (a {@link MessageType}) the rename produces
      * @return an {@link EventTransformer} that updates {@code MessageType} only
      */
     public static EventTransformer rename(MessageType source, MessageType target) { /* ... */ }
@@ -125,9 +138,12 @@ public final class EventTransformation {
        Forward-compatibility invariant #4) -------------------------------------- */
 
     /**
-     * 1:N split. Begin a multi-event transformation from the given source identity.
+     * 1:N split. Begin a multi-event transformation from the given {@code from} identity.
      * Returns a builder requiring a {@code transform(...)} call that produces the
      * list of replacement events.
+     *
+     * @param source the {@code from} identity (a {@link MessageType}) the split matches
+     * @return a builder awaiting a {@code transform(...)} call
      */
     public static MultiEventTransformationBuilder split(MessageType source) { /* ... */ }
 
@@ -136,13 +152,17 @@ public final class EventTransformation {
         /**
          * Supply the splitting behaviour. The mapper receives the input payload converted
          * to {@code T} and returns the list of replacement events that take the input
-         * event's place in the stream. Returning an empty list also works as a drop, but
-         * prefer {@link EventTransformation#drop(MessageType)} for the pure-drop case --
-         * it is more direct and does not require a payload type or mapper.
+         * event's place in the stream, in declared order (FR-003). All replacement events
+         * inherit the input event's envelope -- same tracking token and sequence number
+         * (FR-010). Returning an empty list also works as a drop, but prefer
+         * {@link EventTransformation#drop(MessageType)} for the pure-drop case -- it is
+         * more direct and does not require a payload type or mapper, keeping FR-011 lazy
+         * deserialization intact.
          *
          * @param <T>               the input payload type
          * @param inputType         the type to convert the input payload to before invocation
          * @param replacementMapper maps the input payload to its replacement events
+         * @return an {@link EventTransformer} ready to register with a {@code MessageTransformerChain}
          */
         public <T> EventTransformer transform(Class<T> inputType,
                                               Function<T, List<TransformedEvent>> replacementMapper) { /* ... */ }
@@ -152,8 +172,8 @@ public final class EventTransformation {
        Forward-compatibility invariant #4) -------------------------------------- */
 
     /**
-     * 1:0 drop. The event matching {@code source} is removed from the stream entirely;
-     * no payload type, no mapper, no replacement events. The tracking token still
+     * 1:0 drop. The event matching the given {@code from} identity is removed from the stream
+     * entirely; no payload type, no mapper, no replacement events. The tracking token still
      * advances past the dropped event (FR-014); a tracking processor resumes AFTER it
      * and does not reprocess it.
      * <p>
@@ -162,7 +182,7 @@ public final class EventTransformation {
      * converter for events matching a drop), keeping FR-011 lazy deserialization intact
      * even when the user did not specify an input type.
      *
-     * @param source the identity ({@link MessageType}) of the event to drop
+     * @param source the {@code from} identity (a {@link MessageType}) of the event to drop
      * @return an {@link EventTransformer} that suppresses matching events
      */
     public static EventTransformer drop(MessageType source) { /* ... */ }
@@ -186,17 +206,41 @@ import org.jspecify.annotations.NullMarked;
 import java.util.function.Function;
 
 /**
- * Factory producing {@link CommandTransformer} instances. 1:1 only.
+ * Factory producing {@link CommandTransformer} instances. 1:1 only -- commands are
+ * single-intent messages, so split / drop are unavailable at the API surface (FR-019).
+ * Mirrors {@link EventTransformation} for the patterns it does support.
  *
+ * @author AxonIQ
  * @since 5.3+
  */
 @NullMarked
 public final class CommandTransformation {
 
+    /**
+     * Begin a 1:1 transformation from the given {@code from} identity.
+     *
+     * @param source the {@code from} identity (a {@link MessageType}) the transformation matches
+     * @return a builder awaiting a {@code to(...)} call
+     */
     public static SingleCommandTransformationBuilder from(MessageType source) { /* ... */ }
+
+    /**
+     * Pure identity rename without a payload mapping. The framework's rename factory sets the
+     * output identity itself, so FR-018 is trivially satisfied.
+     *
+     * @param source the {@code from} identity (a {@link MessageType}) the rename matches
+     * @param target the {@code to} identity (a {@link MessageType}) the rename produces
+     * @return a {@link CommandTransformer} that updates {@code MessageType} only
+     */
     public static CommandTransformer rename(MessageType source, MessageType target) { /* ... */ }
 
     public static final class SingleCommandTransformationBuilder {
+        /**
+         * Declare the {@code to} identity.
+         *
+         * @param target the {@code to} identity (a {@link MessageType}) the transformation produces
+         * @return a builder awaiting a {@code transform(...)} call
+         */
         public SingleCommandTransformationWithTargetBuilder to(MessageType target) { /* ... */ }
     }
     public static final class SingleCommandTransformationWithTargetBuilder {
@@ -207,6 +251,7 @@ public final class CommandTransformation {
          * @param <U>           output payload type
          * @param inputType     the type to convert the input command's payload to before invocation
          * @param payloadMapper maps the input payload to its transformed output
+         * @return a {@link CommandTransformer} ready to register with a {@code MessageTransformerChain}
          */
         public <T, U> CommandTransformer transform(Class<T> inputType, Function<T, U> payloadMapper) { /* ... */ }
     }
@@ -222,17 +267,42 @@ import org.jspecify.annotations.NullMarked;
 import java.util.function.Function;
 
 /**
- * Factory producing {@link QueryTransformer} instances. 1:1 only.
+ * Factory producing {@link QueryTransformer} instances. 1:1 only -- queries are
+ * single-intent messages, so split / drop are unavailable at the API surface (FR-019).
+ * Subscription-query update streams flowing back to subscribers are NOT transformed --
+ * only the incoming query is.
  *
+ * @author AxonIQ
  * @since 5.3+
  */
 @NullMarked
 public final class QueryTransformation {
 
+    /**
+     * Begin a 1:1 transformation from the given {@code from} identity.
+     *
+     * @param source the {@code from} identity (a {@link MessageType}) the transformation matches
+     * @return a builder awaiting a {@code to(...)} call
+     */
     public static SingleQueryTransformationBuilder from(MessageType source) { /* ... */ }
+
+    /**
+     * Pure identity rename without a payload mapping. The framework's rename factory sets the
+     * output identity itself, so FR-018 is trivially satisfied.
+     *
+     * @param source the {@code from} identity (a {@link MessageType}) the rename matches
+     * @param target the {@code to} identity (a {@link MessageType}) the rename produces
+     * @return a {@link QueryTransformer} that updates {@code MessageType} only
+     */
     public static QueryTransformer rename(MessageType source, MessageType target) { /* ... */ }
 
     public static final class SingleQueryTransformationBuilder {
+        /**
+         * Declare the {@code to} identity.
+         *
+         * @param target the {@code to} identity (a {@link MessageType}) the transformation produces
+         * @return a builder awaiting a {@code transform(...)} call
+         */
         public SingleQueryTransformationWithTargetBuilder to(MessageType target) { /* ... */ }
     }
     public static final class SingleQueryTransformationWithTargetBuilder {
@@ -243,6 +313,7 @@ public final class QueryTransformation {
          * @param <U>           output payload type
          * @param inputType     the type to convert the input query's payload to before invocation
          * @param payloadMapper maps the input payload to its transformed output
+         * @return a {@link QueryTransformer} ready to register with a {@code MessageTransformerChain}
          */
         public <T, U> QueryTransformer transform(Class<T> inputType, Function<T, U> payloadMapper) { /* ... */ }
     }
