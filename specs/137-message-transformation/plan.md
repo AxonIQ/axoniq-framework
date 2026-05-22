@@ -33,13 +33,13 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 
 **Target Repo**: `axoniq-framework`. One NEW module ships in 5.2.0: `messaging/axoniq-message-transformation/`. Depends on `axon-framework`'s `messaging` + `eventsourcing` modules. Internal package layout follows the `axoniq-distributed-messaging` precedent (`commandhandling/` + `queryhandling/` in one module): a shared `transformation/` base + an `events/` sub-package for 5.2.0. A `cqrs/` sub-package is filled in for 5.3+ when command and query transformation are delivered. Because the handler-registration decoration target lives in `axon-framework` (`CommandBus` / `QueryBus` are upstream types), no additional axoniq dependency is needed in 5.3+ either -- the module dependency set stays constant.
 
-**Integration point (5.2.0)** -- single decorator, registered via `ComponentRegistry.registerDecorator(EventStore.class, TransformingEventStore.DECORATION_ORDER, ...)`:
+**Integration point (5.2.0)** -- one decorator on `EventStore`, registered through `ComponentRegistry`:
 
-- **Events**: `EventStore` (publicly-facing interface; covers every `EventStore` implementation regardless of backend: local JPA / JDBC / in-memory via `StorageEngineBackedEventStore`, the Axon Server connector engine, the Postgres engine, and any future non-engine-backed implementation). The decorator wraps both `EventStore.open(StreamingCondition, ProcessingContext)` (tracking-processor reads) and `EventStore.transaction(ProcessingContext)` -- the latter returns a wrapping `EventStoreTransaction` whose `source(SourcingCondition, ...)` applies the chain (entity loads and DCB reads). The wrapping transaction delegates the four other `EventStoreTransaction` methods (`appendEvent`, `onAppend`, `overrideAppendCondition`, `appendPosition`) unchanged. Precedent: `InterceptingEventStore` in `axon-framework` ([eventsourcing/.../InterceptingEventStore.java](../../../AxonFramework/eventsourcing/src/main/java/org/axonframework/eventsourcing/eventstore/InterceptingEventStore.java)) follows the identical structural pattern (decorator on `EventStore` + wrapping `EventStoreTransaction` cached per `ProcessingContext`). `SourcingCondition` and `StreamingCondition` filtering plus `ConsistencyMarker` / `TerminalEventMessage` bookkeeping run in the underlying engine BEFORE the chain receives the stream (FR-012). Decorator ordering: outer (later) than `InterceptingEventStore` so the chain sits closest to the consumer; suggested `Integer.MIN_VALUE + 100`.
+- **Events**: the chain decorates the publicly-facing `EventStore` interface, covering both read paths (`transaction(...).source(...)` for entity loads and DCB reads, and `open(...)` for tracking-processor reads). Storage-engine filtering and consistency-marker bookkeeping run BEFORE the chain receives the stream (FR-012). The wrapping transaction is cached per `ProcessingContext`. Precedent: `InterceptingEventStore` in `axon-framework` uses the same structural pattern. Decorator ordering: outer (later) than `InterceptingEventStore` so the chain sits closest to the consumer. Concrete decorator types, ordering constants, and method signatures live in [contracts/spi-events.md](contracts/spi-events.md).
 
-**Integration points (5.3+ candidates, NOT in 5.2.0)** -- documented now so the SPI shape doesn't preclude them:
+**Integration points (5.3+ candidates, NOT in 5.2.0)**:
 
-- **Commands and queries**: the design constraint is that transformation MUST fire for **every** incoming command/query that reaches a handler, regardless of whether it arrived locally or via a `CommandBusConnector` / `QueryBusConnector`. Decorating the connector (as initially explored) only catches over-the-wire messages -- local dispatch via `localSegment` in `DistributedCommandBus` and any pure-local `SimpleCommandBus` bypass the connector entirely. The decoration point therefore needs to be at the handler-registration level (`CommandBus.subscribe(QualifiedName, CommandHandler)` / `QueryBus.subscribe(QualifiedName, QueryHandler)`), wrapping each registered handler so the chain runs uniformly on all incoming paths. Concrete design (which bus method to decorate, whether to wrap at registry-level or per-handler, the order vs. `InterceptingCommandBus` if any) is deferred to the 5.3+ command/query transformation issue.
+- **Commands and queries**: the design constraint is that transformation MUST fire for **every** incoming command/query that reaches a handler, regardless of whether it arrived locally or from a remote node. Decorating the bus connector alone misses local dispatch, so the decoration point is at handler-registration level on `CommandBus` / `QueryBus`, wrapping each registered handler. This is reachable using only upstream `axon-framework` types, so the module's dependency footprint does not grow when the `cqrs/` sub-package fills in. Concrete decorator types are sketched in [contracts/spi-cqrs.md](contracts/spi-cqrs.md).
 
 **Testing**: JUnit 5 + AssertJ; Awaitility for async; JMH for FR-011 thresholds.
 
@@ -183,53 +183,11 @@ The existing examples-parent pom already imports `axoniq-framework-bom`, so vers
 
 ## SPI shape
 
-The internal SPI is stream-in / stream-out and reuses AF5's `MessageStream`:
+The internal SPI is stream-in / stream-out and reuses AF5's `MessageStream`. One generic base type (`MessageTransformer<M extends Message>`) with per-message-type specializations (`EventTransformer`, `CommandTransformer`, `QueryTransformer`). Command and query specializations expose a single-entry convenience overload because they always carry one message. Users almost never touch the SPI directly -- they use the public factories. Full interface declarations, contract clauses, and integration types live in [contracts/spi-base.md](contracts/spi-base.md), [contracts/spi-events.md](contracts/spi-events.md), and [contracts/spi-cqrs.md](contracts/spi-cqrs.md); the user-facing factory API lives in [contracts/public-api.md](contracts/public-api.md).
 
-```java
-public interface MessageTransformer<M extends Message> {
-    MessageStream<M> transform(MessageStream<M> stream);
-}
-```
+### Chain composition (architectural)
 
-Per-type specializations expose convenience overloads for single-entry streams (commands and queries are single-intent):
-
-```java
-public interface CommandTransformer extends MessageTransformer<CommandMessage> {
-    MessageStream.Single<CommandMessage> transform(MessageStream.Single<CommandMessage> stream);
-
-    @Override
-    default MessageStream<CommandMessage> transform(MessageStream<CommandMessage> stream) {
-        return transform(stream.first());
-    }
-}
-```
-
-`EventTransformer` and `QueryTransformer` follow the same shape.
-
-Users almost never touch this SPI. They use the factories (`EventTransformation.from(...).to(...).transform(...)`, `EventTransformation.rename(...)`, `EventTransformation.split(...).transform(...)`, `EventTransformation.drop(...)`, plus the cqrs counterparts `CommandTransformation` / `QueryTransformation` in 5.3+) which produce typed `MessageTransformer` instances internally.
-
-### Chain usage (user-facing)
-
-There is exactly **one** `MessageTransformerChain` object per application. The user builds it once with all their transformations (events, and in 5.3+ commands and queries) and the framework wires it into the three decoration points behind the scenes:
-
-```java
-MessageTransformerChain chain = MessageTransformerChain.builder()
-    .register(EventTransformation.from(new MessageType("com.example.X", "1.0.0"))
-                                 .to(new MessageType("com.example.X", "2.0.0"))
-                                 .transform(payload -> ...))
-    .register(EventTransformation.rename(new MessageType("com.example.Y", "1.0.0"),
-                                          new MessageType("com.example.Z", "1.0.0")))
-    // 5.3+:
-    .register(CommandTransformation.rename(...))
-    .register(QueryTransformation.from(...).to(...).transform(...))
-    .build();
-```
-
-The `ConfigurationEnhancer` registers this single chain instance and wires:
-- `TransformingEventStore` decorator around `EventStore` (5.2.0)
-- handler-registration-level decoration on `CommandBus` / `QueryBus` (5.3+)
-
-Each decoration point invokes the chain with a typed `MessageStream<M>` (M is the relevant message subtype at that ingress); the chain internally routes to the sub-chain for that message type. The user-facing model stays simple: register everything once, the framework dispatches.
+There is exactly **one** `MessageTransformerChain` object per application. The user builds it once at startup; the chain is locked and immutable thereafter (FR-004). The chain routes incoming messages by message type to per-`QualifiedName` sub-chains; the user sees one chain, one builder, one registration call style across events (5.2.0) and -- when delivered -- commands and queries (5.3+). The `ConfigurationEnhancer` (`EventTransformationConfigurationEnhancer` in 5.2.0; `CqrsTransformationConfigurationEnhancer` in 5.3+) registers the chain in the component registry and wires it into the decoration points described under "Integration point" above. Each decoration point invokes the chain with a typed `MessageStream<M>` for its message subtype; routing inside the chain is per-`QualifiedName` (FR-007).
 
 ## Required axon-framework additions
 
@@ -274,25 +232,17 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 
 ## Forward-compatibility invariants
 
-The 5.2.0 deliverable is a thin slice of the full design described in the spec. Everything held to SHOULD / MAY / 5.3+ MUST land as a **pure additive change**, not a breaking rewrite. The 5.2.0 implementation therefore COMMITS to these architectural invariants from day one:
+The 5.2.0 deliverable is a thin slice of the full design. Everything held to SHOULD / MAY / 5.3+ MUST land as a **pure additive change**, not a breaking rewrite. The 5.2.0 implementation therefore COMMITS to these architectural invariants from day one:
 
-1. **SPI generic over `Message` from day one**. `MessageTransformer<M extends Message>` is the base type, even though `EventTransformer` is the only specialization shipped in 5.2.0. `CommandTransformer` and `QueryTransformer` (5.3+) extend the same base without forcing a refactor. Protects US8 / US9 / FR-019.
-
-2. **Chain models 0..N outputs per transformation**. Even though 5.2.0 only ships 1:1, the internal data structures and decorator return shape MUST treat "one transformation produces a `MessageStream` of zero or more outputs" -- never "exactly one output". Implementing it as 1:1-only would force a chain rewrite when FR-003 (split / drop) lands. The decorator wraps as `MessageStream<EventMessage> -> MessageStream<EventMessage>`, not `EventMessage -> EventMessage`. Protects US3 / US4 / FR-003 / FR-014.
-
-3. **Per-`QualifiedName` sub-chain routing structure present from day one**. Even if 5.2.0 has at most one transformation per name, the chain MUST already group transformations by `from.qualifiedName()` so US5 (chaining v1 -> v2 -> v3) lands without reorganising the chain. The non-matching lookup-and-skip path is O(1) with no per-event allocation from the start. Protects US5 / FR-007 / FR-011.
-
-4. **Factory method names reserved**. `EventTransformation.from(...).to(...)`, `EventTransformation.rename(...)`, `EventTransformation.split(...)`, `EventTransformation.drop(...)` are reserved on the factory API. Even if `split(...)` and `drop(...)` are not implemented in 5.2.0, the methods either (a) exist as `throw new UnsupportedOperationException("FR-003 deferred")` stubs or (b) are simply absent so adding them later is additive. **Never** ship a different shape that would have to be renamed. Protects US3 / US4 / US2.
-
-5. **Registration goes through a single `MessageTransformerChain` object**. Builder + `.build()` returns an immutable chain that holds transformations for events (5.2.0) and -- when delivered -- commands and queries (5.3+). Internally the chain routes by message type to per-`QualifiedName` sub-chains; the user sees one chain, one builder, one registration call style. Holds the door open for the FR-019 / Part C annotation-based registration alternative: any future annotation discovery must produce the same chain object the programmatic API produces. Protects deferred annotation work and the 5.3+ command/query rollout.
-
-6. **Snapshot pass-through is automatic**. Because the decorator wraps `EventStore` and `SnapshotCapableEventStorageEngine` merges snapshots into the source stream below it, snapshot entries reach the chain inline. The chain MUST treat unknown `MessageType`s (including snapshot types) as pass-through per FR-005. Adding a snapshot transformation in 5.3+ then needs no wiring change. Protects deferred snapshot transformation.
-
-7. **No annotation-discovery hooks anywhere in the 5.2.0 surface**. Keeps the future annotation mechanism's design space unconstrained (spec Part C). A premature `@Transform` or similar annotation would collide with whichever scheme is eventually chosen.
-
-8. **Conflict-detection extension points reserved at `register(...)` and `.build()`**. Even if 5.2.0 ships without conflict detection (FR-008 is MAY), the chain builder MUST validate at the right phases (`register(...)` for per-entry checks, `.build()` for cross-entry checks). 5.2.0 may register no checks, but the call sites MUST exist so adding duplicate-`from`, self-loop, multi-step-cycle, and version-order checks is a pure addition. Protects US6 / FR-008 / FR-020.
-
-9. **Observability hook points reserved**. Even if 5.2.0 emits no per-event TRACE log, the chain MUST have a single place (a decorator-around-chain or a callback list) where US7 / FR-013 observability can plug in without per-event allocation when disabled. Protects FR-013 disable mechanism.
+1. **Generic SPI over `Message`**. `MessageTransformer<M extends Message>` is the base; `EventTransformer` is the only 5.2.0 specialization. _Protects: US8/US9/FR-019 (commands and queries join without an SPI break)._
+2. **Chain models 0..N outputs**. Internal data structures + decorator return shape MUST treat each transformation as producing a `MessageStream` of zero or more outputs from day one. _Protects: US3/US4/FR-003/FR-014 (split and drop without rewriting the chain)._
+3. **Per-`QualifiedName` sub-chain routing**. Transformations grouped by source `QualifiedName`; non-matching lookup is O(1) with no per-event allocation. _Protects: US5/FR-007/FR-011 (chained version hops + lazy non-matching path)._
+4. **Factory method names reserved**. `from(...).to(...)`, `rename(...)`, `split(...)`, `drop(...)` are the only public factory shapes; deferred methods are either absent or stubbed -- never ship a shape that would have to be renamed. _Protects: US2/US3/US4 (rename, split, drop API stability)._
+5. **Single `MessageTransformerChain` object**. Builder returns one immutable chain holding all message types; future annotation discovery MUST produce the same object. _Protects: deferred annotation registration + 5.3+ command/query rollout._
+6. **Snapshot pass-through is automatic**. Snapshots flow inline through the same event stream; FR-005 pass-through on unknown `MessageType`s covers them, so adding a snapshot API later needs no wiring change. _Protects: deferred snapshot transformation._
+7. **No annotation-discovery hooks**. The 5.2.0 surface ships no `@Transform`-style annotation, keeping the future annotation mechanism's design space unconstrained. _Protects: Part C annotation-based registration._
+8. **Conflict-detection call sites reserved**. The builder validates at both registration time (per-entry checks) and lock time (cross-entry checks); 5.2.0 may register no checks but the call sites MUST exist. _Protects: US6/FR-008/FR-020 (duplicate, self-loop, cycle, version-order detection)._
+9. **Observability hook points reserved**. The chain MUST have a single plug-in point where per-event tracing can attach without per-event allocation when disabled. _Protects: US7/FR-013 (startup + per-event logging with opt-out)._
 
 ## Complexity Tracking
 
