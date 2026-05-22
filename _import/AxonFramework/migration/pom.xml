@@ -139,6 +139,11 @@
                                 </artifactItem>
                                 <artifactItem>
                                     <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-configuration</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
                                     <artifactId>axon-modelling</artifactId>
                                     <version>${axon4.version}</version>
                                 </artifactItem>
@@ -178,6 +183,7 @@
                 <configuration>
                     <additionalClasspathElements>
                         <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-messaging-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-configuration-${axon4.version}.jar</additionalClasspathElement>
                         <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-modelling-${axon4.version}.jar</additionalClasspathElement>
                         <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-eventsourcing-${axon4.version}.jar</additionalClasspathElement>
                         <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-spring-${axon4.version}.jar</additionalClasspathElement>
