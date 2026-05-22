@@ -15,8 +15,7 @@
   ~ limitations under the License.
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.axonframework</groupId>
@@ -105,70 +104,90 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <!-- Axon Framework 4.x type stubs for recipe tests. The stubs share the
-             org.axonframework groupId with this reactor's own modules, so the
-             maven-release-plugin treats any reference to them as an internal
-             artifact and fails if the version does not match the release version.
-             Wrapping them in a profile that is deactivated during release
-             (via -DskipAf4RecipeTests) hides them from the release-plugin's
-             version-consistency check while keeping them available for every
-             normal build and CI run. -->
-        <profile>
-            <id>af4-recipe-test-stubs</id>
-            <activation>
-                <property>
-                    <name>!skipAf4RecipeTests</name>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-messaging</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-modelling</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-eventsourcing</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-spring</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-test</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-micrometer</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-                <dependency>
-                    <groupId>org.axonframework</groupId>
-                    <artifactId>axon-server-connector</artifactId>
-                    <version>${axon4.version}</version>
-                    <scope>test</scope>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
-
     <build>
+        <plugins>
+            <!--
+                Axon Framework 4.x type stubs for recipe tests. The stubs share the
+                org.axonframework groupId with reactor modules at a different version.
+                Maven Release Plugin 3.x scans the raw POM model (before profile
+                activation) for <dependency> elements, so profile-based hiding no
+                longer works. Downloading via maven-dependency-plugin:copy puts the
+                coordinates in a <configuration> block that the release plugin's
+                version-consistency scanner does not inspect.
+
+                Pass -DskipAf4RecipeTests to skip the download (and the tests that
+                need these JARs) during release or when a fast build is desired.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-af4-stubs</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipAf4RecipeTests}</skip>
+                            <outputDirectory>${project.build.directory}/af4-stubs</outputDirectory>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-messaging</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-modelling</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-eventsourcing</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-spring</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-test</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-micrometer</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.axonframework</groupId>
+                                    <artifactId>axon-server-connector</artifactId>
+                                    <version>${axon4.version}</version>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <additionalClasspathElements>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-messaging-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-modelling-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-eventsourcing-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-spring-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-test-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-micrometer-${axon4.version}.jar</additionalClasspathElement>
+                        <additionalClasspathElement>${project.build.directory}/af4-stubs/axon-server-connector-${axon4.version}.jar</additionalClasspathElement>
+                    </additionalClasspathElements>
+                </configuration>
+            </plugin>
+        </plugins>
         <resources>
             <!-- Filter rewrite recipe YAMLs so they can interpolate ${project.version}
                  (the AF5 free target, derived from <revision>) and ${axoniq.version}
