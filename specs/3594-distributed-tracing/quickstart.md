@@ -215,4 +215,5 @@ This works across the Axon Server connector and any other transport that preserv
 
 - Full public-API contract: [contracts/public-api.md](./contracts/public-api.md)
 - AF4 → AF5 concern mapping + decoration approach + ProcessingContext binding: [research.md](./research.md)
+- Worked sequence diagrams (command, async event, snapshot — incl. cross-thread propagation): [flows.md](./flows.md)
 - Why this shape: [spec.md](./spec.md)

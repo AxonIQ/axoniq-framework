@@ -377,6 +377,8 @@ When the operation runs inside an active `ProcessingContext` (typical during eve
 
 **Snapshot is not a `Message` in AF5** — confirmed and accommodated. Snapshot creation runs against an entity stream identified by `tagKey` + tag value; there is no inbound `Message` to feed a provider. `TracingSnapshotter` opens the span via `createInternalSpan(...)` and attaches `axoniq.entity.type` / `axoniq.aggregate.identifier` directly from its decorator parameters. No new SPI method is required for this; AF4's `provideForSubject`-style hook would also have been unnecessary.
 
+> **Worked sequence diagrams** for command dispatch, async event publication + handler-side cross-thread W3C propagation, and snapshot creation (with the explicit "providers do NOT fire here" annotation) live in [`flows.md`](./flows.md), together with a "When does my `SpanAttributesProvider` fire?" cheat sheet that summarises the table above.
+
 **Alternatives considered**:
 - **Keep `Span createInternalSpan(String, Object subject)` + `SpanAttributesProvider#provideForSubject(Object)`** — rejected (this clarification). Premature abstraction with no concrete callers in this feature; `Object`-typed parameter forces every provider to `instanceof`-switch; AF4 did not have it.
 - **Re-introduce per-component span factories (`SnapshotterSpanFactory`, `RepositorySpanFactory`)** — explicitly forbidden by FR-016 and the consolidation goal of Story 4.

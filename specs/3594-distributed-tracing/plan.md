@@ -86,6 +86,7 @@ specs/3594-distributed-tracing/
 ├── contracts/
 │   └── public-api.md                        # Phase 1 — Public API of axoniq-tracing-core + axoniq-tracing-opentelemetry + autoconfig
 ├── quickstart.md                            # Phase 1 — Spring Boot + plain Java getting-started
+├── flows.md                                 # Phase 1 — Worked sequence diagrams (mermaid) for command / async event / snapshot flows + "when does SpanAttributesProvider fire?" cheat sheet
 └── tasks.md                                 # Phase 2 — /speckit-tasks output (NOT created by this command)
 ```
 
