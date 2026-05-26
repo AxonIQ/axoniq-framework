@@ -44,6 +44,24 @@ public interface SpanFactory {
     Span createHandlerSpan(String operationName, Message<?> message, @Nullable ProcessingContext context);
 
     /**
+     * Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message},
+     * with an additional OTel {@code SpanLink} to {@code linkedMessage}'s span context.
+     * <p>
+     * The link is rendered by APM UIs as a clickable cross-trace navigation (not a parent-of relationship,
+     * not an attribute). The single concrete use case is {@code TracingQueryUpdateEmitter} linking a
+     * subscription-query update span back to its originating query — matching AF4
+     * {@code DefaultQueryBusSpanFactory:66}'s {@code createChildHandlerSpan("QueryBus.queryUpdate",
+     * updateMessage, queryMessage)} behaviour. See {@code af4-span-inventory.md} §0 for the
+     * AF4→AF5 diff and rationale.
+     * <p>
+     * Implementations MUST extract the W3C span context from {@code linkedMessage.getMetaData()} and
+     * attach it as an OTel {@code SpanLink}. When no link can be extracted (e.g., the linked message
+     * has no propagated context), the span is still created without the link — never throws.
+     */
+    Span createLinkedHandlerSpan(String operationName, Message<?> message, Message<?> linkedMessage,
+                                 @Nullable ProcessingContext context);
+
+    /**
      * Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}.
      * Non-Message attributes (e.g., entity type / identifier for snapshot or repository operations) are
      * attached by the calling decorator via {@link Span#addAttribute(String, String)} directly from local
