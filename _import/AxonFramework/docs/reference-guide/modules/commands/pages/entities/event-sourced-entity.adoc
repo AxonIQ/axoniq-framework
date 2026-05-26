@@ -10,6 +10,7 @@ This makes the event log the single source of truth, giving you a complete and i
 If you are unfamiliar with event sourcing, see xref:events:index.adoc#core-concepts[Events core concepts] for an introduction to the concept.
 ====
 
+[#_entity_identification]
 == Entity identification
 
 Every command that targets an entity instance must identify which instance to load.
@@ -245,6 +246,7 @@ Use `fromIdentifier` when the constructor needs the identifier, or `fromEventMes
 <9> Enables command routing to this entity.
 Reads the `@TargetEntityId`-annotated field from each command payload to determine which entity instance to load or create.
 
+[#_autodetected]
 === Autodetected
 
 Add Axon annotations to the entity class and register it with `EventSourcedEntityModule.autodetected()`.
@@ -302,22 +304,27 @@ public class CourseEntity {
 
 <1> Use `@EventSourcedEntity` (non-Spring) instead of `@EventSourced`.
 
-Register the entity using `EventSourcingConfigurer`:
+Register the entity through the same `CourseEntityConfiguration.configure(EventSourcingConfigurer)` pattern shown in the declarative section:
 
 [source,java]
 ----
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
-configurer.registerEntity(
-    EventSourcedEntityModule.autodetected(String.class, CourseEntity.class) // <1>
-);
+public class CourseEntityConfiguration {
+
+    public static EventSourcingConfigurer configure(EventSourcingConfigurer configurer) {
+        return configurer.registerEntity(
+                EventSourcedEntityModule.autodetected(String.class, CourseEntity.class) // <1>
+        );
+    }
+}
 ----
 
 <1> The first argument is the identifier type; the second is the entity class.
 The `EventSourcedEntityModule#autodetected` flow reads `@CommandHandler`, `@EventSourcingHandler`, and `@EntityCreator` annotations from the class automatically.
 
+[#_spring_boot]
 === Spring Boot
 
 In Spring Boot, annotate the entity with `@EventSourced` instead of `@EventSourcedEntity`.
