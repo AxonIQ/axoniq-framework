@@ -19,12 +19,21 @@
 
 
 /**
- * Event-aware layer of the State Controller module. Defines the {@code EventStream} surface — the fluent
- * {@code fold} builder ({@code FoldableCondition}) plus the typed sugar helpers ({@code contains},
- * {@code containsAnyOf}, {@code count}, {@code sum}, {@code latest}, {@code latestOf}, {@code latestMatch},
- * {@code first}, {@code firstOf}) — and the {@code EventCondition} subtype. Depends on
- * {@link io.axoniq.framework.statecontroller.conditions} and on Axon Framework's existing event types; must not
- * depend on {@link io.axoniq.framework.statecontroller.decisions}.
+ * Event-aware layer of the State Controller module. Hosts both the public {@code EventStream} surface — the
+ * fluent {@code fold} builder ({@code FoldableCondition}) plus the typed sugar helpers ({@code contains},
+ * {@code containsAnyOf}, {@code count}, {@code sum}, {@code sumLong}, {@code latest}, {@code latestOf},
+ * {@code latestMatch}, {@code first}, {@code firstOf}) and the {@code EventCondition} subtype — and the
+ * sourced runtime implementation behind them: {@code SourcedEventStream} owns the per-scope seal-and-load
+ * lifecycle and drives a single coordinated read against the event store on first force; source-side accumulators
+ * ({@code ContainsAnyCondition}, {@code CountCondition}, {@code BigDecimalSumCondition},
+ * {@code LongSumCondition}, {@code SourcedEventSelection}, {@code SourcedFoldableCondition}) observe events through
+ * that read and produce typed values via per-condition {@code CompletableFuture}s.
+ * <p>
+ * {@code LateConditionException} signals the seal-lifecycle violation: declaring a new condition (or
+ * registering a new event type) on a scope after one of its conditions has already been forced.
+ * <p>
+ * Depends on {@link io.axoniq.framework.statecontroller.conditions} and on Axon Framework's existing event
+ * types; must not depend on {@link io.axoniq.framework.statecontroller.decisions}.
  */
 @NullMarked
 package io.axoniq.framework.statecontroller.eventstream;

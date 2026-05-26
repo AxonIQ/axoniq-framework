@@ -22,6 +22,7 @@ package io.axoniq.framework.statecontroller.conditions;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
@@ -33,9 +34,10 @@ import java.util.function.Function;
  * {@link #not()}, {@link #xor(BooleanCondition)}) preserve the {@code BooleanCondition} type so chains stay fluent
  * without lifting back from {@link Condition}.
  * <p>
- * Implementers need only supply {@link #value()} and {@link #map(Function)}; every other operation — including
- * {@link Condition#zip(Condition, java.util.function.BiFunction) zip} — is derived from those primitives. Lift
- * an arbitrary {@code Condition<Boolean>} into a {@code BooleanCondition} via {@link #of(Condition)}.
+ * Implementers need only supply {@link Condition#asCompletableFuture()}; every other operation — including
+ * {@link #map(Function) map} and {@link Condition#zip(Condition, java.util.function.BiFunction) zip} — is
+ * derived from that primitive. Lift an arbitrary {@code Condition<Boolean>} into a {@code BooleanCondition} via
+ * {@link #of(Condition)}.
  *
  * @author Allard Buijze
  * @since 5.2.0
@@ -127,13 +129,8 @@ public interface BooleanCondition extends Condition<Boolean> {
         }
 
         @Override
-        public Boolean value() {
-            return base.value();
-        }
-
-        @Override
-        public <U> Condition<U> map(Function<? super Boolean, ? extends U> fn) {
-            return base.map(fn);
+        public CompletableFuture<Boolean> asCompletableFuture() {
+            return base.asCompletableFuture();
         }
     }
 }

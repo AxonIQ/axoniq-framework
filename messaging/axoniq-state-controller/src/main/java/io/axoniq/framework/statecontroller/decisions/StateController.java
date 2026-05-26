@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.statecontroller.decisions;
 
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -31,6 +33,19 @@ import java.lang.annotation.Target;
  * The first parameter is the command payload — its runtime type determines which command is routed to this
  * handler. The second parameter is a {@link DecisionContext}. The return type is a {@link Decision}.
  * <p>
+ * The annotation is meta-annotated with {@link CommandHandler @CommandHandler}, so AF5's existing handler
+ * discovery picks up {@code @StateController} methods automatically as command handlers. A
+ * {@link org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition HandlerEnhancerDefinition}
+ * registered by this module wraps each annotated method so that:
+ * <ul>
+ *     <li>a returned {@link Decision.Accept} appends its events through the in-context
+ *         {@link org.axonframework.messaging.eventhandling.gateway.EventAppender EventAppender} and surfaces
+ *         {@link Decision.Accept#result()} as the handler's return value (or {@code null} if none was set);</li>
+ *     <li>a returned {@link Decision.Reject} appends its audit events through the same appender and throws a
+ *         {@link org.axonframework.messaging.commandhandling.CommandExecutionException CommandExecutionException}
+ *         carrying the rejection reason as its message and the audit events as its
+ *         {@link org.axonframework.messaging.commandhandling.CommandExecutionException#getDetails() details}.</li>
+ * </ul>
  * The enclosing class itself carries no annotation; the framework discovers decision handlers by scanning
  * registered classes (or explicit instances) for methods annotated with {@code @StateController}. This avoids
  * the redundancy of two annotations expressing the same thing at different positions.
@@ -59,6 +74,7 @@ import java.lang.annotation.Target;
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
+@CommandHandler
 public @interface StateController {
 }

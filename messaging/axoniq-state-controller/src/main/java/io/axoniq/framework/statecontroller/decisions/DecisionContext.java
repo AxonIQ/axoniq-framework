@@ -21,20 +21,31 @@ package io.axoniq.framework.statecontroller.decisions;
 
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
 
-import java.time.Instant;
 import java.util.Map;
 
 /**
  * The handle a {@link StateController @StateController} decision method receives to declare the slice of event
- * history it cares about and to read decision-time information.
+ * history it cares about.
  * <p>
  * {@link #scope(String, Object)} declares a single-tag scope (the common case);
  * {@link #scope(Map)} declares a composite scope across multiple tags. Each {@code scope(...)} call returns an
  * {@link EventStream} bound to a loading-context shared with the conditions it produces, so the framework can
  * load every declared question in a single read.
  * <p>
- * {@link #time()} returns the decision-time {@link Instant}, made explicit so decisions stay testable and
- * independent of wall-clock side effects.
+ * Example:
+ * <pre>{@code
+ * @StateController
+ * public Decision withdraw(Withdraw cmd, DecisionContext ctx) {
+ *     EventStream account = ctx.scope("account", cmd.accountId());
+ *     var closed  = account.contains(AccountClosed.class);
+ *     var balance = account.sum(MoneyDeposited.class, MoneyDeposited::amount)
+ *                          .minus(account.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount));
+ *
+ *     if (closed.isTrue())                           return Decision.reject("account closed");
+ *     if (balance.isLessThan(cmd.amount()).isTrue()) return Decision.reject("insufficient funds");
+ *     return Decision.emit(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+ * }
+ * }</pre>
  *
  * @author Allard Buijze
  * @since 5.2.0
@@ -60,14 +71,4 @@ public interface DecisionContext {
      * @return the lazily-loaded event stream for the composite tagged slice
      */
     EventStream scope(Map<String, ?> tags);
-
-    /**
-     * Returns the time at which this decision is being made.
-     * <p>
-     * Decision methods should prefer this method over {@link Instant#now()} so that decisions remain deterministic
-     * under test and replay.
-     *
-     * @return the decision-time instant
-     */
-    Instant time();
 }

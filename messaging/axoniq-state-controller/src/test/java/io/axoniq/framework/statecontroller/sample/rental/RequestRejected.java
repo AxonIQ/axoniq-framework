@@ -17,15 +17,14 @@
  *  https://www.axoniq.io/pricing
  */
 
+package io.axoniq.framework.statecontroller.sample.rental;
+
+import org.axonframework.eventsourcing.annotation.EventTag;
 
 /**
- * Pure value and composition layer of the State Controller module. Houses {@code Condition<T>} and its specialized
- * subtypes ({@code BooleanCondition}, {@code NumericCondition}, {@code OptionalCondition}) together with the
- * {@code MatchBuilder} flow. This package must not depend on any other sub-package of
- * {@code io.axoniq.framework.statecontroller}; that constraint is what keeps it extractable to a shared utility
- * module the moment a second consumer needs it.
+ * Event: the rental request was rejected. Carries the rejection reason so audits can reconstruct why a request
+ * was denied without re-running the decision body.
  */
-@NullMarked
-package io.axoniq.framework.statecontroller.conditions;
+public record RequestRejected(@EventTag(key = "bike") String bikeId, String userId, String reason) {
 
-import org.jspecify.annotations.NullMarked;
+}

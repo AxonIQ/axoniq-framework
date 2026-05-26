@@ -19,6 +19,11 @@
 
 package io.axoniq.framework.statecontroller.conditions;
 
+import org.axonframework.common.FutureUtils;
+
+import java.time.Duration;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -26,15 +31,22 @@ import java.util.function.Function;
  * A deferred question about a slice of event history that produces a single value of type {@code T} when forced.
  * <p>
  * Conditions are the unit of composition in a State Controller decision. They are declared procedurally but not
- * evaluated until {@link #value()} (or a specialized evaluator such as
- * {@link BooleanCondition#isTrue()}) is invoked. Declaring a condition records intent; evaluating it triggers a
- * single coordinated load of the underlying events for the enclosing scope. Holding a {@code Condition} reference
- * is therefore cheap and free of side effects.
+ * evaluated until {@link #asCompletableFuture()} (or its synchronous bridge {@link #value()}, or a specialized
+ * evaluator such as {@link BooleanCondition#isTrue()}) is invoked. Declaring a condition records intent;
+ * evaluating it triggers a single coordinated load of the underlying events for the enclosing scope. Holding a
+ * {@code Condition} reference is therefore cheap and free of side effects.
  * <p>
- * Specialized subtypes ({@link BooleanCondition}, {@link NumericCondition}, {@link OptionalCondition},
- * {@link CollectionCondition}) add operations that only make sense for their shape and return the specialized
- * type so chains stay fluent without re-wrapping. Use {@link #map(Function)} and {@link #zip(Condition, BiFunction)}
- * when you need to combine values whose shape does not fit one of the specialized subtypes.
+ * The asynchronous shape — {@link #asCompletableFuture()} returning a {@link CompletableFuture} — is the primary
+ * operation. {@link #value()} is a synchronous convenience that bridges the future back to the caller via
+ * {@link FutureUtils#joinAndUnwrap(CompletableFuture, Duration)}; this preserves the imperative style of a
+ * decision body while keeping the underlying loading lifecycle non-blocking. Operators ({@link #map},
+ * {@link #zip}) are implemented as decorators that chain {@code thenApply}/{@code thenCombine} on the upstream
+ * future, never re-blocking on intermediate results.
+ * <p>
+ * Specialized subtypes ({@link BooleanCondition}, {@link NumericCondition}, {@link OptionalCondition}) add
+ * operations that only make sense for their shape and return the specialized type so chains stay fluent without
+ * re-wrapping. Use {@link #map(Function)} and {@link #zip(Condition, BiFunction)} when you need to combine
+ * values whose shape does not fit one of the specialized subtypes.
  *
  * @param <T> the type of value produced when this condition is forced
  * @author Allard Buijze
@@ -43,33 +55,70 @@ import java.util.function.Function;
 public interface Condition<T> {
 
     /**
-     * Forces this condition, returning its value.
+     * Default safety-net timeout used by {@link #value()} when bridging the asynchronous result back to a
+     * synchronous caller. Thirty seconds is long enough that no realistic loaded scope should hit it under
+     * healthy conditions, but short enough that pathological cases (deadlocks, partitioned event stores)
+     * surface as failures rather than thread leaks.
+     */
+    Duration CONDITION_LOAD_TIMEOUT = Duration.ofSeconds(30);
+
+    /**
+     * Returns a {@link CompletableFuture} that completes with this condition's value once the underlying
+     * loaded events have been observed.
      * <p>
-     * The first invocation of {@code value()} (directly or via a specialized evaluator) on any condition declared
-     * in the same scope triggers a single load against the event store covering the union of all conditions
-     * declared at that point. Subsequent invocations reuse the loaded events.
+     * Forcing this method on any condition produced from a given
+     * {@link io.axoniq.framework.statecontroller.eventstream.EventStream EventStream} triggers a single sourced
+     * read against the event store covering every event type declared on the stream up to that moment, and
+     * seals the stream. Subsequent calls — on this condition or any other condition from the same stream —
+     * reuse the loaded events; each condition exposes its own future, all completed by the same underlying
+     * reduce. Sealing is per-stream: forcing a condition on one scope does not load or seal any other scope.
+     * <p>
+     * The returned future may already be completed when this method returns (when an upstream condition has
+     * already been forced) or pending (the load is in flight); callers should treat both cases uniformly.
+     *
+     * @return a future that completes with this condition's value
+     */
+    CompletableFuture<T> asCompletableFuture();
+
+    /**
+     * Forces this condition synchronously, returning its value.
+     * <p>
+     * Default implementation bridges {@link #asCompletableFuture()} back to a synchronous result through
+     * {@link FutureUtils#joinAndUnwrap(CompletableFuture, Duration)} with the
+     * {@link #CONDITION_LOAD_TIMEOUT default safety-net timeout}, preserving the original exception type if
+     * the underlying load fails. Implementations with a cheaper synchronous path may override.
      *
      * @return the value produced by this condition
      */
-    T value();
+    default T value() {
+        return FutureUtils.joinAndUnwrap(asCompletableFuture(), CONDITION_LOAD_TIMEOUT);
+    }
 
     /**
      * Returns a new condition that applies {@code fn} to this condition's value.
+     * <p>
+     * The returned condition does not register any accumulator with the backing event stream; its future is
+     * {@code this.asCompletableFuture().thenApply(fn)}. Chained {@code map} calls fuse into a single
+     * projection.
      *
      * @param fn  the transformation to apply when this condition is forced
      * @param <U> the target value type
      * @return a condition producing {@code fn(value())}
      */
-    <U> Condition<U> map(Function<? super T, ? extends U> fn);
+    default <U> Condition<U> map(Function<? super T, ? extends U> fn) {
+        Objects.requireNonNull(fn, "fn must not be null");
+        return new MappedCondition<>(this, fn);
+    }
 
     /**
      * Combines this condition with {@code other} using {@code combiner}, producing a single condition over the
      * joined values. Both source conditions are evaluated together when the resulting condition is forced.
      * <p>
-     * The default implementation expresses {@code zip} in terms of {@link #map(Function)} and {@code other.value()}.
-     * Because every condition is declared before any is forced, {@code other} is already present in the shared
-     * loading-context and its value is read from the unified load triggered by this condition's {@link #value()}.
-     * Implementations may override for efficiency or to register additional structural dependencies up front.
+     * The returned condition does not register any accumulator with a backing event stream; its future is
+     * {@code this.asCompletableFuture().thenCombine(other.asCompletableFuture(), combiner)}. When {@code other}
+     * comes from the same scope as this condition, both futures complete from the same unified load; when it
+     * comes from a different scope (or is not stream-backed at all), each side completes independently and
+     * {@code thenCombine} resolves as soon as both are ready.
      *
      * @param other    the other condition to combine with
      * @param combiner the function that joins both values into the result
@@ -78,6 +127,8 @@ public interface Condition<T> {
      * @return a condition producing {@code combiner(value(), other.value())}
      */
     default <U, R> Condition<R> zip(Condition<U> other, BiFunction<? super T, ? super U, ? extends R> combiner) {
-        return map(t -> combiner.apply(t, other.value()));
+        Objects.requireNonNull(other, "other must not be null");
+        Objects.requireNonNull(combiner, "combiner must not be null");
+        return new ZippedCondition<>(this, other, combiner);
     }
 }

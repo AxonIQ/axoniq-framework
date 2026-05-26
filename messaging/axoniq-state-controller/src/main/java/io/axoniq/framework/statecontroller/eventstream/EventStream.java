@@ -27,6 +27,7 @@ import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
 
 import java.math.BigDecimal;
 import java.util.function.Function;
+import java.util.function.ToLongFunction;
 
 /**
  * A lazy, tag-scoped view over the events relevant to a decision.
@@ -47,7 +48,8 @@ import java.util.function.Function;
  * <ul>
  *     <li>Predicates: {@link #contains} / {@link #containsAnyOf}</li>
  *     <li>Counting: {@link #count} (varargs over one or more types)</li>
- *     <li>Summing: {@link #sum} (single class only — a typed mapper requires a known {@code E})</li>
+ *     <li>Summing: {@link #sum} for {@link BigDecimal}, {@link #sumLong} for {@code long} (single class only —
+ *         a typed mapper requires a known {@code E})</li>
  *     <li>Selecting the last event: {@link #latest} / {@link #latestOf} / {@link #latestMatch}</li>
  *     <li>Selecting the first event: {@link #first} / {@link #firstOf}</li>
  * </ul>
@@ -124,6 +126,23 @@ public interface EventStream {
      * @return a {@link NumericCondition} producing the total
      */
     <E> NumericCondition<BigDecimal> sum(Class<E> type, Function<? super E, BigDecimal> mapper);
+
+    /**
+     * Sums the projection {@code mapper} applied to every event in the stream that is an instance of {@code type},
+     * accumulating into a {@code long}.
+     * <p>
+     * Use this overload — modelled on {@link java.util.stream.Stream#mapToLong(ToLongFunction) Stream.mapToLong}
+     * — when the payload exposes a primitive {@code long} field: it accepts a method reference like
+     * {@code MyEvent::quantity} directly, without forcing the call site to wrap each value in
+     * {@link BigDecimal#valueOf(long)}. For monetary and other domains where lossless decimal arithmetic
+     * matters, prefer {@link #sum(Class, Function) sum(...)} over {@link BigDecimal}.
+     *
+     * @param type   the event payload type to sum over
+     * @param mapper the projection from each event to a {@code long} addend
+     * @param <E>    the event payload type
+     * @return a {@link NumericCondition} producing the total as a {@link Long}
+     */
+    <E> NumericCondition<Long> sumLong(Class<E> type, ToLongFunction<? super E> mapper);
 
     /**
      * Returns the most recent event in the stream that is an instance of {@code type}, if any.

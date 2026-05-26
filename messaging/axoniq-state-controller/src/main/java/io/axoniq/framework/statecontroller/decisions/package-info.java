@@ -20,11 +20,24 @@
 
 /**
  * State-controller runtime of the State Controller module. Hosts the developer-facing surface for writing
- * decisions — {@code DecisionContext}, the {@code Decision} sealed result, and the {@code @StateController}
- * annotation — and will later host the lazy {@code EventStream} implementation and the DCB consistency wiring
- * that turns an {@code Accept} decision into a conditional append against the event store. Depends on both
- * {@link io.axoniq.framework.statecontroller.eventstream} and
- * {@link io.axoniq.framework.statecontroller.conditions}.
+ * decisions — {@link io.axoniq.framework.statecontroller.decisions.DecisionContext DecisionContext}, the
+ * {@link io.axoniq.framework.statecontroller.decisions.Decision Decision} sealed result, the
+ * {@link io.axoniq.framework.statecontroller.decisions.StateController @StateController} annotation, and the
+ * declarative {@link io.axoniq.framework.statecontroller.decisions.StateControllerComponent StateControllerComponent}
+ * — along with the runtime that wires them into Axon Framework: the
+ * {@link io.axoniq.framework.statecontroller.decisions.DecisionContextParameterResolverFactory parameter resolver}
+ * that injects {@code DecisionContext} into annotated methods and the
+ * {@link io.axoniq.framework.statecontroller.decisions.StateControllerHandlerEnhancer handler enhancer} that
+ * translates a returned {@code Decision} into event appends via the in-context
+ * {@link org.axonframework.messaging.eventhandling.gateway.EventAppender EventAppender}.
+ * <p>
+ * The {@link io.axoniq.framework.statecontroller.eventstream.EventStream EventStream} implementation that each
+ * decision body uses lives in {@link io.axoniq.framework.statecontroller.eventstream}; this package constructs
+ * it via {@link io.axoniq.framework.statecontroller.eventstream.SourcedEventStream SourcedEventStream} from
+ * {@code DecisionContext.scope(...)}.
+ * <p>
+ * Depends on both {@link io.axoniq.framework.statecontroller.eventstream} and
+ * {@link io.axoniq.framework.statecontroller.conditions}; never the reverse.
  */
 @NullMarked
 package io.axoniq.framework.statecontroller.decisions;

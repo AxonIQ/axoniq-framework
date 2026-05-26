@@ -17,15 +17,11 @@
  *  https://www.axoniq.io/pricing
  */
 
+package io.axoniq.framework.statecontroller.sample.rental;
 
 /**
- * Pure value and composition layer of the State Controller module. Houses {@code Condition<T>} and its specialized
- * subtypes ({@code BooleanCondition}, {@code NumericCondition}, {@code OptionalCondition}) together with the
- * {@code MatchBuilder} flow. This package must not depend on any other sub-package of
- * {@code io.axoniq.framework.statecontroller}; that constraint is what keeps it extractable to a shared utility
- * module the moment a second consumer needs it.
+ * Command: a user wants to return the bike they currently have rented.
  */
-@NullMarked
-package io.axoniq.framework.statecontroller.conditions;
+public record ReturnBike(String bikeId, String userId) {
 
-import org.jspecify.annotations.NullMarked;
+}

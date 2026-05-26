@@ -23,6 +23,7 @@ import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
@@ -33,10 +34,10 @@ import java.util.function.Function;
  * {@link #mapPresent(Function)} threads a transformation through the optional without forcing it.
  * {@link #orDefault(Object)} unwraps to a plain {@link Condition} carrying the unconditional value.
  * <p>
- * All specialized operations are derived from {@link #map(Function)}; implementers only supply {@link #value()}
- * and {@link #map(Function)} on the base ({@link Condition#zip(Condition, java.util.function.BiFunction) zip}
- * is defaulted). Lift an arbitrary {@code Condition<Optional<T>>} into an {@code OptionalCondition} via
- * {@link #of(Condition)}.
+ * All specialized operations are derived from {@link #map(Function)}; implementers only supply
+ * {@link Condition#asCompletableFuture()} on the base ({@link Condition#map(Function) map} and
+ * {@link Condition#zip(Condition, java.util.function.BiFunction) zip} are defaulted). Lift an arbitrary
+ * {@code Condition<Optional<T>>} into an {@code OptionalCondition} via {@link #of(Condition)}.
  *
  * @param <T> the value type wrapped by the optional
  * @author Allard Buijze
@@ -117,13 +118,8 @@ public interface OptionalCondition<T> extends Condition<Optional<T>> {
         }
 
         @Override
-        public Optional<T> value() {
-            return base.value();
-        }
-
-        @Override
-        public <U> Condition<U> map(Function<? super Optional<T>, ? extends U> fn) {
-            return base.map(fn);
+        public CompletableFuture<Optional<T>> asCompletableFuture() {
+            return base.asCompletableFuture();
         }
     }
 }
