@@ -48,8 +48,8 @@ intentionally absent and will land additively later (see T055).
 - [ ] T006 [P] Create `EventTransformer extends MessageTransformer<EventMessage>` specialization in `.../transformation/events/EventTransformer.java` per contracts/spi-events.md
 - [ ] T007 [P] Create `ChainConfigurationException` (RuntimeException) in `.../transformation/ChainConfigurationException.java` per contracts/spi-base.md (used by FR-004 lock-after-build and FR-018 output-identity-mismatch in US1; cycle / duplicate / self-loop detection lands later in the deferred US6 follow-up)
 - [ ] T008 Create `MessageTransformerChain` class in `.../transformation/MessageTransformerChain.java`: `public static Builder builder()`, `public <M extends Message> MessageStream<M> transform(MessageStream<M> stream)` returning the input stream untransformed for now (US1 implementation fills the body), internal sub-chain map keyed by `QualifiedName` so the routing structure exists from day one (Forward-compat invariant #3). Chain MUST treat unknown `MessageType`s as pass-through from day one (FR-005 + Forward-compat invariant #6 snapshot pass-through)
-- [ ] T009 Create nested functional interfaces in `MessageTransformerChain` per contracts/spi-base.md: `BeforeApply.shouldApply(MessageTransformer<?>, Message) -> boolean` and `AfterApply.onApplied(MessageTransformer<?>, Message, MessageStream<? extends Message>) -> void`. `@NullMarked`.
-- [ ] T010 Create `MessageTransformerChain.Builder` with `register(MessageTransformer<?>)`, `beforeApply(BeforeApply)`, `afterApply(AfterApply)`, `build()`. `build()` returns the immutable chain and flips a `locked` flag; late `register(...)` throws `ChainConfigurationException("chain is locked")` (FR-004). Hook defaults: always-apply / no-op (zero per-event allocation, FR-011). No `versionOrder(...)` yet (US5). Conflict-detection call sites stay as no-op placeholders (Forward-compat invariant #8).
+- [ ] T009 Add default methods to `EventTransformer` per contracts/spi-events.md: `default EventTransformer when(Predicate<EventMessage>)` (wraps with a pre-apply skip) and `default EventTransformer onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)` (wraps with a post-apply observer). Both return a new wrapping `EventTransformer`; defaults (when no hook attached) MUST NOT allocate per event.
+- [ ] T010 Create `MessageTransformerChain.Builder` with `register(MessageTransformer<?>)` and `build()` only. `build()` returns the immutable chain and flips a `locked` flag; late `register(...)` throws `ChainConfigurationException("chain is locked")` (FR-004). No `versionOrder(...)` yet (US5). Conflict-detection call sites stay as no-op placeholders (Forward-compat invariant #8). NO chain-wide hook methods -- hooks are per-transformer on `EventTransformer`.
 
 **Checkpoint**: SPI skeleton compiles. No transformations applied yet. US1 + US2 + US7 can now proceed.
 
@@ -130,33 +130,33 @@ intentionally absent and will land additively later (see T055).
 
 ---
 
-## Phase 5: User Story 7 -- Chain Hooks + Chain-Build DEBUG (Priority: P2)
+## Phase 5: User Story 7 -- Per-Transformer Hooks + Chain-Build DEBUG (Priority: P2)
 
-**Goal**: Users install `BeforeApply` (decide whether to apply a matched transformer) and `AfterApply` (observer) on the Builder. Framework emits one DEBUG entry at chain build. Defaults are zero-allocation; non-matching path never fires hooks.
+**Goal**: Each `EventTransformer` carries optional `.when(Predicate)` (skip if false) and `.onApplied(BiConsumer)` (post-apply observer) attached at registration. Framework emits one DEBUG entry at chain build. Default (neither hook attached on a transformer) is zero-allocation. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent.
 
-**Independent Test**: with a registered `CourseCreated v1->v2`: (a) `BeforeApply` returning `false` skips invocation; (b) `AfterApply` observer count equals matching-event count, zero for non-matching; (c) `.build()` emits one DEBUG line; (d) no hooks installed -> zero per-event allocation on a 1M-event run.
+**Independent Test**: with a registered `CourseCreated v1->v2` carrying `.when(p)` + `.onApplied(o)`: (a) `p` returning `false` skips the transformer for that input; (b) `o` is invoked with `(input, output)` for every applied transformation; (c) `.build()` emits one DEBUG line; (d) a transformer without `.when` / `.onApplied` attached produces zero per-event allocation on a 1M-event matching run.
 
 ### Tests for User Story 7 (write FIRST, ensure they FAIL before implementation)
 
 - [ ] T042 [P] [US7] FR-013 chain-build DEBUG test: `.build()` emits one DEBUG with transformation count + each `from` / `to`. SLF4J test capture. In `.../transformation/MessageTransformerChainFr013BuildDebugTest.java`
-- [ ] T043 [P] [US7] FR-013 `BeforeApply` skip test: hook returning `false` skips the matched transformer; input passes through unchanged. In `.../transformation/MessageTransformerChainFr013BeforeApplyTest.java`
-- [ ] T044 [P] [US7] FR-013 `AfterApply` observer test: hook receives `(transformer, input, output)` for every match; recorder count equals expected matches. In `.../transformation/MessageTransformerChainFr013AfterApplyTest.java`
-- [ ] T045 [P] [US7] FR-013 hooks-don't-fire-on-non-matching test: with both hooks as counting observers, a non-matching stream leaves `recorder.count == 0`. In `.../transformation/MessageTransformerChainFr013NonMatchingTest.java`
-- [ ] T046 [P] [US7] FR-013 default-hooks no-allocation test: with default hooks, a 1M-event non-matching run keeps `gc.alloc.rate.norm` constant. In `.../transformation/MessageTransformerChainFr013DefaultsAllocationTest.java`
+- [ ] T043 [P] [US7] FR-013 `.when()` skip test: transformer registered with a predicate returning `false` is skipped; input passes through unchanged. In `.../transformation/events/EventTransformerFr013WhenTest.java`
+- [ ] T044 [P] [US7] FR-013 `.onApplied()` observer test: observer receives `(input, output)` for every applied transformation; recorder count equals expected matches. In `.../transformation/events/EventTransformerFr013OnAppliedTest.java`
+- [ ] T045 [P] [US7] FR-013 hooks-don't-fire-on-non-matching test: with `.when` + `.onApplied` both attached as counting observers, a non-matching stream leaves `recorder.count == 0`. In `.../transformation/events/EventTransformerFr013NonMatchingTest.java`
+- [ ] T046 [P] [US7] FR-013 default-no-allocation test: a transformer without `.when` / `.onApplied` attached keeps `gc.alloc.rate.norm` constant on a 1M-event run. In `.../transformation/events/EventTransformerFr013DefaultsAllocationTest.java`
 
 ### Implementation for User Story 7
 
-- [ ] T047 [US7] Wire `BeforeApply` into `MessageTransformerChain.transform(...)`: before invoking a matched transformer call `beforeApply.shouldApply(transformer, input)`; on `false` emit input unchanged. Default (always-apply) must not allocate per event.
-- [ ] T048 [US7] Wire `AfterApply` into `MessageTransformerChain.transform(...)`: after the transformer output (0/1/N elements) call `afterApply.onApplied(transformer, input, output)`. Default (no-op) must not allocate per event.
-- [ ] T049 [US7] Emit chain-build DEBUG in `Builder.build()`: SLF4J `DEBUG` with transformation count + each `from` (+ `to` for 1:1). Field set fixed per FR-013.
+- [ ] T047 [US7] Implement `EventTransformer.when(Predicate<EventMessage>)` default method: returns a new `EventTransformer` that, on each input, calls the predicate; if `false`, emits the input unchanged; if `true`, delegates to this transformer. The wrapper class lives package-private in `.../transformation/events/`.
+- [ ] T048 [US7] Implement `EventTransformer.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)` default method: returns a new `EventTransformer` that delegates to this one, then calls the observer with `(input, output)`. Wrapper class lives package-private in `.../transformation/events/`.
+- [ ] T049 [US7] Emit chain-build DEBUG in `MessageTransformerChain.Builder.build()`: SLF4J `DEBUG` with transformation count + each `from` (+ `to` for 1:1). Field set fixed per FR-013.
 
 ### Documentation for User Story 7
 
-- [ ] T050 [P] [US7] Add `docs/reference-guide/modules/message-transformation/pages/hooks.adoc`: `BeforeApply` feature-flag skip pattern + `AfterApply` SLF4J / Micrometer patterns + chain-build DEBUG. Update `pages/index.adoc` navigation.
+- [ ] T050 [P] [US7] Add `docs/reference-guide/modules/message-transformation/pages/hooks.adoc`: `.when()` feature-flag skip pattern + `.onApplied()` SLF4J / Micrometer patterns + chain-build DEBUG. Update `pages/index.adoc` navigation.
 
 ### Demo example for User Story 7
 
-- [ ] T051 [P] [US7] Add an `AfterApply` SLF4J logger to `axon-framework/examples/university-demo/` (cross-repo PR) -- demonstrates per-event TRACE.
+- [ ] T051 [P] [US7] Add a `.onApplied()` SLF4J logger to one transformation in `axon-framework/examples/university-demo/` (cross-repo PR) -- demonstrates per-transformer per-event TRACE.
 
 **Checkpoint**: US1 + US2 + US7 work independently; the 5.2.0 deliverable slice is complete.
 
@@ -181,7 +181,7 @@ intentionally absent and will land additively later (see T055).
 - **Foundational (Phase 2)**: depends on Setup. BLOCKS US1, US2, US7.
 - **US1 (Phase 3)**: blocked only by Foundational. MUST scope -- the issue's defining increment. Docs (T035) + demo (T036) depend on US1 implementation (T024-T034) being functional.
 - **US2 (Phase 4)**: blocked by Foundational. Implementation (T039) is a thin add-on to US1's factory; in practice deliver after US1. Docs (T040) + demo (T041) extend US1's reference-guide page + the same university-demo module.
-- **US7 (Phase 5)**: blocked by Foundational AND by US1 implementation (T026-T028 wire the matching path that the hooks plug into). Independent of US2. Adds the chain-build DEBUG entry + `BeforeApply` / `AfterApply` hook firing. Docs (T050) + demo (T051) extend the reference-guide module + the demo.
+- **US7 (Phase 5)**: blocked by Foundational AND by US1 implementation (T026-T028 wire the matching path the hooks plug into). Independent of US2. Adds the chain-build DEBUG entry + per-transformer `.when` / `.onApplied` default methods on `EventTransformer`. Docs (T050) + demo (T051) extend the reference-guide module + the demo.
 - **Polish (Phase 6)**: T052-T054 depend on US1 + US2 + US7 being complete; T055 (follow-up issue) is independent paperwork.
 
 ### Within Each User Story
@@ -225,6 +225,6 @@ intentionally absent and will land additively later (see T055).
 - [P] = different files, no incomplete dependencies. Never [P] within the same file.
 - Tests written first; verify they FAIL before implementing the corresponding US tasks.
 - Method names on `EventTransformation` (`from`, `to`, `transform`, `rename`, plus the reserved-but-absent `split`, `drop`) are reserved from day one (Forward-compat invariant #4) even though `split` and `drop` are deferred. Never ship a different shape that would have to be renamed.
-- `MessageTransformerChain.Builder` 5.2.0 surface: `register(...)`, `beforeApply(...)`, `afterApply(...)`, `build()`. `versionOrder(...)` lands with US5. Hooks are nested interfaces on `MessageTransformerChain` -- no generic framework-owned name like `Observability`.
+- `MessageTransformerChain.Builder` 5.2.0 surface: `register(...)`, `build()`. `versionOrder(...)` lands with US5. Per-transformer hooks (`.when` / `.onApplied`) live on `EventTransformer` itself -- matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent, no chain-wide hooks, no generic framework-owned name like `Observability`.
 - The `commandhandling/` + `queryhandling/` sub-packages are deliberately absent here (5.3+ command/query work; "CQRS" is intentionally not in any name). The demo for the 5.2.0 slice lives in `axon-framework/examples/university-demo/` and is delivered per-story via T036 (US1) + T041 (US2) + T051 (US7); no separate cross-repo demo follow-up task exists. Future deferred stories US3-US6 carry their own per-story demo + docs requirement via T055.
 - Commit after each task or after a logical group; the `after_tasks` git extension hook offers to commit after this file is generated.
