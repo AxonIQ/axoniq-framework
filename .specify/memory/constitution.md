@@ -50,6 +50,46 @@ Configuration and wiring MUST be expressible declaratively. Annotations are supp
 MUST NOT be the only way to configure a component. Every annotation-based registration
 MUST have a programmatic equivalent.
 
+### VIII. Vertical-Slice Delivery
+
+Implementation plans MUST prefer **component-by-component vertical slices** over layered
+(all-of-X, then all-of-Y) execution. A vertical slice delivers one component end-to-end
+through the abstraction layers it depends on — core SPI, decorators, configuration,
+autoconfig glue, focused integration test — and ships an observable, validatable behaviour
+before the next component starts.
+
+This principle binds the outputs of `/speckit-plan` and `/speckit-tasks`:
+
+- Phases that would otherwise group "all decorators", "all handlers", or "all wiring" MUST
+  be split into one phase per component.
+- Core abstractions (SPIs, base types, shared helpers) MUST be produced up-front in a
+  single foundation phase so each slice starts on stable ground. Modifications to those
+  abstractions mid-stream are permitted but MUST be flagged to the user before commit, with
+  a one-line summary of what is changing and why.
+- Each vertical slice MUST end with an explicit human-validation checkpoint task: commit
+  the slice, run the slice's focused integration test, post the observable result (e.g.,
+  the produced span tree, the rendered output, the persisted state shape) to the user, and
+  wait for explicit go/no-go before the next slice starts.
+- Cross-component end-to-end tests, reference documentation, example applications, and
+  external-system tests (Testcontainers, real-backend verification, cleanup of upstream
+  artefacts) are produced as a single batched final phase after all slices are validated.
+  Documentation in particular MUST land last so it reflects the as-shipped API surface and
+  configuration knobs without needing to be rewritten per slice.
+- One feature branch, one rollup PR by default. Per-slice PRs are an opt-in deviation, not
+  the norm.
+
+**Rationale**: vertical slices stress-test the core abstractions on the first slice while
+their cost of change is lowest; keep each commit reviewable and reversible; bound the blast
+radius when a slice exposes a design flaw (one component to revert, not all of them); and
+create natural human-feedback boundaries instead of deferring all observable behaviour to a
+final integration phase. Layered execution magnifies the cost of late discovery.
+
+**When to deviate**: only when a change is genuinely orthogonal across components (e.g., a
+parent-pom dependency bump touching every module, a checkstyle rule rollout, a one-shot
+deletion phase against an upstream repository), or when no per-component slice is
+meaningfully smaller than the whole. Deviations MUST be justified explicitly in the spec's
+`## Clarifications` section before the plan is finalised.
+
 ## Relationship to AxonFramework Upstream
 
 Axoniq Framework builds on top of [AxonFramework](https://github.com/AxonFramework/AxonFramework)
@@ -304,7 +344,43 @@ are rejected.
 (root) and the task-specific rules under `.claude/rules/`. When CLAUDE.md and this file
 disagree, this file wins; flag the divergence as a sync issue and update both.
 
-**Version**: 2.1.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-26
+**Version**: 2.2.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-26
+
+---
+
+## Sync Impact Report — 2.2.0 (2026-05-26)
+
+**Bump type**: MINOR — new Foundation Principle added; no existing principle removed or weakened.
+
+**Change**: Added **Principle VIII — Vertical-Slice Delivery** to the Foundation Principles section. Implementation plans MUST prefer component-by-component vertical slices over layered execution. Each slice ships one component end-to-end (core SPI usage + decorator + configuration + autoconfig glue + focused integration test) and ends with an explicit human-validation checkpoint. Core abstractions land up-front in a foundation phase; cross-component E2E tests, docs, examples, and external-system / Testcontainers tests are batched in a final phase. Documentation in particular lands last so it reflects the as-shipped API. Deviations require justification in the spec's Clarifications section.
+
+**Motivation**: Layered plans (all decorators in one phase, then all autoconfig, then all docs) defer observable behaviour to the final phase, magnifying the cost of late discovery and removing the human's natural feedback opportunities. Vertical slicing stress-tests the core abstractions on slice 1 (when the cost of change is lowest), keeps each commit reviewable, and bounds blast radius when a slice exposes a design flaw. Codifying this as a Foundation Principle makes it the default for `/speckit-plan` and `/speckit-tasks` going forward, rather than something every feature has to argue from scratch.
+
+**Trigger**: feat/3594-DistributedTracing clarification session 2026-05-26. The original plan grouped "all tracing decorators" into a single P3 phase. The user pushed back and asked for component-by-component slicing (CommandBus → EventSink → QueryBus → QueryUpdateEmitter → Repository → Snapshotter), with explicit human-validation gates between slices and docs/Testcontainers/example batched at the end. The plan was restructured into 10 phases (P1 foundations, P2 core abstractions + OTel + autoconfig skeleton, P3–P8 six per-component slices, P9 batched finalization, P10 upstream cleanup) and recorded in FR-022b of `specs/3594-distributed-tracing/spec.md`. Promoting this preference to a constitutional principle prevents the same restructuring discussion on the next feature.
+
+**Modified sections**:
+- *Foundation Principles* — added **VIII. Vertical-Slice Delivery**.
+
+**Added sections**: none beyond the new principle (VIII is added in the existing Foundation Principles section).
+
+**Removed sections**: none.
+
+**Renamed principles**: none. Principles I–VII keep their numbering, titles, and content. VIII is appended after VII.
+
+**Templates requiring updates**:
+- ✅ `.specify/templates/tasks-template.md` — already structures phases per user story (Phase 3+ = one phase per User Story), which aligns with VIII. No edit needed; the principle reinforces existing template intent and adds the human-validation-gate requirement on top.
+- ✅ `.specify/templates/plan-template.md` — generic placeholder template; does not enforce a specific phase strategy. No edit needed; concrete plans inherit VIII via the Constitution Check gate.
+- ✅ `.specify/templates/spec-template.md` — does not prescribe an implementation strategy; deviations from VIII are captured in the spec's `## Clarifications` section per the new principle. No edit needed.
+- ✅ `.specify/templates/checklist-template.md` — unaffected.
+- ✅ `.specify/templates/constitution-template.md` — the source template for this very file; no propagation step needed.
+
+**Impact on existing feature specs**:
+- `specs/3594-distributed-tracing/` — already compliant. FR-022b in `spec.md` and the P3–P8 + P9 + P10 structure in `plan.md` are the worked example that motivated this principle. The plan's Constitution Check table will be updated on next plan refresh to list VIII explicitly.
+- No other in-flight feature specs exist at amendment time.
+
+**Sync issues observed**: none. The principle codifies what the user requested in the tracing feature; no other rules conflict with it. `CLAUDE.md` already aligns ("Spec-first: Enter plan mode for non-trivial tasks") but does not prescribe slicing — this amendment narrows that to a specific, testable rule.
+
+**Deferred items**: none. No `TODO()` placeholders remain.
 
 ---
 
