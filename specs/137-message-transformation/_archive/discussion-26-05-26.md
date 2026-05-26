@@ -1,6 +1,6 @@
 # Event Transformation -- Design Meeting Cheat Sheet
 
-Full design: [spec.md](spec.md), [plan.md](plan.md), [contracts/](contracts/).
+Full design: [spec.md](../spec.md), [plan.md](../plan.md), [contracts/](contracts/).
 
 ---
 
@@ -85,6 +85,7 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
     // (A) 1:1 structural transform -- v1's "capacity" splits into min/max
     //     Optional per-transformer hooks (.when / .onApplied) shown here.
     .register(EventTransformation
+            // from should be overloaded and predicate allowed (only support exception when semver comparator otherwise user responsibility)
         .from(new MessageType("com.example.CourseCreated", "1.0.0"))
         .to  (new MessageType("com.example.CourseCreated", "2.0.0"))
         .transform(JsonNode.class, v1 -> {
@@ -95,6 +96,7 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
             v2.put("name", v1.get("name").asText());
             return v2;
         })
+            // not in first version
         .when     (in       -> !featureFlags.isDisabled("course-created-upcast"))
         .onApplied((in, out) -> log.trace("CourseCreated v1 -> v2 applied to {}", in.identifier())))
 
@@ -183,8 +185,6 @@ The **architecture commits** to the full design from day one (see plan.md "Forwa
 
 ## 5. Verification -- design decisions to confirm
 
-No open questions -- everything below is already decided. Quick group sanity check that we're aligned before implementation starts:
-
 1. **Decoration target -- `EventStore` over `EventStorageEngine`.** Storage engine is `@Internal`; decorating the public `EventStore` keeps transformation available to any future `EventStore` implementation (not just storage-engine-backed ones). Same logic for 5.3+: decorate `CommandBus` / `QueryBus`, NOT the connectors.
 2. **`MessageStream.flatMap` upstream addition.** Needed only if 1:N split (US3) lands in 5.2.0. In-module fallback documented; final decision made at the moment US3 is picked up.
 3. **Version ordering default.** Registration order = apply order (matches AF4). `VersionComparator` opt-in via `Builder.versionOrder(...)`; `SemverComparator` ships as a built-in.
@@ -195,9 +195,9 @@ No open questions -- everything below is already decided. Quick group sanity che
 
 ## References
 
-- [spec.md](spec.md) -- full functional spec, US1-US9, FR-001 to FR-021
-- [plan.md](plan.md) -- delivery scope, module layout, forward-compat invariants
-- [contracts/public-api.md](contracts/public-api.md) -- full user-facing API + end-to-end example incl. 5.3+ commands/queries
-- [contracts/spi-base.md](contracts/spi-base.md) -- `MessageTransformer`, `MessageTransformerChain`, `VersionComparator`
-- [contracts/spi-events.md](contracts/spi-events.md) -- `EventTransformer`, `TransformingEventStore`, configuration enhancer
-- [contracts/spi-commands-queries.md](contracts/spi-commands-queries.md) -- 5.3+ deferred shapes
+- [spec.md](../spec.md) -- full functional spec, US1-US9, FR-001 to FR-021
+- [plan.md](../plan.md) -- delivery scope, module layout, forward-compat invariants
+- [contracts/public-api.md](../contracts/public-api.md) -- full user-facing API + end-to-end example incl. 5.3+ commands/queries
+- [contracts/spi-base.md](../contracts/spi-base.md) -- `MessageTransformer`, `MessageTransformerChain`, `VersionComparator`
+- [contracts/spi-events.md](../contracts/spi-events.md) -- `EventTransformer`, `TransformingEventStore`, configuration enhancer
+- [contracts/spi-commands-queries.md](../contracts/spi-commands-queries.md) -- 5.3+ deferred shapes
