@@ -20,7 +20,7 @@ The single most important design move is the collapse of AF4's nine per-componen
 | Query dispatch + handling | `QueryBusSpanFactory` + `DefaultQueryBusSpanFactory`, consumed by `SimpleQueryBus.Builder#spanFactory(...)` | `internal.TracingQueryBus implements QueryBus` registered via `DecoratorDefinition.forType(QueryBus.class)`. Span name `"QueryBus.query <queryName>"` (kind `CLIENT`/`INTERNAL`) on dispatch, `"QueryBus.handle <queryName>"` (kind `SERVER`) on handling. |
 | Subscription-query updates | `QueryUpdateEmitterSpanFactory` + `DefaultQueryUpdateEmitterSpanFactory`, consumed by `SimpleQueryUpdateEmitter.Builder` | `internal.TracingQueryUpdateEmitter implements QueryUpdateEmitter` registered via `DecoratorDefinition.forType(QueryUpdateEmitter.class)`. Span name `"QueryUpdateEmitter.emit <updateType>"`. |
 | Aggregate / entity load + save | `RepositorySpanFactory` + `DefaultRepositorySpanFactory`, consumed by `AbstractRepository.Builder` | `internal.TracingRepository implements Repository` + `internal.TracingStateManager implements StateManager`, registered via `DecoratorDefinition.forType(Repository.class)` / `…StateManager.class`. Span names `"Repository.load <entityType> <id>"` and `"Repository.save <entityType> <id>"`. |
-| Snapshot creation + read | `SnapshotterSpanFactory` + `DefaultSnapshotterSpanFactory`, consumed by `AbstractSnapshotter.Builder` | `internal.TracingSnapshotter implements Snapshotter` registered via `DecoratorDefinition.forType(Snapshotter.class)`. Span names `"Snapshotter.create <entityType> <id>"` and `"Snapshotter.read <entityType> <id>"`. `separateTrace` and `aggregateTypeInSpanName` knobs come back as `TracingProperties.snapshotter.*`. |
+| Snapshot write + read | `SnapshotterSpanFactory` + `DefaultSnapshotterSpanFactory`, consumed by `AbstractSnapshotter.Builder` | `internal.TracingSnapshotStore implements SnapshotStore` registered via `DecoratorDefinition.forType(SnapshotStore.class)`. Span names `"SnapshotStore.store <entityType>"` and `"SnapshotStore.load <entityType>"`, via `createInternalSpan(String)` + local `addAttribute`. **AF5 has no `Snapshotter` component** (it's in `stash/todo`); snapshot creation is an inline `SnapshotPolicy`-gated side-effect of `SnapshottingEntityLifecycleHandler.source(...)`, so the store spans nest under the FR-009 sourcing span. `SnapshotStore` is `@Internal` — accepted coupling, no internals modified. AF4's standalone `scheduleSnapshot`→`createSnapshot` two-level trace does **not** survive; the `separateTrace` / `aggregateTypeInSpanName` knobs are dropped (no `Snapshotter` to host them). See clarification 2026-05-26 (option B3). |
 | ~~Deadline schedule + fire~~ | ~~AF4: `DeadlineManagerSpanFactory` + `DefaultDeadlineManagerSpanFactory`~~ | **Out of scope.** `DeadlineManager` does not exist in Axon Framework 5 (clarification 2026-05-26). No `TracingDeadlineManager`, no enhancer registration, no `TracingProperties` group. |
 | ~~Saga / process-manager invocation~~ | ~~AF4: `SagaManagerSpanFactory` + `DefaultSagaManagerSpanFactory`~~ | **Out of scope.** Sagas / process-managers do not exist in Axon Framework 5 today (clarification 2026-05-26). No `TracingSagaManager`, no enhancer registration, no `TracingProperties` group, no `@SagaEventHandler` wrapping. FR-012 is withdrawn. |
 | `@*Handler` annotation handlers | `TracingHandlerEnhancerDefinition` (already a `HandlerEnhancerDefinition` in AF4) | `internal.TracingHandlerEnhancerDefinition` — direct port of the AF4 class shape, registered as a `HandlerEnhancerDefinition` bean / SPI. Wraps `@CommandHandler`, `@EventHandler`, `@QueryHandler`, `@EventSourcingHandler`. (`@DeadlineHandler` and `@SagaEventHandler` are excluded — see deadline and saga rows above.) |
@@ -138,8 +138,10 @@ public final class TracingConfigurationEnhancer implements ConfigurationEnhancer
                 .order(TracingOrders.DECORATOR_ORDER)
                 .registerWith(registry);
 
-        DecoratorDefinition.forType(Snapshotter.class)
-                .with((cfg, name, delegate) -> new TracingSnapshotter(delegate, cfg.get(SpanFactory.class)))
+        // AF5 has no `Snapshotter` component (it's in stash/todo). Snapshot tracing decorates the real,
+        // registered `SnapshotStore` (@Internal — accepted coupling). See clarification 2026-05-26 (B3).
+        DecoratorDefinition.forType(SnapshotStore.class)
+                .with((cfg, name, delegate) -> new TracingSnapshotStore(delegate, cfg.get(SpanFactory.class)))
                 .order(TracingOrders.DECORATOR_ORDER)
                 .registerWith(registry);
 
@@ -304,7 +306,7 @@ public final class AggregateIdentifierSpanAttributesProvider implements SpanAttr
 
 **Consequence — SPI shape**: the `SpanAttributesProvider` SPI single method is `Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context)`. Providers that do not need the context simply ignore it (e.g., `MessageIdSpanAttributesProvider` takes the id off the `Message` itself). The decision rejects the multi-method / default-fallback alternative — every implementation pays the cost of one `@Nullable` parameter; the SPI stays a single SAM and there is no ambiguity about which method the factory calls.
 
-**Consequence — `SpanFactory.create*Span` signatures**: the two message-aware factory methods gain a `@Nullable ProcessingContext` parameter so that decorators (which always have a `ProcessingContext` from the AF5 bus signatures) feed it through to providers. The non-message `createInternalSpan(operationName)` stays as-is — decorators (e.g., `TracingSnapshotter`, `TracingRepository`) attach their own attributes via `Span#addAttribute(key, value)` from local method parameters; the existing `AggregateIdentifierSpanAttributesProvider` picks up `LegacyResources` data from the `ProcessingContext` when one is active. There is no `provideForSubject(Object)` SPI method and no `createInternalSpan(String, Object)` overload — see §5 below.
+**Consequence — `SpanFactory.create*Span` signatures**: the two message-aware factory methods gain a `@Nullable ProcessingContext` parameter so that decorators (which always have a `ProcessingContext` from the AF5 bus signatures) feed it through to providers. The non-message `createInternalSpan(operationName)` stays as-is — decorators (e.g., `TracingSnapshotStore`, `TracingRepository`) attach their own attributes via `Span#addAttribute(key, value)` from local method parameters; the existing `AggregateIdentifierSpanAttributesProvider` picks up `LegacyResources` data from the `ProcessingContext` when one is active. There is no `provideForSubject(Object)` SPI method and no `createInternalSpan(String, Object)` overload — see §5 below.
 
 **Consequence — behavior on DCB / entity operations**: the `axoniq.aggregate.identifier` attribute is intentionally absent on traces produced inside DCB / entity-based event streams (`LegacyResources.AGGREGATE_IDENTIFIER_KEY` is simply not populated by the storage engines for those streams). Trace consumers MUST treat the attribute as optional. Edge case captured in `spec.md` "DCB / entity-based operation" bullet.
 
@@ -355,17 +357,21 @@ A handful of operations (snapshot creation, repository load / save) are not `Mes
 Span createInternalSpan(String operationName);
 ```
 
-Decorators handling non-message operations own the attribute attachment locally. Example — `TracingSnapshotter`:
+Decorators handling non-message operations own the attribute attachment locally. Example — `TracingSnapshotStore` (decorating the real AF5 `SnapshotStore` — there is no `Snapshotter` component in AF5 main source; see clarification 2026-05-26 option B3):
 
 ```java
 @Override
-public CompletableFuture<Void> scheduleSnapshot(String entityType, Object identifier) {
-    Span span = spanFactory.createInternalSpan(SpanNames.SNAPSHOT_CREATE + " " + entityType);
-    span.addAttribute("axoniq.entity.type", entityType);
+public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
+    Span span = spanFactory.createInternalSpan(SpanNames.SNAPSHOT_STORE + " " + qualifiedName.name());
+    span.addAttribute("axoniq.entity.type", qualifiedName.name());
     span.addAttribute("axoniq.aggregate.identifier", String.valueOf(identifier));
-    return span.runSupplierAsync(() -> delegate.scheduleSnapshot(entityType, identifier));
+    span.addAttribute("axoniq.snapshot.version", String.valueOf(snapshot.version()));
+    return span.runSupplierAsync(() -> delegate.store(qualifiedName, identifier, snapshot));
 }
+// load(...) similarly → SpanNames.SNAPSHOT_LOAD + " " + qualifiedName.name()
 ```
+
+The `store` / `load` spans nest under the FR-009 entity-sourcing span (from decorating `EntityLifecycleHandler.source(...)`) via the active `ProcessingContext`. `SnapshotStore` is `@Internal` — accepted coupling, no AxonFramework internals modified.
 
 When the operation runs inside an active `ProcessingContext` (typical during event sourcing replay), the standard providers — in particular `AggregateIdentifierSpanAttributesProvider` reading `LegacyResources.AGGREGATE_IDENTIFIER_KEY` per §3.2 — contribute their attributes automatically through the message/context path. The decorator's local `addAttribute(...)` calls handle the no-context case.
 
@@ -375,7 +381,7 @@ When the operation runs inside an active `ProcessingContext` (typical during eve
 - The simplification fits Constitution §I (Simplicity First) and §II (Minimal Impact — "three similar lines beats a premature abstraction").
 - The `SpanNames` table still fixes the name strings, so the observable trace shape stays equivalent to AF4 (SC-003a).
 
-**Snapshot is not a `Message` in AF5** — confirmed and accommodated. Snapshot creation runs against an entity stream identified by `tagKey` + tag value; there is no inbound `Message` to feed a provider. `TracingSnapshotter` opens the span via `createInternalSpan(...)` and attaches `axoniq.entity.type` / `axoniq.aggregate.identifier` directly from its decorator parameters. No new SPI method is required for this; AF4's `provideForSubject`-style hook would also have been unnecessary.
+**Snapshot store/load is not a `Message` operation in AF5** — confirmed and accommodated. `SnapshotStore.store(...)` receives a `Snapshot` record (not a `SnapshotEventMessage`), so there is no inbound `Message` to feed a provider. `TracingSnapshotStore` opens the span via `createInternalSpan(...)` and attaches `axoniq.entity.type` / `axoniq.aggregate.identifier` / `axoniq.snapshot.version` directly from its decorator parameters. No new SPI method is required for this; AF4's `provideForSubject`-style hook would also have been unnecessary.
 
 > **Worked sequence diagrams** for command dispatch, async event publication + handler-side cross-thread W3C propagation, and snapshot creation (with the explicit "providers do NOT fire here" annotation) live in [`flows.md`](./flows.md), together with a "When does my `SpanAttributesProvider` fire?" cheat sheet that summarises the table above.
 

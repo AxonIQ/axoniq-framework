@@ -238,7 +238,7 @@ Each is a `public final class` with a no-arg constructor (and an optional vararg
 ### 1.8 `@Internal` types (NOT public surface; listed for reviewer reference)
 
 Under `io.axoniq.framework.tracing.internal`:
-- `TracingCommandBus`, `TracingEventSink`, `TracingEventHandlingComponent`, `TracingQueryBus`, `TracingQueryUpdateEmitter`, `TracingRepository`, `TracingStateManager`, `TracingSnapshotter`
+- `TracingCommandBus`, `TracingEventSink`, `TracingEventHandlingComponent`, `TracingQueryBus`, `TracingQueryUpdateEmitter`, `TracingRepository`, `TracingStateManager`, `TracingSnapshotStore` (decorates the real AF5 `SnapshotStore` — AF5 has no `Snapshotter` component; see `af4-span-inventory.md` §1.8)
 - `TracingHandlerEnhancerDefinition`
 - `SpanNames` (constants table: `CMD_DISPATCH = "CommandBus.dispatchCommand"`, `EVT_PUBLISH = "EventBus.publishEvent"`, `EVT_COMMIT = "EventBus.commitEvents"`, …)
 - `ProcessingContextSpanBinding`

@@ -213,46 +213,46 @@ Same shape as Flow 1. Providers fire once for the handler span. The lifecycle bi
 
 ---
 
-## Flow 3 — Snapshot creation (no Message, providers DO NOT fire)
+## Flow 3 — Snapshot store/load (no Message, providers DO NOT fire)
 
-This is the case the user asked about. Snapshot creation has no inbound `Message` — it's triggered by a threshold inside the snapshotter. The decorator owns all attribute attachment.
+This is the case the user asked about. **AF5 has no `Snapshotter` component** (it lives in `stash/todo`); snapshot creation is an inline `SnapshotPolicy`-gated side-effect of `SnapshottingEntityLifecycleHandler.source(...)`. The decoratable surface is the registered (`@Internal`) `SnapshotStore`. `SnapshotStore.store(...)` receives a `Snapshot` *record*, not a `Message`, so the decorator owns all attribute attachment, and the store/load spans nest under the FR-009 entity-sourcing span via the active `ProcessingContext`. See spec.md clarification 2026-05-26 (option B3) and `af4-span-inventory.md` §1.8.
 
 ### Sequence
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Trigger as Snapshot trigger<br/>(e.g., snapshot-policy)
-    participant TS as TracingSnapshotter<br/>(decorator)
+    participant ELH as SnapshottingEntityLifecycleHandler<br/>(delegate, inside source(...))
+    participant TSS as TracingSnapshotStore<br/>(decorator)
     participant SF as SpanFactory
     participant PROV as Providers
-    participant Snap as AbstractSnapshotter<br/>(delegate)
-    participant Store as EventStore
+    participant Store as SnapshotStore<br/>(delegate, @Internal)
+    participant Ctx as ProcessingContext<br/>(FR-009 sourcing span active)
 
-    Trigger->>TS: scheduleSnapshot(entityType, identifier)
-    Note over Trigger,TS: No Message. No ProcessingContext<br/>parameter on this entry point.
+    Note over ELH: source(...) is already wrapped by the<br/>FR-009 entity-sourcing span on Ctx.<br/>SnapshotPolicy decides a snapshot is due.
+    ELH->>TSS: store(qualifiedName, identifier, snapshot)
+    Note over ELH,TSS: No Message — `Snapshot` is a record.<br/>A ProcessingContext IS active (sourcing).
 
-    TS->>SF: createInternalSpan("Snapshotter.create " + entityType)
-    Note over TS,SF: One-argument overload.<br/>NO context, NO Message.<br/>Providers are NOT iterated.
-    SF-->>TS: snapshotSpan (not yet started)
+    TSS->>SF: createInternalSpan("SnapshotStore.store " + qualifiedName.name())
+    Note over TSS,SF: One-argument overload.<br/>NO Message. Providers are NOT iterated.
+    SF-->>TSS: storeSpan (not yet started)
 
-    TS->>SF: snapshotSpan.addAttribute("axoniq.entity.type", entityType)
-    TS->>SF: snapshotSpan.addAttribute("axoniq.aggregate.identifier",<br/>String.valueOf(identifier))
-    Note over TS,SF: Decorator-local attachment.<br/>Data came from method parameters,<br/>not from a provider.
+    TSS->>SF: storeSpan.addAttribute("axoniq.entity.type", qualifiedName.name())
+    TSS->>SF: storeSpan.addAttribute("axoniq.aggregate.identifier",<br/>String.valueOf(identifier))
+    TSS->>SF: storeSpan.addAttribute("axoniq.snapshot.version",<br/>String.valueOf(snapshot.version()))
+    Note over TSS,SF: Decorator-local attachment from<br/>method parameters, not a provider.
 
-    TS->>SF: snapshotSpan.runSupplierAsync( ... )
-    SF->>SF: scope = snapshotSpan.start()
-    Note over SF: Imperative-edge run helper:<br/>scope opens, OpenTelemetry Context<br/>made current ONLY for this<br/>synchronous span body. No<br/>cross-thread state. (Permitted by<br/>Constitution §V — imperative edge.)
+    TSS->>SF: storeSpan.runSupplierAsync( ... )
+    SF->>SF: scope = storeSpan.start()
+    Note over SF,Ctx: Nests under the active FR-009<br/>sourcing span on Ctx — store span<br/>becomes its child.
 
-    SF->>Snap: delegate.scheduleSnapshot(entityType, identifier)
-    Snap->>Store: read events / build snapshot / store
-    Store-->>Snap: ok
-    Snap-->>SF: CompletableFuture<Void>
+    SF->>Store: delegate.store(qualifiedName, identifier, snapshot)
+    Store-->>SF: CompletableFuture<Void>
     SF->>SF: future.whenComplete( scope.close() )
     Note over SF: Scope closes when the future<br/>completes — span ends.
 
-    SF-->>TS: CompletableFuture<Void>
-    TS-->>Trigger: CompletableFuture<Void>
+    SF-->>TSS: CompletableFuture<Void>
+    TSS-->>ELH: CompletableFuture<Void>
 
     rect rgb(245, 245, 245)
     Note over PROV: SpanAttributesProvider list<br/>not consulted in this flow.<br/>This matches AF4's behavior:<br/>providers were Message-only there too.
@@ -262,29 +262,29 @@ sequenceDiagram
 ### Deep commentary
 
 **Steps 1–2 — Entry point, no `Message` involved**
-The snapshot trigger (event processor reaching threshold, scheduled job, etc.) calls `Snapshotter.scheduleSnapshot(entityType, identifier)`. There is no `Message`, and depending on the trigger there may or may not be a `ProcessingContext` available. The decorator's method signature simply doesn't accept one.
+AF5 has no `Snapshotter.scheduleSnapshot`. The snapshot is created inline inside `SnapshottingEntityLifecycleHandler.source(...)` (gated by `SnapshotPolicy`), which calls `SnapshotStore.store(qualifiedName, identifier, snapshot)`. We decorate `SnapshotStore` (the registered, `@Internal` component) — `store(...)` receives a `Snapshot` *record*, not a `Message`. A `ProcessingContext` IS active here because the call happens inside `source(...)`, which the FR-009 sourcing decorator has already wrapped.
 
-**Step 3 — `createInternalSpan(String)` — one-argument overload**
-The factory builds the span purely from the operation name. **Providers are not iterated.** This is deliberate (see research.md §5 and the previous clarification):
-- The decorator already has the typed data it cares about (entity type, identifier).
+**Step 3 — `createInternalSpan(String)`**
+The factory builds the span purely from the operation name. **Providers are not iterated.** This is deliberate (see research.md §5 and the snapshot clarifications):
+- The decorator already has the typed data it cares about (entity type via `qualifiedName.name()`, identifier, snapshot version).
 - Providers in AF4 only fired on Messages — we are not regressing.
-- Adding a provider iteration here would require providers to handle a null `Message` and / or a null context, complicating every provider for no concrete callers.
+- Adding provider iteration here would require providers to handle a null `Message`, complicating every provider for no concrete callers.
 
-**Steps 4–5 — Decorator attaches attributes directly**
-`Span.addAttribute(...)` writes attributes onto the span before it starts (or after — order doesn't matter for the OTel SDK). The two attributes attached here are the ones AF4's `SnapshotterSpanFactory` used to attach via its bespoke `createSnapshotSpan(aggregateType, aggregateIdentifier)` method. The shape is preserved; the path is direct.
+**Steps 4–6 — Decorator attaches attributes directly**
+`Span.addAttribute(...)` writes attributes from the `store(...)` parameters. These mirror the attributes AF4's `SnapshotterSpanFactory` attached via its bespoke `createSnapshotSpan(aggregateType, aggregateIdentifier)` method — plus `axoniq.snapshot.version` (available in AF5 from the `Snapshot` record). The path is direct.
 
-**Steps 6–11 — Imperative-edge `runSupplierAsync`**
-Because there is no `ProcessingContext`, we cannot bind the span to lifecycle hooks. We fall back to the imperative `Span.runSupplierAsync(...)` helper:
+**Steps 7–10 — `runSupplierAsync` over the async store**
+`SnapshotStore.store(...)` is asynchronous (`CompletableFuture<Void>`). The decorator uses the imperative `Span.runSupplierAsync(...)` helper:
 - Opens the scope (in OpenTelemetry this momentarily makes the OTel `Context.current()` point at the new span — the only place we touch the OTel `ThreadLocal`, and it's at an imperative edge).
 - Runs the supplier (which produces the `CompletableFuture<Void>`).
 - Registers `whenComplete` on the future to close the scope.
 
-This matches the AF4 fallback shape (see `AbstractEventBus.java:144`'s no-UoW branch from the earlier research note).
+Because a `ProcessingContext` IS active during sourcing, the store span naturally nests under the FR-009 sourcing span (the OTel parent is whatever is current when the scope opens). If a decorator author preferred, the span could instead be bound to `ctx` lifecycle hooks via `ProcessingContextSpanBinding`; `runSupplierAsync` is chosen here because the store call is a self-contained async operation, not a UoW-phase-spanning one.
 
 **Why no providers**
-Concretely: imagine a user-defined `TenantSpanAttributesProvider` that reads tenant id from `MetaData`. There is no metadata on a snapshot span — there is no Message. The provider has nothing to read. Even if we passed `provideForMessage(null, null)`, every provider would have to handle both nulls. That is the price the AF4 SPI didn't pay (it never called providers for snapshot spans), and we're not paying it either.
+Concretely: imagine a user-defined `TenantSpanAttributesProvider` that reads tenant id from `MetaData`. `SnapshotStore.store(...)` has a `Snapshot` record (which carries metadata) but no `Message` — and the SPI is `provideForMessage(Message, ctx)`. Even if we passed `provideForMessage(null, ctx)`, every provider would have to handle the null Message. That is the price the AF4 SPI didn't pay (it never called providers for snapshot spans), and we're not paying it either. The store-span attributes the decorator attaches (`axoniq.entity.type`, `axoniq.aggregate.identifier`, `axoniq.snapshot.version`) cover the snapshot case directly.
 
-If, in some future iteration, snapshot spans **do** need provider input — e.g., the surrounding `ProcessingContext` carries a tenant id — the response is a **pure addition**: add `createInternalSpan(String, ProcessingContext)` and have providers handle the `null Message` case. Not in scope today.
+If, in some future iteration, snapshot spans **do** need provider input, the response is a **pure addition**: add `createInternalSpan(String, ProcessingContext)` and have providers handle the `null Message` case. Not in scope today.
 
 ### Repository load / save — same shape
 
@@ -437,8 +437,8 @@ Once the batch span exists in `BATCH_SPAN_KEY` on the batch ctx, every per-event
 | `QueryUpdateEmitter.emit <type>` | `createDispatchSpan` | **Yes** | Providers + propagation |
 | `Repository.load <entityType> <id>` | `createInternalSpan` | No | `TracingRepository` attaches `axoniq.aggregate.identifier` |
 | `Repository.save <entityType> <id>` | `createInternalSpan` | No | Same |
-| `Snapshotter.create <entityType> <id>` | `createInternalSpan` | No | `TracingSnapshotter` attaches `axoniq.entity.type` + `axoniq.aggregate.identifier` |
-| `Snapshotter.read <entityType> <id>` | `createInternalSpan` | No | Same |
+| `SnapshotStore.store <entityType>` | `createInternalSpan` | No | `TracingSnapshotStore` attaches `axoniq.entity.type` + `axoniq.aggregate.identifier` + `axoniq.snapshot.version` (AF5 has no `Snapshotter`; nests under FR-009 sourcing span) |
+| `SnapshotStore.load <entityType>` | `createInternalSpan` | No | Same (minus version) |
 | `@EventSourcingHandler` and other annotation handlers | (wrapped via `TracingHandlerEnhancerDefinition`) | **Yes** (handler-span path) | Providers + extract W3C parent |
 
 Rule of thumb: **`SpanAttributesProvider` fires when the decorator has a `Message` to hand over and not before.** Internal spans use direct `Span#addAttribute(...)` from the decorator's typed parameters.
