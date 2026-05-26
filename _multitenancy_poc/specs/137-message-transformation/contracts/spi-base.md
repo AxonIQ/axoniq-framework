@@ -124,13 +124,22 @@ public final class MessageTransformerChain {
         public Builder versionOrder(VersionComparator ordering) { /* ... */ }
 
         /**
-         * Switch chain-level logging on or off. Default is {@link Observability#enabled()};
-         * use {@link Observability#disabled()} on performance-critical paths.
+         * Install a predicate that returns {@code false} to skip a matched transformer.
+         * Replaces any previous; default: always apply.
          *
-         * @param observability the mode to apply
+         * @param hook the predicate
          * @return this builder
          */
-        public Builder observability(Observability observability) { /* ... */ }
+        public Builder beforeApply(BeforeApply hook) { /* ... */ }
+
+        /**
+         * Install an after-apply observer. Useful for logging / metrics. Replaces any previous;
+         * default: no-op (no per-event allocation).
+         *
+         * @param hook the observer
+         * @return this builder
+         */
+        public Builder afterApply(AfterApply hook) { /* ... */ }
 
         /**
          * Lock the chain and return an immutable instance. Runs multi-step cycle detection
@@ -140,6 +149,45 @@ public final class MessageTransformerChain {
          * @throws ChainConfigurationException on a multi-step cycle or version-order violation
          */
         public MessageTransformerChain build() { /* ... */ }
+    }
+
+    /**
+     * Predicate evaluated before a matched transformer is applied. Returning {@code false}
+     * skips the transformer for this input. Fires only on matched transformers; non-matching
+     * messages pass through in {@code O(1)} without firing.
+     *
+     * @author AxonIQ
+     * @since 5.2.0
+     */
+    @FunctionalInterface
+    public interface BeforeApply {
+
+        /**
+         * @param transformer the transformer about to be invoked
+         * @param input       the matched message
+         * @return {@code true} to apply, {@code false} to skip
+         */
+        boolean shouldApply(MessageTransformer<?> transformer, Message input);
+    }
+
+    /**
+     * Observer invoked after a transformer application. Output is zero, one, or more elements
+     * for drop / 1:1 / split respectively. Fires only on matched applications.
+     *
+     * @author AxonIQ
+     * @since 5.2.0
+     */
+    @FunctionalInterface
+    public interface AfterApply {
+
+        /**
+         * @param transformer the transformer that was invoked
+         * @param input       the message that was transformed
+         * @param output      the resulting output stream
+         */
+        void onApplied(MessageTransformer<?> transformer,
+                       Message input,
+                       MessageStream<? extends Message> output);
     }
 }
 ```
@@ -273,39 +321,13 @@ public final class SemverComparator implements VersionComparator {
 
 ---
 
-## `Observability`
+## Chain hooks (`BeforeApply`, `AfterApply`)
 
-Chain-level logging switch supplied to `Builder.observability(...)`. When disabled, the chain MUST NOT allocate per event (Forward-compatibility invariant #9). User-facing usage and sample DEBUG output are in [public-api.md](public-api.md).
+Nested interfaces on `MessageTransformerChain`, installed via the Builder:
 
-```java
-package io.axoniq.framework.messaging.transformation;
+- **`BeforeApply`** -- predicate. Returning {@code false} skips the matched transformer (e.g., feature flag). Default: always apply.
+- **`AfterApply`** -- observer called with `(transformer, input, output)`. Useful for logging / metrics. Default: no-op (zero per-event allocation).
 
-import org.jspecify.annotations.NullMarked;
-
-/**
- * Chain-level logging switch supplied to
- * {@link MessageTransformerChain.Builder#observability(Observability)}. Enabled emits one
- * DEBUG entry at build time + one TRACE entry per applied transformation. Disabled
- * suppresses all logging and allocates nothing per event.
- *
- * @author AxonIQ
- * @since 5.2.0
- */
-@NullMarked
-public sealed interface Observability {
-
-    /** @return the enabled mode (the default) */
-    static Observability enabled() { /* ... */ }
-
-    /** @return the disabled mode */
-    static Observability disabled() { /* ... */ }
-
-    /** Chain logging enabled. */
-    record Enabled() implements Observability {}
-
-    /** Chain logging suppressed. */
-    record Disabled() implements Observability {}
-}
-```
+Hooks fire only on matched transformers; the non-matching path stays O(1) (FR-011 preserved). Logging is the user's job via `afterApply(...)`; the framework does not take generic names like `Observability`.
 
 **Cross-references**: FR-013, US7.
