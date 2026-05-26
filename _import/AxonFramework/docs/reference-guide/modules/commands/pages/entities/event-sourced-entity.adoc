@@ -64,6 +64,7 @@ See xref:events:event-store-internals.adoc#tags[Event store internals] for detai
 It does not affect which entity instance is loaded.
 ====
 
+[#_entity_members]
 == Entity members
 
 An event-sourced entity consists of four types of members:
