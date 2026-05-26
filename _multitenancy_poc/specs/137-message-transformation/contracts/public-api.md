@@ -20,16 +20,14 @@ The user constructs **exactly one** chain per application and registers it with 
 ```java
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
-import io.axoniq.framework.messaging.transformation.SemverComparator;
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import org.axonframework.messaging.core.MessageType;
 
 // 1. Build the chain.
 MessageTransformerChain chain = MessageTransformerChain.builder()
-    .versionOrder(SemverComparator.instance())                  // optional, FR-020
     .register(EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
                                  .to(new MessageType("com.example.CourseCreated", "2.0.0"))
-                                 .transform(JsonNode.class, v1 -> { /* restructure capacity -> min/max */ }))
+                                 .transform(JsonNode.class, (v1, ctx) -> { /* restructure capacity -> min/max */ }))
     .register(EventTransformation.rename(new MessageType("com.example.CourseOpened", "1.0.0"),
                                           new MessageType("com.example.CourseCreated", "2.0.0")))
     .build();
@@ -49,8 +47,8 @@ Full end-to-end example covering events + commands + queries is shown below.
 **Contract**:
 - `.build()` returns an immutable chain; further registration is rejected (FR-004).
 - Registration order = chain application order (FR-004).
-- If a `VersionComparator` is registered, ordering is enforced at `.build()` (FR-020).
-- Conflict classes from FR-008 (duplicate `from`, self-loop, multi-step cycle, version-order violation) are detected and surfaced before any event is processed.
+- Version ranges expressed via `from(Predicate<MessageType>)` (FR-005, FR-020).
+- Conflict classes from FR-008 (duplicate concrete `from`, self-loop, multi-step cycle on concrete edges) are detected before any event is processed. A defensive runtime safety bound guards against infinite loops from pathological misconfiguration; under normal use it never fires.
 
 ---
 
@@ -60,15 +58,18 @@ Full end-to-end example covering events + commands + queries is shown below.
 package io.axoniq.framework.messaging.transformation.events;
 
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
 
 import java.util.List;
-import java.util.function.Function;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
  * Factory producing {@link EventTransformer} instances. Use one of the static methods
- * ({@link #from(MessageType)}, {@link #rename(MessageType, MessageType)},
- * {@link #split(MessageType)}, {@link #drop(MessageType)}) and register the result with
+ * ({@link #from(MessageType)} / {@link #from(Predicate)},
+ * {@link #rename(MessageType, MessageType)}, {@link #split(MessageType)},
+ * {@link #drop(MessageType)}) and register the result with
  * {@code MessageTransformerChain.builder().register(...)}.
  *
  * @author AxonIQ
@@ -80,12 +81,23 @@ public final class EventTransformation {
     /* US1 -- 1:1 structural transformation (FR-001, MUST in 5.2.0) ----------------- */
 
     /**
-     * Begin a 1:1 transformation. Continue with {@code to(...)} then {@code transform(...)}.
+     * Begin a 1:1 transformation matching the given concrete {@code from} identity by
+     * exact equality. Continue with {@code to(...)} then {@code transform(...)}.
      *
      * @param source the {@code from} identity
      * @return a builder awaiting {@code to(...)}
      */
     public static SingleEventTransformationBuilder from(MessageType source) { /* ... */ }
+
+    /**
+     * Begin a 1:1 transformation matching any {@link MessageType} for which the supplied
+     * predicate returns {@code true}. Use this overload for range / regex / semver matching.
+     * Continue with {@code to(...)} then {@code transform(...)}.
+     *
+     * @param sourcePredicate the matcher
+     * @return a builder awaiting {@code to(...)}
+     */
+    public static SingleEventTransformationBuilder from(Predicate<MessageType> sourcePredicate) { /* ... */ }
 
     public static final class SingleEventTransformationBuilder {
 
@@ -106,15 +118,17 @@ public final class EventTransformation {
          * returned value's runtime type drives conversion back for downstream consumers.
          * Input and output Java types MAY differ. The framework verifies that the output's
          * resolved {@link MessageType} matches the declared {@code to}; a mismatch raises a
-         * runtime error.
+         * runtime error. The mapper also receives the active {@link ProcessingContext}
+         * ({@code null} when none is active).
          *
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the type the stored payload is converted to before invocation
-         * @param payloadMapper maps the input payload to its transformed output
+         * @param payloadMapper maps the input payload + processing context to its transformed output
          * @return the resulting {@link EventTransformer}
          */
-        public <T, U> EventTransformer transform(Class<T> inputType, Function<T, U> payloadMapper) { /* ... */ }
+        public <T, U> EventTransformer transform(Class<T> inputType,
+                                                  BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 
     /* US2 -- pure rename (FR-002, SHOULD in 5.2.0) --------------------------------- */
@@ -146,17 +160,18 @@ public final class EventTransformation {
         /**
          * Supply the splitting behaviour. The mapper returns the replacement events in
          * declared order; each inherits the input event's tracking token and sequence number.
+         * Receives the active {@link ProcessingContext} ({@code null} when none).
          * Returning an empty list works as a drop, but prefer
          * {@link EventTransformation#drop(MessageType)} for that case -- it skips payload
          * conversion entirely.
          *
          * @param <T>               input payload type
          * @param inputType         the type the stored payload is converted to before invocation
-         * @param replacementMapper maps the input payload to its replacement events
+         * @param replacementMapper maps the input payload + processing context to its replacement events
          * @return the resulting {@link EventTransformer}
          */
         public <T> EventTransformer transform(Class<T> inputType,
-                                              Function<T, List<TransformedEvent>> replacementMapper) { /* ... */ }
+                                              BiFunction<T, ProcessingContext, List<TransformedEvent>> replacementMapper) { /* ... */ }
     }
 
     /* US4 -- drop (FR-003, FR-014; MAY in 5.2.0; method name reserved per
@@ -186,9 +201,11 @@ Same shape as `EventTransformation` but only the 1:1 and rename patterns are exp
 package io.axoniq.framework.messaging.transformation.commandhandling;
 
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
 
-import java.util.function.Function;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
  * Factory producing {@link CommandTransformer} instances. 1:1 only -- commands are
@@ -208,6 +225,9 @@ public final class CommandTransformation {
      * @return a builder awaiting {@code to(...)}
      */
     public static SingleCommandTransformationBuilder from(MessageType source) { /* ... */ }
+
+    /** Predicate-based source matching; see {@link EventTransformation#from(Predicate)}. */
+    public static SingleCommandTransformationBuilder from(Predicate<MessageType> sourcePredicate) { /* ... */ }
 
     /**
      * Pure identity rename: payload passes through unchanged.
@@ -234,10 +254,11 @@ public final class CommandTransformation {
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the type the input command's payload is converted to before invocation
-         * @param payloadMapper maps the input payload to its transformed output
+         * @param payloadMapper maps the input payload + processing context to its transformed output
          * @return the resulting {@link CommandTransformer}
          */
-        public <T, U> CommandTransformer transform(Class<T> inputType, Function<T, U> payloadMapper) { /* ... */ }
+        public <T, U> CommandTransformer transform(Class<T> inputType,
+                                                    BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 }
 ```
@@ -246,9 +267,11 @@ public final class CommandTransformation {
 package io.axoniq.framework.messaging.transformation.queryhandling;
 
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
 
-import java.util.function.Function;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
  * Factory producing {@link QueryTransformer} instances. 1:1 only. Subscription-query update
@@ -267,6 +290,9 @@ public final class QueryTransformation {
      * @return a builder awaiting {@code to(...)}
      */
     public static SingleQueryTransformationBuilder from(MessageType source) { /* ... */ }
+
+    /** Predicate-based source matching; see {@link EventTransformation#from(Predicate)}. */
+    public static SingleQueryTransformationBuilder from(Predicate<MessageType> sourcePredicate) { /* ... */ }
 
     /**
      * Pure identity rename: payload passes through unchanged.
@@ -293,10 +319,11 @@ public final class QueryTransformation {
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the type the input query's payload is converted to before invocation
-         * @param payloadMapper maps the input payload to its transformed output
+         * @param payloadMapper maps the input payload + processing context to its transformed output
          * @return the resulting {@link QueryTransformer}
          */
-        public <T, U> QueryTransformer transform(Class<T> inputType, Function<T, U> payloadMapper) { /* ... */ }
+        public <T, U> QueryTransformer transform(Class<T> inputType,
+                                                  BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 }
 ```
@@ -316,7 +343,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
-import io.axoniq.framework.messaging.transformation.SemverComparator;
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.TransformedEvent;
 import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformation;     // 5.3+
@@ -327,26 +353,22 @@ import org.axonframework.messaging.core.MessageType;
 import java.util.List;
 
 MessageTransformerChain chain = MessageTransformerChain.builder()
-    .versionOrder(SemverComparator.instance())                                  // optional, FR-020
 
     // ---------- Events (5.2.0) ----------
 
     // US1 -- 1:1 structural transformation (FR-001, MUST in 5.2.0).
-    // Per-transformer hooks via .when() / .onApplied() (FR-013). Both optional; default
-    // behaviour is "always apply" / no-op with zero per-event allocation when not set.
     //   v1 had a single `capacity` field, v2 splits into min/max.
+    //   The mapper receives the converted payload + active ProcessingContext (nullable).
     .register(EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
                                  .to  (new MessageType("com.example.CourseCreated", "2.0.0"))
-                                 .transform(JsonNode.class, v1 -> {
+                                 .transform(JsonNode.class, (v1, ctx) -> {
                                      int cap = v1.get("capacity").asInt();
                                      ObjectNode v2 = JsonNodeFactory.instance.objectNode();
                                      v2.put("minCapacity", cap);
                                      v2.put("maxCapacity", cap);
                                      v2.put("name", v1.get("name").asText());
                                      return v2;
-                                 })
-                                 .when(input -> !featureFlags.isDisabled("course-created-upcast"))
-                                 .onApplied((in, out) -> log.trace("CourseCreated v1 -> v2 applied to {}", in.identifier())))
+                                 }))
 
     // US2 -- pure rename, payload unchanged (FR-002, SHOULD in 5.2.0)
     //   After a domain refinement, CourseOpened becomes CourseCreated.
@@ -356,7 +378,7 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
     // US3 -- 1:N split, declared order is delivery order (FR-003, FR-010, MAY in 5.2.0)
     //   StudentEnrolledAndCourseUpdated bundled two facts; split them apart.
     .register(EventTransformation.split(new MessageType("com.example.StudentEnrolledAndCourseUpdated", "1.0.0"))
-                                 .transform(JsonNode.class, v1 -> List.of(
+                                 .transform(JsonNode.class, (v1, ctx) -> List.of(
                                      TransformedEvent.of(new MessageType("com.example.StudentEnrolled",       "1.0.0"),
                                                          v1.get("studentEnrollment")),
                                      TransformedEvent.of(new MessageType("com.example.CourseCapacityUpdated", "1.0.0"),
@@ -369,9 +391,11 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
 
     // US5 -- chaining across versions (FR-007, MAY in 5.2.0)
     //   Combined with US1's v1->v2 above, this v2->v3 hop completes a v1 -> v2 -> v3 chain.
-    .register(EventTransformation.from(new MessageType("com.example.CourseCreated", "2.0.0"))
+    //   Also illustrates the from(Predicate) overload: match any 2.x version, not just 2.0.0.
+    .register(EventTransformation.from(mt -> mt.qualifiedName().equals("com.example.CourseCreated")
+                                              && mt.version().startsWith("2."))
                                  .to  (new MessageType("com.example.CourseCreated", "3.0.0"))
-                                 .transform(JsonNode.class, v2 -> {
+                                 .transform(JsonNode.class, (v2, ctx) -> {
                                      ObjectNode v3 = JsonNodeFactory.instance.objectNode();
                                      ObjectNode range = v3.putObject("capacityRange");
                                      range.put("min", v2.get("minCapacity").asInt());
@@ -383,15 +407,13 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
 
     // US8 -- 1:1 command transformation (FR-019)
     //   Receiver fills a default `enrollmentReason` before dispatching to the v2 handler.
-    //   Per-transformer hooks (.when / .onApplied) work uniformly for events, commands, and queries.
     .register(CommandTransformation.from(new MessageType("com.example.EnrollStudent", "1.0.0"))
                                    .to  (new MessageType("com.example.EnrollStudent", "2.0.0"))
-                                   .transform(JsonNode.class, v1 -> {
+                                   .transform(JsonNode.class, (v1, ctx) -> {
                                        ObjectNode v2 = v1.deepCopy();
                                        v2.put("enrollmentReason", "UNKNOWN");
                                        return v2;
-                                   })
-                                   .onApplied((cmd, out) -> metrics.counter("cmd.upcast.enroll-student").increment()))
+                                   }))
 
     // CommandTransformation does NOT expose split(...) -- 1:N / 1:0 are compile-time forbidden
     // for commands and queries (FR-019). Commands and queries are single-intent.
@@ -402,7 +424,7 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
     //   Receiver fills a default `includeArchived` filter for queries sent by older callers.
     .register(QueryTransformation.from(new MessageType("com.example.FindCoursesByFaculty", "1.0.0"))
                                  .to  (new MessageType("com.example.FindCoursesByFaculty", "2.0.0"))
-                                 .transform(JsonNode.class, v1 -> {
+                                 .transform(JsonNode.class, (v1, ctx) -> {
                                      ObjectNode v2 = v1.deepCopy();
                                      v2.put("includeArchived", false);
                                      return v2;
@@ -428,12 +450,14 @@ Every entity load, DCB read, tracking-processor read, incoming command, and inco
 The user only observes errors when something is misconfigured. The framework surfaces all FR-008 conflict classes before any message is processed (`register(...)` for per-entry errors, `.build()` for cross-entry errors). Runtime exceptions thrown inside a transformation function propagate immediately with full context (FR-015); no silent skip.
 
 ```java
-// duplicate `from`            -> ChainConfigurationException at register()
-// self-loop (from == to)      -> ChainConfigurationException at register()
-// multi-step cycle            -> ChainConfigurationException at .build() (with full edge list)
-// version-order violation     -> ChainConfigurationException at .build() (only when a VersionComparator is set)
-// runtime exception in mapper -> propagated to caller, identifying transformation + event + stream position
+// duplicate concrete `from`     -> ChainConfigurationException at register()
+// self-loop (concrete from==to) -> ChainConfigurationException at register()
+// multi-step cycle              -> ChainConfigurationException at .build() (concrete-edge graph, with full edge list)
+// runtime exception in mapper   -> propagated to caller, identifying transformation + event + stream position
 ```
+
+A defensive runtime safety bound prevents an infinite loop from pathological predicate
+misconfiguration; under normal use it never fires.
 
 ---
 
