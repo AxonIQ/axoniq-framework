@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+
+
 import static java.util.Objects.requireNonNull;
 import static org.axonframework.common.configuration.ComponentDefinition.ofTypeAndName;
 
@@ -116,13 +118,14 @@ class SimpleCommandHandlingModule extends BaseModule<SimpleCommandHandlingModule
                     handlingComponentBuilders.forEach(handlingComponent -> commandHandlingComponent.subscribe(
                             handlingComponent.build(c)));
                     handlerBuilders.forEach((key, value) -> commandHandlingComponent.subscribe(key, value.build(c)));
-                    if (interceptorBuilders.isEmpty()) {
-                        return commandHandlingComponent;
+                    CommandHandlingComponent result = commandHandlingComponent;
+                    if (!interceptorBuilders.isEmpty()) {
+                        result = new InterceptingCommandHandlingComponent(
+                                interceptorBuilders.stream().map(b -> b.build(c)).collect(Collectors.toList()),
+                                result
+                        );
                     }
-                    return new InterceptingCommandHandlingComponent(
-                            interceptorBuilders.stream().map(b -> b.build(c)).collect(Collectors.toList()),
-                            commandHandlingComponent
-                    );
+                    return result;
                 })
                 .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (configuration, component) -> {
                     configuration.getComponent(CommandBus.class)

@@ -123,6 +123,54 @@ Furthermore, embracing an ordering approach might lead to place _all_ event hand
 In all, you are free to use an ordering, but we recommend using it sparingly.
 ====
 
+[[lifecycle]]
+== Processor lifecycle
+
+Every `EventProcessor` exposes a common set of lifecycle methods to start, stop, and inspect state.
+These methods are available on all processor implementations, including the xref:event-processors/subscribing.adoc[Subscribing] and xref:event-processors/streaming.adoc[Streaming] Event Processor.
+
+=== Starting and stopping
+
+`start()` and `shutdown()` both return a `CompletableFuture<Void>` that completes when the operation has fully finished.
+
+[NOTE]
+====
+In most scenarios, you do not need to invoke `start()` or `shutdown()` manually.
+Axon Framework manages the processor lifecycle automatically as part of application startup and shutdown.
+Only call these methods directly when you need explicit control, for example when triggering a programmatic replay or conditionally pausing processing.
+====
+
+=== Checking state
+
+Two synchronous methods allow you to inspect the current state of a processor at any point:
+
+* `isRunning()`: returns `true` when the processor is active and processing events.
+Returns `false` after a clean `shutdown()` or before `start()` has been called.
+* `isError()`: returns `true` when the processor has gone into error mode due to an unhandled exception.
+Returns `false` after a clean `shutdown()`.
+See xref:event-processors/streaming.adoc#error-mode[Error mode] for more on how the Streaming Event Processor handles errors.
+
+[source,java]
+----
+import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.messaging.eventhandling.processing.EventProcessor;
+
+public class ProcessorStateChecker {
+
+    private final AxonConfiguration configuration;
+
+    public ProcessorStateChecker(AxonConfiguration configuration) {
+        this.configuration = configuration;
+    }
+
+    public void printState(String processorName) {
+        EventProcessor processor = configuration.getComponent(EventProcessor.class, processorName);
+        System.out.println("Running: " + processor.isRunning());
+        System.out.println("Error:   " + processor.isError());
+    }
+}
+----
+
 [[error-handling]]
 == Error handling
 
@@ -310,6 +358,26 @@ public class AxonConfig {
 Component registration ends when the first `.intercepted(...)` is called.
 Additional interceptors can still be added with further `.intercepted(...)` calls and are applied in registration order.
 
+Use `withExceptionHandler()` to handle exceptions thrown by event handlers in all components managed by the configurer.
+Return `MessageStream.empty()` to suppress the exception and allow event processing to continue.
+Return `MessageStream.failed(error)` (with the same or a different exception) to propagate the error to the event processor:
+
+[source,java]
+----
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer;
+
+private EventHandlingComponentsConfigurer.CompletePhase configureHandlingComponents(
+        EventHandlingComponentsConfigurer.RequiredComponentPhase componentConfigurer
+) {
+    return componentConfigurer.autodetected("orderHandler", cfg -> new OrderEventHandler())
+                              .withExceptionHandler((event, context, error) -> {
+                                  log.warn("Handler failed for {}: {}", event.qualifiedName(), error.getMessage());
+                                  return MessageStream.empty(); // suppress; use MessageStream.failed(error) to propagate
+                              });
+}
+----
+
 ==== Annotated interceptors on the handler class
 
 Methods on the handler class itself can be annotated with `@EventHandlerInterceptor`.
@@ -377,6 +445,38 @@ public class TenantScopedEventHandler {
 
     @EventHandler
     void on(OrderPlaced event) { ... }
+}
+----
+
+`@ExceptionHandler` methods handle exceptions thrown by `@EventHandler` methods on the same component.
+When an event handler throws, the framework looks for a matching `@ExceptionHandler` on the same component before propagating the error.
+If the method returns normally, the exception is suppressed and event processing continues; if the method throws (or re-throws), the exception propagates.
+
+Use the `resultType` attribute to narrow the handler to a specific exception type.
+Without it, the method is eligible for any exception that matches its declared parameter type (or any exception if there are no parameters).
+
+[source,java]
+----
+import org.axonframework.messaging.eventhandling.annotation.EventHandler;
+import org.axonframework.messaging.core.interception.annotation.ExceptionHandler;
+
+public class MyEventHandler {
+
+    @EventHandler
+    void on(OrderPlaced event) {
+        // may throw
+    }
+
+    @ExceptionHandler
+    void onException(RuntimeException ex) {
+        log.error("Handler failed: {}", ex.getMessage());
+        // return normally to suppress the exception and continue processing
+    }
+
+    @ExceptionHandler(resultType = OptimisticLockingFailureException.class)
+    void onConcurrencyFailure(OptimisticLockingFailureException ex) {
+        // handle a specific exception type; other exceptions are not affected
+    }
 }
 ----
 

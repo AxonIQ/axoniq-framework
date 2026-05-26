@@ -113,13 +113,14 @@ class SimpleQueryHandlingModule extends BaseModule<SimpleQueryHandlingModule>
                     handlingComponentBuilders.forEach(handlingComponent -> queryHandlingComponent.subscribe(
                             handlingComponent.build(c)));
                     handlerBuilders.forEach((key, value) -> queryHandlingComponent.subscribe(key, value.build(c)));
-                    if (interceptorBuilders.isEmpty()) {
-                        return queryHandlingComponent;
+                    QueryHandlingComponent result = queryHandlingComponent;
+                    if (!interceptorBuilders.isEmpty()) {
+                        result = new InterceptingQueryHandlingComponent(
+                                interceptorBuilders.stream().map(b -> b.build(c)).collect(Collectors.toList()),
+                                result
+                        );
                     }
-                    return new InterceptingQueryHandlingComponent(
-                            interceptorBuilders.stream().map(b -> b.build(c)).collect(Collectors.toList()),
-                            queryHandlingComponent
-                    );
+                    return result;
                 })
                 .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (configuration, component) -> {
                     configuration.getComponent(QueryBus.class)

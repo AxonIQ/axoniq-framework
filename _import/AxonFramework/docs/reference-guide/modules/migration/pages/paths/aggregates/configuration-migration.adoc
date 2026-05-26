@@ -59,5 +59,5 @@ Also, `@AggregateMember` is replaced by `@EntityMember` for child entities withi
 - xref:commands:entities/index.adoc[Entities]: overview of all entity patterns and when to use each
 
 [IMPORTANT]
-.`@EventSourced` is not a full feature replacement for `@Aggregate`
-The `@EventSourced` annotation in Axon Framework 5/Spring Boot is the configuration replacement for `@Aggregate`, but not a fully functional feature replacement. Attributes you may have used in AF4 (like caching, snapshotting) are no longer supported via annotation. xref:migration:paths/index.adoc#missing-a-migration-path[Contact us] if you require these use cases.
+.
+The `@EventSourced` annotation in Axon Framework 5/Spring Boot is the configuration replacement for `@Aggregate`, but not a fully functional/feature replacement, as attributes you may have used in AF4 (like caching, snapshotting, ...) are no longer supported. xref:migration:paths/index.adoc#missing-a-migration-path[Contact us] if you require these use-cases.
