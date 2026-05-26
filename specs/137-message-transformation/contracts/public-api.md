@@ -9,7 +9,7 @@ The user-facing API consists of three things:
 2. The per-type **factories** (`EventTransformation`, plus `CommandTransformation` and `QueryTransformation` in 5.3+) that produce `MessageTransformer` instances without the user writing SPI code.
 3. The **registration pattern** in Axon configuration (a `ConfigurationEnhancer` does the wiring; the user only registers the chain instance).
 
-See also: [shared SPI base](spi-base.md), [event SPI](spi-events.md), [command/query SPI](spi-cqrs.md).
+See also: [shared SPI base](spi-base.md), [event SPI](spi-events.md), [commands and queries SPI](spi-commands-queries.md).
 
 ---
 
@@ -35,10 +35,10 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
     .build();
 
 // 2. Register the chain with the Axon configuration.
-//    The EventTransformationConfigurationEnhancer (5.2.0) and the
-//    CqrsTransformationConfigurationEnhancer (5.3+) discover it and install the decorators
-//    (TransformingEventStore on EventStore; TransformingCommandBus / TransformingQueryBus
-//    on the respective buses in 5.3+).
+//    The EventTransformationConfigurationEnhancer (5.2.0), joined by the per-sub-package
+//    CommandTransformationConfigurationEnhancer + QueryTransformationConfigurationEnhancer
+//    (5.3+), discover the chain and install the decorators (TransformingEventStore on
+//    EventStore; TransformingCommandBus / TransformingQueryBus on the respective buses in 5.3+).
 EventSourcingConfigurer.create()
     .componentRegistry(cr -> cr.registerComponent(MessageTransformerChain.class, c -> chain))
     .start();
@@ -183,7 +183,7 @@ public final class EventTransformation {
 Same shape as `EventTransformation` but only the 1:1 and rename patterns are exposed; `split(...)` and a drop-equivalent are NOT offered on these types (FR-019).
 
 ```java
-package io.axoniq.framework.messaging.transformation.cqrs;
+package io.axoniq.framework.messaging.transformation.commandhandling;
 
 import org.axonframework.messaging.core.MessageType;
 import org.jspecify.annotations.NullMarked;
@@ -243,7 +243,7 @@ public final class CommandTransformation {
 ```
 
 ```java
-package io.axoniq.framework.messaging.transformation.cqrs;
+package io.axoniq.framework.messaging.transformation.queryhandling;
 
 import org.axonframework.messaging.core.MessageType;
 import org.jspecify.annotations.NullMarked;
@@ -316,12 +316,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
-import io.axoniq.framework.messaging.transformation.Observability;                  // FR-013
 import io.axoniq.framework.messaging.transformation.SemverComparator;
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.TransformedEvent;
-import io.axoniq.framework.messaging.transformation.cqrs.CommandTransformation;     // 5.3+
-import io.axoniq.framework.messaging.transformation.cqrs.QueryTransformation;       // 5.3+
+import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformation;     // 5.3+
+import io.axoniq.framework.messaging.transformation.queryhandling.QueryTransformation;         // 5.3+
 
 import org.axonframework.messaging.core.MessageType;
 
@@ -329,7 +328,13 @@ import java.util.List;
 
 MessageTransformerChain chain = MessageTransformerChain.builder()
     .versionOrder(SemverComparator.instance())                                  // optional, FR-020
-    .observability(Observability.enabled())                                     // default; .disabled() for hot paths, FR-013
+
+    // Optional generic hooks (FR-013). Run only for matched transformers; non-matching
+    // pass-through stays allocation-free.
+    .beforeApply((transformer, input) ->                                        // return false to skip
+        !featureFlags.isDisabled("event-transformation"))
+    .afterApply((transformer, input, output) ->                                 // observer (e.g. SLF4J)
+        log.trace("applied {} to {}", transformer, input.type()))
 
     // ---------- Events (5.2.0) ----------
 
@@ -412,10 +417,10 @@ EventSourcingConfigurer.create()
     .start();
 ```
 
-The configuration enhancers (`EventTransformationConfigurationEnhancer` in 5.2.0, joined by `CqrsTransformationConfigurationEnhancer` in 5.3+) pick up the chain and install:
+The configuration enhancers (`EventTransformationConfigurationEnhancer` in 5.2.0; the per-sub-package `CommandTransformationConfigurationEnhancer` + `QueryTransformationConfigurationEnhancer` in 5.3+) pick up the chain and install:
 - `TransformingEventStore` decorator on `EventStore` (events read path; 5.2.0)
-- `TransformingCommandBus` decorator on `CommandBus` (5.3+, handler-registration level so both local and remote dispatch are covered)
-- `TransformingQueryBus` decorator on `QueryBus` (5.3+, same)
+- `TransformingCommandBus` decorator on `CommandBus` (5.3+, on the bus -- not on a `CommandBusConnector` -- so transformation is available even without distributed messaging)
+- `TransformingQueryBus` decorator on `QueryBus` (5.3+, same -- on the bus)
 
 Every entity load, DCB read, tracking-processor read, incoming command, and incoming query now flows through the chain.
 
@@ -429,19 +434,6 @@ The user only observes errors when something is misconfigured. The framework sur
 // multi-step cycle            -> ChainConfigurationException at .build() (with full edge list)
 // version-order violation     -> ChainConfigurationException at .build() (only when a VersionComparator is set)
 // runtime exception in mapper -> propagated to caller, identifying transformation + event + stream position
-```
-
-Sample DEBUG output at chain build (format framework-internal; field set stable, FR-013):
-
-```text
-DEBUG  MessageTransformerChain locked with 7 transformations:
-DEBUG    [1] com.example.CourseCreated@1.0.0 -> com.example.CourseCreated@2.0.0 (events, 1:1, payload mapper)
-DEBUG    [2] com.example.CourseOpened@1.0.0  -> com.example.CourseCreated@1.0.0  (events, rename)
-DEBUG    [3] com.example.StudentEnrolledAndCourseUpdated@1.0.0                   (events, split 1:N)
-DEBUG    [4] com.example.SystemHeartbeat@1.0.0                                   (events, drop 1:0)
-DEBUG    [5] com.example.CourseCreated@2.0.0 -> com.example.CourseCreated@3.0.0  (events, 1:1, payload mapper)
-DEBUG    [6] com.example.EnrollStudent@1.0.0 -> com.example.EnrollStudent@2.0.0  (commands, 1:1, payload mapper)
-DEBUG    [7] com.example.FindCoursesByFaculty@1.0.0 -> com.example.FindCoursesByFaculty@2.0.0  (queries, 1:1, payload mapper)
 ```
 
 ---
