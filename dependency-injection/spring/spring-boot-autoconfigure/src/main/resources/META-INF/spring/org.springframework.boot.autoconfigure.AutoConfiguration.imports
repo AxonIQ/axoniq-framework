@@ -22,3 +22,5 @@ io.axoniq.framework.springboot.autoconfig.DeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.TracingAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.OpenTelemetryTracingAutoConfiguration
