@@ -732,15 +732,23 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1 scenario 4._
 - **FR-013 (Observability)**: The framework MUST emit one DEBUG entry at chain build listing
   the transformation count and each transformer's `from` (+ `to` for 1:1). That is the only
-  framework-emitted log; per-event tracing is the user's job via the hooks below.
+  framework-emitted log; per-event tracing is the user's job via the per-transformer hooks
+  below.
 
-  The framework MUST expose on `MessageTransformerChain.Builder`:
-  - **`beforeApply(BeforeApply)`** -- predicate returning `false` to skip a matched transformer. Default: always apply.
-  - **`afterApply(AfterApply)`** -- observer called with `(transformer, input, output)`. Default: no-op (zero per-event allocation).
+  Each transformer MUST expose two optional hooks, attached via the fluent factory at
+  registration time:
+  - **`.when(Predicate<EventMessage>)`** -- gate before apply. Returning `false` skips this
+    transformer for the input. Default: always apply. Matches the AF4
+    `SingleEntryUpcaster.canUpcast` precedent.
+  - **`.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)`** --
+    post-apply observer scoped to this transformer. Useful for per-event TRACE / metrics
+    on just this transformation. Default: no-op (zero per-event allocation).
 
-  Hooks fire only on matched transformers; the non-matching path stays O(1) regardless of
-  installed hooks (FR-011 preserved). The framework MUST NOT take a generic name like
-  "Observability".
+  Hooks fire only on this specific transformer when matched; non-matching events still pass
+  through in O(1) regardless of installed hooks (FR-011 preserved). The framework MUST NOT
+  take a generic name like "Observability" and MUST NOT expose chain-wide hooks on the
+  Builder -- hooks are per-transformer, matching AF4 precedent and keeping logging /
+  metrics local to the transformation that owns them.
   _Traces to: US7._
 - **FR-014 (Position advances past drops)**: When a transformation drops an event, the tracking
   token MUST still advance. A restarting streaming processor MUST NOT reprocess dropped events.
@@ -858,9 +866,10 @@ a last resort if the old stream must be fully replaced.
   across all invocations with no external synchronization. Specific thread and iteration counts
   are set in plan.md. Verifies FR-006.
 - **SC-009 (Observability)**: At chain build, one DEBUG entry lists every registered
-  transformation. A `BeforeApply` returning `false` skips its transformer; an `AfterApply`
-  is invoked with `(transformer, input, output)` for every applied transformation. With no
-  hooks installed, no per-event allocation occurs on either path. Verifies FR-013.
+  transformation. A transformer registered with `.when(p)` is skipped when `p` returns
+  `false`; a transformer registered with `.onApplied(o)` invokes `o` with `(input, output)`
+  for every application. With neither hook attached on a transformer, no per-event
+  allocation occurs on either path. Verifies FR-013.
 
 ## Assumptions
 

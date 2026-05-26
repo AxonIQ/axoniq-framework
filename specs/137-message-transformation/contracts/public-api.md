@@ -329,16 +329,11 @@ import java.util.List;
 MessageTransformerChain chain = MessageTransformerChain.builder()
     .versionOrder(SemverComparator.instance())                                  // optional, FR-020
 
-    // Optional generic hooks (FR-013). Run only for matched transformers; non-matching
-    // pass-through stays allocation-free.
-    .beforeApply((transformer, input) ->                                        // return false to skip
-        !featureFlags.isDisabled("event-transformation"))
-    .afterApply((transformer, input, output) ->                                 // observer (e.g. SLF4J)
-        log.trace("applied {} to {}", transformer, input.type()))
-
     // ---------- Events (5.2.0) ----------
 
-    // US1 -- 1:1 structural transformation (FR-001, MUST in 5.2.0)
+    // US1 -- 1:1 structural transformation (FR-001, MUST in 5.2.0).
+    // Per-transformer hooks via .when() / .onApplied() (FR-013). Both optional; default
+    // behaviour is "always apply" / no-op with zero per-event allocation when not set.
     //   v1 had a single `capacity` field, v2 splits into min/max.
     .register(EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
                                  .to  (new MessageType("com.example.CourseCreated", "2.0.0"))
@@ -349,7 +344,9 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
                                      v2.put("maxCapacity", cap);
                                      v2.put("name", v1.get("name").asText());
                                      return v2;
-                                 }))
+                                 })
+                                 .when(input -> !featureFlags.isDisabled("course-created-upcast"))
+                                 .onApplied((in, out) -> log.trace("CourseCreated v1 -> v2 applied to {}", in.identifier())))
 
     // US2 -- pure rename, payload unchanged (FR-002, SHOULD in 5.2.0)
     //   After a domain refinement, CourseOpened becomes CourseCreated.
