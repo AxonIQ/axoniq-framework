@@ -19,11 +19,20 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.NullMarked;
 
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
+
 /**
  * Event-specific {@link MessageTransformer}. Use the {@code EventTransformation} factory
  * rather than implementing directly. The event envelope (entity type, entity identifier,
  * tracking token, sequence number) is preserved across transformation; snapshots flow
  * through unchanged.
+ * <p>
+ * Each transformer optionally carries a per-transformer "when" predicate (gate before apply)
+ * and an "onApplied" observer (post-apply), attached via {@link #when} / {@link #onApplied}.
+ * Both default to "always apply" / no-op with zero per-event allocation when not set,
+ * matching the AF4 {@code SingleEntryUpcaster.canUpcast} / {@code doUpcast} precedent
+ * (FR-013).
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -33,6 +42,26 @@ public interface EventTransformer extends MessageTransformer<EventMessage> {
 
     @Override
     MessageStream<EventMessage> transform(MessageStream<EventMessage> stream);
+
+    /**
+     * Return a new {@link EventTransformer} that delegates to this one only when
+     * {@code condition} returns {@code true} for the input. Default behaviour: always apply.
+     *
+     * @param condition the predicate
+     * @return a wrapped transformer
+     */
+    default EventTransformer when(Predicate<EventMessage> condition) { /* ... */ }
+
+    /**
+     * Return a new {@link EventTransformer} that fires {@code observer} after this transformer
+     * has produced its output stream. Useful for per-event logging / metrics on this
+     * specific transformation. Default behaviour: no-op.
+     *
+     * @param observer the post-apply callback
+     * @return a wrapped transformer
+     */
+    default EventTransformer onApplied(
+            BiConsumer<EventMessage, MessageStream<? extends EventMessage>> observer) { /* ... */ }
 }
 ```
 
