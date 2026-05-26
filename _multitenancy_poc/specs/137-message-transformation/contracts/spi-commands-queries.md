@@ -77,6 +77,14 @@ public interface QueryTransformer extends MessageTransformer<QueryMessage> {
 
 **Cross-references**: FR-018, FR-019, US9.
 
+### Query response transformation (deferred)
+
+Queries are bidirectional: a `QueryMessage` request flows to a handler, and a `MessageStream<QueryResponseMessage>` response flows back to the caller (verified at `QueryBus.java:69`). The current scope covers the **request side only** -- `QueryTransformer extends MessageTransformer<QueryMessage>` above. A `QueryResponseTransformer extends MessageTransformer<QueryResponseMessage>` is **architecturally compatible** with no SPI change: `QueryResponseMessage extends ResultMessage extends Message` (verified at `messaging/core/ResultMessage.java:31`, `messaging/queryhandling/QueryResponseMessage.java:32`) so it slots into the existing generic `MessageTransformer<M extends Message>` base.
+
+**Why deferred**: receiver-side reading of an old-vs-new response IS read-time transformation (fits this work's read-only invariant, FR-021), distinct from sender-side new-to-old downcasting (out of scope per spec Part C). It is deferred from the first cut to keep the 5.3+ slice focused on request-side coverage; the decoration point would be `TransformingQueryBus.query(...)` piping the returned `MessageStream<QueryResponseMessage>` through a parallel chain lookup. No 5.2.0 wiring change is needed.
+
+See also spec Part C "Query response transformation `[Deferred]`".
+
 ---
 
 ## `TransformingCommandBus` (integration type, 5.3+, internal)
