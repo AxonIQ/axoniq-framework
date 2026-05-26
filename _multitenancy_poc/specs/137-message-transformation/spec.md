@@ -396,9 +396,9 @@ confirm correct wiring in production.
 
 #### User Story 8 - Command Transformation (Priority: P3) `[Delivery: 5.3+]`
 
-**Delivery note**: Per scope decision 2026-05-21, command transformation is held back to a 5.3+
-release; the 5.2.0 issue (#137) delivers events only. This user story remains in the spec as
-the design target for the future `axoniq-message-transformation-cqrs` module.
+**Delivery note**: Command transformation is held back to a 5.3+ release; the 5.2.0 issue
+(#137) delivers events only. This user story remains in the spec as the design target for
+the future command-handling sub-package.
 
 **Plain-English explanation**: a receiver applies the transformation chain to an incoming
 command before dispatching it to the command handler. The mechanism is the same as for
@@ -428,9 +428,9 @@ Sender-side transformation (new-to-old) is deferred (see Part C).
 
 #### User Story 9 - Query Transformation (Priority: P3) `[Delivery: 5.3+]`
 
-**Delivery note**: Per scope decision 2026-05-21, query transformation is held back to a 5.3+
-release; the 5.2.0 issue (#137) delivers events only. This user story remains in the spec as
-the design target for the future `axoniq-message-transformation-cqrs` module.
+**Delivery note**: Query transformation is held back to a 5.3+ release; the 5.2.0 issue
+(#137) delivers events only. This user story remains in the spec as the design target for
+the future query-handling sub-package.
 
 **Plain-English explanation**: a receiver applies the transformation chain to an incoming
 query before dispatching it to the query handler, same mechanism as commands and events.
