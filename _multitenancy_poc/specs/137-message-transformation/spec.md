@@ -730,21 +730,17 @@ a last resort if the old stream must be fully replaced.
   change. Any `EventStore` implementation -- engine-backed or not -- participates in
   transformation. Wiring details are in [plan.md](plan.md).
   _Traces to: US1 scenario 4._
-- **FR-013 (Observability)**: The framework MUST emit:
-  - **DEBUG once at startup**: total transformation count and each transformation's source (and
-    target for 1:1) identity.
-  - **TRACE per applied transformation**: transformation identifier (implementation class name,
-    or the `from` identity for builder-based registrations, which is unique by FR-008 conflict
-    1), the matched `from` identity, and the event's stream position (sequence number or
-    tracking token).
+- **FR-013 (Observability)**: The framework MUST emit one DEBUG entry at chain build listing
+  the transformation count and each transformer's `from` (+ `to` for 1:1). That is the only
+  framework-emitted log; per-event tracing is the user's job via the hooks below.
 
-  The framework MUST expose a generic pair of builder-level hooks (a before-apply predicate
-  and an after-apply observer) on the chain so users can plug in their own logging, metrics,
-  or instrumentation, and so chain logging itself can be silenced on hot paths without
-  per-event allocation. 
+  The framework MUST expose on `MessageTransformerChain.Builder`:
+  - **`beforeApply(BeforeApply)`** -- veto predicate per matched transformer. Default: always apply.
+  - **`afterApply(AfterApply)`** -- observer called with `(transformer, input, output)`. Default: no-op (zero per-event allocation).
 
-  Log message format is framework-internal, the listed fields MUST be present so log-scraping
-  remains reliable across releases.
+  Hooks fire only on matched transformers; the non-matching path stays O(1) regardless of
+  installed hooks (FR-011 preserved). The framework MUST NOT take a generic name like
+  "Observability".
   _Traces to: US7._
 - **FR-014 (Position advances past drops)**: When a transformation drops an event, the tracking
   token MUST still advance. A restarting streaming processor MUST NOT reprocess dropped events.
@@ -799,7 +795,8 @@ a last resort if the old stream must be fully replaced.
   **When omitted (the default)**, registration order alone determines apply order, matching AF4
   semantics and keeping registration concise. Matching remains exact `MessageType` per FR-005,
   cycle detection stays structural and is independent of the comparator. When a comparator is
-  registered, it also orders transformations in DEBUG/TRACE logs (FR-013) and error messages.
+  registered, it also orders transformations in the chain-build DEBUG log (FR-013) and error
+  messages.
   _Traces to: FR-004, FR-008._
 - **FR-021 (Data-protection ordering)**: Data-protection mechanisms (PII redaction, field-level
   masking, payload decryption, etc.) MUST operate downstream of the transformation chain.
@@ -860,11 +857,10 @@ a last resort if the old stream must be fully replaced.
   sufficient iteration count to exercise real thread interleaving produces identical outputs
   across all invocations with no external synchronization. Specific thread and iteration counts
   are set in plan.md. Verifies FR-006.
-- **SC-009 (Observability)**: A DEBUG log entry is emitted once when the chain is built, listing
-  the count and `from`/`to` of every registered transformation. A TRACE log entry is emitted each
-  time a transformation matches an event, identifying the transformation and the event's name,
-  version, and stream position. With observability disabled, no log entries are emitted. All
-  three behaviors verified by automated test against the framework's logging API. Verifies FR-013.
+- **SC-009 (Observability)**: At chain build, one DEBUG entry lists every registered
+  transformation. A `BeforeApply` returning `false` skips its transformer; an `AfterApply`
+  is invoked with `(transformer, input, output)` for every applied transformation. With no
+  hooks installed, no per-event allocation occurs on either path. Verifies FR-013.
 
 ## Assumptions
 
