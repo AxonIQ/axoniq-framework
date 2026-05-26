@@ -131,7 +131,7 @@ See [`research-batch-tracing.md`](./research-batch-tracing.md) for the full batc
 
 | AF4 wrapping target | AF4 source | What it traces | AF5 decorator + span | Status |
 |---|---|---|---|---|
-| `@CommandHandler` | `TracingHandlerEnhancerDefinition.java` | Per-method invocation | `TracingHandlerEnhancerDefinition` in `axoniq-tracing-core/internal/` | Covered (FR-003) |
+| `@CommandHandler` | `TracingHandlerEnhancerDefinition.java` | Per-method invocation | `TracingHandlerEnhancerDefinition` in `axoniq-tracing-messaging/.../internal/` (`@EventSourcingHandler` coverage added by `axoniq-tracing-eventsourcing`) | Covered (FR-003) |
 | `@EventHandler` | same | Per-method invocation | same | Covered (FR-003) |
 | `@EventSourcingHandler` | same, gated by `axon.tracing.showEventSourcingHandlers=false` default | Aggregate state-evolution handler invocation | same, gated by `TracingProperties.showEventSourcingHandlers` | Covered (FR-003, FR-020) |
 | `@QueryHandler` | same | Per-method invocation | same | Covered (FR-003) |
@@ -178,7 +178,7 @@ Every span name in the AF4 reference guide (`AxonFramework4/docs/old-reference-g
 
 ### Implementation gates
 
-For each `Tracing*` decorator in `axoniq-tracing-core/src/main/java/io/axoniq/framework/tracing/internal/`, the implementer MUST cross-check that the spans it emits match the rows under the corresponding section above. A defensive integration test (`AF4SpanShapeParityIntegrationTest`) SHOULD assert the user-visible span name + kind for each AF4 reference-guide span listed in §2.
+For each `Tracing*` decorator in the per-concern modules (`axoniq-tracing-messaging`, `axoniq-tracing-modelling`, `axoniq-tracing-eventsourcing`, each under `.../internal/`), the implementer MUST cross-check that the spans it emits match the rows under the corresponding section above. A defensive integration test (`AF4SpanShapeParityIntegrationTest`) SHOULD assert the user-visible span name + kind for each AF4 reference-guide span listed in §2.
 
 ### Single confirmed gap
 

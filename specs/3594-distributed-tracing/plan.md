@@ -6,9 +6,9 @@
 
 ## Summary
 
-Port Axon Framework 4's distributed-tracing capability (the only working implementation today) into AxoniqFramework, re-shaped around Axon Framework 5 idioms. The new code lives in two new flat-sibling Maven modules under a new top-level `tracing/` directory — `tracing/axoniq-tracing-core` and `tracing/axoniq-tracing-opentelemetry` — and an additional Spring Boot auto-configuration class is added to the existing `dependency-injection/spring/spring-boot-autoconfigure` module (no new spring-tracing module).
+Port Axon Framework 4's distributed-tracing capability (the only working implementation today) into AxoniqFramework, re-shaped around Axon Framework 5 idioms. The new code lives in **five** new flat-sibling Maven modules under a new top-level `tracing/` directory — `axoniq-tracing-api` (SPI + public decorator-authoring helpers, depends only on `axon-messaging`), `axoniq-tracing-messaging`, `axoniq-tracing-modelling`, `axoniq-tracing-eventsourcing` (the per-concern decorators, mirroring AF5's `axon-messaging`/`axon-modelling`/`axon-eventsourcing` artifact split), and `axoniq-tracing-opentelemetry` (the OTel binding) — and additional Spring Boot auto-configuration is added to the existing `dependency-injection/spring/spring-boot-autoconfigure` module (no new spring-tracing module). The split lets a consumer take tracing for exactly the AF5 modules it uses, and lets external modules / repos add their own tracing by depending on `axoniq-tracing-api` + registering a ServiceLoader-discovered `ConfigurationEnhancer` (see spec.md clarification 2026-05-26).
 
-The migration **consolidates** the AF4 per-component span-factory interface family (`CommandBusSpanFactory`, `EventBusSpanFactory`, …, `SagaManagerSpanFactory`) into a single public `SpanFactory`. All per-component span shapes — naming, kind (`CLIENT`/`SERVER`/`PRODUCER`/`CONSUMER`/`INTERNAL`), attribute keys, distributed-vs-in-process branching, and metadata-based W3C context propagation — live inside **private** (`@Internal` or package-private) delegating wrapper classes registered via a single public `TracingConfigurationEnhancer` using `DecoratorDefinition`s. Each wrapper follows AF5's `TracingCommandBus` shape: implements the target interface, holds a `delegate` field of the same interface plus a `SpanFactory`, calls through to the delegate, and exposes itself to introspection via `ComponentDescriptor.describeWrapperOf(delegate)`. Where the wrapped operation already participates in a `ProcessingContext`, span open/close rides on the `ProcessingLifecycle` hooks rather than `try/finally` so span scope tracks the framework's processing phases correctly through async / reactive continuations.
+The migration **consolidates** the AF4 per-component span-factory interface family (`CommandBusSpanFactory`, `EventBusSpanFactory`, …, `SagaManagerSpanFactory`) into a single public `SpanFactory`. All per-component span shapes — naming, kind (`CLIENT`/`SERVER`/`PRODUCER`/`CONSUMER`/`INTERNAL`), attribute keys, distributed-vs-in-process branching, and metadata-based W3C context propagation — live inside **private** (`@Internal` or package-private) delegating wrapper classes registered via **per-module `ConfigurationEnhancer`s** (one per per-concern tracing module, each ServiceLoader-discovered) using `DecoratorDefinition`s. Each wrapper follows AF5's `TracingCommandBus` shape: implements the target interface, holds a `delegate` field of the same interface plus a `SpanFactory`, calls through to the delegate, and exposes itself to introspection via `ComponentDescriptor.describeWrapperOf(delegate)`. Where the wrapped operation already participates in a `ProcessingContext`, span open/close rides on the `ProcessingLifecycle` hooks rather than `try/finally` so span scope tracks the framework's processing phases correctly through async / reactive continuations.
 
 **Implementation strategy (revised 2026-05-26 — see spec.md FR-022b)**: After landing core abstractions + OpenTelemetry implementation + autoconfig skeleton up-front, the per-component decorators are built as **six sequential end-to-end vertical slices** (CommandBus → EventSink/EventHandling → QueryBus → QueryUpdateEmitter → Repository/StateManager → SnapshotStore), each landing its decorator + handler-enhancer extension + autoconfig toggle + focused Boot integration test + explicit human-validation checkpoint before the next slice begins. Cross-component end-to-end testing, Jaeger testcontainers verification, the example application, and reference-guide documentation are produced as a batched final phase. This replaces the original plan's single "P3 — all decorators in one phase" with the per-component sequencing the user requested, without removing any work originally scoped.
 
@@ -32,7 +32,7 @@ After the AxoniqFramework migration lands, all dead tracing source in the upstre
 
 **Target Platform**: JVM 21+. The core module is Spring-free; OpenTelemetry module is Spring-free; only the autoconfig glue depends on Spring Boot.
 
-**Project Type**: Multi-module Maven library — adds two new leaf modules and one autoconfig class to an existing module.
+**Project Type**: Multi-module Maven library — adds five new leaf modules (under `tracing/`) and autoconfig classes to an existing module.
 
 **Performance Goals**: No measurable overhead when tracing is disabled (no-op factory). No microbenchmark target is set; the no-op call sites must be trivially inlinable (single method dispatch returning a shared no-op span). When enabled, the overhead is dominated by the OpenTelemetry SDK itself and is out of scope for this feature.
 
@@ -46,7 +46,7 @@ After the AxoniqFramework migration lands, all dead tracing source in the upstre
 - **Implementation MUST proceed component-by-component as vertical end-to-end slices** in the order given by FR-022b. Each slice ends with an explicit human-validation checkpoint; the next slice does not start until the user has accepted the previous slice's span tree. One feature branch, one rollup PR.
 
 **Scale/Scope**:
-- 2 new Maven modules (`tracing/axoniq-tracing-core`, `tracing/axoniq-tracing-opentelemetry`).
+- 5 new Maven modules (`tracing/axoniq-tracing-api`, `tracing/axoniq-tracing-messaging`, `tracing/axoniq-tracing-modelling`, `tracing/axoniq-tracing-eventsourcing`, `tracing/axoniq-tracing-opentelemetry`).
 - 1 new autoconfig class + 1 new `TracingProperties` class + 1 new entry in `AutoConfiguration.imports` in the existing `axoniq-spring-boot-autoconfigure` module.
 - ~7 component-tracing decorators (commands, events sink, event handling component, query bus, query update emitter, repository/state, snapshotter), plus the annotation `HandlerEnhancerDefinition` wrapper. Deadlines and sagas / process-managers are excluded — see clarifications 2026-05-26.
 - ~6 built-in `SpanAttributesProvider` implementations (parity with AF4).
@@ -69,7 +69,7 @@ Mapped against the **Foundation Principles** and **Architecture Rules** in `.spe
 | IV. Dual Paradigm Support | PASS | Span open/close binds to `ProcessingLifecycle` hooks; works for both imperative and reactive call paths because hooks fire on the right phases regardless of paradigm. |
 | V. No ThreadLocals | PASS | Active span lives in `ProcessingContext` under `ResourceKey<SpanScope>`. The OpenTelemetry `Context.makeCurrent()` ThreadLocal is used **only** at the imperative-style edge of `Span.run...` synchronous helpers (explicitly permitted by Constitution §V). |
 | VI. Composition over Inheritance | PASS | All decorators implement target interface by composition; AF4's `DistributedCommandBus`-style direct re-implementation is explicitly rejected (FR-013). |
-| VII. Declarative over Annotation-Heavy | PASS | Programmatic `MessagingConfigurer.componentRegistry(cr -> cr.registerEnhancer(new TracingConfigurationEnhancer()))` is the primary path; Spring auto-configuration is a thin wrapper. |
+| VII. Declarative over Annotation-Heavy | PASS | The per-module `ConfigurationEnhancer`s are ServiceLoader-discovered (drop the module on the classpath → tracing wires itself), so no explicit registration call is needed; Spring auto-configuration is a thin wrapper supplying the `SpanFactory` bean + properties. |
 | Module Dependency Hierarchy | PASS | New `tracing/` modules sit beside `messaging/`, `connector/`, `dependency-injection/`, `testing/`. Tracing depends on `axon-messaging` (upstream) but **not** on other AxoniqFramework modules; it has no reverse dependency from messaging back to tracing. |
 | Async-First | PASS | Decorators preserve `CompletableFuture<…>` / `MessageStream<…>` return types from the wrapped methods unchanged. |
 | ProcessingContext as Unit of Work | PASS | `SpanScope` is stored via `ResourceKey<SpanScope>`. |
@@ -92,7 +92,7 @@ specs/3594-distributed-tracing/
 ├── research-batch-tracing.md                # Phase 0 supplement — batch-tracing design (Option C), AF4 hierarchy, rejected alternatives, subscribing-processor parity
 ├── af4-span-inventory.md                    # Phase 0 supplement — exhaustive AF4 SpanFactory ↔ AF5 decorator mapping (44 methods across 9 families), implementation reference
 ├── contracts/
-│   └── public-api.md                        # Phase 1 — Public API of axoniq-tracing-core + axoniq-tracing-opentelemetry + autoconfig
+│   └── public-api.md                        # Phase 1 — Public API of axoniq-tracing-api + axoniq-tracing-opentelemetry + autoconfig
 ├── quickstart.md                            # Phase 1 — Spring Boot + plain Java getting-started
 ├── flows.md                                 # Phase 1 — Worked sequence diagrams (mermaid) for command / async event / snapshot / streaming-batch flows + "when does SpanAttributesProvider fire?" cheat sheet
 └── tasks.md                                 # Phase 2 — /speckit-tasks output (NOT created by this command)
@@ -103,10 +103,11 @@ Per the user's instruction, **no `data-model.md`** is generated for this feature
 ### Source Code (repository root)
 
 ```text
-# NEW: top-level tracing/ directory — siblings: tracing-core + tracing-opentelemetry
+# NEW: top-level tracing/ directory — five flat siblings mirroring AF5's axon-messaging / -modelling / -eventsourcing split.
+# See spec.md clarification 2026-05-26 (five-module structure) and FR-017/FR-018.
 tracing/
-├── axoniq-tracing-core/
-│   ├── pom.xml                              # artifactId: axoniq-tracing-core, parent: axoniq-framework-parent
+├── axoniq-tracing-api/                      # SPI + public decorator-authoring helpers; depends ONLY on axon-messaging
+│   ├── pom.xml                              # artifactId: axoniq-tracing-api, parent: axoniq-framework-parent
 │   └── src/
 │       ├── main/java/io/axoniq/framework/tracing/
 │       │   ├── package-info.java            # @NullMarked
@@ -117,39 +118,73 @@ tracing/
 │       │   ├── NoOpSpanFactory.java         # PUBLIC — default when no factory is configured
 │       │   ├── MultiSpanFactory.java        # PUBLIC — composes multiple SpanFactories (e.g., OTel + LoggingSpanFactory)
 │       │   ├── LoggingSpanFactory.java      # PUBLIC — SLF4J implementation for dev/debug
-│       │   ├── TracingConfigurationEnhancer.java         # PUBLIC — sole ConfigurationEnhancer; grows DecoratorDefinition registrations slice-by-slice
-│       │   ├── attributes/
-│       │   │   ├── package-info.java
-│       │   │   ├── MessageIdSpanAttributesProvider.java
-│       │   │   ├── MessageNameSpanAttributesProvider.java
-│       │   │   ├── MessageTypeSpanAttributesProvider.java
-│       │   │   ├── PayloadTypeSpanAttributesProvider.java
-│       │   │   ├── MetadataSpanAttributesProvider.java
-│       │   │   └── AggregateIdentifierSpanAttributesProvider.java
-│       │   └── internal/                    # @Internal — all per-component decorators; populated slice-by-slice
+│       │   ├── ProcessingContextSpanBinding.java  # PUBLIC helper (DFI-001) — binds Span open/close to ProcessingLifecycle hooks
+│       │   ├── SpanNames.java               # PUBLIC helper (DFI-001) — span-name conventions shared by built-in + external decorators
+│       │   ├── MetadataContextPropagator.java     # PUBLIC SPI (DFI-001) — W3C metadata getter/setter contract (OTel binding in -opentelemetry)
+│       │   └── attributes/
 │       │       ├── package-info.java
-│       │       ├── TracingCommandBus.java                   # P3 — Slice 1
-│       │       ├── TracingEventSink.java                    # P4 — Slice 2 (dispatch side)
-│       │       ├── TracingEventHandlingComponent.java       # P4 — Slice 2 (handling side)
-│       │       ├── TracingQueryBus.java                     # P5 — Slice 3
-│       │       ├── TracingQueryUpdateEmitter.java           # P6 — Slice 4
-│       │       ├── TracingRepository.java                   # P7 — Slice 5
-│       │       ├── TracingStateManager.java                 # P7 — Slice 5
-│       │       ├── TracingSnapshotStore.java                # P8 — Slice 6 (decorates AF5 SnapshotStore; no Snapshotter component exists)
-│       │       ├── TracingHandlerEnhancerDefinition.java    # grown incrementally: P3 (@CommandHandler), P4 (@EventHandler), P5 (@QueryHandler), P8 (@EventSourcingHandler)
-│       │       ├── SpanNames.java                           # @Internal constants ("CommandBus.dispatchCommand", "EventBus.publishEvent", …); grown per slice
-│       │       └── ProcessingContextSpanBinding.java        # @Internal — binds Span open/close to ProcessingLifecycle hooks
+│       │       ├── MessageIdSpanAttributesProvider.java
+│       │       ├── MessageNameSpanAttributesProvider.java
+│       │       ├── MessageTypeSpanAttributesProvider.java
+│       │       ├── PayloadTypeSpanAttributesProvider.java
+│       │       ├── MetadataSpanAttributesProvider.java
+│       │       └── AggregateIdentifierSpanAttributesProvider.java
 │       └── test/java/io/axoniq/framework/tracing/
 │           ├── NoOpSpanFactoryTest.java
 │           ├── MultiSpanFactoryTest.java
-│           ├── TracingHandlerEnhancerDefinitionTest.java    # grown alongside the production class (one @Nested per annotation type)
 │           ├── attributes/                  # one test per provider
-│           ├── internal/                    # one test per decorator (added with its slice)
 │           └── support/
 │               └── TestSpanFactory.java     # recording test double (no Mockito); ports from AF4's TestSpanFactory
 │
-└── axoniq-tracing-opentelemetry/
-    ├── pom.xml                              # artifactId: axoniq-tracing-opentelemetry; depends on axoniq-tracing-core + io.opentelemetry:opentelemetry-api
+├── axoniq-tracing-messaging/                # decorators for axon-messaging components; depends on -api + axon-messaging
+│   ├── pom.xml                              # artifactId: axoniq-tracing-messaging
+│   └── src/
+│       ├── main/
+│       │   ├── java/io/axoniq/framework/tracing/messaging/
+│       │   │   ├── package-info.java        # @NullMarked
+│       │   │   ├── MessagingTracingConfigurationEnhancer.java  # @Internal — registers the DecoratorDefinitions below
+│       │   │   └── internal/                # @Internal/package-private decorators; populated slice-by-slice
+│       │   │       ├── TracingCommandBus.java                  # Slice 1
+│       │   │       ├── TracingEventSink.java                   # Slice 2 (dispatch side)
+│       │   │       ├── TracingEventHandlingComponent.java      # Slice 2 (handling side)
+│       │   │       ├── TracingQueryBus.java                    # Slice 3
+│       │   │       ├── TracingQueryUpdateEmitter.java          # Slice 4
+│       │   │       └── TracingHandlerEnhancerDefinition.java   # @CommandHandler (S1) / @EventHandler (S2) / @QueryHandler (S3)
+│       │   └── resources/META-INF/services/
+│       │       └── org.axonframework.common.configuration.ConfigurationEnhancer  # → MessagingTracingConfigurationEnhancer
+│       └── test/java/io/axoniq/framework/tracing/messaging/    # one test per decorator (added with its slice)
+│
+├── axoniq-tracing-modelling/                # decorators for axon-modelling components; depends on -api + axon-modelling
+│   ├── pom.xml                              # artifactId: axoniq-tracing-modelling
+│   └── src/
+│       ├── main/
+│       │   ├── java/io/axoniq/framework/tracing/modelling/
+│       │   │   ├── package-info.java
+│       │   │   ├── ModellingTracingConfigurationEnhancer.java  # @Internal
+│       │   │   └── internal/
+│       │   │       ├── TracingRepository.java                  # Slice 5
+│       │   │       └── TracingStateManager.java                # Slice 5
+│       │   └── resources/META-INF/services/
+│       │       └── org.axonframework.common.configuration.ConfigurationEnhancer  # → ModellingTracingConfigurationEnhancer
+│       └── test/java/io/axoniq/framework/tracing/modelling/
+│
+├── axoniq-tracing-eventsourcing/            # decorators for axon-eventsourcing components; depends on -api + axon-eventsourcing
+│   ├── pom.xml                              # artifactId: axoniq-tracing-eventsourcing
+│   └── src/
+│       ├── main/
+│       │   ├── java/io/axoniq/framework/tracing/eventsourcing/
+│       │   │   ├── package-info.java
+│       │   │   ├── EventSourcingTracingConfigurationEnhancer.java  # @Internal
+│       │   │   └── internal/
+│       │   │       ├── TracingSnapshotStore.java               # Slice 6 (decorates AF5 SnapshotStore; no Snapshotter component exists)
+│       │   │       ├── TracingEntityLifecycleHandler.java       # Slice 6 — source(...) sourcing span (FR-009 parent for snapshot store span)
+│       │   │       └── EventSourcingHandlerTracingEnhancer.java # Slice 6 — extends handler-enhancer coverage to @EventSourcingHandler
+│       │   └── resources/META-INF/services/
+│       │       └── org.axonframework.common.configuration.ConfigurationEnhancer  # → EventSourcingTracingConfigurationEnhancer
+│       └── test/java/io/axoniq/framework/tracing/eventsourcing/
+│
+└── axoniq-tracing-opentelemetry/            # OTel binding; depends on -api + io.opentelemetry:opentelemetry-api
+    ├── pom.xml                              # artifactId: axoniq-tracing-opentelemetry; depends on axoniq-tracing-api + opentelemetry-api
     └── src/
         ├── main/java/io/axoniq/framework/tracing/opentelemetry/
         │   ├── package-info.java            # @NullMarked
@@ -167,24 +202,25 @@ tracing/
 dependency-injection/spring/spring-boot-autoconfigure/
 └── src/main/
     ├── java/io/axoniq/framework/springboot/autoconfig/
-    │   ├── TracingAutoConfiguration.java                # NEW — wires SpanFactory + providers + TracingConfigurationEnhancer
+    │   ├── TracingAutoConfiguration.java                # NEW — wires SpanFactory bean + built-in providers (enhancers are ServiceLoader-discovered, not bean-wired)
     │   └── OpenTelemetryTracingAutoConfiguration.java   # NEW — promotes OpenTelemetrySpanFactory over NoOp when OTel is on the classpath
     ├── java/io/axoniq/framework/springboot/
     │   └── TracingProperties.java                       # NEW — @ConfigurationProperties("axon.tracing"); per-slice toggles added incrementally
     └── resources/META-INF/spring/
         └── org.springframework.boot.autoconfigure.AutoConfiguration.imports   # APPEND the two new classes
 
-# EDITED: existing module — pom only, add the two new modules + OpenTelemetry BOM
+# EDITED: existing module — pom only, add OpenTelemetry BOM
 build/parent/pom.xml
                                             # ADD <opentelemetry.version> property
                                             # ADD io.opentelemetry:opentelemetry-bom import to dependencyManagement
-                                            # (the two new modules are registered in the root aggregator pom.xml, not here)
+                                            # (the five new modules are registered in the root aggregator pom.xml, not here)
 
 # EDITED: root aggregator
-pom.xml                                     # ADD <module>tracing/axoniq-tracing-core</module> and <module>tracing/axoniq-tracing-opentelemetry</module>
+pom.xml                                     # ADD the five <module>tracing/axoniq-tracing-*</module> entries
+                                            #   (api, messaging, modelling, eventsourcing, opentelemetry)
 
 # EDITED: existing BOM
-axoniq-framework-bom/pom.xml                # ADD axoniq-tracing-core + axoniq-tracing-opentelemetry as dependencyManagement entries
+axoniq-framework-bom/pom.xml                # ADD all five axoniq-tracing-* artifacts as dependencyManagement entries
 
 # EDITED: docs — module directory already exists at docs/reference-guide/modules/tracing/
 # (Produced in P9.7 — the batched final phase — to avoid rewriting the page six times)
@@ -217,7 +253,7 @@ integrationtests/src/test/java/io/axoniq/framework/tracing/
 # (full deletion checklist captured in research.md and lifted into tasks.md by /speckit-tasks — phase P10)
 ```
 
-**Structure Decision**: Two new flat-sibling Maven modules under a new top-level `tracing/` directory (`tracing/axoniq-tracing-core`, `tracing/axoniq-tracing-opentelemetry`), following the existing per-concern top-level convention already used by `messaging/`, `connector/`, `dependency-injection/`, and `testing/`. Spring Boot wiring is added to the **existing** `dependency-injection/spring/spring-boot-autoconfigure` module rather than a new tracing-specific autoconfig module, matching how dead-letter / postgres / axon-server autoconfig are already shipped from the same place.
+**Structure Decision**: Five new flat-sibling Maven modules under a new top-level `tracing/` directory — `axoniq-tracing-api` (SPI + public decorator-authoring helpers; depends only on `axon-messaging`), `axoniq-tracing-messaging`, `axoniq-tracing-modelling`, `axoniq-tracing-eventsourcing` (per-concern decorators mirroring AF5's `axon-messaging`/`axon-modelling`/`axon-eventsourcing` artifacts), and `axoniq-tracing-opentelemetry` (OTel binding). Follows the per-concern top-level convention already used by `messaging/`, `connector/`, `dependency-injection/`, and `testing/`. Each per-concern decorator module ships its own `@Internal` `ConfigurationEnhancer` discovered via ServiceLoader (matching `axoniq-dead-letter` / `axoniq-distributed-messaging`), so a consumer pulls in tracing only for the AF5 modules it uses and external modules / repos extend tracing by depending on `axoniq-tracing-api`. Spring Boot wiring is added to the **existing** `dependency-injection/spring/spring-boot-autoconfigure` module rather than a new tracing-specific autoconfig module, matching how dead-letter / postgres / axon-server autoconfig are already shipped from the same place. See spec.md clarification 2026-05-26 (five-module structure) for the full rationale and the validated `axoniq-tracing-api → axon-messaging` dependency.
 
 ## Implementation Phases (handed off to `/speckit-tasks`)
 
@@ -256,13 +292,13 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
 
 ### Phase listing
 
-1. **P1 — Foundations**: parent POM updates (add `<opentelemetry.version>` property + OTel BOM import), the two new Maven modules' scaffolding (`pom.xml`, `package-info.java` with `@NullMarked`, root aggregator wiring, BOM entries). No production code yet — this lands the empty modules so the build is green before any classes arrive. **TDD-exempt.**
+1. **P1 — Foundations**: parent POM updates (add `<opentelemetry.version>` property + OTel BOM import), the five new Maven modules' scaffolding (`pom.xml` with the validated dependency wiring — `-api → axon-messaging`; `-messaging → -api + axon-messaging`; `-modelling → -api + axon-modelling`; `-eventsourcing → -api + axon-eventsourcing`; `-opentelemetry → -api + opentelemetry-api`; `package-info.java` with `@NullMarked`, root aggregator wiring, BOM entries). No production code yet — this lands the empty modules so the build is green before any classes arrive. **TDD-exempt.**
 
-2. **P2 — Core abstractions + OpenTelemetry module + autoconfig skeleton**: builds everything the slices will share, in one phase so each slice starts on top of a stable foundation:
-    - `axoniq-tracing-core`: `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider` SPI, `NoOpSpanFactory`, `MultiSpanFactory`, `LoggingSpanFactory`, the six built-in `SpanAttributesProvider` implementations under `attributes/`, `SpanNames` skeleton, `ProcessingContextSpanBinding` helper, `TracingConfigurationEnhancer` skeleton (zero `DecoratorDefinition` registrations yet — slices fill it in), `TestSpanFactory` recording double ported from AF4.
-    - `axoniq-tracing-opentelemetry`: `OpenTelemetrySpanFactory`, `OpenTelemetrySpan`, `MetadataContextSetter`, `MetadataContextGetter`. These don't need per-component shaping — they implement the generic `SpanFactory` API and the W3C TextMap propagation contract.
-    - `dependency-injection/spring/spring-boot-autoconfigure`: `TracingProperties` skeleton (global `axon.tracing.enabled` only; per-component toggles are added by the corresponding slice), `TracingAutoConfiguration` (registers default `SpanFactory` bean — `OpenTelemetrySpanFactory` if OTel is on the classpath, else `NoOpSpanFactory` — plus the `TracingConfigurationEnhancer` bean, plus the six built-in `SpanAttributesProvider` beans), `OpenTelemetryTracingAutoConfiguration`, the two new entries in `AutoConfiguration.imports`.
-    - Unit tests for all of the above. The autoconfig has a smoke `@SpringBootTest` confirming the context starts, registers the `SpanFactory` bean, and registers an empty `TracingConfigurationEnhancer` (the slices will assert it actually decorates components).
+2. **P2 — Core abstractions (`axoniq-tracing-api`) + OpenTelemetry module + autoconfig skeleton**: builds everything the slices will share, in one phase so each slice starts on top of a stable foundation:
+    - `axoniq-tracing-api`: `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider` SPI, `NoOpSpanFactory`, `MultiSpanFactory`, `LoggingSpanFactory`, the six built-in `SpanAttributesProvider` implementations under `attributes/`, the **public** decorator-authoring helpers (`SpanNames`, `ProcessingContextSpanBinding`, `MetadataContextPropagator` SPI — DFI-001 realized), and the `TestSpanFactory` recording double ported from AF4. No `TracingConfigurationEnhancer` here — the enhancers live in the per-concern decorator modules (P3–P8) so the api module has zero dependency on the decorators.
+    - `axoniq-tracing-opentelemetry`: `OpenTelemetrySpanFactory`, `OpenTelemetrySpan`, `MetadataContextSetter`, `MetadataContextGetter`. These don't need per-component shaping — they implement the generic `SpanFactory` API and the `MetadataContextPropagator` W3C TextMap contract from `-api`.
+    - `dependency-injection/spring/spring-boot-autoconfigure`: `TracingProperties` skeleton (global `axon.tracing.enabled` only; per-component toggles are added by the corresponding slice), `TracingAutoConfiguration` (registers default `SpanFactory` bean — `OpenTelemetrySpanFactory` if OTel is on the classpath, else `NoOpSpanFactory` — plus the six built-in `SpanAttributesProvider` beans; the per-module `ConfigurationEnhancer`s are ServiceLoader-discovered, not bean-registered here), `OpenTelemetryTracingAutoConfiguration`, the new entries in `AutoConfiguration.imports`. Autoconfig conditions each component group on the presence of the corresponding `axoniq-tracing-*` module.
+    - Unit tests for all of the above. The autoconfig has a smoke `@SpringBootTest` confirming the context starts and registers the `SpanFactory` bean (the slices, each shipping their own ServiceLoader-discovered enhancer, will assert their components are actually decorated).
     - Public-API surface test that fails if anyone introduces a public `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` interface (enforces FR-016 / SC-003).
     - **No component decorators yet.** No per-slice integration tests yet.
 
@@ -270,7 +306,7 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
     - **P3.1**: `TracingCommandBus` decorator + unit tests (`TracingCommandBusTest`). Ports `DefaultCommandBusSpanFactoryTest` from AF4 first, then improves to behaviour-only assertions. Dispatch + handle spans, kinds (`CLIENT` / `SERVER` for distributed, `INTERNAL` for in-process), distributed-vs-in-process branching, metadata-based W3C context propagation via `MetadataContextSetter` / `MetadataContextGetter`. Span lifecycle bound to `ProcessingContext` via `ProcessingContextSpanBinding` (FR-013a).
     - **P3.2**: Introduce `TracingHandlerEnhancerDefinition` with `@CommandHandler` coverage + unit tests (`TracingHandlerEnhancerDefinitionTest` with `@Nested CommandHandlerEnhancement`). Ports `TracingHandlerEnhancerDefinitionTest` from AF4 first; only the `@CommandHandler` cases land in this slice — the other annotations are explicitly out of scope here and produce no enhancement until their slice runs. **Eager-name guard (FR-003a)**: the `SpanFactory` takes an eager `String` (not AF4's `Supplier<String>`), so the enhancer MUST decide it will open a span (enabled + handler-type not suppressed) **before** building the reflective span name `getSpanName(target, signature)`, computing the name only on the span-creating branch — never eagerly per invocation. Add a unit test asserting the name builder is **not** invoked when the enhancer is disabled / the handler type is suppressed (e.g. spy/recording the name supplier, or asserting via a handler whose name-build would throw). This guard matters most for `@EventSourcingHandler` (slice 6) on the replay hot path, but the pattern is established here in slice 1. See `af4-span-inventory.md` §0 rows 7/7a and §1.9.
     - **P3.3**: Add `axon.tracing.commandBus.enabled` toggle to `TracingProperties`. Wire it into `TracingAutoConfiguration` so that the `CommandBus` decoration is skipped when disabled. Unit test the toggle via the Spring `ApplicationContextRunner`.
-    - **P3.4**: Register `DecoratorDefinition.forType(CommandBus.class)` and the `HandlerEnhancerDefinition` in `TracingConfigurationEnhancer`. Update `SpanNames` constants for the command-bus spans.
+    - **P3.4**: Register `DecoratorDefinition.forType(CommandBus.class)` and the `HandlerEnhancerDefinition` in `MessagingTracingConfigurationEnhancer` (in `axoniq-tracing-messaging`; add its `META-INF/services` entry). Update `SpanNames` (in `axoniq-tracing-api`) for the command-bus spans.
     - **P3.5**: Focused Boot integration test (`SliceCommandBusTracingIntegrationTest`) using `@SpringBootTest` + `InMemorySpanExporter` SDK. Asserts (a) a dispatched command produces the expected dispatch span with `CLIENT`/`INTERNAL` kind, (b) the handler produces the expected child handler span with the right `SERVER`/`INTERNAL` kind, (c) the `@CommandHandler`-annotated method produces the enhancer-added child span with the right attributes, (d) `axon.tracing.commandBus.enabled=false` skips decoration. Span name + kind + attributes asserted against the corresponding rows in `af4-span-inventory.md` §1 (the AF4 → AF5 mapping audit).
     - **P3.6**: **STOP — Human validation gate for Slice 1.** Commit. Run `./mvnw -Pintegration-test verify -pl integrationtests -Dtest=SliceCommandBusTracingIntegrationTest`. Post the asserted span tree to the user. Wait for go/no-go before starting Slice 2.
 
@@ -279,7 +315,7 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
     - **P4.2**: `TracingEventHandlingComponent` decorator + unit tests. Per-event consumer span (`EventProcessor.process <eventName>`, kind `CONSUMER`). Lazy batch span via `ctx.computeResourceIfAbsent(BATCH_SPAN_KEY, …)` gated on `ctx.getResource(Segment.RESOURCE_KEY).isPresent()`. Batch span bound to UoW lifecycle. See `research-batch-tracing.md` and `flows.md` Flow 4.
     - **P4.3**: Extend `TracingHandlerEnhancerDefinition` to cover `@EventHandler` + unit tests (a new `@Nested EventHandlerEnhancement` block in `TracingHandlerEnhancerDefinitionTest`).
     - **P4.4**: Add `axon.tracing.eventSink.enabled`, `axon.tracing.eventProcessor.enabled`, `axon.tracing.eventProcessor.disableBatchTrace`, `axon.tracing.eventProcessor.distributedInSameTrace`, `axon.tracing.eventProcessor.distributedInSameTraceTimeLimit` (default `PT2M`) toggles to `TracingProperties`. Semantics match AF4's `DefaultEventProcessorSpanFactory` (FR-007a).
-    - **P4.5**: Register `DecoratorDefinition.forType(EventSink.class)` and `DecoratorDefinition.forType(EventHandlingComponent.class)` in `TracingConfigurationEnhancer`. The `EventHandlingComponent` registration uses a `cfg.getOptionalComponent(EventProcessorConfiguration.class).isPresent()` scope guard (covers both `PooledStreamingEventProcessor` and `SubscribingEventProcessor`; FR-007a).
+    - **P4.5**: Register `DecoratorDefinition.forType(EventSink.class)` and `DecoratorDefinition.forType(EventHandlingComponent.class)` in `MessagingTracingConfigurationEnhancer`. The `EventHandlingComponent` registration uses a `cfg.getOptionalComponent(EventProcessorConfiguration.class).isPresent()` scope guard (covers both `PooledStreamingEventProcessor` and `SubscribingEventProcessor`; FR-007a).
     - **P4.6**: Focused Boot integration test (`SliceEventTracingIntegrationTest`) covering (a) PSEP: per-event spans nested under a single batch root span enclosing the UoW's prepare-commit (token-store write) and after-commit (segment-status update); (b) `SubscribingEventProcessor`: per-event spans inheriting the publisher's trace, **no** batch span (AF4 parity, FR-007a); (c) cross-thread W3C propagation between publication and async handling via `MetadataContextSetter`/`Getter`; (d) all five new toggles behave as documented.
     - **P4.7**: **STOP — Human validation gate for Slice 2.** Commit, run the slice test, post span tree, wait for go/no-go.
 
@@ -287,14 +323,14 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
     - **P5.1**: `TracingQueryBus` decorator + unit tests. Dispatch + handle spans for direct query, scatter-gather, and subscription-query initial-result paths. Distributed-vs-in-process branching.
     - **P5.2**: Extend `TracingHandlerEnhancerDefinition` to cover `@QueryHandler` + unit tests.
     - **P5.3**: Add `axon.tracing.queryBus.enabled` toggle.
-    - **P5.4**: Register `DecoratorDefinition.forType(QueryBus.class)` in `TracingConfigurationEnhancer`.
+    - **P5.4**: Register `DecoratorDefinition.forType(QueryBus.class)` in `MessagingTracingConfigurationEnhancer`.
     - **P5.5**: Focused Boot integration test (`SliceQueryBusTracingIntegrationTest`).
     - **P5.6**: **STOP — Human validation gate for Slice 3.**
 
 6. **P6 — Slice 4: `TracingQueryUpdateEmitter`** (Story 1 / 4, FR-008 — query update portion):
     - **P6.1**: `TracingQueryUpdateEmitter` decorator + unit tests. Implements the AF4 two-span pattern for `emit`: a schedule span (when the emission is queued) plus an emit span (when delivery actually happens). Plus single spans for `complete` / `completeExceptionally`.
     - **P6.2**: Add `axon.tracing.queryUpdateEmitter.enabled` toggle.
-    - **P6.3**: Register `DecoratorDefinition.forType(QueryUpdateEmitter.class)`.
+    - **P6.3**: Register `DecoratorDefinition.forType(QueryUpdateEmitter.class)` in `MessagingTracingConfigurationEnhancer` (QueryUpdateEmitter is an `axon-messaging` component).
     - **P6.4**: Focused Boot integration test (`SliceQueryUpdateEmitterTracingIntegrationTest`) exercising a subscription query end-to-end.
     - **P6.5**: **STOP — Human validation gate for Slice 4.**
 
@@ -303,7 +339,7 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
     - **P7.2**: `TracingStateManager` decorator + unit tests.
     - **P7.3**: End-to-end verification of `AggregateIdentifierSpanAttributesProvider` — exercise the path where `LegacyResources.AGGREGATE_IDENTIFIER_KEY` is populated by a legacy aggregate-based event stream so that `axoniq.aggregate.identifier` appears on spans; verify it is absent on DCB / entity-based paths.
     - **P7.4**: Add `axon.tracing.repository.enabled` toggle.
-    - **P7.5**: Register `DecoratorDefinition.forType(Repository.class)` and `DecoratorDefinition.forType(StateManager.class)`.
+    - **P7.5**: Register `DecoratorDefinition.forType(Repository.class)` and `DecoratorDefinition.forType(StateManager.class)` in `ModellingTracingConfigurationEnhancer` (in `axoniq-tracing-modelling`; add its `META-INF/services` entry).
     - **P7.6**: Focused Boot integration test (`SliceRepositoryTracingIntegrationTest`).
     - **P7.7**: **STOP — Human validation gate for Slice 5.**
 
@@ -311,7 +347,7 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
     - **P8.1**: `TracingSnapshotStore implements SnapshotStore` decorator + unit tests. Two spans: `SnapshotStore.store <entityType>` + `SnapshotStore.load <entityType>`, via `createInternalSpan(String)` + local `addAttribute`. **NB**: AF5 has no `Snapshotter` component (it's in `stash/todo`); snapshot creation is an inline `SnapshotPolicy`-gated side-effect of `SnapshottingEntityLifecycleHandler.source(...)`. The store/load spans nest under the FR-009 entity-sourcing span (`EntityLifecycleHandler.source`) via `ProcessingContext` — no separate snapshot outer decoration. `SnapshotStore` is `@Internal` (accepted coupling; no internals modified). See spec.md clarification 2026-05-26 (B3).
     - **P8.2**: Extend `TracingHandlerEnhancerDefinition` to cover `@EventSourcingHandler` + unit tests. This is the last annotation to land — after P8 the enhancer covers all four (`@CommandHandler`, `@EventHandler`, `@QueryHandler`, `@EventSourcingHandler`). **This is the hot-path case for the FR-003a eager-name guard** established in slice 1 (P3.2): `@EventSourcingHandler` fires once per event during entity replay, and is suppressed by default (`showEventSourcingHandlers=false`). Add a unit test asserting that, with `showEventSourcingHandlers=false`, an `@EventSourcingHandler` invocation neither opens a span nor invokes `getSpanName(...)` (the reflective name builder) — proving the guard short-circuits before the expensive name construction. See `af4-span-inventory.md` §0 row 7a and FR-003a.
     - **P8.3**: Add `axon.tracing.snapshotStore.enabled` toggle.
-    - **P8.4**: Register `DecoratorDefinition.forType(SnapshotStore.class)`.
+    - **P8.4**: Register `DecoratorDefinition.forType(SnapshotStore.class)` (and the `EntityLifecycleHandler.source` sourcing-span decorator) in `EventSourcingTracingConfigurationEnhancer` (in `axoniq-tracing-eventsourcing`; add its `META-INF/services` entry).
     - **P8.5**: Focused Boot integration test (`SliceSnapshotStoreTracingIntegrationTest`) exercising both snapshot store (write) and snapshot load (read), asserting the store/load spans nest under the entity-sourcing span.
     - **P8.6**: **STOP — Human validation gate for Slice 6.** This is the last per-component gate; after this the implementation moves to the batched final phase.
 

@@ -2,7 +2,7 @@
 
 **Feature**: 3594 — Distributed Tracing Support
 
-**Modules**: `axoniq-tracing-core`, `axoniq-tracing-opentelemetry`, `axoniq-spring-boot-autoconfigure` (new classes only)
+**Modules**: `axoniq-tracing-api` (public SPI + decorator-authoring helpers), `axoniq-tracing-messaging` / `axoniq-tracing-modelling` / `axoniq-tracing-eventsourcing` (per-concern decorators — all `@Internal`, no public surface), `axoniq-tracing-opentelemetry`, `axoniq-spring-boot-autoconfigure` (new classes only). The public API below lives in **`axoniq-tracing-api`** except the OTel `SpanFactory` impl. See spec.md clarification 2026-05-26 (five-module structure).
 
 This document is the authoritative description of the **public** API surface shipped by this feature. Anything not listed here is `@Internal` or package-private, and not subject to the framework's binary-compatibility promise.
 
@@ -10,7 +10,7 @@ The shape below is **the only acceptable public surface** — see SC-003. A CI a
 
 ---
 
-## Module 1 — `axoniq-tracing-core`
+## Module 1 — `axoniq-tracing-api`
 
 ### 1.1 `SpanFactory` (interface)
 
@@ -437,7 +437,7 @@ io.axoniq.framework.springboot.autoconfig.OpenTelemetryTracingAutoConfiguration
 
 ## Architectural Test (P3, runs on every build)
 
-A unit test under `axoniq-tracing-core/src/test/java/io/axoniq/framework/tracing/PublicApiSurfaceTest.java` enumerates classes via classpath scanning and asserts:
+A unit test under `axoniq-tracing-api/src/test/java/io/axoniq/framework/tracing/PublicApiSurfaceTest.java` enumerates classes via classpath scanning and asserts:
 
 1. `io.axoniq.framework.tracing.*` contains EXACTLY `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider`, `NoOpSpanFactory`, `MultiSpanFactory`, `LoggingSpanFactory`, `TracingConfigurationEnhancer`.
 2. No public type in any sub-package matches the forbidden patterns `*BusSpanFactory`, `*ManagerSpanFactory`, `*ProcessorSpanFactory`, `*EmitterSpanFactory`, `RepositorySpanFactory`, `SagaManagerSpanFactory`, `SnapshotterSpanFactory`. (`DeadlineManagerSpanFactory` is also implicitly forbidden — both deadlines and sagas / process-managers are out of scope.)
