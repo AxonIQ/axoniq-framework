@@ -15,6 +15,113 @@ This document preserves the design conversation behind FR-007a so the rationale 
 - The decorator on `EventHandlingComponent` opens the batch span **lazily on the first per-event `handle()` call** via `ctx.computeResourceIfAbsent(BATCH_SPAN_KEY, …)`, guarded by `ctx.getResource(Segment.RESOURCE_KEY).isPresent()`.
 - The batch span binds to the batch UoW's `whenComplete`, so it encloses **all** event handlers + `runOnPrepareCommit` (token-store write) + `runOnAfterCommit` (status update). AF4 batch-span coverage parity confirmed.
 - The cleaner alternative (B+upstream — a `BatchInterceptor` API on `PooledStreamingEventProcessorConfiguration`) was rejected because it requires an upstream PR and release. Kept as a deferred future improvement.
+- The decorator covers **both** `PooledStreamingEventProcessor` and `SubscribingEventProcessor` via a single `DecoratorDefinition.forType(EventHandlingComponent.class)` registration scoped to the common `EventProcessorConfiguration` base. `SubscribingEventProcessor` deliberately produces **no batch root span** — AF4 parity, not a regression — because subscribing handlers run synchronously inside the publisher's UoW where a separate batch span would be a redundant wrapper.
+
+---
+
+## AF4 vs AF5 event-processor hierarchy — and why one decorator covers both
+
+### AF4 hierarchy
+
+```
+EventProcessor (interface)
+  └── AbstractEventProcessor (abstract)
+        ├── SubscribingEventProcessor
+        ├── TrackingEventProcessor                 (removed in AF5)
+        └── PooledStreamingEventProcessor
+```
+
+The batch-span code lived in `AbstractEventProcessor.processInUnitOfWork` (line 165 — `spanFactory.createBatchSpan(this instanceof StreamingEventProcessor, eventMessages).runCallable(...)`), so all three subclasses inherited the same wiring. The `streaming` boolean was derived from `this instanceof StreamingEventProcessor`, and `DefaultEventProcessorSpanFactory.createBatchSpan` returned `NoOpSpan.INSTANCE` when `!streaming` — so `SubscribingEventProcessor` ran the call but received a NoOp span back.
+
+### AF5 hierarchy
+
+```
+EventProcessor (interface)
+  ├── SubscribingEventProcessor
+  └── PooledStreamingEventProcessor
+```
+
+No abstract base. The two processor types are independent siblings. **However**, their configuration classes share a common base:
+
+```
+EventProcessorConfiguration (concrete, in messaging/.../eventhandling/configuration/)
+  ├── SubscribingEventProcessorConfiguration
+  └── PooledStreamingEventProcessorConfiguration
+```
+
+Both processor types ultimately route to `eventHandlingComponents.handle(entries, ctx)` (the `ProcessorEventHandlingComponents.handle(...)` entry at `messaging/.../eventhandling/processing/ProcessorEventHandlingComponents.java:110-124`). So a single `DecoratorDefinition.forType(EventHandlingComponent.class)` registration catches both — provided its scope guard accepts both configuration types.
+
+### Registration scope decision (Clarification 2026-05-26 Q: "How is TracingEventHandlingComponent scoped …?")
+
+Chosen: **guard on the common `EventProcessorConfiguration` base**.
+
+```java
+registry.registerDecorator(
+    DecoratorDefinition
+        .forType(EventHandlingComponent.class)
+        .with((cfg, name, delegate) -> {
+            if (cfg.getOptionalComponent(EventProcessorConfiguration.class).isEmpty()) {
+                return delegate;  // not inside any event-processor module — skip
+            }
+            return new TracingEventHandlingComponent(delegate,
+                                                     cfg.getComponent(SpanFactory.class),
+                                                     cfg.getComponent(TracingProperties.class).eventProcessor());
+        })
+);
+```
+
+This is broader than the DLQ enhancer's PSEP-only scope. Justification: tracing semantics legitimately apply to every event-handling component, not just pooled-streaming. The DLQ's PSEP-only scope reflects DLQ semantics (segment-aware replay) and is appropriate for that feature; tracing has different semantics and a different correct scope.
+
+Rejected scope alternatives:
+- **No guard at all**: decorator would wrap any `EventHandlingComponent`, including test stubs and ad-hoc registrations outside any processor.
+- **Two specific guards (PSEP OR Subscribing)**: requires updating the enhancer whenever a new processor type ships. The common base avoids that.
+- **PSEP only**: AF4 regression — subscribing processors would lose per-event spans entirely.
+
+### Why `SubscribingEventProcessor` gets no batch root span — and why that's AF4 parity, not a regression
+
+The user instinct that "AF4 shared the abstract class, so all types got the batch span" is half-right: the **code** was shared, the **span** was not. AF4's `DefaultEventProcessorSpanFactory.createBatchSpan` returned a NoOp for non-streaming processors:
+
+```java
+// AxonFramework4/.../DefaultEventProcessorSpanFactory.java:81-86  (verbatim)
+public Span createBatchSpan(boolean streaming, List<? extends EventMessage> eventMessages) {
+    if (distributedInSameTrace || disableBatchTrace || !streaming) {
+        return NoOpSpanFactory.NoOpSpan.INSTANCE;   // ← here for SubscribingEventProcessor
+    }
+    return spanFactory.createRootTrace(() -> "StreamingEventProcessor.batch");
+}
+```
+
+The AF4 reference guide documents this explicitly at `AxonFramework4/docs/old-reference-guide/modules/monitoring/pages/tracing.adoc:193-195`:
+
+> | Subscribing event processor | Child of the publishing span (synchronous invocation) | None (handler runs inside the publishing unit of work) |
+
+AF4's design rationale (preserved by AF5's mapping):
+
+1. **Subscribing processors run synchronously inside the publisher's UoW.** The handler call stack is `publisher.dispatchCommand → @CommandHandler → eventSink.publish(events) → subscribingProcessor.process(events, publisherCtx) → handler`. There is no separate batch boundary — the publisher's UoW *is* the batch.
+2. **The publisher already has a span covering its whole UoW**, plus the AF4 `commit-events` span (and AF5's `EventBus.commitEvents` span via `TracingEventSink`) covering the per-event publication. Adding a `SubscribingEventProcessor.batch` span on top of that would be a redundant wrapper around an already-spanned boundary — every event handler would get a great-grandparent span that adds nothing the publisher's span doesn't already provide.
+3. **AF4 trace dashboards rely on this shape.** Story 4's acceptance criterion 3 explicitly requires "span names, kinds, and attributes are equivalent — i.e., the consolidation does not regress the observable trace shape." Introducing a new batch span for subscribing is a regression *in the other direction*.
+
+How AF5's `TracingEventHandlingComponent` reproduces this with zero special-casing:
+- `SubscribingEventProcessor.process(events, context)` does not write `Segment.RESOURCE_KEY` to its UoW. Only `WorkPackage.processBatch` (`PooledStreamingEventProcessor`'s code path) writes that key.
+- `TracingEventHandlingComponent.openBatchSpan(ctx)` checks `ctx.getResource(Segment.RESOURCE_KEY) != null`. For subscribing, the resource is absent, the check fails, the method returns `NoOpSpan.INSTANCE`. No batch root is opened. **Identical to AF4 behavior.**
+- The per-event span (`EventProcessor.process <eventName>`) still opens. Its parent is whatever is current on the surrounding `ProcessingContext`:
+  - When `SubscribingEventProcessor.process(events, context)` reuses the caller's `ProcessingContext` (`AxonFramework5/.../SubscribingEventProcessor.java:145-146`) — typically the publisher's UoW — the per-event span becomes a child of the publisher's trace. Identical to AF4.
+  - When `context == null` and a fresh UoW is created (line 148), the per-event span starts a new trace (or, if a W3C parent is present in `event.getMetaData()`, parents under that). Identical to AF4.
+
+### Subscribing-processor coverage matrix
+
+| Processor | Batch root span | Per-event spans | Parent of per-event spans |
+|---|---|---|---|
+| `PooledStreamingEventProcessor` | **`StreamingEventProcessor.batch`** (lazy-opened via `Segment.RESOURCE_KEY` guard, bound to batch UoW `whenComplete`) | `EventProcessor.process <eventName>` | The batch span |
+| `SubscribingEventProcessor` (publisher-supplied ctx) | None (NoOp — AF4 parity) | `EventProcessor.process <eventName>` | The publisher's surrounding span (via reused `ProcessingContext`) |
+| `SubscribingEventProcessor` (`context == null`, fresh UoW) | None (NoOp — AF4 parity) | `EventProcessor.process <eventName>` | New root trace (or W3C parent from `event.getMetaData()` if present) |
+| Future `EventProcessor` impls | Yes if they write `Segment.RESOURCE_KEY` to the batch UoW | Yes — inherits from common-base scope guard | Their batch span if present, else the surrounding span |
+
+### When would deviating from AF4 here make sense?
+
+Deferred future improvement (DFI candidate) — not in scope for this feature:
+
+A `axon.tracing.eventProcessor.subscribingBatchTrace` property (default `false`, matching AF4) could be added later. Enabling it would require writing a second sentinel key (e.g., a `EventProcessorConfiguration.PROCESSOR_NAME_KEY`) from both processor types and broadening `openBatchSpan`'s detection logic. Both pieces are pure additions to FR-007a — no breaking changes — if a future user case justifies the deviation.
 
 ---
 
