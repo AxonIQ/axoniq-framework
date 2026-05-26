@@ -77,7 +77,7 @@ axon:
   tracing:
     enabled: true                          # master switch (default true)
     components:
-      sagas: false                         # don't trace sagas
+      query-updates: false                 # don't trace subscription-query updates
     snapshotter:
       separate-trace: true                 # snapshots get their own trace root
       aggregate-type-in-span-name: true
@@ -165,7 +165,8 @@ MessagingConfigurer.create()
 |---|---|---|
 | Command dispatch | `CommandBus.dispatchCommand <commandName>` | `CLIENT` (distributed) / `INTERNAL` (in-process) |
 | Command handling | `CommandBus.handleCommand <commandName>` | `SERVER` |
-| Event publication | `EventBus.publishEvent <eventName>` | `PRODUCER` |
+| Event publication (per event, around context propagation) | `EventBus.publishEvent <eventName>` | `PRODUCER` |
+| Event commit (per `publish(...)` call, around UoW prepare/commit/after-commit phases) | `EventBus.commitEvents` | `INTERNAL` |
 | Event handling | `EventProcessor[<name>].process <eventName>` | `CONSUMER` |
 | Query dispatch | `QueryBus.query <queryName>` | `CLIENT` / `INTERNAL` |
 | Query handling | `QueryBus.handle <queryName>` | `SERVER` |
@@ -174,7 +175,6 @@ MessagingConfigurer.create()
 | Entity save | `Repository.save <entityType> <id>` | `INTERNAL` |
 | Snapshot create | `Snapshotter.create <entityType> <id>` | `INTERNAL` |
 | Snapshot read | `Snapshotter.read <entityType> <id>` | `INTERNAL` |
-| Saga invoke (once ported) | `SagaManager.invoke <sagaType>` | `INTERNAL` |
 | Annotation handlers (`@EventSourcingHandler` etc.) | `<handler-method-name>` | `INTERNAL` |
 
 Standard attributes attached by the default `SpanAttributesProvider`s:

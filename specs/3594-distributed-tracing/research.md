@@ -15,20 +15,20 @@ The single most important design move is the collapse of AF4's nine per-componen
 | Concern (what is being traced) | AF4 — per-component factory + consumer | AF5 — what replaces it in AxoniqFramework |
 |---|---|---|
 | Command dispatch + handling | `CommandBusSpanFactory` (interface) + `DefaultCommandBusSpanFactory`, consumed by `SimpleCommandBus.Builder#spanFactory(...)` | `internal.TracingCommandBus implements CommandBus` registered via `DecoratorDefinition.forType(CommandBus.class)`. Span names: `"CommandBus.dispatchCommand <commandName>"` (kind `CLIENT` when distributed, `INTERNAL` otherwise) and `"CommandBus.handleCommand <commandName>"` (kind `SERVER`). |
-| Event publication | `EventBusSpanFactory` + `DefaultEventBusSpanFactory`, consumed by `SimpleEventBus.Builder#spanFactory(...)` | `internal.TracingEventSink implements EventSink` registered via `DecoratorDefinition.forType(EventSink.class)`. Span name `"EventBus.publishEvent <eventName>"` (kind `PRODUCER`). |
+| Event publication | `EventBusSpanFactory` + `DefaultEventBusSpanFactory`, consumed by `SimpleEventBus.Builder#spanFactory(...)`. AF4's `AbstractEventBus#publish` creates **two** spans: (a) `createPublishEventSpan(e)` per event around `propagateContext(...)` at publish-entry (`AbstractEventBus.java:121-122`), and (b) `createCommitEventsSpan()` spanning the surrounding UoW's `prepareCommit` → `commit` → `afterCommit` → `cleanup` phases (`AbstractEventBus.java:160-202`, plus the no-UoW path at `:144`). | `internal.TracingEventSink implements EventSink` registered via `DecoratorDefinition.forType(EventSink.class)`. Produces **two spans per call**, equivalent to AF4: (a) `"EventBus.publishEvent <eventName>"` (kind `PRODUCER`) — one per event, synchronously at publish-entry, around `SpanFactory#propagateContext(event)`, BEFORE delegating; (b) `"EventBus.commitEvents"` — one per `publish(...)` call, bound to the supplied `ProcessingContext` via `ProcessingContextSpanBinding` (opened in `runOnPrepareCommit`, errored in `onError`, closed in `whenComplete`). When `ProcessingContext` is `null`, the commit-events span falls back to a synchronous `Span.run(...)` wrapper around `delegate.publish(...)`. Both spans are creatable from the public `EventSink#publish(ProcessingContext, List<EventMessage>)` signature alone — no event-bus internals are touched. |
 | Event handling (incl. async / pooled streaming) | `EventProcessorSpanFactory` + `DefaultEventProcessorSpanFactory`, consumed by `TrackingEventProcessor.Builder` / `PooledStreamingEventProcessor.Builder` | `internal.TracingEventHandlingComponent implements EventHandlingComponent` registered via `DecoratorDefinition.forType(EventHandlingComponent.class)`. Span name `"EventProcessor[<processor>].process <eventName>"` (kind `CONSUMER`), with the producer's W3C context extracted from metadata and linked as parent. |
 | Query dispatch + handling | `QueryBusSpanFactory` + `DefaultQueryBusSpanFactory`, consumed by `SimpleQueryBus.Builder#spanFactory(...)` | `internal.TracingQueryBus implements QueryBus` registered via `DecoratorDefinition.forType(QueryBus.class)`. Span name `"QueryBus.query <queryName>"` (kind `CLIENT`/`INTERNAL`) on dispatch, `"QueryBus.handle <queryName>"` (kind `SERVER`) on handling. |
 | Subscription-query updates | `QueryUpdateEmitterSpanFactory` + `DefaultQueryUpdateEmitterSpanFactory`, consumed by `SimpleQueryUpdateEmitter.Builder` | `internal.TracingQueryUpdateEmitter implements QueryUpdateEmitter` registered via `DecoratorDefinition.forType(QueryUpdateEmitter.class)`. Span name `"QueryUpdateEmitter.emit <updateType>"`. |
 | Aggregate / entity load + save | `RepositorySpanFactory` + `DefaultRepositorySpanFactory`, consumed by `AbstractRepository.Builder` | `internal.TracingRepository implements Repository` + `internal.TracingStateManager implements StateManager`, registered via `DecoratorDefinition.forType(Repository.class)` / `…StateManager.class`. Span names `"Repository.load <entityType> <id>"` and `"Repository.save <entityType> <id>"`. |
 | Snapshot creation + read | `SnapshotterSpanFactory` + `DefaultSnapshotterSpanFactory`, consumed by `AbstractSnapshotter.Builder` | `internal.TracingSnapshotter implements Snapshotter` registered via `DecoratorDefinition.forType(Snapshotter.class)`. Span names `"Snapshotter.create <entityType> <id>"` and `"Snapshotter.read <entityType> <id>"`. `separateTrace` and `aggregateTypeInSpanName` knobs come back as `TracingProperties.snapshotter.*`. |
 | ~~Deadline schedule + fire~~ | ~~AF4: `DeadlineManagerSpanFactory` + `DefaultDeadlineManagerSpanFactory`~~ | **Out of scope.** `DeadlineManager` does not exist in Axon Framework 5 (clarification 2026-05-26). No `TracingDeadlineManager`, no enhancer registration, no `TracingProperties` group. |
-| Saga / process-manager invocation | `SagaManagerSpanFactory` + `DefaultSagaManagerSpanFactory`, consumed by `AbstractSagaManager.Builder` | `internal.TracingSagaManager` (registration guarded — only registers if a saga / process-manager AF5 port is available). Span name `"SagaManager.invoke <sagaType>"`. Per FR-012, if the AF5 port doesn't exist yet, the class is omitted and added later as a pure addition. |
-| `@*Handler` annotation handlers | `TracingHandlerEnhancerDefinition` (already a `HandlerEnhancerDefinition` in AF4) | `internal.TracingHandlerEnhancerDefinition` — direct port of the AF4 class shape, registered as a `HandlerEnhancerDefinition` bean / SPI. Wraps `@CommandHandler`, `@EventHandler`, `@QueryHandler`, `@EventSourcingHandler`, `@SagaEventHandler`. (`@DeadlineHandler` is excluded — see deadline row above.) |
+| ~~Saga / process-manager invocation~~ | ~~AF4: `SagaManagerSpanFactory` + `DefaultSagaManagerSpanFactory`~~ | **Out of scope.** Sagas / process-managers do not exist in Axon Framework 5 today (clarification 2026-05-26). No `TracingSagaManager`, no enhancer registration, no `TracingProperties` group, no `@SagaEventHandler` wrapping. FR-012 is withdrawn. |
+| `@*Handler` annotation handlers | `TracingHandlerEnhancerDefinition` (already a `HandlerEnhancerDefinition` in AF4) | `internal.TracingHandlerEnhancerDefinition` — direct port of the AF4 class shape, registered as a `HandlerEnhancerDefinition` bean / SPI. Wraps `@CommandHandler`, `@EventHandler`, `@QueryHandler`, `@EventSourcingHandler`. (`@DeadlineHandler` and `@SagaEventHandler` are excluded — see deadline and saga rows above.) |
 | Custom user span attributes | `SpanAttributesProvider` (already a generic SPI in AF4) | `SpanAttributesProvider` — kept as public SPI in `axoniq-tracing-core`. Six built-in providers ported verbatim into `attributes/` (message id, message name, message type, payload type, metadata, aggregate identifier). |
 | OpenTelemetry implementation | `OpenTelemetrySpanFactory` + `OpenTelemetrySpan` + `MetadataContextSetter` + `MetadataContextGetter` in `tracing-opentelemetry` | Same four classes, ported into `axoniq-tracing-opentelemetry`. Class shape is essentially unchanged; only the imports and `Span` interface they implement are AF5 ones. |
 | Spring Boot wiring | `AxonTracingAutoConfiguration` + `TracingProperties` + `OpenTelemetryAutoConfiguration` in `spring-boot-autoconfigure` | `TracingAutoConfiguration` + `TracingProperties` + `OpenTelemetryTracingAutoConfiguration` added **inside the existing** `dependency-injection/spring/spring-boot-autoconfigure` module. Three `@Bean` methods exposing per-component `*SpanFactory` beans in AF4 collapse to **one** `SpanFactory` `@Bean`. |
 
-**Decision**: No public `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` interface is exposed (FR-016). `DeadlineManagerSpanFactory` is also excluded — deadlines are out of scope (clarification 2026-05-26).
+**Decision**: No public `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` interface is exposed (FR-016). `DeadlineManagerSpanFactory` is also implicitly forbidden — both deadlines and sagas / process-managers are out of scope (clarifications 2026-05-26).
 
 **Rationale**: Each of those AF4 interfaces had three responsibilities glued together — building a span name string, choosing a span kind, and (sometimes) deciding what to do for the distributed case. None of those responsibilities benefit from being polymorphic on the user's side: there are no real implementations of `EventBusSpanFactory` outside the framework. They exist as interfaces in AF4 only because the consumer-side builder needed an interface to inject; AF5's `DecoratorDefinition` removes that need entirely.
 
@@ -146,7 +146,8 @@ public final class TracingConfigurationEnhancer implements ConfigurationEnhancer
         // Deadline tracing is permanently out of scope — DeadlineManager does not exist in AF5
         // (clarification 2026-05-26). No `ifClassPresent("org.axonframework.deadline.DeadlineManager", …)`.
 
-        // Saga / process-manager wrapping is added the same way once their AF5 port lands.
+        // Saga / process-manager tracing is permanently out of scope — sagas / process-managers do not
+        // exist in AF5 (clarification 2026-05-26). No TracingSagaManager registration here.
 
         // Annotation-handler enhancer (covers @EventSourcingHandler etc. — orthogonal to the bus-level decorators above).
         registry.registerComponent(HandlerEnhancerDefinition.class, "tracingHandlerEnhancer",
@@ -158,7 +159,7 @@ public final class TracingConfigurationEnhancer implements ConfigurationEnhancer
 
 **Decision**: One enhancer registers everything. `order(TracingOrders.DECORATOR_ORDER)` puts tracing **outside** interception so that the dispatcher span captures the full handler invocation including interceptors. (Concrete numeric order is fixed in `TracingOrders.java` and documented in `public-api.md`.)
 
-**Rationale**: A single enhancer is one bean / one ServiceLoader entry, and one place to evolve. Future scheduler / process-manager tracing is "add one more `DecoratorDefinition` here" — zero public-API churn (Story 4 AS-2).
+**Rationale**: A single enhancer is one bean / one ServiceLoader entry, and one place to evolve. Future component tracing (e.g., if a scheduler or saga / process-manager ever lands in AF5) is "add one more `DecoratorDefinition` here" — zero public-API churn (Story 4 AS-2).
 
 **Alternatives considered**:
 - **One `ConfigurationEnhancer` per concern (`TracingCommandsConfigurationEnhancer`, `TracingEventsConfigurationEnhancer`, …)** — rejected: nine beans to register, nine ServiceLoader entries, no benefit because they all share the same `SpanFactory` resolution.
@@ -215,6 +216,55 @@ final class ProcessingContextSpanBinding {
 
 **Decision (fallback)**: When a wrapped operation has no `ProcessingContext` parameter (e.g., a programmatic, out-of-band snapshot creation), the decorator falls back to `Span.runSupplier(...)` / `Span.runSupplierAsync(...)`. This is the direct AF4 style and is acceptable here per FR-013a because there is genuinely no lifecycle to ride on.
 
+### 3.1 Worked example — `TracingEventSink` reproduces AF4's two-span pattern
+
+AF4's `AbstractEventBus.publish(...)` opens two spans (see the mapping row above): one per event around context propagation, and one across the UoW commit phases. Both are reproducible from the AF5 `EventSink#publish(ProcessingContext, List<EventMessage>)` signature alone — the decorator never touches the bus internals.
+
+```java
+@Internal
+final class TracingEventSink implements EventSink {
+
+    private final EventSink delegate;
+    private final SpanFactory spanFactory;
+
+    TracingEventSink(EventSink delegate, SpanFactory spanFactory) {
+        this.delegate = Objects.requireNonNull(delegate, "delegate may not be null");
+        this.spanFactory = Objects.requireNonNull(spanFactory, "spanFactory may not be null");
+    }
+
+    @Override
+    public CompletableFuture<Void> publish(@Nullable ProcessingContext context,
+                                           List<? extends EventMessage<?>> events) {
+
+        // (a) per-event publish span — synchronous, around propagateContext (mirrors AbstractEventBus.java:121-122)
+        List<EventMessage<?>> propagated = events.stream()
+                .map(event -> spanFactory.createDispatchSpan(SpanNames.EVT_PUBLISH, event)
+                                         .runSupplier(() -> spanFactory.propagateContext(event)))
+                .toList();
+
+        // (b) commit-events span — bound to ProcessingContext lifecycle (mirrors AbstractEventBus.java:160-202)
+        //     or, when no context is active, run synchronously around the delegate call (mirrors :144).
+        if (context != null) {
+            Span commitSpan = spanFactory.createInternalSpan(SpanNames.EVT_COMMIT);
+            ProcessingContextSpanBinding.bind(context, commitSpan);
+            return delegate.publish(context, propagated);
+        }
+        return spanFactory.createInternalSpan(SpanNames.EVT_COMMIT)
+                          .runSupplierAsync(() -> delegate.publish(null, propagated));
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeWrapperOf(delegate);
+        descriptor.describeProperty("spanFactory", spanFactory);
+    }
+}
+```
+
+**Why the decorator is sufficient**: every input AF4 needed to open both spans is part of the AF5 public method signature: the `events` list (for the per-event span) and the `ProcessingContext` (for the commit-events span). The AF4 implementation reached into its own `UnitOfWork` because it had to — `UnitOfWork` was the carrier. In AF5, that carrier is the `ProcessingContext` parameter — already in the decorator's hands. **No AF5 event-bus internals are touched.**
+
+**The same pattern applies to other components** whose AF4 counterparts opened both a per-message dispatch span and a UoW-scoped commit span (none currently in scope beyond event publication, but the pattern is the template).
+
 **Alternatives considered**:
 - **OpenTelemetry's `io.opentelemetry.context.Context.current()` everywhere** — rejected: pulls a `ThreadLocal` back into the framework. We rely on it only at imperative-edge `Span.runSupplier(...)` call sites.
 - **A new `SpanLifecycleInterceptor`** — rejected: introduces a new interceptor level which Constitution §Interceptor Levels forbids (only `MessageDispatchInterceptor` / `MessageHandlerInterceptor` are blessed; tracing plugs in via `DecoratorDefinition` + `HandlerEnhancerDefinition` instead).
@@ -247,12 +297,12 @@ Span handleSpan = spanFactory.createHandlerSpan(SpanNames.CMD_HANDLE, command);
 
 ## 5. SpanFactory Coverage of Non-Message Operations
 
-A handful of operations (snapshot creation, repository load/save, saga invocation) are not `Message`s but still need spans. AF4 modelled this by giving each per-component factory bespoke methods like `createSaveAggregateSpan(Aggregate)`, etc.
+A handful of operations (snapshot creation, repository load/save) are not `Message`s but still need spans. AF4 modelled this by giving each per-component factory bespoke methods like `createSaveAggregateSpan(Aggregate)`, etc.
 
 **Decision**: The consolidated `SpanFactory` exposes **two** generic builders for the non-message case:
 
 1. `Span createInternalSpan(String name)` — for purely internal operations with no associated message.
-2. `Span createInternalSpan(String name, Object subject)` — same, but the `subject` (an aggregate id, an entity descriptor, a saga id) is passed through to every `SpanAttributesProvider` so attribute keys remain pluggable.
+2. `Span createInternalSpan(String name, Object subject)` — same, but the `subject` (an aggregate id, an entity descriptor) is passed through to every `SpanAttributesProvider` so attribute keys remain pluggable.
 
 The four built-in providers (aggregate id, message id, message name, payload type) inspect the `subject` reflectively (one short `instanceof` switch on the known internal subject types) so we don't need a parallel `SpanAttributesProvider` hierarchy.
 

@@ -6,7 +6,7 @@
 
 This document is the authoritative description of the **public** API surface shipped by this feature. Anything not listed here is `@Internal` or package-private, and not subject to the framework's binary-compatibility promise.
 
-The shape below is **the only acceptable public surface** — see SC-003. A CI architectural test (set up in P3) enumerates public types under `io.axoniq.framework.tracing` and fails the build if a `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` ever shows up. (`DeadlineManagerSpanFactory` is implicitly forbidden because deadlines are out of scope — clarification 2026-05-26.)
+The shape below is **the only acceptable public surface** — see SC-003. A CI architectural test (set up in P3) enumerates public types under `io.axoniq.framework.tracing` and fails the build if a `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` ever shows up. (`DeadlineManagerSpanFactory` is implicitly forbidden — deadlines and sagas / process-managers are out of scope per clarifications 2026-05-26.)
 
 ---
 
@@ -43,7 +43,7 @@ public interface SpanFactory {
 
     /**
      * Creates a {@link Span} for an internal operation that is parameterised by a domain {@code subject}
-     * (e.g., aggregate identifier, saga identifier). The {@code subject} is forwarded to every registered
+     * (e.g., aggregate identifier, entity descriptor). The {@code subject} is forwarded to every registered
      * {@link SpanAttributesProvider}.
      */
     Span createInternalSpan(String operationName, Object subject);
@@ -143,7 +143,7 @@ package io.axoniq.framework.tracing;
  * The single {@link ConfigurationEnhancer} that wires tracing into AxoniqFramework. Registers
  * {@link DecoratorDefinition}s for every traced component type (command bus, event sink,
  * event handling component, query bus, query update emitter, repository, state manager,
- * snapshotter, saga manager) and a {@link HandlerEnhancerDefinition} for
+ * snapshotter) and a {@link HandlerEnhancerDefinition} for
  * annotation-based handlers.
  * <p>
  * Programmatic usage:
@@ -210,9 +210,9 @@ Each is a `public final class` with a no-arg constructor (and an optional vararg
 ### 1.8 `@Internal` types (NOT public surface; listed for reviewer reference)
 
 Under `io.axoniq.framework.tracing.internal`:
-- `TracingCommandBus`, `TracingEventSink`, `TracingEventHandlingComponent`, `TracingQueryBus`, `TracingQueryUpdateEmitter`, `TracingRepository`, `TracingStateManager`, `TracingSnapshotter`, `TracingSagaManager`
+- `TracingCommandBus`, `TracingEventSink`, `TracingEventHandlingComponent`, `TracingQueryBus`, `TracingQueryUpdateEmitter`, `TracingRepository`, `TracingStateManager`, `TracingSnapshotter`
 - `TracingHandlerEnhancerDefinition`
-- `SpanNames` (constants table: `CMD_DISPATCH = "CommandBus.dispatchCommand"`, `EVT_PUBLISH = "EventBus.publishEvent"`, …)
+- `SpanNames` (constants table: `CMD_DISPATCH = "CommandBus.dispatchCommand"`, `EVT_PUBLISH = "EventBus.publishEvent"`, `EVT_COMMIT = "EventBus.commitEvents"`, …)
 - `ProcessingContextSpanBinding`
 - `TracingOrders` (decorator-order constants)
 
@@ -274,7 +274,6 @@ public class TracingProperties {
     private final CommandBusOptions commandBus = new CommandBusOptions();
     private final QueryBusOptions queryBus = new QueryBusOptions();
     private final RepositoryOptions repository = new RepositoryOptions();
-    private final SagaManagerOptions sagaManager = new SagaManagerOptions();
     private final AttributeProviderToggles attributeProviders = new AttributeProviderToggles();
     /* getters / setters */
 
@@ -285,7 +284,6 @@ public class TracingProperties {
         private boolean queryUpdates = true;
         private boolean snapshotting = true;
         private boolean repository = true;
-        private boolean sagas = true;
         /* getters / setters */
     }
 
@@ -314,11 +312,6 @@ public class TracingProperties {
 
     public static class RepositoryOptions {
         private String aggregateIdAttributeName = "axon.aggregate.identifier";
-        /* getters / setters */
-    }
-
-    public static class SagaManagerOptions {
-        private String sagaIdentifierAttributeName = "axon.saga.identifier";
         /* getters / setters */
     }
 
@@ -419,7 +412,7 @@ io.axoniq.framework.springboot.autoconfig.OpenTelemetryTracingAutoConfiguration
 A unit test under `axoniq-tracing-core/src/test/java/io/axoniq/framework/tracing/PublicApiSurfaceTest.java` enumerates classes via classpath scanning and asserts:
 
 1. `io.axoniq.framework.tracing.*` contains EXACTLY `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider`, `NoOpSpanFactory`, `MultiSpanFactory`, `LoggingSpanFactory`, `TracingConfigurationEnhancer`.
-2. No public type in any sub-package matches the forbidden patterns `*BusSpanFactory`, `*ManagerSpanFactory`, `*ProcessorSpanFactory`, `*EmitterSpanFactory`, `RepositorySpanFactory`, `SagaManagerSpanFactory`, `SnapshotterSpanFactory`. (`DeadlineManagerSpanFactory` is also implicitly forbidden — deadlines are out of scope.)
+2. No public type in any sub-package matches the forbidden patterns `*BusSpanFactory`, `*ManagerSpanFactory`, `*ProcessorSpanFactory`, `*EmitterSpanFactory`, `RepositorySpanFactory`, `SagaManagerSpanFactory`, `SnapshotterSpanFactory`. (`DeadlineManagerSpanFactory` is also implicitly forbidden — both deadlines and sagas / process-managers are out of scope.)
 3. Every class under `io.axoniq.framework.tracing.internal` is either package-private OR annotated with `@Internal`.
 
 This is the executable form of SC-003 / FR-016.

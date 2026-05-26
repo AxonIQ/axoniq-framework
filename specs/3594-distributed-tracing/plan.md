@@ -34,7 +34,7 @@ After the AxoniqFramework migration lands, all dead tracing source in the upstre
 
 **Constraints**:
 - No `ThreadLocal` in framework code (Constitution §V). Active-span tracking goes through `ProcessingContext` resources keyed by `ResourceKey<SpanScope>`.
-- No public `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` interfaces (FR-016). Deadline tracing is permanently out of scope (clarification 2026-05-26 — `DeadlineManager` does not exist in AF5).
+- No public `*BusSpanFactory` / `*ManagerSpanFactory` / `*ProcessorSpanFactory` / `*EmitterSpanFactory` / `RepositorySpanFactory` / `SagaManagerSpanFactory` / `SnapshotterSpanFactory` interfaces (FR-016). Deadline and saga / process-manager tracing are permanently out of scope (clarifications 2026-05-26 — neither component exists in AF5).
 - Wrappers MUST be delegating decorators that implement the target component interface by composition and call `describeWrapperOf(delegate)` (FR-013).
 - Cross-process trace context propagates through message metadata under reserved keys; collision behaviour with user metadata is documented.
 - AF5 tracing source is dead code (commented-out, no wiring) — never used as a starting point. Code is read from AF4 and re-implemented for AF5 idioms.
@@ -42,7 +42,7 @@ After the AxoniqFramework migration lands, all dead tracing source in the upstre
 **Scale/Scope**:
 - 2 new Maven modules (`tracing/axoniq-tracing-core`, `tracing/axoniq-tracing-opentelemetry`).
 - 1 new autoconfig class + 1 new `TracingProperties` class + 1 new entry in `AutoConfiguration.imports` in the existing `axoniq-spring-boot-autoconfigure` module.
-- ~8 component-tracing decorators (commands, events, query bus, query update emitter, event handling component, repository/state, snapshotter, sagas/process-managers when their AF5 port exists), plus the annotation `HandlerEnhancerDefinition` wrapper. Deadlines are excluded — see clarification 2026-05-26.
+- ~7 component-tracing decorators (commands, events, query bus, query update emitter, event handling component, repository/state, snapshotter), plus the annotation `HandlerEnhancerDefinition` wrapper. Deadlines and sagas / process-managers are excluded — see clarifications 2026-05-26.
 - ~6 built-in `SpanAttributesProvider` implementations (parity with AF4).
 - 1 reference-guide page populated under `docs/reference-guide/modules/tracing/pages/`.
 - 1 cleanup PR (or PR set) against the upstream Axon Framework 5 repository deleting all dead tracing source there.
@@ -125,8 +125,7 @@ tracing/
 │       │       ├── TracingRepository.java                 # modelling
 │       │       ├── TracingStateManager.java               # modelling
 │       │       ├── TracingSnapshotter.java                # event sourcing
-│       │       ├── TracingSagaManager.java                # sagas / process-managers — registered only when AF5 port exists
-│       │       ├── TracingHandlerEnhancerDefinition.java  # wraps @CommandHandler/@EventHandler/@QueryHandler/@EventSourcingHandler/@SagaEventHandler
+│       │       ├── TracingHandlerEnhancerDefinition.java  # wraps @CommandHandler/@EventHandler/@QueryHandler/@EventSourcingHandler
 │       │       ├── SpanNames.java                         # @Internal constants ("CommandBus.dispatchCommand", "EventBus.publishEvent", …)
 │       │       └── ProcessingContextSpanBinding.java      # @Internal — binds Span open/close to ProcessingLifecycle hooks
 │       └── test/java/io/axoniq/framework/tracing/
