@@ -71,6 +71,8 @@
         <!-- Metrics -->
         <dropwizard.metrics.version>5.0.6</dropwizard.metrics.version>
         <micrometer.version>1.16.4</micrometer.version>
+        <!-- Tracing -->
+        <opentelemetry.version>1.52.0</opentelemetry.version>
         <!-- Other -->
         <byte-buddy.version>1.18.8</byte-buddy.version>
         <commons-io.version>2.22.0</commons-io.version>
@@ -110,6 +112,15 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- OpenTelemetry BOM (manages opentelemetry-api / -sdk / -exporter-otlp versions) -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Axon Framework -->
             <dependency>
                 <groupId>org.axonframework</groupId>

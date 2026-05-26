@@ -103,6 +103,33 @@
                 <artifactId>axoniq-testcontainer</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
+            <!-- Axoniq Framework: Tracing -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-modelling</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-eventsourcing</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-opentelemetry</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>

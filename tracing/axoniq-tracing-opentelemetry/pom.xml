@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
+  ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
+  ~ You may not use this file except in compliance with the License.
+  ~
+  ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../build/parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>axoniq-tracing-opentelemetry</artifactId>
+
+    <name>Axoniq Framework - Tracing OpenTelemetry</name>
+    <description>
+        OpenTelemetry binding for the tracing API: an OpenTelemetry-backed SpanFactory plus the W3C
+        TextMap setter/getter used to propagate trace context through message metadata.
+    </description>
+
+    <dependencies>
+        <!-- Tracing API -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-tracing-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- OpenTelemetry (API only; the SDK is a host-application concern) -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-tracing-api</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-messaging</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>io.axoniq.framework.tracing.opentelemetry</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

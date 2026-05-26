@@ -89,6 +89,12 @@
         <module>messaging/axoniq-event-streaming</module>
 
         <module>testing/axoniq-testcontainer</module>
+
+        <module>tracing/axoniq-tracing-api</module>
+        <module>tracing/axoniq-tracing-messaging</module>
+        <module>tracing/axoniq-tracing-modelling</module>
+        <module>tracing/axoniq-tracing-eventsourcing</module>
+        <module>tracing/axoniq-tracing-opentelemetry</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>
