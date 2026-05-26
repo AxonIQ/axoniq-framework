@@ -738,11 +738,13 @@ a last resort if the old stream must be fully replaced.
     1), the matched `from` identity, and the event's stream position (sequence number or
     tracking token).
 
-  The framework MUST provide a mechanism to disable observability entirely. When disabled, no
-  startup or per-applied log entries are emitted by the chain at any level.
+  The framework MUST expose a generic pair of builder-level hooks (a before-apply predicate
+  and an after-apply observer) on the chain so users can plug in their own logging, metrics,
+  or instrumentation, and so chain logging itself can be silenced on hot paths without
+  per-event allocation. 
 
   Log message format is framework-internal, the listed fields MUST be present so log-scraping
-  remains reliable across releases. No public API changes beyond the disable mechanism.
+  remains reliable across releases.
   _Traces to: US7._
 - **FR-014 (Position advances past drops)**: When a transformation drops an event, the tracking
   token MUST still advance. A restarting streaming processor MUST NOT reprocess dropped events.
