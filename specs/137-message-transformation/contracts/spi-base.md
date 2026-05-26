@@ -18,6 +18,9 @@ import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.jspecify.annotations.NullMarked;
 
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
+
 /**
  * Base SPI for message transformations. The element type {@code M} is preserved -- a
  * transformer does not turn a command into an event. Per element it MAY change the
@@ -28,6 +31,11 @@ import org.jspecify.annotations.NullMarked;
  * Most users do not implement this directly; use the typed factory
  * {@code EventTransformation} (plus {@code CommandTransformation} / {@code QueryTransformation}
  * in 5.3+).
+ * <p>
+ * Each transformer optionally carries a "when" predicate ({@link #when}) and an "onApplied"
+ * observer ({@link #onApplied}). Both apply uniformly to events, commands, and queries.
+ * Defaults: always apply / no-op, zero per-event allocation. Matches AF4
+ * {@code SingleEntryUpcaster.canUpcast} / {@code doUpcast} (FR-013).
  *
  * @param <M> the {@link Message} subtype this transformer accepts and emits
  * @author AxonIQ
@@ -44,6 +52,25 @@ public interface MessageTransformer<M extends Message> {
      * @return the transformed stream
      */
     MessageStream<M> transform(MessageStream<M> stream);
+
+    /**
+     * Return a new transformer that delegates to this one only when {@code condition} returns
+     * {@code true} for the input. Default behaviour: always apply.
+     *
+     * @param condition the predicate
+     * @return a wrapped transformer
+     */
+    default MessageTransformer<M> when(Predicate<M> condition) { /* ... */ }
+
+    /**
+     * Return a new transformer that fires {@code observer} after this one has produced its
+     * output stream. Useful for per-event logging / metrics on this specific transformation.
+     * Default behaviour: no-op.
+     *
+     * @param observer the post-apply callback
+     * @return a wrapped transformer
+     */
+    default MessageTransformer<M> onApplied(BiConsumer<M, MessageStream<? extends M>> observer) { /* ... */ }
 }
 ```
 
@@ -266,6 +293,6 @@ public final class SemverComparator implements VersionComparator {
 
 ## Per-transformer hooks (`when`, `onApplied`)
 
-Hooks live on each individual transformer, not on the chain Builder. The user attaches them via the fluent factory (`.when(...)` / `.onApplied(...)`) when registering a transformation. This matches the AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent and keeps logging/metrics scoped to the transformation that owns them. Concrete API + usage examples live in [public-api.md](public-api.md); concrete default methods on the event-specific specialization live in [spi-events.md](spi-events.md).
+Hooks live on each individual transformer, not on the chain Builder. Default methods on the base `MessageTransformer<M>` shown above, so events, commands, and queries all get them uniformly. Subtypes (`EventTransformer`, `CommandTransformer`, `QueryTransformer`) override with covariant return types so the fluent API stays typed (`.when(...)` on an `EventTransformer` returns an `EventTransformer`). User attaches them via the typed factory (`.when(...)` / `.onApplied(...)`) when registering a transformation. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` and keeps logging/metrics scoped to the transformation that owns them. Usage examples in [public-api.md](public-api.md).
 
 **Cross-references**: FR-013, US7.

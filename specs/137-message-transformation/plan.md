@@ -17,7 +17,7 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 **5.2.0 minimum (issue AxonIQ/axoniq-framework#137)** -- delivers what is necessary for a user to configure a 1:1 event transformer:
 
 - **MUST**: US1 (1:1 structural transform), FR-001, FR-004 (programmatic registration + lifecycle), the supporting envelope/payload-access/legacy-version invariants (FR-005, FR-010, FR-011, FR-012, FR-016, FR-017, FR-018, FR-021).
-- **SHOULD if it fits**: US2 (rename), FR-002; US7 per-transformer hooks (`.when(...)` + `.onApplied(...)` on `EventTransformer` + chain-build DEBUG entry, FR-013).
+- **SHOULD if it fits**: US2 (rename), FR-002; US7 per-transformer hooks (`.when(...)` + `.onApplied(...)` on the base `MessageTransformer<M>`, so events / commands / queries all inherit them + chain-build DEBUG entry, FR-013).
 - **NICE-TO-HAVE for 5.2.0, else 5.3.0**: US3 (split), US4 (drop), US5 (chaining), US6 (conflict / runtime-failure feedback); FRs FR-003, FR-007, FR-008, FR-014, FR-015, FR-020. (US7 ships in SHOULD; an optional reference logging hook may follow.)
 
 **5.3+ candidates** (explicit, not part of this issue):
@@ -112,7 +112,8 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |              (the command/query sub-packages decorate CommandBus/QueryBus from axon-framework,
 |              so no axoniq-distributed-messaging dependency is needed)
 |-- src/main/java/io/axoniq/framework/messaging/transformation/
-|     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message>
+|     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message>;
+|     |                                         # default .when(Predicate<M>) / .onApplied(BiConsumer<M, ...>) (FR-013)
 |     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004)
 |     |-- ChainConfigurationException.java      # thrown by Builder on FR-008 conflicts + FR-018 + FR-004 lock
 |     |-- VersionComparator.java                # optional (FR-020) -- deferred, lands with US5
@@ -120,7 +121,7 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |     |
 |     |-- events/                               # 5.2.0
 |     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>;
-|     |     |                                   # default .when(Predicate) / .onApplied(BiConsumer) hooks (FR-013)
+|     |     |                                   # covariant .when / .onApplied overrides for fluent typing
 |     |     |
 |     |     |-- EventTransformation.java        # factory: from(...).to(...).transform(...) (FR-001, MUST),
 |     |     |                                   # rename(...) (FR-002, SHOULD), split(...).transform(...)
@@ -220,7 +221,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 ### 5.2.0 -- SHOULD (deliver if it fits in the window)
 
 - **US2 (rename)**, **FR-002** -- pure rename without a payload mapper. Thin add-on to the existing factory.
-- **US7 (observability)**, **FR-013** -- `.when(Predicate<EventMessage>)` (skip-if-false) and `.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)` (post-apply observer) as default methods on `EventTransformer`, attached at registration time; plus the chain-build DEBUG entry. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent.
+- **US7 (observability)**, **FR-013** -- `.when(Predicate<M>)` (skip-if-false) and `.onApplied(BiConsumer<M, MessageStream<? extends M>>)` (post-apply observer) as default methods on the base `MessageTransformer<M>`, attached at registration time. Events, commands, and queries inherit them via covariant overrides. Plus the chain-build DEBUG entry. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent.
 
 ### 5.2.0 -- MAY (nice-to-have for 5.2.0, else slip to 5.3.0)
 
@@ -249,7 +250,7 @@ The 5.2.0 deliverable is a thin slice of the full design. Everything held to SHO
 6. **Snapshot pass-through is automatic**. Snapshots flow inline through the same event stream; FR-005 pass-through on unknown `MessageType`s covers them, so adding a snapshot API later needs no wiring change. _Protects: deferred snapshot transformation._
 7. **No annotation-discovery hooks**. The 5.2.0 surface ships no `@Transform`-style annotation, keeping the future annotation mechanism's design space unconstrained. _Protects: Part C annotation-based registration._
 8. **Conflict-detection call sites reserved**. The builder validates at both registration time (per-entry checks) and lock time (cross-entry checks); 5.2.0 may register no checks but the call sites MUST exist. _Protects: US6/FR-008/FR-020 (duplicate, self-loop, cycle, version-order detection)._
-9. **Per-transformer hooks shipped from 5.2.0**. Each `EventTransformer` exposes `.when(Predicate<EventMessage>)` (skip if `false`) and `.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)` (post-apply observer) as default methods returning wrapping transformers. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent. Both default to "always" / no-op with zero per-event allocation. No chain-wide hooks on the Builder; no generic framework-owned name like `Observability`. _Delivers: US7/FR-013._
+9. **Per-transformer hooks shipped from 5.2.0**. Default methods on the base `MessageTransformer<M>` SPI: `.when(Predicate<M>)` (skip if `false`) and `.onApplied(BiConsumer<M, MessageStream<? extends M>>)` (post-apply observer). Apply uniformly to events, commands, and queries via covariant overrides on each specialization. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast`. Defaults: "always" / no-op, zero per-event allocation. No chain-wide hooks on the Builder; no generic framework-owned name like `Observability`. _Delivers: US7/FR-013._
 
 ## Complexity Tracking
 
