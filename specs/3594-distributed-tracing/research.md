@@ -304,7 +304,7 @@ public final class AggregateIdentifierSpanAttributesProvider implements SpanAttr
 
 **Consequence — SPI shape**: the `SpanAttributesProvider` SPI single method is `Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context)`. Providers that do not need the context simply ignore it (e.g., `MessageIdSpanAttributesProvider` takes the id off the `Message` itself). The decision rejects the multi-method / default-fallback alternative — every implementation pays the cost of one `@Nullable` parameter; the SPI stays a single SAM and there is no ambiguity about which method the factory calls.
 
-**Consequence — `SpanFactory.create*Span` signatures**: the two message-aware factory methods gain a `@Nullable ProcessingContext` parameter so that decorators (which always have a `ProcessingContext` from the AF5 bus signatures) feed it through to providers. The non-message `createInternalSpan(operationName, subject)` keeps its existing shape — `subject` flows through `SpanAttributesProvider#provideForSubject(Object)`.
+**Consequence — `SpanFactory.create*Span` signatures**: the two message-aware factory methods gain a `@Nullable ProcessingContext` parameter so that decorators (which always have a `ProcessingContext` from the AF5 bus signatures) feed it through to providers. The non-message `createInternalSpan(operationName)` stays as-is — decorators (e.g., `TracingSnapshotter`, `TracingRepository`) attach their own attributes via `Span#addAttribute(key, value)` from local method parameters; the existing `AggregateIdentifierSpanAttributesProvider` picks up `LegacyResources` data from the `ProcessingContext` when one is active. There is no `provideForSubject(Object)` SPI method and no `createInternalSpan(String, Object)` overload — see §5 below.
 
 **Consequence — behavior on DCB / entity operations**: the `axoniq.aggregate.identifier` attribute is intentionally absent on traces produced inside DCB / entity-based event streams (`LegacyResources.AGGREGATE_IDENTIFIER_KEY` is simply not populated by the storage engines for those streams). Trace consumers MUST treat the attribute as optional. Edge case captured in `spec.md` "DCB / entity-based operation" bullet.
 
@@ -347,16 +347,40 @@ Span handleSpan = spanFactory.createHandlerSpan(SpanNames.CMD_HANDLE, command);
 
 ## 5. SpanFactory Coverage of Non-Message Operations
 
-A handful of operations (snapshot creation, repository load/save) are not `Message`s but still need spans. AF4 modelled this by giving each per-component factory bespoke methods like `createSaveAggregateSpan(Aggregate)`, etc.
+A handful of operations (snapshot creation, repository load / save) are not `Message`s but still need spans. AF4 modelled this with bespoke per-component factory methods like `SnapshotterSpanFactory.createSnapshotSpan(aggregateType, aggregateIdentifier)` and `RepositorySpanFactory.createLoadAggregateSpan(...)` — typed parameters, dedicated methods per operation.
 
-**Decision**: The consolidated `SpanFactory` exposes **two** generic builders for the non-message case:
+**Decision**: The consolidated `SpanFactory` exposes **one** non-message builder:
 
-1. `Span createInternalSpan(String name)` — for purely internal operations with no associated message.
-2. `Span createInternalSpan(String name, Object subject)` — same, but the `subject` (an aggregate id, an entity descriptor) is passed through to every `SpanAttributesProvider` so attribute keys remain pluggable.
+```java
+Span createInternalSpan(String operationName);
+```
 
-The four built-in providers (aggregate id, message id, message name, payload type) inspect the `subject` reflectively (one short `instanceof` switch on the known internal subject types) so we don't need a parallel `SpanAttributesProvider` hierarchy.
+Decorators handling non-message operations own the attribute attachment locally. Example — `TracingSnapshotter`:
 
-**Rationale**: Two generic methods replace ~12 bespoke per-component span-creation methods from AF4 without losing fidelity. The internal `SpanNames` table fixes the name strings so the observable trace shape stays equivalent to AF4 (SC-003a).
+```java
+@Override
+public CompletableFuture<Void> scheduleSnapshot(String entityType, Object identifier) {
+    Span span = spanFactory.createInternalSpan(SpanNames.SNAPSHOT_CREATE + " " + entityType);
+    span.addAttribute("axoniq.entity.type", entityType);
+    span.addAttribute("axoniq.aggregate.identifier", String.valueOf(identifier));
+    return span.runSupplierAsync(() -> delegate.scheduleSnapshot(entityType, identifier));
+}
+```
+
+When the operation runs inside an active `ProcessingContext` (typical during event sourcing replay), the standard providers — in particular `AggregateIdentifierSpanAttributesProvider` reading `LegacyResources.AGGREGATE_IDENTIFIER_KEY` per §3.2 — contribute their attributes automatically through the message/context path. The decorator's local `addAttribute(...)` calls handle the no-context case.
+
+**Rationale**:
+- AF4 didn't have a generic `Object subject` parameter either — its per-component factories had typed methods. A single-typed-parameter `Object` is a worse abstraction than AF4's bespoke methods, not a better one.
+- Every decorator that opens a non-message span already has the relevant typed data as its own method parameters — there is no point routing it through `Object` and an `instanceof` switch on the provider side.
+- The simplification fits Constitution §I (Simplicity First) and §II (Minimal Impact — "three similar lines beats a premature abstraction").
+- The `SpanNames` table still fixes the name strings, so the observable trace shape stays equivalent to AF4 (SC-003a).
+
+**Snapshot is not a `Message` in AF5** — confirmed and accommodated. Snapshot creation runs against an entity stream identified by `tagKey` + tag value; there is no inbound `Message` to feed a provider. `TracingSnapshotter` opens the span via `createInternalSpan(...)` and attaches `axoniq.entity.type` / `axoniq.aggregate.identifier` directly from its decorator parameters. No new SPI method is required for this; AF4's `provideForSubject`-style hook would also have been unnecessary.
+
+**Alternatives considered**:
+- **Keep `Span createInternalSpan(String, Object subject)` + `SpanAttributesProvider#provideForSubject(Object)`** — rejected (this clarification). Premature abstraction with no concrete callers in this feature; `Object`-typed parameter forces every provider to `instanceof`-switch; AF4 did not have it.
+- **Re-introduce per-component span factories (`SnapshotterSpanFactory`, `RepositorySpanFactory`)** — explicitly forbidden by FR-016 and the consolidation goal of Story 4.
+- **Pass typed records (e.g., `SnapshotSubject(String type, Object id)`)** — rejected; same `instanceof` ergonomics under a different name, and still no concrete need.
 
 ---
 

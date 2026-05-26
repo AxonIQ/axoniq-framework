@@ -43,15 +43,14 @@ public interface SpanFactory {
     /** Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message}. */
     Span createHandlerSpan(String operationName, Message<?> message, @Nullable ProcessingContext context);
 
-    /** Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}. */
-    Span createInternalSpan(String operationName);
-
     /**
-     * Creates a {@link Span} for an internal operation that is parameterised by a domain {@code subject}
-     * (e.g., aggregate identifier, entity descriptor). The {@code subject} is forwarded to every registered
-     * {@link SpanAttributesProvider} (via {@link SpanAttributesProvider#provideForSubject(Object)}).
+     * Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}.
+     * Non-Message attributes (e.g., entity type / identifier for snapshot or repository operations) are
+     * attached by the calling decorator via {@link Span#addAttribute(String, String)} directly from local
+     * parameters, or contributed by the standard {@link SpanAttributesProvider}s when the operation runs
+     * inside a {@link ProcessingContext} that carries {@code LegacyResources} resources.
      */
-    Span createInternalSpan(String operationName, Object subject);
+    Span createInternalSpan(String operationName);
 
     /**
      * Propagates the active tracing context (if any) onto the given {@link Message}'s metadata, returning
@@ -142,10 +141,6 @@ package io.axoniq.framework.tracing;
 public interface SpanAttributesProvider {
 
     Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context);
-
-    default Map<String, String> provideForSubject(Object subject) {
-        return Map.of();
-    }
 }
 ```
 
