@@ -450,5 +450,6 @@ Rule of thumb: **`SpanAttributesProvider` fires when the decorator has a `Messag
 - Public API contract: [contracts/public-api.md](./contracts/public-api.md)
 - Design rationale, AF4→AF5 mapping, `ProcessingContextSpanBinding`, propagation, aggregate-id sourcing, non-Message-span design: [research.md](./research.md)
 - Streaming-batch span design — AF4 vs Option C coverage, rejected alternatives (`TracingEventProcessor`, upstream `BatchInterceptor`, `UnitOfWorkFactory` decoration, drop-batch-span), implicit `Segment.RESOURCE_KEY` contract: [research-batch-tracing.md](./research-batch-tracing.md)
+- Exhaustive AF4 SpanFactory ↔ AF5 decorator mapping — 9 families × 44 methods, every AF4 production caller, cross-check against AF4 reference guide span names, implementation reference for each `Tracing*` decorator: [af4-span-inventory.md](./af4-span-inventory.md)
 - Quickstart for users: [quickstart.md](./quickstart.md)
 - Spec including all clarifications: [spec.md](./spec.md)

@@ -83,10 +83,12 @@ specs/3594-distributed-tracing/
 ├── spec.md                                  # Existing — feature specification
 ├── plan.md                                  # This file
 ├── research.md                              # Phase 0 — AF4→AF5 concern mapping, decoration design, ProcessingContext lifecycle binding, propagation
+├── research-batch-tracing.md                # Phase 0 supplement — batch-tracing design (Option C), AF4 hierarchy, rejected alternatives, subscribing-processor parity
+├── af4-span-inventory.md                    # Phase 0 supplement — exhaustive AF4 SpanFactory ↔ AF5 decorator mapping (44 methods across 9 families), implementation reference
 ├── contracts/
 │   └── public-api.md                        # Phase 1 — Public API of axoniq-tracing-core + axoniq-tracing-opentelemetry + autoconfig
 ├── quickstart.md                            # Phase 1 — Spring Boot + plain Java getting-started
-├── flows.md                                 # Phase 1 — Worked sequence diagrams (mermaid) for command / async event / snapshot flows + "when does SpanAttributesProvider fire?" cheat sheet
+├── flows.md                                 # Phase 1 — Worked sequence diagrams (mermaid) for command / async event / snapshot / streaming-batch flows + "when does SpanAttributesProvider fire?" cheat sheet
 └── tasks.md                                 # Phase 2 — /speckit-tasks output (NOT created by this command)
 ```
 
@@ -207,7 +209,7 @@ The phases below are the structural backbone the task generator will follow. The
 
 1. **P1 — Foundations**: parent POM updates, the two new Maven modules' scaffolding (`pom.xml`, `package-info.java` with `@NullMarked`, root aggregator wiring, BOM entries). No production code yet — this lands the empty modules so the build is green before any classes arrive.
 2. **P2 — Core abstractions**: `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider`, `NoOpSpanFactory`, `MultiSpanFactory`, `LoggingSpanFactory`, and the six built-in attribute providers under `attributes/`. Unit tests with `TestSpanFactory` ported from AF4.
-3. **P3 — Per-component decorators + `TracingConfigurationEnhancer`** (Story 4 consolidation): all `internal/Tracing*.java` decorators, the `SpanNames` constants table, the `ProcessingContextSpanBinding` helper, and `TracingConfigurationEnhancer` registering them all via `DecoratorDefinition`. Per-decorator unit tests, plus a public-API surface test that fails if anyone introduces a `*BusSpanFactory` interface (SC-003).
+3. **P3 — Per-component decorators + `TracingConfigurationEnhancer`** (Story 4 consolidation): all `internal/Tracing*.java` decorators, the `SpanNames` constants table, the `ProcessingContextSpanBinding` helper, and `TracingConfigurationEnhancer` registering them all via `DecoratorDefinition`. Per-decorator unit tests, plus a public-API surface test that fails if anyone introduces a `*BusSpanFactory` interface (SC-003). Each decorator's span name + kind + attribute set MUST match the corresponding row in [`af4-span-inventory.md`](./af4-span-inventory.md) §1 (the exhaustive AF4 → AF5 mapping audit); the multi-span patterns (`EventBus` publish+commit, `QueryUpdateEmitter` schedule+emit, `Snapshotter` schedule+create, `Repository` load+lock+initializeState, `EventProcessor` batch+process) MUST be reproduced explicitly. A defensive `AF4SpanShapeParityIntegrationTest` SHOULD assert span name + kind for every row in inventory §2 (the AF4 reference-guide cross-check) so Story 4 acceptance criterion 3 is verifiable rather than aspirational.
 4. **P4 — OpenTelemetry module**: `OpenTelemetrySpanFactory`, `OpenTelemetrySpan`, `MetadataContextSetter`, `MetadataContextGetter`. Tests cover the text-map round-trip on `MetaData` and the propagation invariants.
 5. **P5 — Spring Boot autoconfig**: `TracingProperties`, `TracingAutoConfiguration`, `OpenTelemetryTracingAutoConfiguration`, `AutoConfiguration.imports` entries. Integration-style Boot test (`@SpringBootTest`) that asserts a default Boot context registers tracing decorators and that `axon.tracing.enabled=false` disables them.
 6. **P6 — End-to-end + propagation integration tests**: `TracingEndToEndIntegrationTest` (command → event → query through an OpenTelemetry SDK with `InMemorySpanExporter`, asserting the span tree shape) and `TracingPropagationIntegrationTest` (round-trip trace context through message metadata). Equivalence assertion against an AF4 reference-shape (SC-003a).

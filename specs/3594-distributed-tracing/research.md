@@ -10,7 +10,7 @@ This file resolves every `NEEDS CLARIFICATION` carried into planning and records
 
 ## 1. AF4 → AF5 Concern Mapping
 
-The single most important design move is the collapse of AF4's nine per-component span-factory interfaces into one public `SpanFactory` plus private per-component **decorators**. The table below is the authoritative mapping the port works against.
+The single most important design move is the collapse of AF4's nine per-component span-factory interfaces into one public `SpanFactory` plus private per-component **decorators**. The table below is the **one-row-per-concern summary**; the **exhaustive method-by-method audit** (44 AF4 factory methods × every AF4 production caller × AF5 decorator mapping × cross-check against AF4 reference guide) lives in [`af4-span-inventory.md`](./af4-span-inventory.md) and is the authoritative artifact for Story 4 acceptance criterion 3 ("the consolidation does not regress the observable trace shape").
 
 | Concern (what is being traced) | AF4 — per-component factory + consumer | AF5 — what replaces it in AxoniqFramework |
 |---|---|---|
