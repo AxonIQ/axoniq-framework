@@ -49,6 +49,7 @@ Full end-to-end example covering events + commands + queries is shown below.
 - Registration order = chain application order (FR-004).
 - Version ranges expressed via `from(Predicate<MessageType>)` (FR-005, FR-020).
 - Conflict classes from FR-008 (duplicate concrete `from`, self-loop, multi-step cycle on concrete edges) are detected before any event is processed. A defensive runtime safety bound guards against infinite loops from pathological misconfiguration; under normal use it never fires.
+- **The chain is a passive registry.** It does NOT hold a `MessageConverter` reference and does NOT perform conversion. The framework's `EventTransformationConfigurationEnhancer` resolves the registered `MessageConverter` from the {@code Configuration} at decorator-registration time and passes it into the `TransformingEventStore` constructor (pattern mirrored from `AnnotatedEventSourcedEntityModule` and `EventSourcingConfigurationDefaults`). Users therefore never need to thread a converter through the builder.
 
 ---
 
@@ -113,26 +114,56 @@ public final class EventTransformation {
     public static final class SingleEventTransformationWithTargetBuilder {
 
         /**
-         * Supply the payload mapping behaviour. The framework converts the stored payload to
-         * {@code inputType} (e.g. {@code JsonNode}, a POJO) before invoking the mapper; the
-         * returned value's runtime type drives conversion back for downstream consumers.
-         * Input and output Java types MAY differ. The framework verifies that the output's
-         * resolved {@link MessageType} matches the declared {@code to}; a mismatch raises a
-         * runtime error.
+         * Supply the payload mapping behaviour. The framework invokes
+         * {@code MessageConverter.convertPayload(message, inputType)} on the inner event message
+         * to obtain a value of {@code inputType} (e.g. {@code JsonNode}, a POJO) before invoking
+         * the mapper. The mapper's return value becomes the new payload of the rewritten
+         * {@code EventMessage}; downstream handlers convert that payload to their own preferred
+         * Java type via their own {@code MessageConverter} call -- the transformation chain
+         * itself does NOT convert "back". Input and output Java types MAY differ.
          * <p>
-         * The mapper also receives the active {@link ProcessingContext}. It MAY be {@code null}
-         * (e.g. on tracking-processor reads outside a transaction); null-check before calling
-         * {@code .get*(...)} on it. Most transformations do not need the context and can
-         * safely ignore it.
+         * The framework verifies that the output payload's resolved {@link MessageType} matches
+         * the declared {@code to} when resolution is possible (typed POJO with {@code @Event} /
+         * {@code @Message} annotation -- {@code MessageTypeResolver.resolve(Class<?>)} returns
+         * a non-empty {@code Optional}). For untyped representations ({@code JsonNode},
+         * {@code Map<String, Object>}, raw bytes) the resolver returns {@code Optional.empty()}
+         * and the framework trusts the mapper to produce the correct {@code to} identity --
+         * see FR-018.
+         * <p>
+         * The mapper also receives the active {@link ProcessingContext}. The entity-load read
+         * path always supplies a non-null context; the tracking-processor read path
+         * ({@code EventStore.open(StreamingCondition, @Nullable ProcessingContext)}) MAY supply
+         * {@code null} if the caller passed {@code null}. Null-check before calling
+         * {@code .get*(...)} on it. Most transformations do not need the context.
          *
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the type the stored payload is converted to before invocation
-         * @param payloadMapper maps the input payload + (nullable) processing context to its
-         *                      transformed output
+         * @param payloadMapper maps the input payload + (possibly-null) processing context to
+         *                      its transformed output
          * @return the resulting {@link EventTransformer}
          */
         public <T, U> EventTransformer transform(Class<T> inputType,
+                                                  BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
+
+        /**
+         * Generic-type overload. Use this when {@code inputType} carries type parameters
+         * (e.g. {@code Map<String, Object>}, {@code List<Foo>}). Per
+         * {@code .claude/rules/type-safety.md} and mirroring
+         * {@code Configuration.getComponent(TypeReference)}, the factory accepts a
+         * {@link org.axonframework.common.TypeReference} so {@code T} is bound at compile
+         * time and the lambda parameter type is inferred. Behaviour is identical to the
+         * {@code Class<T>} overload; internally the factory calls
+         * {@code inputType.getType()} before handing to {@code MessageConverter.convertPayload}.
+         *
+         * @param <T>           input payload type
+         * @param <U>           output payload type
+         * @param inputType     the {@link org.axonframework.common.TypeReference} the stored
+         *                      payload is converted to
+         * @param payloadMapper maps the input payload + processing context to its transformed output
+         * @return the resulting {@link EventTransformer}
+         */
+        public <T, U> EventTransformer transform(org.axonframework.common.TypeReference<T> inputType,
                                                   BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 
@@ -165,8 +196,9 @@ public final class EventTransformation {
         /**
          * Supply the splitting behaviour. The mapper returns the replacement events in
          * declared order; each inherits the input event's tracking token and sequence number.
-         * Receives the active {@link ProcessingContext} ({@code null} when none).
-         * Returning an empty list works as a drop, but prefer
+         * Receives the active {@link ProcessingContext} -- non-null on the entity-load read
+         * path; possibly-null on the tracking-processor read path (see the 1:1 overload's
+         * Javadoc for details). Returning an empty list works as a drop, but prefer
          * {@link EventTransformation#drop(MessageType)} for that case -- it skips payload
          * conversion entirely.
          *
@@ -397,7 +429,9 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
     // US5 -- chaining across versions (FR-007, MAY in 5.2.0)
     //   Combined with US1's v1->v2 above, this v2->v3 hop completes a v1 -> v2 -> v3 chain.
     //   Also illustrates the from(Predicate) overload: match any 2.x version, not just 2.0.0.
-    .register(EventTransformation.from(mt -> mt.qualifiedName().equals("com.example.CourseCreated")
+    //   Note: MessageType.qualifiedName() returns a QualifiedName record (NOT a String);
+    //         use .name() (or .toString()) to compare to the fully-qualified name string.
+    .register(EventTransformation.from(mt -> mt.qualifiedName().name().equals("com.example.CourseCreated")
                                               && mt.version().startsWith("2."))
                                  .to  (new MessageType("com.example.CourseCreated", "3.0.0"))
                                  .transform(JsonNode.class, (v2, ctx) -> {
