@@ -114,8 +114,12 @@ import org.jspecify.annotations.Nullable;
 @Internal
 public final class TransformingEventStore implements EventStore {
 
-    /** Decoration order: outer (later) than {@code InterceptingEventStore}. */
-    public static final int DECORATION_ORDER = Integer.MIN_VALUE + 100;
+    /**
+     * Decoration order: outer (later) than {@code InterceptingEventStore} (which uses
+     * {@code MIN_VALUE + 50}). The {@code +1000} offset leaves headroom for users or
+     * framework to slot other decorators in between.
+     */
+    public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     /**
      * @param delegate the inner {@link EventStore} to wrap
