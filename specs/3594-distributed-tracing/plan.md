@@ -207,6 +207,29 @@ integrationtests/src/test/java/io/axoniq/framework/tracing/
 
 The phases below are the structural backbone the task generator will follow. They map 1:1 to the User Stories in `spec.md`.
 
+### Mandatory workflow: test-driven development (FR-022a)
+
+**Before writing any production code in any phase below, the implementer MUST invoke the `test-driven-development` skill** and follow its red-green-refactor cycle. This is non-negotiable for this feature (see `spec.md` FR-022a):
+
+1. **Invoke the `test-driven-development` skill** at the start of each task that produces production code.
+2. **Translate the AF4 equivalent test first**, if one exists. Locate the matching test under `/Users/mateusznowak/GitRepos/AxonFramework/AxonFramework4/messaging/src/test/java/org/axonframework/...` (e.g., `DefaultCommandBusSpanFactoryTest`, `DefaultEventBusSpanFactoryTest`, `DefaultEventProcessorSpanFactoryTest`, `DefaultQueryBusSpanFactoryTest`, `DefaultRepositorySpanFactoryTest`, `DefaultSnapshotterSpanFactoryTest`, `TracingHandlerEnhancerDefinitionTest`, `MultiSpanFactoryTest`, etc.) and start by porting it to the AF5 API surface. **Translation is not transcription** — improve the AF4 test where it asserts on implementation details rather than behaviour (CLAUDE.md Test Guidelines forbid implementation-detail testing), drop dead assertions, and modernise to AssertJ + JUnit 5 `@Nested`.
+3. **Prefer stub / recording implementations over Mockito mocks** where a stub produces a cleaner test. CLAUDE.md already mandates this ("avoid Mock whenever possible, try to use simplest implementation"); the AF4 codebase has a `TestSpanFactory` recording double that the new modules SHOULD port and extend rather than mocking `SpanFactory` ad-hoc.
+4. Write the failing test first; run it; confirm it fails for the expected reason.
+5. Write the minimum production code to make it pass.
+6. Refactor with the test as a safety net.
+7. **Run the `simplify` skill (or an equivalent code-simplifier agent) on the resulting test code** to ensure clarity and consistency before considering the task complete. This is mandatory, not optional — the test is the primary artefact reviewers consult to understand intended behaviour, so its readability matters as much as the production code's.
+8. Repeat for the next behaviour.
+
+**No production code without a failing test that justifies it.** This applies to phases P2 through P8. Exemptions: P1 (module scaffolding ships no behaviour) and P9 (deletion-only phase in upstream AxonFramework 5).
+
+**If writing a test is genuinely difficult** — e.g., no AF4 equivalent exists, the natural AF5 assertion would test implementation details rather than behaviour (forbidden by CLAUDE.md Test Guidelines), a recording double doesn't yet exist for a needed collaborator and isn't trivially constructable, or the OpenTelemetry SDK's `InMemorySpanExporter` doesn't expose what you need to assert on — **stop and ask the user**. Do not mock around it, do not skip the test, do not ship untested code. Examples of legitimate questions to surface to the user:
+- "AF4 has no test for `<Tracing*>` covering `<behaviour>`; how should I assert it?"
+- "What's the recording double for `<X>` in this project, or should I create one (and what should it record)?"
+- "The natural assertion couples to `<implementation detail>`; how should I assert this behaviourally?"
+- "OpenTelemetry's `InMemorySpanExporter` reports `<X>`; can I assert on that, or is there a different convention?"
+
+Compliance with this workflow is a precondition for marking any P2–P8 task complete in `tasks.md`.
+
 1. **P1 — Foundations**: parent POM updates, the two new Maven modules' scaffolding (`pom.xml`, `package-info.java` with `@NullMarked`, root aggregator wiring, BOM entries). No production code yet — this lands the empty modules so the build is green before any classes arrive.
 2. **P2 — Core abstractions**: `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider`, `NoOpSpanFactory`, `MultiSpanFactory`, `LoggingSpanFactory`, and the six built-in attribute providers under `attributes/`. Unit tests with `TestSpanFactory` ported from AF4.
 3. **P3 — Per-component decorators + `TracingConfigurationEnhancer`** (Story 4 consolidation): all `internal/Tracing*.java` decorators, the `SpanNames` constants table, the `ProcessingContextSpanBinding` helper, and `TracingConfigurationEnhancer` registering them all via `DecoratorDefinition`. Per-decorator unit tests, plus a public-API surface test that fails if anyone introduces a `*BusSpanFactory` interface (SC-003). Each decorator's span name + kind + attribute set MUST match the corresponding row in [`af4-span-inventory.md`](./af4-span-inventory.md) §1 (the exhaustive AF4 → AF5 mapping audit); the multi-span patterns (`EventBus` publish+commit, `QueryUpdateEmitter` schedule+emit, `Snapshotter` schedule+create, `Repository` load+lock+initializeState, `EventProcessor` batch+process) MUST be reproduced explicitly. A defensive `AF4SpanShapeParityIntegrationTest` SHOULD assert span name + kind for every row in inventory §2 (the AF4 reference-guide cross-check) so Story 4 acceptance criterion 3 is verifiable rather than aspirational.
