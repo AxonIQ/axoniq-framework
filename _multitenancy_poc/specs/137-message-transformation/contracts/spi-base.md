@@ -86,7 +86,7 @@ public final class MessageTransformerChain {
 
     /**
      * Apply the chain to the given stream. Each input element is processed by fixed-point
-     * iteration: walk the registrations in order, first match wins, restart on each match,
+     * iteration: walk the registrations in order, last match wins, restart on each match,
      * terminate when nothing matches. Non-matching elements pass through unchanged in
      * constant time (O(1) for concrete-{@code from}; O(P) when predicate-based {@code from}
      * transformations are registered).
@@ -135,7 +135,7 @@ public final class MessageTransformerChain {
 
 **Contract**:
 - **Startup-only registration** (FR-004). Late `register(...)` after `.build()` throws.
-- **Fixed-point iteration** (FR-007): for each input message, walk the registrations in registration order; first match wins; on match, restart from the top with the output (1:1) or recurse per output (1:N); terminate when nothing matches (or on drop). Subsumes both same-name version chains and cross-name renames.
+- **Fixed-point iteration** (FR-007): for each input message, walk the registrations in registration order; **the last match wins** (later registrations override earlier overlapping ones); on match, restart from the top with the output (1:1) or recurse per output (1:N); terminate when nothing matches (or on drop). Subsumes both same-name version chains and cross-name renames.
 - **Hybrid lookup** (FR-011): transformations whose `from` is a concrete `MessageType` live in a `QualifiedName`-keyed map for O(1) non-matching lookup; transformations whose `from` is a `Predicate<MessageType>` live in a separate flat list, scanned linearly. Snapshots flow through unchanged (FR-005, no entries match).
 - **Dispatch by message subtype `M`**: events flow only through `MessageTransformer<EventMessage>` entries, commands only through `MessageTransformer<CommandMessage>`, queries only through `MessageTransformer<QueryMessage>`.
 - **Conflict detection** (FR-008): duplicate concrete `from` (registration time), self-loop (registration time), multi-step cycle on the concrete-`from -> to` graph (lock time). A defensive runtime safety bound guards against pathological infinite loops; under normal use it never fires.
