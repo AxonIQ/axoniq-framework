@@ -9,7 +9,7 @@ Shared SPI base for events (5.2.0) and -- when delivered -- commands and queries
 
 ## `MessageTransformer<M extends Message>`
 
-Generic SPI base. Stream-in / stream-out: one transformer rewrites a `MessageStream<M>` into a new `MessageStream<M>` of the same `Message` subtype (`M` is preserved across the call).
+Generic SPI base. Single-message input, stream output: each transformer emits zero elements (drop), one (1:1), or N (1:N split) for one matched input message. `M` is preserved across the call -- a transformer does not turn a command into an event. The chain (see `MessageTransformerChain` below) composes many transformers into a stream-in / stream-out pipeline; this per-transformer SPI is intentionally the simpler shape so user code stays a plain `BiFunction`-equivalent that returns a `MessageStream`.
 
 ```java
 package io.axoniq.framework.messaging.transformation;
@@ -35,6 +35,7 @@ import org.jspecify.annotations.Nullable;
  * @author AxonIQ
  * @since 5.2.0
  */
+@FunctionalInterface
 @NullMarked
 public interface MessageTransformer<M extends Message> {
 

@@ -535,6 +535,32 @@ receiver-side transformation alone.
 
 ---
 
+#### Query response transformation `[Deferred]`
+
+**Scenario**: a query handler at version v2 returns a response in the v2 shape, but an older
+caller at v1 expects the v1 shape. The response needs to be transformed v2 -> v1 on its way
+back to the caller.
+
+**Why this fits the receiver-side, read-time pattern (not sender-side downcasting)**: from the
+caller's perspective the response is something it *reads* from the QueryBus. Transforming it
+on read mirrors how events are transformed on read in 5.2.0. It is therefore architecturally
+aligned with US8 / US9 and with `MessageTransformer<M extends Message>` -- a future
+`QueryResponseTransformer extends MessageTransformer<QueryResponseMessage>` slots into the
+existing chain with no SPI change (`QueryResponseMessage extends ResultMessage extends
+Message`).
+
+**Why deferred for 5.2.0 AND 5.3+ first cut**: US8 / US9 cover the *request* side of commands
+and queries (5.3+); the response side is held to a later release to keep the first cut focused.
+Wiring would attach to `TransformingQueryBus.query(...)` and pipe the returned
+`MessageStream<QueryResponseMessage>` through a parallel chain lookup. SPI details are in
+[contracts/spi-commands-queries.md](contracts/spi-commands-queries.md) ("Query response
+transformation (deferred)").
+
+**When to revisit**: alongside US9 delivery, or once concrete query-versioning cases surface
+where receiver-side response transformation is the cleanest solution.
+
+---
+
 #### Snapshot Transformation `[Deferred]`
 
 **Use case**: a 1:1 `Snapshot -> Snapshot` transformer would let the framework apply a
