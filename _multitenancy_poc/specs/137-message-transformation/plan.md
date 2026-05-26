@@ -17,7 +17,7 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 **5.2.0 minimum (issue AxonIQ/axoniq-framework#137)** -- delivers what is necessary for a user to configure a 1:1 event transformer:
 
 - **MUST**: US1 (1:1 structural transform), FR-001, FR-004 (programmatic registration + lifecycle), the supporting envelope/payload-access/legacy-version invariants (FR-005, FR-010, FR-011, FR-012, FR-016, FR-017, FR-018, FR-021).
-- **SHOULD if it fits**: US2 (rename), FR-002; US7 chain hooks (`BeforeApply` + `AfterApply` on `Builder` + chain-build DEBUG entry, FR-013).
+- **SHOULD if it fits**: US2 (rename), FR-002; US7 per-transformer hooks (`.when(...)` + `.onApplied(...)` on `EventTransformer` + chain-build DEBUG entry, FR-013).
 - **NICE-TO-HAVE for 5.2.0, else 5.3.0**: US3 (split), US4 (drop), US5 (chaining), US6 (conflict / runtime-failure feedback); FRs FR-003, FR-007, FR-008, FR-014, FR-015, FR-020. (US7 ships in SHOULD; an optional reference logging hook may follow.)
 
 **5.3+ candidates** (explicit, not part of this issue):
@@ -113,14 +113,14 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |              so no axoniq-distributed-messaging dependency is needed)
 |-- src/main/java/io/axoniq/framework/messaging/transformation/
 |     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message>
-|     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004);
-|     |                                         # nested BeforeApply / AfterApply (FR-013)
+|     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004)
 |     |-- ChainConfigurationException.java      # thrown by Builder on FR-008 conflicts + FR-018 + FR-004 lock
 |     |-- VersionComparator.java                # optional (FR-020) -- deferred, lands with US5
 |     |-- SemverComparator.java                 # builder convenience -- deferred, lands with US5
 |     |
 |     |-- events/                               # 5.2.0
-|     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>
+|     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>;
+|     |     |                                   # default .when(Predicate) / .onApplied(BiConsumer) hooks (FR-013)
 |     |     |
 |     |     |-- EventTransformation.java        # factory: from(...).to(...).transform(...) (FR-001, MUST),
 |     |     |                                   # rename(...) (FR-002, SHOULD), split(...).transform(...)
@@ -220,7 +220,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 ### 5.2.0 -- SHOULD (deliver if it fits in the window)
 
 - **US2 (rename)**, **FR-002** -- pure rename without a payload mapper. Thin add-on to the existing factory.
-- **US7 (observability)**, **FR-013** -- `BeforeApply` + `AfterApply` nested interfaces on `MessageTransformerChain`, installed via `Builder.beforeApply(...)` / `Builder.afterApply(...)`, plus the chain-build DEBUG entry. Per-event tracing is the user's choice via `afterApply(...)`.
+- **US7 (observability)**, **FR-013** -- `.when(Predicate<EventMessage>)` (skip-if-false) and `.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)` (post-apply observer) as default methods on `EventTransformer`, attached at registration time; plus the chain-build DEBUG entry. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent.
 
 ### 5.2.0 -- MAY (nice-to-have for 5.2.0, else slip to 5.3.0)
 
@@ -249,7 +249,7 @@ The 5.2.0 deliverable is a thin slice of the full design. Everything held to SHO
 6. **Snapshot pass-through is automatic**. Snapshots flow inline through the same event stream; FR-005 pass-through on unknown `MessageType`s covers them, so adding a snapshot API later needs no wiring change. _Protects: deferred snapshot transformation._
 7. **No annotation-discovery hooks**. The 5.2.0 surface ships no `@Transform`-style annotation, keeping the future annotation mechanism's design space unconstrained. _Protects: Part C annotation-based registration._
 8. **Conflict-detection call sites reserved**. The builder validates at both registration time (per-entry checks) and lock time (cross-entry checks); 5.2.0 may register no checks but the call sites MUST exist. _Protects: US6/FR-008/FR-020 (duplicate, self-loop, cycle, version-order detection)._
-9. **Generic chain hooks shipped from 5.2.0**. `Builder.beforeApply(BeforeApply)` (return `false` to skip a matched transformer) and `Builder.afterApply(AfterApply)` (observer); nested functional interfaces on `MessageTransformerChain`. Fire only on matched transformers; non-matching path stays allocation-free. No generic framework-owned name like `Observability`. _Delivers: US7/FR-013._
+9. **Per-transformer hooks shipped from 5.2.0**. Each `EventTransformer` exposes `.when(Predicate<EventMessage>)` (skip if `false`) and `.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)` (post-apply observer) as default methods returning wrapping transformers. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent. Both default to "always" / no-op with zero per-event allocation. No chain-wide hooks on the Builder; no generic framework-owned name like `Observability`. _Delivers: US7/FR-013._
 
 ## Complexity Tracking
 

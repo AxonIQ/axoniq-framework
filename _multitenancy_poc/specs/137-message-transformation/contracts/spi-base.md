@@ -124,24 +124,6 @@ public final class MessageTransformerChain {
         public Builder versionOrder(VersionComparator ordering) { /* ... */ }
 
         /**
-         * Install a predicate that returns {@code false} to skip a matched transformer.
-         * Replaces any previous; default: always apply.
-         *
-         * @param hook the predicate
-         * @return this builder
-         */
-        public Builder beforeApply(BeforeApply hook) { /* ... */ }
-
-        /**
-         * Install an after-apply observer. Useful for logging / metrics. Replaces any previous;
-         * default: no-op (no per-event allocation).
-         *
-         * @param hook the observer
-         * @return this builder
-         */
-        public Builder afterApply(AfterApply hook) { /* ... */ }
-
-        /**
          * Lock the chain and return an immutable instance. Runs multi-step cycle detection
          * and -- if a {@link VersionComparator} was set -- the version-order check.
          *
@@ -149,45 +131,6 @@ public final class MessageTransformerChain {
          * @throws ChainConfigurationException on a multi-step cycle or version-order violation
          */
         public MessageTransformerChain build() { /* ... */ }
-    }
-
-    /**
-     * Predicate evaluated before a matched transformer is applied. Returning {@code false}
-     * skips the transformer for this input. Fires only on matched transformers; non-matching
-     * messages pass through in {@code O(1)} without firing.
-     *
-     * @author AxonIQ
-     * @since 5.2.0
-     */
-    @FunctionalInterface
-    public interface BeforeApply {
-
-        /**
-         * @param transformer the transformer about to be invoked
-         * @param input       the matched message
-         * @return {@code true} to apply, {@code false} to skip
-         */
-        boolean shouldApply(MessageTransformer<?> transformer, Message input);
-    }
-
-    /**
-     * Observer invoked after a transformer application. Output is zero, one, or more elements
-     * for drop / 1:1 / split respectively. Fires only on matched applications.
-     *
-     * @author AxonIQ
-     * @since 5.2.0
-     */
-    @FunctionalInterface
-    public interface AfterApply {
-
-        /**
-         * @param transformer the transformer that was invoked
-         * @param input       the message that was transformed
-         * @param output      the resulting output stream
-         */
-        void onApplied(MessageTransformer<?> transformer,
-                       Message input,
-                       MessageStream<? extends Message> output);
     }
 }
 ```
@@ -198,7 +141,7 @@ public final class MessageTransformerChain {
 - **Dispatch by message subtype `M`**: events flow only through `MessageTransformer<EventMessage>` entries, commands only through `MessageTransformer<CommandMessage>`, queries only through `MessageTransformer<QueryMessage>`.
 - **O(1) non-matching path** with no per-event allocation (FR-011, JMH-verified). Unknown `MessageType`s pass through (FR-005); this also makes snapshots automatically pass-through (Forward-compat invariant #6).
 - **Re-entry on `QualifiedName` change** (FR-007): an output whose `QualifiedName` differs from its input's re-enters routing at the OUTPUT's sub-chain. Covers 1:N splits AND 1:1 cross-name renames / structural transforms, e.g. `CourseOpened@1.0.0 -> CourseCreated@1.0.0 -> CourseCreated@2.0.0 -> CourseCreated@3.0.0`. Same-name 1:1 hops (pure version bumps) continue in the current sub-chain.
-- **Conflict detection (FR-008) and observability (FR-013)** call sites MUST exist from day one even when not implemented in 5.2.0 (Forward-compat invariants #8, #9).
+- **Conflict detection (FR-008) call sites** MUST exist from day one even when not implemented in 5.2.0 (Forward-compat invariant #8). Observability (FR-013) lives per-transformer, not on the Builder -- see "Per-transformer hooks" below.
 
 **Cross-references**: FR-004, FR-005, FR-007, FR-008, FR-011, FR-013, FR-020, US1, US5, US6, US7.
 
@@ -321,13 +264,8 @@ public final class SemverComparator implements VersionComparator {
 
 ---
 
-## Chain hooks (`BeforeApply`, `AfterApply`)
+## Per-transformer hooks (`when`, `onApplied`)
 
-Nested interfaces on `MessageTransformerChain`, installed via the Builder:
-
-- **`BeforeApply`** -- predicate. Returning {@code false} skips the matched transformer (e.g., feature flag). Default: always apply.
-- **`AfterApply`** -- observer called with `(transformer, input, output)`. Useful for logging / metrics. Default: no-op (zero per-event allocation).
-
-Hooks fire only on matched transformers; the non-matching path stays O(1) (FR-011 preserved). Logging is the user's job via `afterApply(...)`; the framework does not take generic names like `Observability`.
+Hooks live on each individual transformer, not on the chain Builder. The user attaches them via the fluent factory (`.when(...)` / `.onApplied(...)`) when registering a transformation. This matches the AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent and keeps logging/metrics scoped to the transformation that owns them. Concrete API + usage examples live in [public-api.md](public-api.md); concrete default methods on the event-specific specialization live in [spi-events.md](spi-events.md).
 
 **Cross-references**: FR-013, US7.
