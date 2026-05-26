@@ -17,16 +17,14 @@ package io.axoniq.framework.messaging.transformation.commandhandling;
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
-
-import java.util.function.BiConsumer;
-import java.util.function.Predicate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Command-specific {@link MessageTransformer}. 1:1 only -- split / drop do not apply to
- * commands. Use the {@code CommandTransformation} factory rather than implementing directly.
- * Per-transformer hooks ({@code .when} / {@code .onApplied}) are inherited from
- * {@link MessageTransformer}; covariant overrides below keep the fluent API typed.
+ * commands. Output is always a {@link MessageStream.Single}. Use the
+ * {@code CommandTransformation} factory rather than implementing directly.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -34,26 +32,8 @@ import java.util.function.Predicate;
 @NullMarked
 public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 
-    /**
-     * Single-entry convenience overload; commands arrive one at a time.
-     *
-     * @param stream a single-element command stream
-     * @return the transformed single-element stream
-     */
-    MessageStream.Single<CommandMessage> transform(MessageStream.Single<CommandMessage> stream);
-
-    /** Adapts the base SPI to the single-entry overload. */
     @Override
-    default MessageStream<CommandMessage> transform(MessageStream<CommandMessage> stream) {
-        return transform(stream.first());
-    }
-
-    @Override
-    default CommandTransformer when(Predicate<CommandMessage> condition) { /* ... */ }
-
-    @Override
-    default CommandTransformer onApplied(
-            BiConsumer<CommandMessage, MessageStream<? extends CommandMessage>> observer) { /* ... */ }
+    MessageStream.Single<? extends CommandMessage> transform(CommandMessage message, @Nullable ProcessingContext context);
 }
 ```
 
@@ -73,18 +53,16 @@ package io.axoniq.framework.messaging.transformation.queryhandling;
 
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.jspecify.annotations.NullMarked;
-
-import java.util.function.BiConsumer;
-import java.util.function.Predicate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Query-specific {@link MessageTransformer}. 1:1 only. Subscription-query update streams
- * flowing back to subscribers are NOT transformed -- only the incoming query is. Use the
- * {@code QueryTransformation} factory rather than implementing directly. Per-transformer
- * hooks ({@code .when} / {@code .onApplied}) are inherited from {@link MessageTransformer};
- * covariant overrides below keep the fluent API typed.
+ * flowing back to subscribers are NOT transformed -- only the incoming query is. Output is
+ * always a {@link MessageStream.Single}. Use the {@code QueryTransformation} factory rather
+ * than implementing directly.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -92,26 +70,8 @@ import java.util.function.Predicate;
 @NullMarked
 public interface QueryTransformer extends MessageTransformer<QueryMessage> {
 
-    /**
-     * Single-entry convenience overload; queries arrive one at a time.
-     *
-     * @param stream a single-element query stream
-     * @return the transformed single-element stream
-     */
-    MessageStream.Single<QueryMessage> transform(MessageStream.Single<QueryMessage> stream);
-
-    /** Adapts the base SPI to the single-entry overload. */
     @Override
-    default MessageStream<QueryMessage> transform(MessageStream<QueryMessage> stream) {
-        return transform(stream.first());
-    }
-
-    @Override
-    default QueryTransformer when(Predicate<QueryMessage> condition) { /* ... */ }
-
-    @Override
-    default QueryTransformer onApplied(
-            BiConsumer<QueryMessage, MessageStream<? extends QueryMessage>> observer) { /* ... */ }
+    MessageStream.Single<? extends QueryMessage> transform(QueryMessage message, @Nullable ProcessingContext context);
 }
 ```
 

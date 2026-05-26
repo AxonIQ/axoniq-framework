@@ -16,18 +16,16 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.NullMarked;
-
-import java.util.function.BiConsumer;
-import java.util.function.Predicate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Event-specific {@link MessageTransformer}. Use the {@code EventTransformation} factory
  * rather than implementing directly. The event envelope (entity type, entity identifier,
  * tracking token, sequence number) is preserved across transformation; snapshots flow
- * through unchanged. Per-transformer hooks ({@code .when} / {@code .onApplied}) are inherited
- * from {@link MessageTransformer}; the covariant overrides below keep the fluent API typed.
+ * through unchanged.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -36,14 +34,7 @@ import java.util.function.Predicate;
 public interface EventTransformer extends MessageTransformer<EventMessage> {
 
     @Override
-    MessageStream<EventMessage> transform(MessageStream<EventMessage> stream);
-
-    @Override
-    default EventTransformer when(Predicate<EventMessage> condition) { /* ... */ }
-
-    @Override
-    default EventTransformer onApplied(
-            BiConsumer<EventMessage, MessageStream<? extends EventMessage>> observer) { /* ... */ }
+    MessageStream<? extends EventMessage> transform(EventMessage message, @Nullable ProcessingContext context);
 }
 ```
 
