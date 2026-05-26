@@ -735,7 +735,7 @@ a last resort if the old stream must be fully replaced.
   framework-emitted log; per-event tracing is the user's job via the hooks below.
 
   The framework MUST expose on `MessageTransformerChain.Builder`:
-  - **`beforeApply(BeforeApply)`** -- veto predicate per matched transformer. Default: always apply.
+  - **`beforeApply(BeforeApply)`** -- predicate returning `false` to skip a matched transformer. Default: always apply.
   - **`afterApply(AfterApply)`** -- observer called with `(transformer, input, output)`. Default: no-op (zero per-event allocation).
 
   Hooks fire only on matched transformers; the non-matching path stays O(1) regardless of
