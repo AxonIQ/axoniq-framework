@@ -64,107 +64,46 @@ public class InPersonCourse extends CourseEntity {
 }
 ----
 
-Register with `EventSourcedEntityModule.declarative()`, providing a factory that creates the right concrete type:
+The polymorphism-specific piece is the `entityFactory`: an `EventSourcedEntityFactory.fromEventMessage` that inspects the first event and creates the right concrete type.
+Subtype-specific command handlers cast the entity parameter to that subtype.
+
+Refer to xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative configuration] for the surrounding registration boilerplate—`messagingModel((config, model) -> { ... })`, `criteriaResolver`, `entityIdResolver`, and the basic `creationalCommandHandler` / `instanceCommandHandler` / `entityEvolver` patterns.
+Only the polymorphism-specific snippets are shown below:
 
 [source,java]
 ----
-import org.axonframework.eventsourcing.EventSourcedEntityFactory;
-import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.axonframework.messaging.eventstreaming.Tag;
-import org.axonframework.modelling.annotation.AnnotationBasedEntityIdResolver;
-
-static void registerCourseEntity(EventSourcingConfigurer configurer) { // <1>
-    configurer.registerEntity(
-        EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-            .messagingModel((config, model) -> {
-                MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class); // <2>
-                return model
-                    .creationalCommandHandler(
-                        resolver.resolveOrThrow(CreateCourse.class).qualifiedName(),
-                        (command, context) -> {
-                            CreateCourse cmd = command.payloadAs(CreateCourse.class);
-                            EventAppender.forContext(context).append(
-                                new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity(),
-                                                  cmd.courseType(), cmd.platformUrl(), cmd.location())
-                            );
-                            return MessageStream.empty().cast();
-                        }
-                    )
-                    .instanceCommandHandler(
-                        resolver.resolveOrThrow(EnrollStudent.class).qualifiedName(),
-                        (command, entity, context) -> {
-                            if (entity.enrolledCount >= entity.capacity) {
-                                throw new IllegalStateException("Course is full");
-                            }
-                            EnrollStudent cmd = command.payloadAs(EnrollStudent.class);
-                            EventAppender.forContext(context).append(
-                                new StudentEnrolled(entity.courseId, cmd.studentId())
-                            );
-                            return MessageStream.empty().cast();
-                        }
-                    )
-                    .instanceCommandHandler(
-                        resolver.resolveOrThrow(UpdatePlatformUrl.class).qualifiedName(),
-                        (command, entity, context) -> {
-                            OnlineCourse online = (OnlineCourse) entity; // <3>
-                            UpdatePlatformUrl cmd = command.payloadAs(UpdatePlatformUrl.class);
-                            EventAppender.forContext(context).append(
-                                new PlatformUrlUpdated(online.courseId, cmd.newUrl())
-                            );
-                            return MessageStream.empty().cast();
-                        }
-                    )
-                    .entityEvolver((entity, event, context) -> {
-                        QualifiedName studentEnrolled = resolver.resolveOrThrow(StudentEnrolled.class).qualifiedName();
-                        QualifiedName platformUrlUpdated = resolver.resolveOrThrow(PlatformUrlUpdated.class).qualifiedName();
-                        if (event.type().qualifiedName().equals(studentEnrolled)) {
-                            entity.enrolledCount++;
-                        }
-                        if (event.type().qualifiedName().equals(platformUrlUpdated)) {
-                            ((OnlineCourse) entity).platformUrl = event.payloadAs(PlatformUrlUpdated.class).newUrl(); // <4>
-                        }
-                        return entity;
-                    })
-                    .build();
-            })
-            .entityFactory(c -> EventSourcedEntityFactory.fromEventMessage((id, firstEvent) -> { // <5>
-                CourseCreated e = firstEvent.payloadAs(CourseCreated.class);
-                return switch (e.courseType()) {
-                    case ONLINE    -> new OnlineCourse(e);
-                    case IN_PERSON -> new InPersonCourse(e);
-                };
-            }))
-            .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id)))
-            .entityIdResolver(c -> new AnnotationBasedEntityIdResolver<>()) // <6>
-            .build()
-    );
-}
+// Subtype-specific instance command handler—cast to the concrete type.
+.instanceCommandHandler(
+    resolver.resolveOrThrow(UpdatePlatformUrl.class).qualifiedName(),
+    (command, entity, context) -> {
+        OnlineCourse online = (OnlineCourse) entity; // <1>
+        UpdatePlatformUrl cmd = command.payloadAs(UpdatePlatformUrl.class);
+        EventAppender.forContext(context).append(
+                new PlatformUrlUpdated(online.courseId, cmd.newUrl())
+        );
+        return MessageStream.empty().cast();
+    }
+)
 ----
 
-<1> Receive the `EventSourcingConfigurer` as a parameter.
-The configurer is created once at application startup and passed to registration methods.
+[source,java]
+----
+// Entity factory: pick the concrete type based on the first event.
+.entityFactory(c -> EventSourcedEntityFactory.fromEventMessage((id, firstEvent) -> { // <2>
+    CourseCreated e = firstEvent.payloadAs(CourseCreated.class);
+    return switch (e.courseType()) {
+        case ONLINE    -> new OnlineCourse(e);
+        case IN_PERSON -> new InPersonCourse(e);
+    };
+}))
+----
 
-<2> Resolve qualified names via `MessageTypeResolver` to respect any custom name or namespace declared on `@Command` or `@Event` annotations.
+<1> Cast the parameter to the concrete subtype to access subtype-specific fields.
+Safe here because `UpdatePlatformUrl` can only target an `OnlineCourse`.
 
-<3> Cast to the concrete type to access subtype-specific fields.
-This is safe because `UpdatePlatformUrl` can only target an `OnlineCourse`.
-
-<4> The evolver mutates and returns the same instance (mutable classes).
-For immutable classes, return a new instance of the correct concrete type instead.
-
-<5> `fromEventMessage` receives the entity identifier and the first event in the stream.
+<2> `fromEventMessage` receives the entity identifier and the first event in the stream.
 Inspect the event to determine which concrete type to instantiate.
 This replaces the `@EntityCreator` static factory used in the autodetected approach.
-
-<6> Enables command routing to this entity.
-Reads the `@TargetEntityId`-annotated field from each command payload to determine which entity instance to load or create.
-See xref:commands:entities/event-sourced-entity.adoc#entity-identification[Entity identification] for details.
 
 === Autodetected
 
