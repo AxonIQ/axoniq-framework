@@ -3,6 +3,7 @@
 
 A stateful command handler keeps command handling logic in a dedicated class, separate from the entity that holds state.
 The entity is loaded automatically by Axon and injected as a parameter via `@InjectEntity`.
+The injected entity can still be event sourced, as shown xref:commands:entities/event-sourced-entity.adoc[here], but without the command handlers inside the event-sourced entity class.
 
 This separates two concerns:
 
