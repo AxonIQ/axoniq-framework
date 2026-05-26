@@ -165,7 +165,7 @@
                          -DskipAf4RecipeTests flag skips the copy execution and
                          the tests that depend on those JARs; they are validated
                          in CI before release. -->
-                    <arguments>-DskipAf4RecipeTests</arguments>
+                    <arguments>-DskipAf4RecipeTests=true</arguments>
                 </configuration>
             </plugin>
             <plugin>
@@ -360,7 +360,7 @@
         <connection>scm:git:git://github.com/AxonFramework/AxonFramework.git</connection>
         <developerConnection>scm:git:git@github.com:AxonFramework/AxonFramework.git</developerConnection>
         <url>https://github.com/AxonFramework/AxonFramework</url>
-        <tag>axon-5.0.4</tag>
+        <tag>axon-5.1.1</tag>
     </scm>
 
     <developers>
