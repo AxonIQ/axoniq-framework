@@ -383,13 +383,15 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
 
     // US8 -- 1:1 command transformation (FR-019)
     //   Receiver fills a default `enrollmentReason` before dispatching to the v2 handler.
+    //   Per-transformer hooks (.when / .onApplied) work uniformly for events, commands, and queries.
     .register(CommandTransformation.from(new MessageType("com.example.EnrollStudent", "1.0.0"))
                                    .to  (new MessageType("com.example.EnrollStudent", "2.0.0"))
                                    .transform(JsonNode.class, v1 -> {
                                        ObjectNode v2 = v1.deepCopy();
                                        v2.put("enrollmentReason", "UNKNOWN");
                                        return v2;
-                                   }))
+                                   })
+                                   .onApplied((cmd, out) -> metrics.counter("cmd.upcast.enroll-student").increment()))
 
     // CommandTransformation does NOT expose split(...) -- 1:N / 1:0 are compile-time forbidden
     // for commands and queries (FR-019). Commands and queries are single-intent.

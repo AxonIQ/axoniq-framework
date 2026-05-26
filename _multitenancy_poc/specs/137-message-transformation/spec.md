@@ -735,20 +735,20 @@ a last resort if the old stream must be fully replaced.
   framework-emitted log; per-event tracing is the user's job via the per-transformer hooks
   below.
 
-  Each transformer MUST expose two optional hooks, attached via the fluent factory at
-  registration time:
-  - **`.when(Predicate<EventMessage>)`** -- gate before apply. Returning `false` skips this
-    transformer for the input. Default: always apply. Matches the AF4
-    `SingleEntryUpcaster.canUpcast` precedent.
-  - **`.onApplied(BiConsumer<EventMessage, MessageStream<? extends EventMessage>>)`** --
-    post-apply observer scoped to this transformer. Useful for per-event TRACE / metrics
-    on just this transformation. Default: no-op (zero per-event allocation).
+  Each transformer MUST expose two optional hooks on the base `MessageTransformer<M>` SPI
+  (so they apply uniformly to events, commands, and queries), attached via the fluent
+  factory at registration time:
+  - **`.when(Predicate<M>)`** -- gate before apply. Returning `false` skips this transformer
+    for the input. Default: always apply. Matches the AF4 `SingleEntryUpcaster.canUpcast`
+    precedent.
+  - **`.onApplied(BiConsumer<M, MessageStream<? extends M>>)`** -- post-apply observer
+    scoped to this transformer. Useful for per-event TRACE / metrics on just this
+    transformation. Default: no-op (zero per-event allocation).
 
-  Hooks fire only on this specific transformer when matched; non-matching events still pass
-  through in O(1) regardless of installed hooks (FR-011 preserved). The framework MUST NOT
-  take a generic name like "Observability" and MUST NOT expose chain-wide hooks on the
-  Builder -- hooks are per-transformer, matching AF4 precedent and keeping logging /
-  metrics local to the transformation that owns them.
+  Hooks fire only on this specific transformer when matched; non-matching messages still
+  pass through in O(1) regardless of installed hooks (FR-011 preserved). The framework MUST
+  NOT take a generic name like "Observability" and MUST NOT expose chain-wide hooks on the
+  Builder -- hooks are per-transformer.
   _Traces to: US7._
 - **FR-014 (Position advances past drops)**: When a transformation drops an event, the tracking
   token MUST still advance. A restarting streaming processor MUST NOT reprocess dropped events.

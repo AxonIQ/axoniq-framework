@@ -19,9 +19,14 @@ import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.jspecify.annotations.NullMarked;
 
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
+
 /**
  * Command-specific {@link MessageTransformer}. 1:1 only -- split / drop do not apply to
  * commands. Use the {@code CommandTransformation} factory rather than implementing directly.
+ * Per-transformer hooks ({@code .when} / {@code .onApplied}) are inherited from
+ * {@link MessageTransformer}; covariant overrides below keep the fluent API typed.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -42,6 +47,13 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage> {
     default MessageStream<CommandMessage> transform(MessageStream<CommandMessage> stream) {
         return transform(stream.first());
     }
+
+    @Override
+    default CommandTransformer when(Predicate<CommandMessage> condition) { /* ... */ }
+
+    @Override
+    default CommandTransformer onApplied(
+            BiConsumer<CommandMessage, MessageStream<? extends CommandMessage>> observer) { /* ... */ }
 }
 ```
 
@@ -64,10 +76,15 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.jspecify.annotations.NullMarked;
 
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
+
 /**
  * Query-specific {@link MessageTransformer}. 1:1 only. Subscription-query update streams
  * flowing back to subscribers are NOT transformed -- only the incoming query is. Use the
- * {@code QueryTransformation} factory rather than implementing directly.
+ * {@code QueryTransformation} factory rather than implementing directly. Per-transformer
+ * hooks ({@code .when} / {@code .onApplied}) are inherited from {@link MessageTransformer};
+ * covariant overrides below keep the fluent API typed.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -88,6 +105,13 @@ public interface QueryTransformer extends MessageTransformer<QueryMessage> {
     default MessageStream<QueryMessage> transform(MessageStream<QueryMessage> stream) {
         return transform(stream.first());
     }
+
+    @Override
+    default QueryTransformer when(Predicate<QueryMessage> condition) { /* ... */ }
+
+    @Override
+    default QueryTransformer onApplied(
+            BiConsumer<QueryMessage, MessageStream<? extends QueryMessage>> observer) { /* ... */ }
 }
 ```
 
