@@ -540,14 +540,18 @@ receiver-side transformation alone.
 **Use case**: a 1:1 `Snapshot -> Snapshot` transformer would let the framework apply a
 state-schema change to a stored snapshot instead of discarding it and replaying all events.
 
-**Why deferred for 5.2.0**: scope and focus, NOT architecture. Snapshot entries flow inline
-through the same event stream the chain reads, so a developer who registers a matching
-transformation in 5.2.0 will see it fire on snapshots; what is deferred is the user-facing
-API/docs/test fixtures, not the chain wiring. Wiring details are in [plan.md](plan.md).
+**Why deferred for 5.2.0**: scope and focus, NOT architecture. On the **entity-load** path,
+`SnapshotEventMessage` entries (subtype of `EventMessage`) flow inline through the same stream
+the chain reads when `SourcingStrategy.Snapshot` is active, so a developer who registers a
+matching transformation in 5.2.0 will see it fire on snapshots loaded for an entity; what is
+deferred is the user-facing API/docs/test fixtures, not the chain wiring. On the
+**tracking-processor** path, `open(StreamingCondition, ...)` does NOT carry snapshots -- only
+post-snapshot events -- so a snapshot transformation that also wants to fire on streaming reads
+will need its own hook regardless of this 5.2.0 work. Wiring details are in [plan.md](plan.md).
 
 **Ergonomic gap (not a blocker)**: a snapshot's payload accessor in the public surface today
-requires going through the `Converter`; a typed accessor on `Snapshot` may be added later.
-Both options remain open.
+requires going through the `MessageConverter`; an ergonomic typed accessor on
+`SnapshotEventMessage` may be added later. Both options remain open.
 
 **When justified** (Gregory Young): snapshots are a cache, not a source of truth.
 Discard-and-replay is the correct primary strategy, snapshot transformation is the optimisation,
@@ -673,13 +677,22 @@ a last resort if the old stream must be fully replaced.
   predicate `from`s producing each other's input); the exact bound is implementation-defined.
   _Traces to: US6._
 - **FR-009 (Typed payload access)**: Each transformation declares a target Java type at
-  registration; the framework converts the stored payload to that type via the registered
-  `Converter` before invocation, then passes the converted payload plus the active
-  `ProcessingContext` (nullable) to the mapper. Mapper shape:
-  `BiFunction<T, ProcessingContext, U>` for 1:1, `BiFunction<T, ProcessingContext, List<TransformedEvent>>`
-  for 1:N. Typical input types: structured representations (JSON tree, Avro generic record,
-  POJO) or raw bytes. Conversion is on-demand (no pre-conversion). A future overload giving
-  the mapper direct `Converter` access (for multi-view transformations) is deferred to 5.3+.
+  registration. The framework invokes `MessageConverter.convertPayload(message, targetType)`
+  (verified at `messaging/core/conversion/MessageConverter.java`) on the inner `EventMessage`
+  to obtain the typed payload, then passes that payload plus the active `ProcessingContext`
+  to the mapper. The target type is accepted as either a `Class<T>` (most common) OR a
+  `TypeReference<T>` (for generic targets like `Map<String, Object>`, `List<Foo>`; per
+  `.claude/rules/type-safety.md` and mirroring `Configuration.getComponent(TypeReference)`,
+  the `TypeReference<T>` overload binds `T` at compile time so the lambda parameter type is
+  inferred -- no manual cast). Mapper shape: `BiFunction<T, ProcessingContext, U>` for 1:1,
+  `BiFunction<T, ProcessingContext, List<TransformedEvent>>` for 1:N. The framework's read
+  paths supply a non-null `ProcessingContext` on the entity-load path (`transaction(ctx)`);
+  on the tracking-processor path (`open(condition, @Nullable ProcessingContext)`), the
+  context may be null if the caller passes null. Mappers MUST null-check before calling
+  `.get*(...)` on it; most mappers do not need the context. Typical input types: structured
+  representations (JSON tree, Avro generic record, POJO) or raw bytes. Conversion is
+  on-demand (no pre-conversion). A future overload giving the mapper direct `Converter`
+  access (for multi-view transformations) is deferred to 5.3+.
   _Traces to: US1, US3, US4._
 - **FR-010 (Envelope and metadata)**: The message envelope, entity type, entity identifier,
   tracking token, sequence number, MUST be preserved unchanged by every transformation, any
@@ -746,14 +759,24 @@ a last resort if the old stream must be fully replaced.
   test fixture API is deferred, this requirement is an invariant on the transformation API
   itself.
   _Traces to: US1, US3, US4, US5._
-- **FR-018 (Output identity check)**: For 1:1 transformations that supply a payload mapper, the
-  framework MUST verify after invocation that the output payload's identity matches the declared
-  `to`. A mismatch MUST be propagated under FR-015 with full context (declared `to`, actual
-  output identity, stream position). The framework MUST NOT silently coerce. The check is
-  satisfied trivially for pure renames (FR-002), the framework sets the output identity itself.
-  It does NOT apply to 1:N/1:0 transformations, output identities are mapper-determined by
-  design, and the developer has full responsibility for each replacement event's identity (the
-  framework does not validate that the chosen identity is meaningful or subscribed to).
+- **FR-018 (Output identity check; resolver-permitting)**: For 1:1 transformations that supply
+  a payload mapper, the framework MUST attempt verification after invocation that the output
+  payload's resolved `MessageType` matches the declared `to`. Resolution uses
+  `MessageTypeResolver.resolve(Class<?>)` (verified at
+  `messaging/core/MessageTypeResolver.java:33-92`), which is **class-based**: it returns a
+  non-empty `Optional` only when the output's runtime class carries `@Event` / `@Message`
+  identity. When resolution succeeds and the resolved identity differs from the declared `to`,
+  the framework MUST propagate the error under FR-015 with full context (declared `to`, actual
+  output identity, stream position) and MUST NOT silently coerce. When the resolver returns
+  `Optional.empty()` (typical for untyped representations like `JsonNode`,
+  `Map<String, Object>`, or raw bytes -- their classes carry no identity annotation), the
+  framework SKIPS the check and trusts the mapper to produce the correct `to` identity; this
+  is not a silent failure -- it is the only feasible behaviour, since no class-based identity
+  exists. The check is satisfied trivially for pure renames (FR-002), the framework sets the
+  output identity itself. It does NOT apply to 1:N/1:0 transformations, output identities are
+  mapper-determined by design, and the developer has full responsibility for each replacement
+  event's identity (the framework does not validate that the chosen identity is meaningful or
+  subscribed to).
   _Traces to: US1, US6 scenario 6._
 - **FR-019 (Commands and queries)**: The transformer mechanism MUST support commands and queries
   in addition to events, using the same uniform stream-in / stream-out shape. The chain MUST
@@ -809,7 +832,7 @@ a last resort if the old stream must be fully replaced.
 - **SC-002 (Conflicts)**: Every conflict class in FR-008 is detected and reported before any
   event is processed.
 - **SC-003 (Examples)**: All in-scope use cases for the delivered slice are demonstrated in a
-  new Maven sub-module under `axon-framework/examples/` (alongside `university-demo`,
+  new Maven sub-module under `AxonFramework/examples/` (case-sensitive directory; alongside `university-demo`,
   `university-java`, `university-java-springboot-3`, etc.). For 5.2.0 this covers the events
   user stories that ship (US1 always; US2 if it lands; US3, US4, US5, US6, US7 if they land as
   nice-to-haves). Command and query example transformations (US8, US9) join when those user
@@ -847,8 +870,8 @@ a last resort if the old stream must be fully replaced.
   are in [plan.md](plan.md).
 - Transformations apply at read time only, the event store is append-only and stored events are
   never modified on disk.
-- The demo lives as a new Maven sub-module under `axon-framework/examples/` (plain Java, no
-  Spring), alongside the existing example sub-modules. It depends on
+- The demo lives as a new Maven sub-module under `AxonFramework/examples/` (case-sensitive
+  directory; plain Java, no Spring), alongside the existing example sub-modules. It depends on
   `io.axoniq.framework:axoniq-message-transformation`. Spring Boot integration is follow-on
   work, potentially mirrored in the existing `university-java-springboot-3` /
   `university-java-springboot-4` examples.

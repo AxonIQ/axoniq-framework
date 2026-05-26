@@ -44,7 +44,12 @@ public interface MessageTransformer<M extends Message> {
      * one (1:1), or more (1:N) elements.
      *
      * @param message the matched input message
-     * @param context the active processing context, or {@code null} if none
+     * @param context the active processing context. Non-null on the entity-load read path
+     *                ({@code EventStore.transaction(ctx)}); MAY be {@code null} on the
+     *                tracking-processor read path
+     *                ({@code EventStore.open(StreamingCondition, @Nullable ProcessingContext)})
+     *                when the caller passes {@code null}. Implementations MUST tolerate
+     *                {@code null}.
      * @return the resulting output stream
      */
     MessageStream<? extends M> transform(M message, @Nullable ProcessingContext context);
