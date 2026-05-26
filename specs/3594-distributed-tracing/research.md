@@ -265,6 +265,56 @@ final class TracingEventSink implements EventSink {
 
 **The same pattern applies to other components** whose AF4 counterparts opened both a per-message dispatch span and a UoW-scoped commit span (none currently in scope beyond event publication, but the pattern is the template).
 
+### 3.2 Sourcing the aggregate identifier in AF5 (Aggregate → Entity / DCB shift)
+
+AF4's `AggregateIdentifierSpanAttributesProvider` casts the inbound `Message` to `DomainEventMessage` and calls `getAggregateIdentifier()` (see `AxonFramework4/messaging/src/main/java/org/axonframework/tracing/attributes/AggregateIdentifierSpanAttributesProvider.java:39-43`). That path is **closed** in AF5:
+
+- `DomainEventMessage` is **completely removed** from AxonFramework 5 production code (verified by grep across `messaging/`, `modelling/`, `eventsourcing/`, `extensions/` — zero matches, stash excluded).
+- The "aggregate" concept itself has been replaced by **Entity / Dynamic Consistency Boundary (DCB)**. New code uses `@EventSourcedEntity(tagKey = "...")` plus `@EventTag` on event fields/records; the event store resolves entities by tag rather than by aggregate identifier embedded in the message. See AF5's migration guide: `docs/reference-guide/modules/migration/pages/paths/aggregates.adoc`.
+- For the migration window, AF5 ships a small bridge: `org.axonframework.messaging.core.LegacyResources`. The aggregate-based event storage engines (`AggregateBasedJpaEventStorageEngine`, etc.) populate three `ResourceKey<?>` values on the `ProcessingContext` while sourcing or persisting a legacy aggregate stream:
+
+  ```java
+  public static final Context.ResourceKey<String> AGGREGATE_IDENTIFIER_KEY = Context.ResourceKey.withLabel("aggregateIdentifier");
+  public static final Context.ResourceKey<String> AGGREGATE_TYPE_KEY       = Context.ResourceKey.withLabel("aggregateType");
+  public static final Context.ResourceKey<Long>   AGGREGATE_SEQUENCE_NUMBER_KEY = Context.ResourceKey.withLabel("aggregateSequenceNumber");
+  ```
+- AF5's idiomatic readers of these values are `AggregateTypeParameterResolverFactory.AggregateTypeParameterResolver` and `SourceIdParameterResolverFactory.SourceIdParameterResolver`. Both do exactly:
+
+  ```java
+  var value = context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY);
+  if (value != null) return CompletableFuture.completedFuture(value);
+  ```
+
+**Decision**: the new `AggregateIdentifierSpanAttributesProvider` (and any future legacy-bridge attribute provider) MUST read from `ProcessingContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)`. It MUST NOT reference `DomainEventMessage` (forbidden by constitution v2.1.0).
+
+```java
+@NullMarked
+public final class AggregateIdentifierSpanAttributesProvider implements SpanAttributesProvider {
+
+    @Override
+    public Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context) {
+        if (context == null) {
+            return Map.of();
+        }
+        String aggregateId = context.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY);
+        return aggregateId == null ? Map.of() : Map.of("axoniq.aggregate.identifier", aggregateId);
+    }
+}
+```
+
+**Consequence — SPI shape**: the `SpanAttributesProvider` SPI single method is `Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context)`. Providers that do not need the context simply ignore it (e.g., `MessageIdSpanAttributesProvider` takes the id off the `Message` itself). The decision rejects the multi-method / default-fallback alternative — every implementation pays the cost of one `@Nullable` parameter; the SPI stays a single SAM and there is no ambiguity about which method the factory calls.
+
+**Consequence — `SpanFactory.create*Span` signatures**: the two message-aware factory methods gain a `@Nullable ProcessingContext` parameter so that decorators (which always have a `ProcessingContext` from the AF5 bus signatures) feed it through to providers. The non-message `createInternalSpan(operationName, subject)` keeps its existing shape — `subject` flows through `SpanAttributesProvider#provideForSubject(Object)`.
+
+**Consequence — behavior on DCB / entity operations**: the `axoniq.aggregate.identifier` attribute is intentionally absent on traces produced inside DCB / entity-based event streams (`LegacyResources.AGGREGATE_IDENTIFIER_KEY` is simply not populated by the storage engines for those streams). Trace consumers MUST treat the attribute as optional. Edge case captured in `spec.md` "DCB / entity-based operation" bullet.
+
+**Out of scope / deferred**: a sister `EntityTagSpanAttributesProvider` that contributes one or more `axoniq.entity.tag.<key>` attributes from the inbound event's `@EventTag`-derived tags is acknowledged as a deferred future improvement (similar to DFI-001 for the propagator SPI). It is a pure addition — register a new `SpanAttributesProvider` bean in the autoconfig — and does not affect any public shape this feature ships.
+
+**Alternatives considered**:
+- **Port `AggregateIdentifierSpanAttributesProvider` verbatim and depend on a stash bridge for `DomainEventMessage`** — rejected; trips constitution v2.1.0 and breaks the moment the stash drops the bridge.
+- **Add a public `MetadataKey<String> AGGREGATE_IDENTIFIER` and propagate aggregate-id through message metadata** — rejected; duplicates the responsibility of `LegacyResources` and forces every event-store implementation to repeat the work the resource already does.
+- **Add the SPI overload with a default body that falls back to a no-context call** — rejected per the SPI-shape question; one method, one signature.
+
 **Alternatives considered**:
 - **OpenTelemetry's `io.opentelemetry.context.Context.current()` everywhere** — rejected: pulls a `ThreadLocal` back into the framework. We rely on it only at imperative-edge `Span.runSupplier(...)` call sites.
 - **A new `SpanLifecycleInterceptor`** — rejected: introduces a new interceptor level which Constitution §Interceptor Levels forbids (only `MessageDispatchInterceptor` / `MessageHandlerInterceptor` are blessed; tracing plugs in via `DecoratorDefinition` + `HandlerEnhancerDefinition` instead).

@@ -63,6 +63,16 @@ Axoniq Framework features:
 - MAY introduce new components in the active modules (`messaging/`, `connector/`,
   `dependency-injection/`, `testing/`), provided they compose with upstream types.
 - MUST NOT introduce duplicate concepts that conflict with upstream APIs.
+- **MUST NOT reference AF4-era upstream types that have been removed from
+  AxonFramework 5** (e.g., `DomainEventMessage`). Where data those types carried
+  is still required for legacy bridging, source it from `ProcessingContext`
+  resources exposed via
+  `org.axonframework.messaging.core.LegacyResources`
+  (`AGGREGATE_IDENTIFIER_KEY`, `AGGREGATE_TYPE_KEY`,
+  `AGGREGATE_SEQUENCE_NUMBER_KEY`). New (DCB / entity-based) code paths SHOULD
+  use `@EventSourcedEntity(tagKey = …)` + `@EventTag` instead and treat the
+  legacy resources as best-effort fallbacks (present only on legacy aggregate-
+  based event streams).
 
 The `_archive/` directory contains earlier AF5 drafts that have been moved upstream into
 AxonFramework. Do not treat archived classes as the current API.
@@ -294,4 +304,20 @@ are rejected.
 (root) and the task-specific rules under `.claude/rules/`. When CLAUDE.md and this file
 disagree, this file wins; flag the divergence as a sync issue and update both.
 
-**Version**: 2.0.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-21
+**Version**: 2.1.0 | **Ratified**: 2026-05-18 | **Last Amended**: 2026-05-26
+
+---
+
+## Sync Impact Report — 2.1.0 (2026-05-26)
+
+**Bump type**: MINOR — new architecture rule added; no existing rule removed or weakened.
+
+**Change**: Added a new bullet under *Relationship to AxonFramework Upstream* forbidding references to AF4-era upstream types removed from AxonFramework 5 (e.g., `DomainEventMessage`), and pointing new code at `org.axonframework.messaging.core.LegacyResources` resource keys (`AGGREGATE_IDENTIFIER_KEY` / `AGGREGATE_TYPE_KEY` / `AGGREGATE_SEQUENCE_NUMBER_KEY`) on `ProcessingContext` when legacy bridging data is still needed, and at `@EventSourcedEntity` / `@EventTag` for DCB/entity-based code paths.
+
+**Motivation**: AF5 has removed `DomainEventMessage` (and other AF4 message subtypes) entirely from production code. Without an explicit constitutional rule, ports from AF4 risk re-introducing references to those types — they compile only as long as a stash dependency leaks them, and break the moment the upstream shadow disappears. The rule pins the canonical sourcing path for the data those types used to carry.
+
+**Trigger**: feat/3594-DistributedTracing — AF4's `AggregateIdentifierSpanAttributesProvider` casts to `DomainEventMessage`. The port reads from `LegacyResources.AGGREGATE_IDENTIFIER_KEY` instead.
+
+**Impact on other specs**: None at amendment time. Any existing feature spec that references `DomainEventMessage` MUST be flagged at next clarification pass. None do.
+
+**Sync issues observed**: None — `CLAUDE.md` already says "Composition over Inheritance" and "AF5 idioms first"; this amendment makes the implicit rule explicit and verifiable.

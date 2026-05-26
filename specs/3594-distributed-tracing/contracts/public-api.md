@@ -32,11 +32,16 @@ package io.axoniq.framework.tracing;
  */
 public interface SpanFactory {
 
-    /** Creates a {@link Span} for an outbound (dispatch / producer) operation on the given {@link Message}. */
-    Span createDispatchSpan(String operationName, Message<?> message);
+    /**
+     * Creates a {@link Span} for an outbound (dispatch / producer) operation on the given {@link Message}.
+     * The {@code context} (when non-null) is forwarded to every {@link SpanAttributesProvider} so that
+     * providers can read per-context resources (e.g.,
+     * {@code LegacyResources.AGGREGATE_IDENTIFIER_KEY}).
+     */
+    Span createDispatchSpan(String operationName, Message<?> message, @Nullable ProcessingContext context);
 
     /** Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message}. */
-    Span createHandlerSpan(String operationName, Message<?> message);
+    Span createHandlerSpan(String operationName, Message<?> message, @Nullable ProcessingContext context);
 
     /** Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}. */
     Span createInternalSpan(String operationName);
@@ -44,7 +49,7 @@ public interface SpanFactory {
     /**
      * Creates a {@link Span} for an internal operation that is parameterised by a domain {@code subject}
      * (e.g., aggregate identifier, entity descriptor). The {@code subject} is forwarded to every registered
-     * {@link SpanAttributesProvider}.
+     * {@link SpanAttributesProvider} (via {@link SpanAttributesProvider#provideForSubject(Object)}).
      */
     Span createInternalSpan(String operationName, Object subject);
 
@@ -122,11 +127,21 @@ package io.axoniq.framework.tracing;
 /**
  * Contributes attributes to a {@link Span} based on the {@link Message} (or non-message {@code subject})
  * the span is created for. Multiple providers compose; the order in which they are invoked is unspecified.
+ * <p>
+ * The {@code context} parameter on {@link #provideForMessage(Message, ProcessingContext)} is {@code @Nullable}
+ * because some span-creation points (e.g., an out-of-band snapshot trigger) have no
+ * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} available. Providers that don't need
+ * the context simply ignore it. Providers that DO need it (e.g.,
+ * {@link io.axoniq.framework.tracing.attributes.AggregateIdentifierSpanAttributesProvider}, which reads from
+ * {@code LegacyResources.AGGREGATE_IDENTIFIER_KEY}) MUST handle {@code null} gracefully.
+ * <p>
+ * Implementations MUST NOT reference AF4-era types that have been removed from AxonFramework 5 (e.g.,
+ * {@code DomainEventMessage}) — see constitution v2.1.0 §"Relationship to AxonFramework Upstream".
  */
 @FunctionalInterface
 public interface SpanAttributesProvider {
 
-    Map<String, String> provideForMessage(Message<?> message);
+    Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context);
 
     default Map<String, String> provideForSubject(Object subject) {
         return Map.of();
@@ -203,7 +218,7 @@ public final class LoggingSpanFactory implements SpanFactory {
 | `MessageTypeSpanAttributesProvider` | `axoniq.message.type` = `COMMAND` / `EVENT` / `QUERY` |
 | `PayloadTypeSpanAttributesProvider` | `axoniq.message.payloadType` |
 | `MetadataSpanAttributesProvider` | configured allowlist of metadata keys → `axoniq.metadata.<key>` |
-| `AggregateIdentifierSpanAttributesProvider` | `axoniq.aggregate.identifier` (from internal `subject` parameter on `createInternalSpan(name, subject)`) |
+| `AggregateIdentifierSpanAttributesProvider` | `axoniq.aggregate.identifier` — sourced from `LegacyResources.AGGREGATE_IDENTIFIER_KEY` on the `ProcessingContext`. Best-effort: present only when a legacy aggregate-based event storage engine populated the resource. Absent on DCB / entity-based operations. MUST NOT reference the removed `DomainEventMessage` type (constitution v2.1.0). |
 
 Each is a `public final class` with a no-arg constructor (and an optional varargs / list constructor for `MetadataSpanAttributesProvider`).
 

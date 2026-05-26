@@ -184,7 +184,7 @@ Standard attributes attached by the default `SpanAttributesProvider`s:
 - `axoniq.message.type` ∈ {`COMMAND`, `EVENT`, `QUERY`}
 - `axoniq.message.payloadType`
 - `axoniq.metadata.<allowlisted-key>` (each entry of `MetadataSpanAttributesProvider`'s allowlist)
-- `axoniq.aggregate.identifier` (where applicable)
+- `axoniq.aggregate.identifier` — **conditional**. Sourced from `ProcessingContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)`. Present on traces flowing through a legacy aggregate-based event storage engine (e.g., `AggregateBasedJpaEventStorageEngine`); absent on DCB / entity-based operations (`@EventSourcedEntity(tagKey = ...)` + `@EventTag` model). Trace consumers MUST treat it as optional. (A future `EntityTagSpanAttributesProvider` for the DCB path is a deferred future improvement.)
 
 ---
 
