@@ -304,6 +304,125 @@ Same answer for providers: `createInternalSpan(String)` does not iterate them; t
 
 ---
 
+## Flow 4 — Streaming event processor batch (`PooledStreamingEventProcessor`)
+
+This is the case the previous "consumer side" of Flow 2 elided. AF4 produced **two nested spans** here — `StreamingEventProcessor.batch` (root per batch) and `EventProcessor.process` (child per event). Flow 2 only showed the per-event side. Flow 4 shows the full nesting in AF5 via Option C (lazy-open on shared `ProcessingContext`).
+
+The full design comparison, AF4 vs Option C coverage matrix, and the rejected alternatives (A — `TracingEventProcessor` decorator; B+upstream — `BatchInterceptor` SPI on PSEP config; D — `UnitOfWorkFactory` decoration; F — drop batch span) are documented in [`research-batch-tracing.md`](./research-batch-tracing.md).
+
+### Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant WP   as WorkPackage<br/>(AF5, internal)
+    participant UoW  as Batch UnitOfWork<br/>(ProcessingContext)
+    participant PEHC as ProcessorEventHandlingComponents
+    participant TEH  as TracingEventHandlingComponent<br/>(decorator)
+    participant SF   as SpanFactory
+    participant PCB  as ProcessingContextSpanBinding
+    participant EHC  as EventHandlingComponent<br/>(delegate)
+    participant H    as @EventHandler
+
+    WP->>UoW: unitOfWorkFactory.create()
+    WP->>UoW: runOnPreInvocation(ctx -> {<br/>  ctx.putResource(Segment.RESOURCE_KEY, segment);<br/>  ctx.putResource(BATCH_END_RESOURCE_KEY, lastToken);<br/>})
+    WP->>UoW: onInvocation(ctx -> batchProcessor.process(eventBatch, ctx))
+    WP->>UoW: runOnPrepareCommit(ctx -> storeToken(lastToken, ctx))
+    WP->>UoW: runOnAfterCommit(ctx -> updateSegmentStatus(...))
+
+    WP->>UoW: execute()
+    UoW->>UoW: pre-invocation: attach Segment + token resources
+    UoW->>PEHC: handle(entries, ctx)
+
+    loop for each entry in entries
+        PEHC->>PEHC: perEventCtx = ctx.withResource(<br/>  TrackingToken.RESOURCE_KEY, entryToken)
+        Note over PEHC: ResourceOverridingProcessingContext —<br/>non-overridden keys fall through to ctx,<br/>so getResource(Segment.RESOURCE_KEY)<br/>still works on perEventCtx.
+
+        PEHC->>TEH: handle(event, perEventCtx)
+
+        alt First event in this batch ctx
+            TEH->>TEH: perEventCtx.computeResourceIfAbsent(<br/>  BATCH_SPAN_KEY, () -> openBatchSpan(perEventCtx))
+            Note right of TEH: computeResourceIfAbsent on a non-overridden<br/>key falls through and stores on the<br/>BATCH ctx — visible to every subsequent event.
+
+            TEH->>TEH: isStreamingBatch =<br/>  perEventCtx.getResource(Segment.RESOURCE_KEY) != null
+            Note over TEH: Replaces AF4's<br/>`this instanceof StreamingEventProcessor`<br/>boolean. No boolean parameter survives.
+
+            alt isStreamingBatch && !config.disableBatchTrace
+                TEH->>SF: createInternalSpan(<br/>  "StreamingEventProcessor.batch")
+                SF-->>TEH: batchSpan
+                TEH->>PCB: bindBatch(perEventCtx, batchSpan)
+                PCB->>UoW: runOnPreInvocation(batchSpan.start)
+                Note over PCB,UoW: pre-invocation already fired —<br/>so the start runs immediately<br/>on the next yield.
+                PCB->>UoW: onError(batchSpan.recordException)
+                PCB->>UoW: whenComplete(batchSpan.end)
+                Note over PCB,UoW: Hooks delegate from perEventCtx<br/>down to the BATCH ctx — span<br/>closes when the batch UoW completes,<br/>AFTER prepareCommit + afterCommit.
+            else otherwise
+                TEH->>TEH: batchSpan = NoOpSpan.INSTANCE
+                Note over TEH: Subscribing processor (no Segment),<br/>or user set disableBatchTrace=true,<br/>or in distributedInSameTrace mode<br/>within the time window.
+            end
+        else Subsequent events
+            TEH->>TEH: batchSpan looked up — already opened
+        end
+
+        TEH->>SF: createHandlerSpan("EventProcessor.process",<br/>  event, perEventCtx)
+        SF-->>TEH: eventSpan (child of batchSpan)
+        TEH->>PCB: bindPerEvent(perEventCtx, eventSpan)
+        Note over PCB: Per-event hooks delegate through<br/>perEventCtx → batchCtx; the eventSpan<br/>closes when this single event's chain<br/>of CompletableFutures completes.
+
+        TEH->>EHC: delegate.handle(event, perEventCtx)
+        EHC->>H: invoke @EventHandler
+        H-->>EHC: result
+        EHC-->>TEH: MessageStream.Empty
+        TEH-->>PEHC: MessageStream.Empty
+    end
+
+    PEHC-->>UoW: MessageStream.Empty
+    UoW->>UoW: prepareCommit: storeToken(lastToken, ctx)
+    Note over UoW: Token-store write — INSIDE batchSpan.<br/>Matches AF4 createBatchSpan coverage.
+
+    UoW->>UoW: commit
+    UoW->>UoW: afterCommit: updateSegmentStatus(...)
+    Note over UoW: Status update — INSIDE batchSpan.
+
+    UoW-->>WP: complete
+    UoW->>PCB: whenComplete fires
+    PCB->>SF: batchSpan.end()
+    Note right of PCB: Batch span closes here —<br/>encloses everything from<br/>first handle() through afterCommit.
+```
+
+### Deep commentary
+
+**Steps 1–5 — Batch UoW setup (outside the batch span)**
+`WorkPackage.processBatch` (`AxonFramework5/.../WorkPackage.java:377-394`) builds the UoW, attaches `Segment.RESOURCE_KEY` and `BATCH_END_RESOURCE_KEY` in `runOnPreInvocation`, registers the per-event handling in `onInvocation`, the token-store write in `runOnPrepareCommit`, and the status update in `runOnAfterCommit`. **No tracing decorator has been invoked yet.** This mirrors AF4 lines 313-323 of `WorkPackage.processEvents()` and is intentionally outside the batch span (AF4 didn't cover this either).
+
+**Steps 6–8 — Per-event sub-context shadows the batch ctx**
+`ProcessorEventHandlingComponents.handle` (`AxonFramework5/.../ProcessorEventHandlingComponents.java:110-124`) creates a `ResourceOverridingProcessingContext` per event, overriding only `TrackingToken.RESOURCE_KEY`. Reads of `Segment.RESOURCE_KEY` and writes to `BATCH_SPAN_KEY` transparently fall through to the parent batch ctx (verified at `ResourceOverridingProcessingContext.java:185-228`). This is the load-bearing AF5 contract that makes Option C work.
+
+**Steps 9–16 — Lazy batch-span open on first event**
+The first per-event `handle()` calls `perEventCtx.computeResourceIfAbsent(BATCH_SPAN_KEY, …)`. Because `BATCH_SPAN_KEY` is not the overridden key, the call falls through to the batch ctx — the supplier runs once, the span is stored on the **batch ctx**, and every subsequent per-event call in the same batch finds the same span. The batch span is bound to the batch UoW's `whenComplete` via `ProcessingContextSpanBinding`, so it closes after `runOnAfterCommit` — covering token-store write and status update, matching AF4.
+
+**Steps 17–23 — Per-event spans become children of the batch span**
+Once the batch span exists in `BATCH_SPAN_KEY` on the batch ctx, every per-event `createHandlerSpan` call sees it as the currently-active span and parents the per-event span underneath. This is the AF5 mapping of AF4's `createBatchSpan(...).runCallable(() -> createProcessEventSpan(...).runCallable(() -> handler))` nesting.
+
+**Steps 24–26 — Token-store write and status update are inside the batch span**
+`runOnPrepareCommit` → `storeToken(lastToken, ctx)` and `runOnAfterCommit` → `updateSegmentStatus(...)` both run during `unitOfWork.execute()`, which is still open when the batch span exists. The batch span closes in `whenComplete` (step 27), after `afterCommit` has fired. **AF4 coverage parity is preserved.**
+
+### How AF4's `EventProcessorSpanFactory` toggles map to Option C
+
+| AF4 property | Option C behavior |
+|---|---|
+| `disableBatchTrace=true` | `openBatchSpan` returns `NoOpSpan.INSTANCE`; per-event spans become roots (or linked-back to publisher when propagation header is present in `event.getMetaData()`) |
+| `distributedInSameTrace=true` (within `distributedInSameTraceTimeLimit`) | Skip batch span; per-event `createHandlerSpan` extracts the W3C parent from `event.getMetaData()`, becomes a child of the publisher's trace |
+| `distributedInSameTrace=true` (outside the time window) | Behaves like the default — new batch root trace |
+| `streaming=false` (AF4's `instanceof StreamingEventProcessor`) | `ctx.getResource(Segment.RESOURCE_KEY)` is null on the batch ctx; `openBatchSpan` returns `NoOpSpan.INSTANCE` — `SubscribingEventProcessor` produces no batch span, matching AF4 |
+
+### Where `SpanAttributesProvider` fires in this flow
+
+- **Per-event span** (step 21): `createHandlerSpan(..., event, perEventCtx)` iterates providers once per event. The `axoniq.aggregate.identifier` attribute appears on these spans when `LegacyResources.AGGREGATE_IDENTIFIER_KEY` is present on the ctx (legacy aggregate-based event streams).
+- **Batch span** (step 14): `createInternalSpan("StreamingEventProcessor.batch")` does **not** iterate providers — there is no `Message` parameter. The batch span only carries the operation name. This matches AF4 — `createBatchSpan` was an internal-span path there too.
+
+---
+
 ## Cheat sheet — "When does my `SpanAttributesProvider` fire?"
 
 | Span | Factory method | Providers iterated? | How attributes get attached |
@@ -330,5 +449,6 @@ Rule of thumb: **`SpanAttributesProvider` fires when the decorator has a `Messag
 
 - Public API contract: [contracts/public-api.md](./contracts/public-api.md)
 - Design rationale, AF4→AF5 mapping, `ProcessingContextSpanBinding`, propagation, aggregate-id sourcing, non-Message-span design: [research.md](./research.md)
+- Streaming-batch span design — AF4 vs Option C coverage, rejected alternatives (`TracingEventProcessor`, upstream `BatchInterceptor`, `UnitOfWorkFactory` decoration, drop-batch-span), implicit `Segment.RESOURCE_KEY` contract: [research-batch-tracing.md](./research-batch-tracing.md)
 - Quickstart for users: [quickstart.md](./quickstart.md)
 - Spec including all clarifications: [spec.md](./spec.md)
