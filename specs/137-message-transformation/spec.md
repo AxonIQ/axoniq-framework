@@ -660,9 +660,9 @@ a last resort if the old stream must be fully replaced.
   - **Multi-step cycle** in the graph of concrete `from -> to` edges (e.g. `X@1.0.0 -> X@2.0.0`
     then `X@2.0.0 -> X@1.0.0`): raised at chain lock time with the full edge list.
 
-  Predicate-based `from` cannot be checked statically. A **runtime iteration cap** (default
-  100 passes per input message) MUST raise a clear error if a single message triggers more
-  applications than the cap, naming the last transformation that fired.
+  The framework includes a defensive runtime safety bound to prevent infinite loops from
+  pathological misconfiguration that cannot be detected statically (e.g. two overlapping
+  predicate `from`s producing each other's input); the exact bound is implementation-defined.
   _Traces to: US6._
 - **FR-009 (Typed payload access)**: Each transformation declares a target Java type at
   registration; the framework converts the stored payload to that type via the registered
@@ -727,7 +727,7 @@ a last resort if the old stream must be fully replaced.
   `MessageStream` is pull-based and lazy, already-emitted siblings (events 0..K-1) stay
   delivered, the stream terminates at the failing element K and the framework does NOT roll back
   earlier emissions. Callers needing atomic-all-or-nothing semantics must layer that on top.
-  _Traces to: US6 scenario 6._
+  _Traces to: US6 scenario 5._
 - **FR-016 (Legacy unversioned events)**: Events stored without an explicit version MUST be
   treated as version `0.0.1` (the AF5 `MessageType` default). Transformations targeting `0.0.1`
   apply to these events, no special API is required.
@@ -746,7 +746,7 @@ a last resort if the old stream must be fully replaced.
   It does NOT apply to 1:N/1:0 transformations, output identities are mapper-determined by
   design, and the developer has full responsibility for each replacement event's identity (the
   framework does not validate that the chosen identity is meaningful or subscribed to).
-  _Traces to: US1, US6 scenario 7._
+  _Traces to: US1, US6 scenario 6._
 - **FR-019 (Commands and queries)**: The transformer mechanism MUST support commands and queries
   in addition to events, using the same uniform stream-in / stream-out shape. The chain MUST
   fire on every incoming command/query that reaches a handler regardless of whether it arrived
