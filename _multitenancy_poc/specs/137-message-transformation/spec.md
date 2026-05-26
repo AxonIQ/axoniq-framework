@@ -633,6 +633,14 @@ a last resort if the old stream must be fully replaced.
   (user-supplied: e.g. range, regex, semver). Non-matching events pass through unchanged. Naming
   consistency between `from` identities and the names produced by the configured
   `MessageTypeResolver` is the user's responsibility.
+
+  **Ordering**: when more than one registered transformation can match the same input (e.g. a
+  predicate that overlaps with another predicate, or a predicate that overlaps with a
+  concrete `MessageType`), the framework MUST apply the **last match in registration order**.
+  This means a new transformation added at the bottom of the registration list **overrides**
+  any earlier transformation whose `from` also matches -- matching the common "later definition
+  wins" intuition. Deterministic; the user owns the choice -- there is no overlap
+  auto-detection. Reference-guide docs MUST surface this with a worked example.
   _Traces to: US1 scenario 3, US5._
 - **FR-006 (Determinism and thread-safety)**: Transformations MUST be deterministic and
   thread-safe, same input always produces the same output, and the framework MAY invoke them
@@ -643,12 +651,12 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1 scenarios 4 and 6, US5 scenario 1._
 - **FR-007 (Chain composition)**: The framework MUST process each incoming message by
   fixed-point iteration over the registered transformations:
-  1. Walk the registrations in registration order.
-  2. First transformation whose `from` matches the current message wins; invoke it.
+  1. Walk the registrations in registration order; track the **last** transformation whose
+     `from` matches the current message.
+  2. If a match was found, invoke it; otherwise terminate and emit the current message.
   3. For 1:1 output: replace the current message with the output, restart from step 1.
   4. For 1:N output: each output re-enters the chain independently (recursive step 1).
   5. For 1:0 (drop) output: terminate with empty result.
-  6. If no transformation matches in step 1: terminate; emit the current message.
 
   This subsumes both same-name version bumps (e.g. v1 -> v2 -> v3 of `CourseCreated`) and
   cross-name renames (e.g. `CourseOpened` -> `CourseCreated`) without special-casing.
