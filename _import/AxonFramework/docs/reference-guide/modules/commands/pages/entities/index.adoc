@@ -9,9 +9,9 @@ If you are new to event sourcing, see xref:events:index.adoc#core-concepts[Event
 
 Use an entity when a command needs state established by earlier commands:
 
-* "A course cannot accept more students than its capacity"—the handler needs to know how many are enrolled.
-* "A bank account cannot go below zero"—the handler needs the current balance.
-* "An order can only be cancelled if it has not shipped"—the handler needs the order status.
+* "A course cannot accept more students than its capacity": the handler needs to know how many are enrolled.
+* "A bank account cannot go below zero": the handler needs the current balance.
+* "An order can only be cancelled if it has not shipped": the handler needs the order status.
 
 == When not to use entities
 
@@ -21,7 +21,7 @@ Do not use an entity when the command can be validated without reading prior sta
 * Creating a resource with a client-supplied identifier, with no existing state to check.
 * Forwarding a command to an external system that owns the state.
 
-These are xref:commands:command-handlers.adoc#stateless-command-handlers[stateless command handlers]—simpler and cheaper to run.
+These are xref:commands:command-handlers.adoc#stateless-command-handlers[stateless command handlers]: simpler and cheaper to run.
 If you are adding an entity only to hold a flag that is set once and never changes, that is a signal the command may not need an entity.
 
 == Subsections

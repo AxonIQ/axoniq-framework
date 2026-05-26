@@ -120,7 +120,7 @@ public class CourseEntity {
 <1> Creational command handler: validates the creation command and appends the creation event.
 <2> Instance command handler: validates against current state and appends the enrollment event.
 <3> Event sourcing handlers: update state fields from events.
-They must contain no business logic—only state assignments.
+They must contain no business logic, only state assignments.
 <4> No-arg constructor used as the entity creator.
 
 [IMPORTANT]
@@ -161,7 +161,7 @@ Three approaches are available to wire this entity into Axon:
 
 The declarative approach wires the entity's existing methods into Axon without touching the entity class.
 
-The registration is wrapped in a helper method that receives the application's `EventSourcingConfigurer` as a parameter—the configurer itself is constructed only once, in `main()`, and threaded through each entity's configuration class.
+The registration is wrapped in a helper method that receives the application's `EventSourcingConfigurer` as a parameter. The configurer itself is constructed only once, in `main()`, and threaded through each entity's configuration class.
 
 [source,java]
 ----
@@ -226,7 +226,7 @@ This respects any custom name or namespace defined in the used `MessageTypeResol
 
 <2> Creational command handlers are invoked as the starting point for a new entity instance.
 
-<3> Delegates to the entity's `create` method—business logic stays in the entity.
+<3> Delegates to the entity's `create` method; business logic stays in the entity.
 `EventAppender.forContext(context)` creates or retrieves the event appender bound to the current processing context.
 To append metadata alongside an event, see xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata].
 
@@ -328,13 +328,13 @@ The `EventSourcedEntityModule#autodetected` flow reads `@CommandHandler`, `@Even
 === Spring Boot
 
 In Spring Boot, annotate the entity with `@EventSourced` instead of `@EventSourcedEntity`.
-Axon's auto-configuration detects and registers it automatically—no explicit configuration class is required.
+Axon's auto-configuration detects and registers it automatically; no explicit configuration class is required.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 == Placing handlers on the entity vs. a separate component
 
 Command handlers can be placed directly on the entity class (as shown above) or kept in a separate component that receives the entity as a parameter via `@InjectEntity`.
-Both approaches are valid—choose based on how you want to structure your codebase.
+Both approaches are valid; choose based on how you want to structure your codebase.
 
 Placing handlers on the entity keeps all logic for that entity in one class.
 A separate component lets you organize code by use case rather than by entity, which aligns with Vertical Slice Architecture.
@@ -343,6 +343,6 @@ See xref:commands:entities/stateful-command-handler.adoc[Stateful command handle
 
 == Further reading
 
-* xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata]—to append metadata alongside an event, pass a `Metadata` instance as the second argument to `eventAppender.append()`
-* xref:tuning:snapshotting.adoc[Snapshotting]—available as a performance optimization for entities with large event streams
-* xref:testing:index.adoc[Test fixtures]—the test fixture guards against unintentional state changes in command handlers and is strongly recommended for stateful entity testing
+* xref:events:event-publishing.adoc#_appending_events_with_metadata[Appending events with metadata]: to append metadata alongside an event, pass a `Metadata` instance as the second argument to `eventAppender.append()`
+* xref:tuning:snapshotting.adoc[Snapshotting]: available as a performance optimization for entities with large event streams
+* xref:testing:index.adoc[Test fixtures]: the test fixture guards against unintentional state changes in command handlers and is strongly recommended for stateful entity testing

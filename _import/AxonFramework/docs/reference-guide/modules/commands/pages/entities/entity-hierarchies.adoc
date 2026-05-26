@@ -10,7 +10,7 @@ Use child entities when:
 
 * A parent entity owns a bounded set of sub-elements, each with their own identity and command handling logic.
 * Putting all commands on the root entity would create an oversized class with unrelated responsibilities.
-* The children's lifecycle is tied to the parent—they are created and removed together with it.
+* The children's lifecycle is tied to the parent; they are created and removed together with it.
 
 [NOTE]
 ====
@@ -58,7 +58,7 @@ public record EnrollmentEntity(String studentId, boolean dropped) {
 
 <1> Identifier-only constructor used to materialize a fresh parent before its events are replayed.
 <2> A getter Axon uses to read the child collection when routing commands and events.
-<3> An evolver that produces a new parent instance with an updated child list—required for immutable parents.
+<3> An evolver that produces a new parent instance with an updated child list, required for immutable parents.
 <4> A getter exposing the value that identifies this particular child instance.
 The name matches the field used to address this child in incoming commands.
 
@@ -108,7 +108,7 @@ import org.axonframework.modelling.entity.child.EntityChildMetamodel;
 
 MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class);
 
-// Build the child metamodel—same shape as a parent metamodel, without children.
+// Build the child metamodel: same shape as a parent metamodel, without children.
 EntityMetamodel<EnrollmentEntity> enrollmentMetamodel = ConcreteEntityMetamodel
         .forEntityClass(EnrollmentEntity.class)
         // ... child command handlers and evolver
@@ -148,7 +148,7 @@ Other factory methods cover a single child field or different collection shapes.
 <2> The getter that reads the child list from a parent instance, plus the evolver that produces a new parent instance with an updated list.
 
 <3> `commandTargetResolver` selects which child should handle the incoming command.
-Return the matching child, or `null` if none should handle it—Axon then throws `ChildEntityNotFoundException`.
+Return the matching child, or `null` if none should handle it (Axon then throws `ChildEntityNotFoundException`).
 
 <4> `eventTargetMatcher` determines whether a given child should receive the event.
 Both resolvers are required.
@@ -212,7 +212,7 @@ public class CourseEntity {
 ----
 
 <1> `@EntityMember` declares `enrollments` as a collection of child entities.
-`routingKey = "studentId"` is required when the parent holds multiple children of the same type—it tells Axon which command field to match against `EnrollmentEntity.getStudentId()`.
+`routingKey = "studentId"` is required when the parent holds multiple children of the same type; it tells Axon which command field to match against `EnrollmentEntity.getStudentId()`.
 For a single child field with no other fields of the same type, `routingKey` can be omitted.
 
 <2> Children are created in the parent's `@EventSourcingHandler`, never in a command handler.
@@ -245,7 +245,7 @@ Use a `List` instead and manage key-based lookup within the entity.
 === Spring Boot
 
 In Spring Boot, annotate the parent entity with `@EventSourced` instead of `@EventSourcedEntity`.
-Axon's auto-configuration detects and registers it automatically—no explicit configuration class is required.
+Axon's auto-configuration detects and registers it automatically; no explicit configuration class is required.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 == Command and event routing
@@ -274,7 +274,7 @@ If the parent had only a single `EnrollmentEntity` field instead of a `List`, th
 === Event routing to children
 
 By default, Axon routes events to children using the same `routingKey` declared on `@EntityMember`.
-`RoutingKeyEventTargetMatcherDefinition` delivers each event only to the child whose routing key value matches the event payload field—not to every child in the collection.
+`RoutingKeyEventTargetMatcherDefinition` delivers each event only to the child whose routing key value matches the event payload field, not to every child in the collection.
 
 This means events are selectively routed: only the matching child receives the event.
 If your entity relies on broadcasting events to all children, you will need to implement a custom `EventTargetMatcher` (see <<_advanced_routing,Advanced routing>> below).

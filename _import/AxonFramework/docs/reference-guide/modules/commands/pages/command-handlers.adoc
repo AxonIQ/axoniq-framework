@@ -2,7 +2,7 @@
 :navtitle: Handling
 
 Command handlers process commands and perform the corresponding business logic.
-A command handler decides whether a requested change is valid and, if so, applies it—by appending events, invoking services, or dispatching further commands.
+A command handler decides whether a requested change is valid and, if so, applies it by appending events, invoking services, or dispatching further commands.
 
 Command handlers are **stateless** when they do not need prior state to process the command (this page).
 When prior state is required, the handler either lives on the entity itself (see xref:entities/event-sourced-entity.adoc[Event-sourced entities]) or receives the entity as a parameter via `@InjectEntity` (see xref:entities/stateful-command-handler.adoc[Stateful command handlers]).
@@ -41,7 +41,7 @@ public class FacultyAnnouncementCommandHandler {
 
 <2> State is accessed through injected services, not maintained in the handler itself.
 
-<3> Each command invocation is independent—no instance state is maintained between calls.
+<3> Each command invocation is independent; no instance state is maintained between calls.
 
 <4> Commands change the conceptual state of the system (here, delivering an announcement through the notification service).
 
@@ -123,7 +123,7 @@ public void handle(IssueStudentTranscriptDto dto) {
 ----
 
 The framework uses `Converters` to transform the payload to match the handler's parameter type.
-This eliminates many use cases for upcasters—simple type conversions happen during handling rather than requiring explicit upcasting logic.
+This eliminates many use cases for upcasters, simple type conversions happen during handling rather than requiring explicit upcasting logic.
 
 [NOTE]
 ====
@@ -157,7 +157,7 @@ public void handle(
 It exposes the active unit of work, registered application components, and lifecycle hooks.
 
 <2> `runOnCommit` registers a callback that fires once the unit of work commits successfully.
-Use it for side effects that should only happen after the command processing completes—metrics, audit trails, or dispatching follow-up notifications outside the transactional boundary.
+Use it for side effects that should only happen after the command processing completes: metrics, audit trails, or dispatching follow-up notifications outside the transactional boundary.
 
 For more details on `ProcessingContext`, see xref:messaging-concepts:processing-context.adoc[].
 
@@ -188,7 +188,7 @@ public void handle(RenameCourse command, EventAppender eventAppender) {
 ----
 
 <1> `EventAppender` is injected as a handler parameter alongside the command.
-Creational handlers are declared `static`—no entity instance exists yet at this point.
+Creational handlers are declared `static`, no entity instance exists yet at this point.
 
 <2> Use `eventAppender.append()` to publish one or more events.
 Events are published when the `ProcessingContext` commits.
@@ -334,7 +334,7 @@ This honors any custom name or namespace declared on a `@Command` annotation and
 <3> Retrieve any registered component from the `ProcessingContext`.
 The `NotificationService` was registered separately as part of the application's configuration.
 
-<4> Stateless command handlers return a `MessageStream`—use `MessageStream.empty().cast()` when no result is produced.
+<4> Stateless command handlers return a `MessageStream`. Use `MessageStream.empty().cast()` when no result is produced.
 
 [#_autodetected]
 === Autodetected

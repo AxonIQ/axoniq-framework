@@ -23,7 +23,7 @@ This approach emphasizes _what you want to accomplish_ (commands) rather than _h
 Command handlers come in three styles, depending on whether they need prior state and where that state lives:
 
 * **Stateless command handlers**: no prior state is needed.
-Each invocation is independent—for example, dispatching a batch of sub-commands, sending a notification, or forwarding a command to an external system.
+Each invocation is independent (for example, dispatching a batch of sub-commands, sending a notification, or forwarding a command to an external system).
 See xref:commands:command-handlers.adoc[Command handlers].
 
 * **Event-sourced entities**: command handlers live on the entity class itself, alongside its state fields and event sourcing handlers.

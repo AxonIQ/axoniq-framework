@@ -88,13 +88,13 @@ public class CourseCommandHandler {
 }
 ----
 
-<1> Creational handlers do not receive an entity parameter—the course does not yet exist and is created when `CourseCreated` is published.
+<1> Creational handlers do not receive an entity parameter; the course does not yet exist and is created when `CourseCreated` is published.
 
 <2> `@InjectEntity` tells Axon to load the `Course` entity before invoking this handler.
 By default, the entity ID is read from the `@TargetEntityId`-annotated field on the command payload; see <<_resolving_the_entity_identifier>> for the other options.
 
 <3> The handler reads entity state to make a decision.
-No event is appended if the name has not changed—an idempotent pattern common in this style.
+No event is appended if the name has not changed; an idempotent pattern common in this style.
 
 The commands used in this example:
 
@@ -107,7 +107,7 @@ public record CreateCourse(String courseId, String name, int capacity) {}
 public record RenameCourse(@TargetEntityId String courseId, String name) {}
 ----
 
-For how to define the entity itself—state fields, event sourcing handlers, and configuration—see xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities].
+For how to define the entity itself (state fields, event sourcing handlers, and configuration), see xref:commands:entities/event-sourced-entity.adoc[Event-sourced entities].
 
 [#_resolving_the_entity_identifier]
 == Resolving the entity identifier
@@ -115,11 +115,11 @@ For how to define the entity itself—state fields, event sourcing handlers, and
 `@InjectEntity` needs an identifier to look up the entity.
 The annotation offers two attributes for controlling how that identifier is resolved from the incoming command:
 
-* **`idProperty`**—name a field on the command payload directly: `@InjectEntity(idProperty = "courseId")`.
+* **`idProperty`**: name a field on the command payload directly: `@InjectEntity(idProperty = "courseId")`.
 Useful when the command targets multiple entities (see <<_injecting_multiple_entities>>) or when the relevant field is not marked with `@TargetEntityId`.
-* **`idResolver`**—supply a class implementing `EntityIdResolver` for custom extraction logic, useful when the identifier is computed from multiple fields or requires lookup logic.
+* **`idResolver`**: supply a class implementing `EntityIdResolver` for custom extraction logic, useful when the identifier is computed from multiple fields or requires lookup logic.
 
-Without either attribute set, Axon falls back to the default resolver, which reads the field marked with `@TargetEntityId` on the command payload—the form used in the example above.
+Without either attribute set, Axon falls back to the default resolver, which reads the field marked with `@TargetEntityId` on the command payload (the form used in the example above).
 
 [#_injecting_multiple_entities]
 == Injecting multiple entities
@@ -167,7 +167,7 @@ public class SubscribeStudentToCourseHandler {
 
 <2> `idProperty = "studentId"` tells Axon to load the `Student` entity using the `studentId` field of the command.
 
-The command in this example has no `@TargetEntityId` because there is no single primary entity—the handler works across two:
+The command in this example has no `@TargetEntityId` because there is no single primary entity; the handler works across two:
 
 [source,java]
 ----
@@ -180,7 +180,7 @@ Stateful command handlers are the natural fit for https://www.jimmybogard.com/ve
 
 In Vertical Slice Architecture, you organize code around use cases rather than technical layers.
 Each slice owns everything needed to fulfill one request: the command, the handler, the entity state it reads, and the events it appends.
-A slice cuts vertically through the application stack—from the incoming command down to the event store—rather than grouping code horizontally by layers such as controllers, services, and repositories.
+A slice cuts vertically through the application stack (from the incoming command down to the event store) rather than grouping code horizontally by layers such as controllers, services, and repositories.
 
 === From event model to code
 
@@ -236,7 +236,7 @@ public class RenameCourseHandler {
 }
 ----
 
-The result is a codebase where finding the code for a use case is trivial—look for the handler class named after the command.
+The result is a codebase where finding the code for a use case is trivial: look for the handler class named after the command.
 
 * **Navigability**: each use case lives in one place. No need to trace through service layers to find where a command is processed.
 * **Testability**: a handler class with a single method is straightforward to test in isolation, with a stub or mock entity.

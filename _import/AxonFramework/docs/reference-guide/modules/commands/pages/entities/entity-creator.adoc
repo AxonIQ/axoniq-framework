@@ -1,26 +1,26 @@
 = Entity Creator
 :navtitle: Entity creator
 
-Every event-sourced entity needs a creator method—a constructor or static factory method that Axon calls before replaying the entity's events.
+Every event-sourced entity needs a creator method: a constructor or static factory method that Axon calls before replaying the entity's events.
 Three creator forms are supported:
 
-. **No-argument creator**—Axon calls a no-arg constructor, then replays the entity's events.
-. **Identifier-based creator**—Axon passes the entity identifier at construction time.
-. **First-event-based creator**—Axon passes the first event in the entity's stream at construction time.
+. **No-argument creator**: Axon calls a no-arg constructor, then replays the entity's events.
+. **Identifier-based creator**: Axon passes the entity identifier at construction time.
+. **First-event-based creator**: Axon passes the first event in the entity's stream at construction time.
 
 The identifier-based and first-event-based forms are the foundation for **immutable entities**: by passing required state into the constructor, fields can be declared `final` and the entity's identity is fixed from the moment of creation.
 
 Each form is supported by both configuration styles:
 
-* **Declarative**—wire the creator with `EventSourcedEntityFactory`.
+* **Declarative**: wire the creator with `EventSourcedEntityFactory`.
 See xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative] for the full registration call this slots into.
-* **Automated** (annotation-based)—mark the constructor with `@EntityCreator`.
+* **Automated** (annotation-based): mark the constructor with `@EntityCreator`.
 Works identically with `@EventSourcedEntity` (non-Spring) and `@EventSourced` (Spring Boot).
 
 [NOTE]
 ====
 The annotated examples below use `@EventSourcedEntity(tagKey = "courseId")`, the non-Spring annotation.
-In Spring Boot, replace `@EventSourcedEntity` with `@EventSourced`—the `@EntityCreator` patterns are identical.
+In Spring Boot, replace `@EventSourcedEntity` with `@EventSourced`; the `@EntityCreator` patterns are identical.
 ====
 
 == No-argument creator
@@ -85,7 +85,7 @@ public class CourseEntity {
 }
 ----
 
-<1> `courseId` is `final`—set once at construction, never mutated by event sourcing handlers.
+<1> `courseId` is `final`: set once at construction, never mutated by event sourcing handlers.
 <2> Axon invokes this constructor with the entity identifier resolved from the incoming command.
 
 [IMPORTANT]
@@ -99,7 +99,7 @@ Without it, the first parameter is assumed to be the event payload (the first-ev
 Suited for **fully immutable** entities: every field is `final`, set once when the entity is created from its creation event.
 Subsequent state changes produce a new instance returned from the `@EventSourcingHandler`.
 
-When this form is used, command handlers must be split into xref:commands:entities/event-sourced-entity.adoc#_entity_members[creational and instance command handlers]—a creational handler appends the creation event before the entity exists, and instance handlers operate on the already-created entity for subsequent commands.
+When this form is used, command handlers must be split into xref:commands:entities/event-sourced-entity.adoc#_entity_members[creational and instance command handlers]: a creational handler appends the creation event before the entity exists, and instance handlers operate on the already-created entity for subsequent commands.
 
 === Declarative
 

@@ -29,7 +29,7 @@ Polymorphism is handled by an `EventSourcedEntityFactory.fromEventMessage()` fac
 
 [source,java]
 ----
-// Abstract parent—no annotations needed
+// Abstract parent, no annotations needed
 public abstract class CourseEntity {
 
     protected String courseId;
@@ -67,12 +67,12 @@ public class InPersonCourse extends CourseEntity {
 The polymorphism-specific piece is the `entityFactory`: an `EventSourcedEntityFactory.fromEventMessage` that inspects the first event and creates the right concrete type.
 Subtype-specific command handlers cast the entity parameter to that subtype.
 
-Refer to xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative configuration] for the surrounding registration boilerplate—`messagingModel((config, model) -> { ... })`, `criteriaResolver`, `entityIdResolver`, and the basic `creationalCommandHandler` / `instanceCommandHandler` / `entityEvolver` patterns.
+Refer to xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative configuration] for the surrounding registration boilerplate: `messagingModel((config, model) -> { ... })`, `criteriaResolver`, `entityIdResolver`, and the basic `creationalCommandHandler` / `instanceCommandHandler` / `entityEvolver` patterns.
 Only the polymorphism-specific snippets are shown below:
 
 [source,java]
 ----
-// Subtype-specific instance command handler—cast to the concrete type.
+// Subtype-specific instance command handler. Cast to the concrete type.
 .instanceCommandHandler(
     resolver.resolveOrThrow(UpdatePlatformUrl.class).qualifiedName(),
     (command, entity, context) -> {
@@ -113,7 +113,7 @@ Axon discovers concrete subtypes from `concreteTypes`.
 [TIP]
 ====
 If the entity class is a sealed class or interface, `concreteTypes` is optional.
-Axon automatically collects all concrete (non-sealed) leaf types by recursively traversing the sealed hierarchy—no explicit listing is required.
+Axon automatically collects all concrete (non-sealed) leaf types by recursively traversing the sealed hierarchy; no explicit listing is required.
 ====
 
 [source,java]
@@ -139,7 +139,7 @@ public abstract class CourseEntity {
 
 <1> Subtypes do not need `@EventSourcedEntity`; Axon discovers them from `concreteTypes`.
 
-<2> The `@EntityCreator` factory picks the concrete subtype based on the creation event—the polymorphism-specific part.
+<2> The `@EntityCreator` factory picks the concrete subtype based on the creation event. This is the polymorphism-specific part.
 
 Register the abstract parent class:
 
@@ -161,25 +161,25 @@ Axon discovers the concrete subtypes from `concreteTypes` automatically.
 === Spring Boot
 
 In Spring Boot, annotate the abstract parent with `@EventSourced(concreteTypes = {...})` instead of `@EventSourcedEntity(concreteTypes = {...})`.
-Axon's auto-configuration detects and registers it, including all listed subtypes—no explicit configuration class is required.
-Do *not* annotate the subtypes with `@EventSourced`—they are already discovered, and since `@EventSourced` is a Spring `@Component`, annotating them would cause Spring to create unnecessary beans.
+Axon's auto-configuration detects and registers it, including all listed subtypes; no explicit configuration class is required.
+Do *not* annotate the subtypes with `@EventSourced`; they are already discovered, and since `@EventSourced` is a Spring `@Component`, annotating them would cause Spring to create unnecessary beans.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
 [TIP]
 ====
 If the entity class is a sealed class or interface, `concreteTypes` is optional.
-Axon automatically collects all concrete (non-sealed) leaf types by recursively traversing the sealed hierarchy—no explicit listing is required.
+Axon automatically collects all concrete (non-sealed) leaf types by recursively traversing the sealed hierarchy; no explicit listing is required.
 ====
 
 == Constraints
 
 * For non-sealed entity classes, subtypes not listed in `concreteTypes` are silently ignored; their command and event handlers will not be registered and commands targeting them will fail at runtime.
-For sealed entity classes, all concrete (non-sealed) leaf types in the sealed hierarchy are discovered automatically—no explicit listing in `concreteTypes` is needed.
+For sealed entity classes, all concrete (non-sealed) leaf types in the sealed hierarchy are discovered automatically; no explicit listing in `concreteTypes` is needed.
 * Each command may have at most one handler anywhere in the hierarchy.
 Axon throws `DuplicateCommandHandlerSubscriptionException` at startup if the same command appears in more than one class within the same entity type.
 This applies to both instance and creational command handlers.
 * `@EventSourcingHandler` methods can be declared on both the parent and subtypes; the parent's handler is called first, then the subtype's.
-* Parent fields read or assigned by subtype constructors must be at least `protected`—`private` fields cannot be accessed from subclasses.
+* Parent fields read or assigned by subtype constructors must be at least `protected`; `private` fields cannot be accessed from subclasses.
 * The concrete type is fixed at creation time; an entity cannot change its type at runtime.
 
 == Further reading
