@@ -118,13 +118,18 @@ public final class EventTransformation {
          * returned value's runtime type drives conversion back for downstream consumers.
          * Input and output Java types MAY differ. The framework verifies that the output's
          * resolved {@link MessageType} matches the declared {@code to}; a mismatch raises a
-         * runtime error. The mapper also receives the active {@link ProcessingContext}
-         * ({@code null} when none is active).
+         * runtime error.
+         * <p>
+         * The mapper also receives the active {@link ProcessingContext}. It MAY be {@code null}
+         * (e.g. on tracking-processor reads outside a transaction); null-check before calling
+         * {@code .get*(...)} on it. Most transformations do not need the context and can
+         * safely ignore it.
          *
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the type the stored payload is converted to before invocation
-         * @param payloadMapper maps the input payload + processing context to its transformed output
+         * @param payloadMapper maps the input payload + (nullable) processing context to its
+         *                      transformed output
          * @return the resulting {@link EventTransformer}
          */
         public <T, U> EventTransformer transform(Class<T> inputType,
