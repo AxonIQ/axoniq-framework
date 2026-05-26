@@ -18,140 +18,66 @@ Child entities share the same consistency boundary as their parent: a command ta
 For large or independently managed collections, a separate entity with its own lifecycle may be a better fit.
 ====
 
-== The parent entity
+== The parent and child entities
 
-The parent entity declares its children using `@EntityMember`.
-`@EntityMember` tells Axon that the annotated field holds child entity instances and instructs the framework to inspect the element type for command and event handlers.
-
-`routingKey` on `@EntityMember` is only required when the parent holds multiple children of the same type (either a collection, or two or more fields of the same type).
-It specifies which property of an incoming command or event payload identifies the target child.
-Axon matches that value against the child's corresponding getter method.
-
-For a single child field with no other fields of the same type, `routingKey` can be omitted—commands are forwarded to it automatically:
+A hierarchy is two plain Java classes: a parent that holds child instances as a field, and a child with its own state and routing key.
+The configuration sections below show how Axon connects these classes to the command and event flow.
 
 [source,java]
 ----
-@EventSourcedEntity(tagKey = "courseId")
-public class CourseEntity {
+import java.util.List;
 
-    @EntityMember // <1>
-    private CourseScheduleEntity schedule;
+// Parent entity
+public record CourseEntity(String courseId, int capacity, List<EnrollmentEntity> enrollments) {
 
-    @EventSourcingHandler
-    private void on(CourseScheduled event) {
-        this.schedule = new CourseScheduleEntity(event.startDate(), event.endDate());
+    public CourseEntity(String courseId) { // <1>
+        this(courseId, 0, List.of());
+    }
+
+    public List<EnrollmentEntity> getEnrollments() { // <2>
+        return enrollments;
+    }
+
+    public CourseEntity withEnrollments(List<EnrollmentEntity> updated) { // <3>
+        return new CourseEntity(courseId, capacity, List.copyOf(updated));
     }
 }
-----
 
-<1> No `routingKey` needed—there is only one `CourseScheduleEntity` field, so commands are forwarded to it automatically.
+// Child entity
+public record EnrollmentEntity(String studentId, boolean dropped) {
 
-[NOTE]
-====
-Only `List` fields are supported for collections of child entities in the annotated approach.
-Using a `Map` field will not route commands to the map values.
-Use a `List` instead and manage key-based lookup within the entity.
-====
-
-== The child entity
-
-Child entities are plain Java classes with their own command and event handlers.
-They do not need `@EventSourcedEntity`. They are managed entirely by the parent.
-
-The child must expose a getter whose name matches the `routingKey` declared on `@EntityMember` (in the annotated approaches), so Axon can route commands to the correct child instance.
-
-[source,java]
-----
-import org.axonframework.eventsourcing.annotation.EventSourcingHandler;
-import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-
-public class EnrollmentEntity {
-
-    private final String studentId;
-    private boolean dropped;
-
-    public EnrollmentEntity(String studentId) { // <1>
-        this.studentId = studentId;
+    public EnrollmentEntity(String studentId) {
+        this(studentId, false);
     }
 
-    public String getStudentId() { // <2>
+    public String getStudentId() { // <4>
         return studentId;
     }
-
-    @CommandHandler
-    public void handle(DropEnrollment cmd, EventAppender appender) {
-        if (dropped) {
-            throw new IllegalStateException("Enrollment already dropped");
-        }
-        appender.append(new EnrollmentDropped(cmd.courseId(), studentId, cmd.reason()));
-    }
-
-    @EventSourcingHandler
-    private void on(EnrollmentDropped event) {
-        this.dropped = true;
-    }
 }
 ----
 
-<1> The constructor is called from the parent's `@EventSourcingHandler` when the child is first created.
-<2> Axon matches incoming commands to the child whose `getStudentId()` equals the command field declared by `routingKey`.
-
-[IMPORTANT]
-====
-Each command must have exactly one handler in the entire entity hierarchy.
-If both the parent and a child entity declare a handler for the same command, Axon throws `DuplicateCommandHandlerSubscriptionException` during configuration.
-====
-
-== Command and event routing
-
-=== Commands targeting child entities
-
-Every command needs a `@TargetEntityId` field so Axon can load the correct parent entity.
-When a command targets a child, it also needs a field that matches the parent's `routingKey` so Axon can route it to the right child.
-The `routingKey` field is only required on the command if the parent holds multiple children of the same type:
-
-[source,java]
-----
-import org.axonframework.modelling.annotation.TargetEntityId;
-
-public record DropEnrollment(
-        @TargetEntityId String courseId, // <1>
-        String studentId,                // <2>
-        String reason
-) {}
-----
-
-<1> `@TargetEntityId` identifies the parent entity to load.
-<2> `studentId` matches the `routingKey = "studentId"` on `@EntityMember` in the parent, routing the command to the correct child in the collection.
-If the parent had only a single `EnrollmentEntity` field instead of a `List`, this field would not be required for routing.
-
-=== Event routing to children
-
-By default, Axon routes events to children using the same `routingKey` declared on `@EntityMember`.
-`RoutingKeyEventTargetMatcherDefinition` delivers each event only to the child whose routing key value matches the event payload field—not to every child in the collection.
-
-This means events are selectively routed: only the matching child receives the event.
-If your entity relies on broadcasting events to all children, you will need to implement a custom `EventTargetMatcher` (see <<advanced-routing,Advanced routing>> below).
-
-[NOTE]
-====
-If no matching child is found when a command arrives, Axon throws `ChildEntityNotFoundException`.
-This usually means the child has not been created yet. Ensure the parent's `@EventSourcingHandler` creates the child before any commands target it.
-====
+<1> Identifier-only constructor used to materialize a fresh parent before its events are replayed.
+<2> A getter Axon uses to read the child collection when routing commands and events.
+<3> An evolver that produces a new parent instance with an updated child list—required for immutable parents.
+<4> A getter exposing the value that identifies this particular child instance.
+The name matches the field used to address this child in incoming commands.
 
 == Configuring the hierarchy
 
 Three approaches are available:
 
-. <<_declarative,Declarative>>: no annotations on the entity class. Wire handlers and children programmatically.
-. <<_autodetected,Autodetected>>: annotate with `@EventSourcedEntity`. Register with `EventSourcedEntityModule.autodetected()`.
+. <<_declarative,Declarative>>: no annotations on the entity classes. Wire handlers and children programmatically.
+. <<_autodetected,Autodetected>>: annotate the parent with `@EventSourcedEntity`. Register with `EventSourcedEntityModule.autodetected()`.
 . <<_spring_boot,Spring Boot>>: annotate with `@EventSourced`. Auto-configuration handles registration.
 
+[#_declarative]
 === Declarative
 
-In the declarative approach, both parent and child entities are plain Java classes or records with no framework annotations.
-Child entity metamodels are built separately and added to the parent metamodel using `EntityChildMetamodel`.
+The declarative approach uses the parent and child shown above without modifying them.
+The hierarchy-specific wiring is the `EntityChildMetamodel` that attaches the child to the parent metamodel via `addChild`.
+
+For brevity, the example below shows only the child-wiring piece.
+See xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative configuration] for the parent's own command handlers, event evolvers, factory, and criteria resolver.
 
 [NOTE]
 ====
@@ -169,179 +95,75 @@ The `tagKey` in the criteria resolver (`Tag.of("courseId", id)`) must match the 
 See xref:commands:entities/event-sourced-entity.adoc#_entity_identification[Entity identification] for details.
 ====
 
-[source,java]
-----
-// Parent entity—plain record, no annotations
-public record CourseEntity(String courseId, int capacity, List<EnrollmentEntity> enrollments) {
-
-    CourseEntity(String courseId) {
-        this(courseId, 0, List.of());
-    }
-
-    public List<EnrollmentEntity> getEnrollments() { // <1>
-        return enrollments;
-    }
-
-    CourseEntity withEnrollments(List<EnrollmentEntity> updated) { // <2>
-        return new CourseEntity(courseId, capacity, List.copyOf(updated));
-    }
-}
-
-// Child entity—plain record, no annotations
-public record EnrollmentEntity(String studentId, boolean dropped) {
-
-    EnrollmentEntity(String studentId) {
-        this(studentId, false);
-    }
-
-    public String getStudentId() { // <3>
-        return studentId;
-    }
-}
-----
-
-<1> A getter for the child collection, used by `ChildEntityFieldDefinition` to read children from the parent.
-<2> An evolver method that produces a new parent instance with an updated child list.
-<3> The routing getter: its name must match the `routingKey` used when wiring the child metamodel.
-
-Build the child metamodel and register the parent:
+The hierarchy-specific code goes inside the `messagingModel((config, model) -> { ... })` callback of the registration shown in xref:commands:entities/event-sourced-entity.adoc#_declarative[Declarative configuration].
+The only additions for hierarchies are the `EntityChildMetamodel` for the child and the `.addChild(...)` invocation on the parent metamodel:
 
 [source,java]
 ----
-import org.axonframework.eventsourcing.EventSourcedEntityFactory;
-import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
-import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.axonframework.messaging.eventstreaming.Tag;
 import org.axonframework.modelling.entity.ConcreteEntityMetamodel;
 import org.axonframework.modelling.entity.EntityMetamodel;
 import org.axonframework.modelling.entity.child.ChildEntityFieldDefinition;
 import org.axonframework.modelling.entity.child.EntityChildMetamodel;
 
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class);
 
-configurer.registerEntity(
-    EventSourcedEntityModule.declarative(String.class, CourseEntity.class)
-        .messagingModel((config, model) -> {
-            MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class); // <1>
+// Build the child metamodel—same shape as a parent metamodel, without children.
+EntityMetamodel<EnrollmentEntity> enrollmentMetamodel = ConcreteEntityMetamodel
+        .forEntityClass(EnrollmentEntity.class)
+        // ... child command handlers and evolver
+        .build();
 
-            EntityMetamodel<EnrollmentEntity> enrollmentMetamodel = ConcreteEntityMetamodel
-                .forEntityClass(EnrollmentEntity.class)
-                .instanceCommandHandler(
-                    resolver.resolveOrThrow(DropEnrollment.class).qualifiedName(),
-                    (command, entity, context) -> {
-                        if (entity.dropped()) {
-                            throw new IllegalStateException("Enrollment already dropped");
-                        }
-                        DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
-                        EventAppender.forContext(context).append(
-                            new EnrollmentDropped(cmd.courseId(), entity.studentId(), cmd.reason())
-                        );
-                        return MessageStream.empty().cast();
-                    }
-                )
-                .entityEvolver((entity, event, context) -> {
+// Attach it to the parent metamodel via addChild.
+return model
+        // ... parent command handlers and evolver
+        .addChild(EntityChildMetamodel // <1>
+                .list(CourseEntity.class, enrollmentMetamodel)
+                .childEntityFieldDefinition(ChildEntityFieldDefinition.forGetterEvolver( // <2>
+                        CourseEntity::getEnrollments,
+                        CourseEntity::withEnrollments
+                ))
+                .commandTargetResolver((candidates, command, ctx) -> { // <3>
+                    DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
+                    return candidates.stream()
+                                     .filter(e -> e.getStudentId().equals(cmd.studentId()))
+                                     .findFirst()
+                                     .orElse(null);
+                })
+                .eventTargetMatcher((child, event, ctx) -> { // <4>
                     if (event.type().qualifiedName().equals(resolver.resolveOrThrow(EnrollmentDropped.class).qualifiedName())) {
-                        return new EnrollmentEntity(entity.studentId(), true);
+                        EnrollmentDropped e = event.payloadAs(EnrollmentDropped.class);
+                        return child.getStudentId().equals(e.studentId());
                     }
-                    return entity;
+                    return false;
                 })
-                .build();
-
-            return model
-                .creationalCommandHandler(
-                    resolver.resolveOrThrow(CreateCourse.class).qualifiedName(),
-                    (command, context) -> {
-                        CreateCourse cmd = command.payloadAs(CreateCourse.class);
-                        EventAppender.forContext(context).append(
-                            new CourseCreated(cmd.courseId(), cmd.title(), cmd.capacity())
-                        );
-                        return MessageStream.empty().cast();
-                    }
-                )
-                .instanceCommandHandler(
-                    resolver.resolveOrThrow(EnrollStudent.class).qualifiedName(),
-                    (command, entity, context) -> {
-                        if (entity.enrollments().size() >= entity.capacity()) {
-                            throw new IllegalStateException("Course is full");
-                        }
-                        EnrollStudent cmd = command.payloadAs(EnrollStudent.class);
-                        EventAppender.forContext(context).append(
-                            new StudentEnrolled(entity.courseId(), cmd.studentId())
-                        );
-                        return MessageStream.empty().cast();
-                    }
-                )
-                .entityEvolver((entity, event, context) -> {
-                    if (event.type().qualifiedName().equals(resolver.resolveOrThrow(CourseCreated.class).qualifiedName())) {
-                        CourseCreated e = event.payloadAs(CourseCreated.class);
-                        return new CourseEntity(e.courseId(), e.capacity(), List.of());
-                    }
-                    if (event.type().qualifiedName().equals(resolver.resolveOrThrow(StudentEnrolled.class).qualifiedName())) {
-                        StudentEnrolled e = event.payloadAs(StudentEnrolled.class);
-                        var updated = new ArrayList<>(entity.enrollments());
-                        updated.add(new EnrollmentEntity(e.studentId()));
-                        return new CourseEntity(entity.courseId(), entity.capacity(), List.copyOf(updated));
-                    }
-                    return entity;
-                })
-                .addChild(EntityChildMetamodel // <2>
-                    .list(CourseEntity.class, enrollmentMetamodel)
-                    .childEntityFieldDefinition(ChildEntityFieldDefinition.forGetterEvolver(
-                        CourseEntity::getEnrollments,  // <3>
-                        CourseEntity::withEnrollments  // <4>
-                    ))
-                    .commandTargetResolver((candidates, command, ctx) -> { // <5>
-                        DropEnrollment cmd = command.payloadAs(DropEnrollment.class);
-                        return candidates.stream()
-                                         .filter(e -> e.getStudentId().equals(cmd.studentId()))
-                                         .findFirst()
-                                         .orElse(null);
-                    })
-                    .eventTargetMatcher((child, event, ctx) -> { // <6>
-                        if (event.type().qualifiedName().equals(resolver.resolveOrThrow(EnrollmentDropped.class).qualifiedName())) {
-                            EnrollmentDropped e = event.payloadAs(EnrollmentDropped.class);
-                            return child.getStudentId().equals(e.studentId());
-                        }
-                        return false;
-                    })
-                    .build()
-                )
-                .build();
-        })
-        .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(CourseEntity::new))
-        .criteriaResolver(c -> (id, ctx) -> EventCriteria.havingTags(Tag.of("courseId", id)))
-        .build()
-);
+                .build()
+        )
+        .build();
 ----
 
-<1> Resolve qualified names via `MessageTypeResolver` rather than constructing `QualifiedName` directly.
-This respects any custom name or namespace declared on `@Command`, `@Event`, or `@Query` annotations.
-Both the child and parent metamodels are built inside the callback so they share the same resolver.
+<1> `EntityChildMetamodel.list()` wires the child into the parent for a `List` field.
+Other factory methods cover a single child field or different collection shapes.
 
-<2> `EntityChildMetamodel.list()` wires the child metamodel into the parent.
-The first argument is the parent entity type. The second is the previously built child metamodel.
+<2> The getter that reads the child list from a parent instance, plus the evolver that produces a new parent instance with an updated list.
 
-<3> The getter that reads the current child list from a parent instance.
+<3> `commandTargetResolver` selects which child should handle the incoming command.
+Return the matching child, or `null` if none should handle it—Axon then throws `ChildEntityNotFoundException`.
 
-<4> The evolver that produces a new parent instance with an updated child list (needed for immutable records).
+<4> `eventTargetMatcher` determines whether a given child should receive the event.
+Both resolvers are required.
 
-<5> `commandTargetResolver` finds which child should handle the incoming command.
-Return the matching child, or `null` if no child should handle it (Axon will then throw `ChildEntityNotFoundException`).
-
-<6> `eventTargetMatcher` determines whether a given child should receive the event.
-Both resolvers are required. Without them the builder throws at startup.
-
+[#_autodetected]
 === Autodetected
 
-Use `@EventSourcedEntity` and register with `EventSourcedEntityModule.autodetected()`.
-The `autodetected` builder reads all `@CommandHandler`, `@EventSourcingHandler`, and `@EntityMember` annotations automatically, including child types.
+Add Axon annotations to the parent entity and register it with `EventSourcedEntityModule.autodetected()`.
+The `EventSourcedEntityModule#autodetected` flow reads all `@CommandHandler`, `@EventSourcingHandler`, and `@EntityMember` annotations from the class, including children.
 
 [source,java]
 ----
+import java.util.ArrayList;
+import java.util.List;
+
 import org.axonframework.eventsourcing.annotation.EventSourcedEntity;
 import org.axonframework.eventsourcing.annotation.EventSourcingHandler;
 import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
@@ -390,39 +212,92 @@ public class CourseEntity {
 ----
 
 <1> `@EntityMember` declares `enrollments` as a collection of child entities.
-`routingKey = "studentId"` is required for a collection because it tells Axon which command field to match against `EnrollmentEntity.getStudentId()`.
+`routingKey = "studentId"` is required when the parent holds multiple children of the same type—it tells Axon which command field to match against `EnrollmentEntity.getStudentId()`.
+For a single child field with no other fields of the same type, `routingKey` can be omitted.
 
 <2> Children are created in the parent's `@EventSourcingHandler`, never in a command handler.
 
-Register with `EventSourcingConfigurer`:
+Register the entity:
 
 [source,java]
 ----
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 
-EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+public class CourseHierarchyConfiguration {
 
-configurer.registerEntity(
-    EventSourcedEntityModule.autodetected(String.class, CourseEntity.class) // <1>
-);
+    public static EventSourcingConfigurer configure(EventSourcingConfigurer configurer) {
+        return configurer.registerEntity(
+                EventSourcedEntityModule.autodetected(String.class, CourseEntity.class)
+        );
+    }
+}
 ----
 
-<1> Pass the parent entity class.
-`autodetected` discovers `@EntityMember` children automatically.
+[NOTE]
+====
+Only `List` fields are supported for collections of child entities in the annotated approach.
+Using a `Map` field will not route commands to the map values.
+Use a `List` instead and manage key-based lookup within the entity.
+====
 
+[#_spring_boot]
 === Spring Boot
 
 In Spring Boot, annotate the parent entity with `@EventSourced` instead of `@EventSourcedEntity`.
 Axon's auto-configuration detects and registers it automatically—no explicit configuration class is required.
 The entity class structure is otherwise identical to the <<_autodetected,autodetected>> approach.
 
-[#advanced-routing]
-== Advanced routing
+== Command and event routing
+
+=== Commands targeting child entities
+
+Every command needs a `@TargetEntityId` field so Axon can load the correct parent entity.
+When a command targets a child, it also needs a field that matches the parent's `routingKey` so Axon can route it to the right child.
+The `routingKey` field is only required on the command if the parent holds multiple children of the same type:
+
+[source,java]
+----
+import org.axonframework.modelling.annotation.TargetEntityId;
+
+public record DropEnrollment(
+        @TargetEntityId String courseId, // <1>
+        String studentId,                // <2>
+        String reason
+) {}
+----
+
+<1> `@TargetEntityId` identifies the parent entity to load.
+<2> `studentId` matches the `routingKey = "studentId"` on `@EntityMember` in the parent, routing the command to the correct child in the collection.
+If the parent had only a single `EnrollmentEntity` field instead of a `List`, this field would not be required for routing.
+
+=== Event routing to children
+
+By default, Axon routes events to children using the same `routingKey` declared on `@EntityMember`.
+`RoutingKeyEventTargetMatcherDefinition` delivers each event only to the child whose routing key value matches the event payload field—not to every child in the collection.
+
+This means events are selectively routed: only the matching child receives the event.
+If your entity relies on broadcasting events to all children, you will need to implement a custom `EventTargetMatcher` (see <<_advanced_routing,Advanced routing>> below).
+
+[NOTE]
+====
+If no matching child is found when a command arrives, Axon throws `ChildEntityNotFoundException`.
+This usually means the child has not been created yet.
+Ensure the parent's `@EventSourcingHandler` creates the child before any commands target it.
+====
+
+[IMPORTANT]
+====
+Each command must have exactly one handler in the entire entity hierarchy.
+If both the parent and a child entity declare a handler for the same command, Axon throws `DuplicateCommandHandlerSubscriptionException` during configuration.
+====
+
+[#_advanced_routing]
+=== Advanced routing
 
 For scenarios where the default routing behaviour does not fit, you can provide custom implementations of `EventTargetMatcher` and `CommandTargetResolver`.
 
-=== Custom event routing with `EventTargetMatcherDefinition`
+==== Custom event routing with `EventTargetMatcherDefinition`
 
 By default, `RoutingKeyEventTargetMatcherDefinition` routes each event to the single child whose routing key matches the event payload.
 To deliver events to multiple children, or to apply custom matching logic, implement `EventTargetMatcherDefinition`:
@@ -446,7 +321,7 @@ public class CourseEntity {
 `EventTargetMatcherDefinition` is a factory that creates an `EventTargetMatcher` for the child type.
 `EventTargetMatcher` is called once per child entity and returns whether that child should receive the event.
 
-=== Custom command routing with `CommandTargetResolverDefinition`
+==== Custom command routing with `CommandTargetResolverDefinition`
 
 By default, Axon uses the `routingKey` attribute to resolve which child should receive a command.
 To apply custom logic, provide a `CommandTargetResolverDefinition` on the `@EntityMember`:
