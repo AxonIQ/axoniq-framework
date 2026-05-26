@@ -16,14 +16,13 @@ package io.axoniq.framework.messaging.transformation;
 
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
-
-import java.util.function.BiConsumer;
-import java.util.function.Predicate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Base SPI for message transformations. The element type {@code M} is preserved -- a
- * transformer does not turn a command into an event. Per element it MAY change the
+ * transformer does not turn a command into an event. Per call it MAY change the
  * {@link org.axonframework.messaging.core.MessageType} identity, the payload's Java type
  * or structure, and the cardinality (1:N split / 1:0 drop for events; commands and
  * queries are 1:1 only).
@@ -31,11 +30,6 @@ import java.util.function.Predicate;
  * Most users do not implement this directly; use the typed factory
  * {@code EventTransformation} (plus {@code CommandTransformation} / {@code QueryTransformation}
  * in 5.3+).
- * <p>
- * Each transformer optionally carries a "when" predicate ({@link #when}) and an "onApplied"
- * observer ({@link #onApplied}). Both apply uniformly to events, commands, and queries.
- * Defaults: always apply / no-op, zero per-event allocation. Matches AF4
- * {@code SingleEntryUpcaster.canUpcast} / {@code doUpcast} (FR-013).
  *
  * @param <M> the {@link Message} subtype this transformer accepts and emits
  * @author AxonIQ
@@ -45,32 +39,15 @@ import java.util.function.Predicate;
 public interface MessageTransformer<M extends Message> {
 
     /**
-     * Apply this transformation. Non-matching elements pass through unchanged. The output
-     * stream MAY contain zero, one, or more elements per input element.
+     * Transform a single matched message. Called by the chain only when {@code message}
+     * matches this transformer's {@code from}. The output stream MAY contain zero (drop),
+     * one (1:1), or more (1:N) elements.
      *
-     * @param stream the input stream
-     * @return the transformed stream
+     * @param message the matched input message
+     * @param context the active processing context, or {@code null} if none
+     * @return the resulting output stream
      */
-    MessageStream<M> transform(MessageStream<M> stream);
-
-    /**
-     * Return a new transformer that delegates to this one only when {@code condition} returns
-     * {@code true} for the input. Default behaviour: always apply.
-     *
-     * @param condition the predicate
-     * @return a wrapped transformer
-     */
-    default MessageTransformer<M> when(Predicate<M> condition) { /* ... */ }
-
-    /**
-     * Return a new transformer that fires {@code observer} after this one has produced its
-     * output stream. Useful for per-event logging / metrics on this specific transformation.
-     * Default behaviour: no-op.
-     *
-     * @param observer the post-apply callback
-     * @return a wrapped transformer
-     */
-    default MessageTransformer<M> onApplied(BiConsumer<M, MessageStream<? extends M>> observer) { /* ... */ }
+    MessageStream<? extends M> transform(M message, @Nullable ProcessingContext context);
 }
 ```
 
@@ -108,14 +85,17 @@ import org.jspecify.annotations.NullMarked;
 public final class MessageTransformerChain {
 
     /**
-     * Route the stream through the relevant sub-chain. Non-matching messages pass through
-     * unchanged in constant time without payload conversion.
+     * Apply the chain to the given stream. Each input element is processed by fixed-point
+     * iteration: walk the registrations in order, first match wins, restart on each match,
+     * terminate when nothing matches. Non-matching elements pass through unchanged in
+     * constant time (O(1) for concrete-{@code from}; O(P) when predicate-based {@code from}
+     * transformations are registered).
      *
      * @param stream the input stream
      * @param <M>    the {@link Message} subtype of the stream
      * @return the transformed stream
      */
-    public <M extends Message> MessageStream<M> transform(MessageStream<M> stream) { /* ... */ }
+    public <M extends Message> MessageStream<? extends M> transform(MessageStream<M> stream) { /* ... */ }
 
     /**
      * Start building a new chain.
@@ -142,20 +122,11 @@ public final class MessageTransformerChain {
         public Builder register(MessageTransformer<?> transformer) { /* ... */ }
 
         /**
-         * Optionally enforce version ordering at {@link #build()}. Without a comparator
-         * (the default), registration order alone determines apply order.
-         *
-         * @param ordering the comparator, or {@code null} to clear
-         * @return this builder
-         */
-        public Builder versionOrder(VersionComparator ordering) { /* ... */ }
-
-        /**
          * Lock the chain and return an immutable instance. Runs multi-step cycle detection
-         * and -- if a {@link VersionComparator} was set -- the version-order check.
+         * on the graph of concrete-{@code MessageType} {@code from -> to} edges.
          *
          * @return the locked chain
-         * @throws ChainConfigurationException on a multi-step cycle or version-order violation
+         * @throws ChainConfigurationException on a multi-step cycle
          */
         public MessageTransformerChain build() { /* ... */ }
     }
@@ -164,11 +135,10 @@ public final class MessageTransformerChain {
 
 **Contract**:
 - **Startup-only registration** (FR-004). Late `register(...)` after `.build()` throws.
-- **Per-`QualifiedName` sub-chains** (FR-007). Registered transformers are grouped by `from.qualifiedName()`. Within a sub-chain, registration order = application order.
+- **Fixed-point iteration** (FR-007): for each input message, walk the registrations in registration order; first match wins; on match, restart from the top with the output (1:1) or recurse per output (1:N); terminate when nothing matches (or on drop). Subsumes both same-name version chains and cross-name renames.
+- **Hybrid lookup** (FR-011): transformations whose `from` is a concrete `MessageType` live in a `QualifiedName`-keyed map for O(1) non-matching lookup; transformations whose `from` is a `Predicate<MessageType>` live in a separate flat list, scanned linearly. Snapshots flow through unchanged (FR-005, no entries match).
 - **Dispatch by message subtype `M`**: events flow only through `MessageTransformer<EventMessage>` entries, commands only through `MessageTransformer<CommandMessage>`, queries only through `MessageTransformer<QueryMessage>`.
-- **O(1) non-matching path** with no per-event allocation (FR-011, JMH-verified). Unknown `MessageType`s pass through (FR-005); this also makes snapshots automatically pass-through (Forward-compat invariant #6).
-- **Re-entry on `QualifiedName` change** (FR-007): an output whose `QualifiedName` differs from its input's re-enters routing at the OUTPUT's sub-chain. Covers 1:N splits AND 1:1 cross-name renames / structural transforms, e.g. `CourseOpened@1.0.0 -> CourseCreated@1.0.0 -> CourseCreated@2.0.0 -> CourseCreated@3.0.0`. Same-name 1:1 hops (pure version bumps) continue in the current sub-chain.
-- **Conflict detection (FR-008) call sites** MUST exist from day one even when not implemented in 5.2.0 (Forward-compat invariant #8). Observability (FR-013) lives per-transformer, not on the Builder -- see "Per-transformer hooks" below.
+- **Conflict detection** (FR-008): duplicate concrete `from` (registration time), self-loop (registration time), multi-step cycle on the concrete-`from -> to` graph (lock time). A defensive runtime safety bound guards against pathological infinite loops; under normal use it never fires.
 
 **Cross-references**: FR-004, FR-005, FR-007, FR-008, FR-011, FR-013, FR-020, US1, US5, US6, US7.
 
@@ -213,86 +183,23 @@ Detection points:
 
 | Conflict (FR-008) | When detected |
 |---|---|
-| duplicate `from` | `register(...)` |
-| self-loop (`from == to`) | `register(...)` |
-| multi-step cycle | `.build()` (lists full edge chain) |
-| version-order violation | `.build()` (only when a `VersionComparator` is set) |
+| duplicate concrete `from` | `register(...)` |
+| self-loop on concrete `from == to` | `register(...)` |
+| multi-step cycle on concrete `from -> to` graph | `.build()` (lists full edge chain) |
+| (defensive) runtime safety bound on chain iteration | runtime, only on pathological misconfiguration |
 
 ---
 
-## `VersionComparator` + `SemverComparator`
+## Version-range matching
 
-Optional `Comparator<String>` that enforces version ordering at `.build()` lock time. Default: no comparator, registration order alone determines apply order (matches AF4 semantics).
+Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). Registration order = apply order; no auto-detection of overlapping predicates.
 
-```java
-package io.axoniq.framework.messaging.transformation;
-
-import java.util.Comparator;
-import org.jspecify.annotations.NullMarked;
-
-/**
- * Optional comparator over version strings supplied to
- * {@link MessageTransformerChain.Builder#versionOrder(VersionComparator)} to enforce
- * version ordering at lock time. {@link SemverComparator} ships as a built-in for
- * MAJOR.MINOR.PATCH versions.
- *
- * @author AxonIQ
- * @since 5.2.0
- */
-@NullMarked
-public interface VersionComparator extends Comparator<String> {
-
-    /**
-     * Convenience factory for the built-in semver comparator.
-     *
-     * @return the {@link SemverComparator} singleton
-     */
-    static VersionComparator semver() { /* ... */ }
-}
-```
-
-```java
-package io.axoniq.framework.messaging.transformation;
-
-import org.jspecify.annotations.NullMarked;
-
-/**
- * Semver (MAJOR.MINOR.PATCH) implementation of {@link VersionComparator}. Non-parseable
- * versions raise a {@link ChainConfigurationException} at chain build time -- no silent
- * lexicographic fallback. To accept other version formats, supply a custom
- * {@link VersionComparator}.
- *
- * @author AxonIQ
- * @since 5.2.0
- */
-@NullMarked
-public final class SemverComparator implements VersionComparator {
-
-    /**
-     * @return the shared singleton instance
-     */
-    public static SemverComparator instance() { /* ... */ }
-
-    /**
-     * Compare two semver version strings by MAJOR, then MINOR, then PATCH.
-     *
-     * @param version1 first version (e.g. {@code "1.0.0"})
-     * @param version2 second version (e.g. {@code "2.0.0"})
-     * @return negative, zero, or positive as {@code version1} is less than, equal to,
-     *         or greater than {@code version2}
-     * @throws ChainConfigurationException if either argument is not valid semver
-     */
-    @Override
-    public int compare(String version1, String version2) { /* ... */ }
-}
-```
-
-**Cross-references**: FR-020, US5.
+**Cross-references**: FR-020.
 
 ---
 
-## Per-transformer hooks (`when`, `onApplied`)
+## Per-transformer hooks (deferred)
 
-Hooks live on each individual transformer, not on the chain Builder. Default methods on the base `MessageTransformer<M>` shown above, so events, commands, and queries all get them uniformly. Subtypes (`EventTransformer`, `CommandTransformer`, `QueryTransformer`) override with covariant return types so the fluent API stays typed (`.when(...)` on an `EventTransformer` returns an `EventTransformer`). User attaches them via the typed factory (`.when(...)` / `.onApplied(...)`) when registering a transformation. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` and keeps logging/metrics scoped to the transformation that owns them. Usage examples in [public-api.md](public-api.md).
+`.when(Predicate<M>)` (skip if `false`) + `.onApplied(BiConsumer<M, MessageStream<? extends M>>)` (post-apply observer) on the base SPI -- matching AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` -- is deferred entirely. NOT in 5.2.0. The common "skip this transformer for this input" case is already covered by FR-005's predicate-based `from`. When the hook pair lands, it does so as a pure additive change: no chain-wide hooks on the Builder, no generic framework-owned name like `Observability`.
 
 **Cross-references**: FR-013, US7.
