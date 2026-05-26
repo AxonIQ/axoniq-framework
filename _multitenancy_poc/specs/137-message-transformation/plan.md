@@ -1,6 +1,6 @@
 # Implementation Plan: Event Transformation API
 
-**Branch**: `enhancement/137/implementation-message-transformator` | **Date**: 2026-05-21 | **Spec**: [spec.md](spec.md)
+**Branch**: `enhancement/137/implementation-message-transformator` | **Last revised**: 2026-05-26 | **Spec**: [spec.md](spec.md)
 
 **Repo**: this feature now lives in `axoniq-framework` (issue moves there). `axon-framework` stays untouched except for one small additive change (see "Required axon-framework additions").
 
@@ -16,9 +16,9 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 
 **5.2.0 minimum (issue AxonIQ/axoniq-framework#137)** -- delivers what is necessary for a user to configure a 1:1 event transformer:
 
-- **MUST**: US1 (1:1 structural transform), FR-001, FR-004 (programmatic registration + lifecycle), the supporting envelope/payload-access/legacy-version invariants (FR-005, FR-010, FR-011, FR-012, FR-016, FR-017, FR-018, FR-021).
-- **SHOULD if it fits**: US2 (rename), FR-002; US7 per-transformer hooks (`.when(...)` + `.onApplied(...)` on the base `MessageTransformer<M>`, so events / commands / queries all inherit them + chain-build DEBUG entry, FR-013).
-- **NICE-TO-HAVE for 5.2.0, else 5.3.0**: US3 (split), US4 (drop), US5 (chaining), US6 (conflict / runtime-failure feedback); FRs FR-003, FR-007, FR-008, FR-014, FR-015, FR-020. (US7 ships in SHOULD; an optional reference logging hook may follow.)
+- **MUST**: US1 (1:1 structural transform), FR-001, FR-004 (programmatic registration + lifecycle), FR-005 matching (both `from(MessageType)` exact-equals AND `from(Predicate<MessageType>)` overloads -- the latter unlocks FR-020 range / regex / semver matching), the supporting envelope/payload-access/legacy-version invariants (FR-010, FR-011, FR-012, FR-016, FR-017, FR-018, FR-021).
+- **SHOULD if it fits**: US2 (rename), FR-002; the chain-build DEBUG entry (FR-013 first half).
+- **NICE-TO-HAVE for 5.2.0, else 5.3.0**: US3 (split), US4 (drop), US5 (multi-hop chaining), US6 (conflict / runtime-failure feedback); FRs FR-003, FR-007 (multi-hop), FR-008 (cycle detection on predicate edges), FR-014, FR-015. Per-transformer hooks (`.when` / `.onApplied`, FR-013 second half) deferred entirely as a pure additive extension.
 
 **5.3+ candidates** (explicit, not part of this issue):
 
@@ -49,7 +49,7 @@ The internal SPI is stream-in / stream-out (`MessageStream<M> -> MessageStream<M
 
 **Performance Goals**:
 
-- O(1) per-event lookup on the non-matching path with no per-event allocations (FR-011). Per-`QualifiedName` sub-chain map (FR-007) gives this directly.
+- O(1) per-event lookup on the non-matching path for concrete-`from` transformers (`QualifiedName`-keyed map); O(P) for predicate-`from` transformers where P is small (FR-011).
 - JMH benchmark dimensions: chain length in `{1, 10, 50, 100}` x event count `1M`, with `-prof gc`. Pass: per-event latency variance < 10% across chain lengths; `gc.alloc.rate.norm` constant in chain length.
 
 **Constraints**:
@@ -112,16 +112,12 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |              (the command/query sub-packages decorate CommandBus/QueryBus from axon-framework,
 |              so no axoniq-distributed-messaging dependency is needed)
 |-- src/main/java/io/axoniq/framework/messaging/transformation/
-|     |-- MessageTransformer.java               # generic SPI base: MessageTransformer<M extends Message>;
-|     |                                         # default .when(Predicate<M>) / .onApplied(BiConsumer<M, ...>) (FR-013)
-|     |-- MessageTransformerChain.java          # per-QualifiedName sub-chains (FR-007), .build() locks (FR-004)
-|     |-- ChainConfigurationException.java      # thrown by Builder on FR-008 conflicts + FR-018 + FR-004 lock
-|     |-- VersionComparator.java                # optional (FR-020) -- deferred, lands with US5
-|     |-- SemverComparator.java                 # builder convenience -- deferred, lands with US5
+|     |-- MessageTransformer.java               # generic SPI base: transform(M, ProcessingContext) -> MessageStream<? extends M>
+|     |-- MessageTransformerChain.java          # fixed-point iteration; hybrid QN-index + predicate list (FR-007, FR-011); .build() locks (FR-004)
+|     |-- ChainConfigurationException.java      # thrown by Builder on FR-008 conflicts + FR-018 + FR-004 lock + defensive runtime safety bound
 |     |
 |     |-- events/                               # 5.2.0
-|     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>;
-|     |     |                                   # covariant .when / .onApplied overrides for fluent typing
+|     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>
 |     |     |
 |     |     |-- EventTransformation.java        # factory: from(...).to(...).transform(...) (FR-001, MUST),
 |     |     |                                   # rename(...) (FR-002, SHOULD), split(...).transform(...)
@@ -157,7 +153,7 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |
 `-- src/test/java/...                           # FR-001 1:1 (MUST), FR-002 rename (SHOULD), FR-008 conflict tests
                                                 # (nice-to-have), FR-020 comparator (nice-to-have),
-                                                # FR-007 sub-chain routing (nice-to-have), ...
+                                                # FR-007 fixed-point iteration (nice-to-have), ...
 
 ```
 
@@ -194,7 +190,7 @@ The internal SPI is stream-in / stream-out and reuses AF5's `MessageStream`. One
 
 ### Chain composition (architectural)
 
-There is exactly **one** `MessageTransformerChain` object per application. The user builds it once at startup; the chain is locked and immutable thereafter (FR-004). The chain routes incoming messages by message type to per-`QualifiedName` sub-chains; the user sees one chain, one builder, one registration call style across events (5.2.0) and -- when delivered -- commands and queries (5.3+). The `EventTransformationConfigurationEnhancer` (5.2.0), joined by per-sub-package `CommandTransformationConfigurationEnhancer` + `QueryTransformationConfigurationEnhancer` (5.3+), registers the chain in the component registry and wires it into the decoration points described under "Integration point" above. Each decoration point invokes the chain with a typed `MessageStream<M>` for its message subtype; routing inside the chain is per-`QualifiedName` (FR-007).
+There is exactly **one** `MessageTransformerChain` object per application. The user builds it once at startup; the chain is locked and immutable thereafter (FR-004). For each incoming message the chain runs fixed-point iteration over the registered transformers in registration order, first match wins, restart on each match, terminate when nothing matches (FR-007). The user sees one chain, one builder, one registration call style across events (5.2.0) and -- when delivered -- commands and queries (5.3+). The `EventTransformationConfigurationEnhancer` (5.2.0), joined by per-sub-package `CommandTransformationConfigurationEnhancer` + `QueryTransformationConfigurationEnhancer` (5.3+), registers the chain in the component registry and wires it into the decoration points described under "Integration point" above.
 
 ## Required axon-framework additions
 
@@ -202,33 +198,35 @@ There is exactly **one** `MessageTransformerChain` object per application. The u
 
 **Conditional axon-framework addition**: only needed if the 1:N split nice-to-have (US3, FR-003) lands in 5.2.0.
 
-- **`MessageStream.flatMap(Function<? super M, ? extends MessageStream<R>>)`**: needed for chain composition where 1:N split outputs re-enter their own sub-chain per FR-007. Backward-compatible default method or new operator on `MessageStream`. Note: the return type loses the `Single<M>` / `Empty<M>` refinement (always `MessageStream<R>`) because the function may produce a multi-element stream.
+- **`MessageStream.flatMap(Function<? super M, ? extends MessageStream<R>>)`**: needed by the framework's chain to convert input `MessageStream<M>` into per-message fixed-point iteration outputs. Backward-compatible default method or new operator on `MessageStream`. Note: the return type loses the `Single<M>` / `Empty<M>` refinement (always `MessageStream<R>`) because the function may produce a multi-element stream.
 
-**Fallback if `MessageStream.flatMap` is not available upstream in time**: implement an internal helper in `axoniq-message-transformation` that combines `mapMessage` + a recursive sub-chain entry call to achieve the same 1:N re-entry behaviour, without touching the public `MessageStream` API. Slightly uglier internal code but no upstream coordination required. Final decision deferred to the moment US3 is picked up; if the upstream PR has merged by then, use it; otherwise use the fallback.
+**Fallback if `MessageStream.flatMap` is not available upstream in time**: implement an internal helper in `axoniq-message-transformation` that combines `mapMessage` + `concatWith` (or `reduce`) to achieve the same per-element fan-out behaviour, without touching the public `MessageStream` API. Slightly uglier internal code but no upstream coordination required.
 
 Snapshot delivery (5.3+ candidate) may want one further small addition in a future release (a hook in `SnapshottingEntityLifecycleHandler` for snapshot-payload transformation), but that is out of scope here.
 
+**`axon-common` follow-on (FR-020)**: a `SemverPredicate` (or similar) helper returning `Predicate<MessageType>` for range matching (e.g. `1.x`, `>=1.0 <2.0`). Lives in `axon-common`, not as a transitive third-party dependency (per team decision). Not blocking 5.2.0: users compose their own predicates until it ships. Tracked separately.
+
 ## Scope and deferred work
 
-Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-framework#137 (ported from AxonIQ/AxonFramework#3597). The spec describes the full design vision (US1-US9 plus deferred Part C items); this plan documents what of that vision ships in 5.2.0 and what is explicitly held to 5.3+.
+Scope evolved through team review (Framework Design Support Group, May 2026). The plan covers issue AxonIQ/axoniq-framework#137 (ported from AxonIQ/AxonFramework#3597). The spec describes the full design vision (US1-US9 plus deferred Part C items); this plan documents what of that vision ships in 5.2.0 and what is explicitly held to 5.3+.
 
 ### 5.2.0 -- MUST (blocks the issue closing)
 
 - **US1 (1:1 structural payload transform)**, **FR-001** -- user can declare `from`/`to` identity and a payload mapper.
 - **FR-004** -- programmatic registration, startup-only, chain locks at `.build()`.
-- Supporting invariants without which US1 is unsafe: **FR-005** (exact matching, pass-through for non-matches), **FR-009 declarative target type** (`transform(Class<T>, Function<T, U>)`: framework converts stored bytes to the declared input type via the registered `Converter` before invocation -- the only way the user can write a typed payload mapper for US1), **FR-010** (envelope preservation), **FR-011** (lazy deserialization on non-matching path), **FR-012** (same result across entity load / DCB read / tracking processor), **FR-016** (unversioned legacy events default to `0.0.1`), **FR-017** (unit-testable), **FR-018** (output identity check), **FR-021** (data-protection ordering -- transformer runs before any handler-side interceptor).
+- Supporting invariants without which US1 is unsafe: **FR-005** (matching: `from(MessageType)` for exact equality + `from(Predicate<MessageType>)` for range / regex / semver -- both overloads ship), **FR-006** (deterministic + thread-safe transformations, contract for documentation), **FR-009 declarative target type** (`transform(Class<T>, BiFunction<T, ProcessingContext, U>)`: framework converts stored bytes to the declared input type via the registered `Converter` and passes the active `ProcessingContext` to the mapper -- the only way the user can write a typed payload mapper for US1), **FR-010** (envelope preservation), **FR-011** (lazy deserialization on non-matching path), **FR-012** (same result across entity load / DCB read / tracking processor), **FR-016** (unversioned legacy events default to `0.0.1`), **FR-017** (unit-testable), **FR-018** (output identity check), **FR-021** (data-protection ordering -- transformer runs before any handler-side interceptor).
 
 ### 5.2.0 -- SHOULD (deliver if it fits in the window)
 
 - **US2 (rename)**, **FR-002** -- pure rename without a payload mapper. Thin add-on to the existing factory.
-- **US7 (observability)**, **FR-013** -- `.when(Predicate<M>)` (skip-if-false) and `.onApplied(BiConsumer<M, MessageStream<? extends M>>)` (post-apply observer) as default methods on the base `MessageTransformer<M>`, attached at registration time. Events, commands, and queries inherit them via covariant overrides. Plus the chain-build DEBUG entry. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast` precedent.
+- **US7 chain-build DEBUG entry**, **FR-013 (partial)** -- one DEBUG log line at chain lock listing each transformer's `from` (+ `to` for 1:1). The full per-transformer-hooks half of FR-013 (`.when` / `.onApplied`) is deferred entirely; see MAY tier.
 
 ### 5.2.0 -- MAY (nice-to-have for 5.2.0, else slip to 5.3.0)
 
 - **US3 (split)** + **US4 (drop)**, **FR-003**. Pulls in `MessageStream.flatMap` (or the in-module fallback -- see Required axon-framework additions).
-- **US5 (chaining across versions)**, **FR-007** chain composition + sub-chain routing.
-- **US6 (misconfiguration + runtime feedback)**, **FR-008** conflict detection.
-- **FR-014** position-advances-past-drops (only relevant if US4 lands), **FR-015** exception propagation, **FR-020** optional `VersionComparator`.
+- **US5 (chaining across versions)**, **FR-007** multi-hop fixed-point iteration tests / hardening (single-hop ships in MUST).
+- **US6 (misconfiguration + runtime feedback)**, **FR-008** conflict detection (including cycle detection across predicate edges).
+- **FR-014** position-advances-past-drops (only relevant if US4 lands), **FR-015** exception propagation.
 
 ### 5.3+ -- explicitly deferred
 
@@ -236,7 +234,7 @@ Scope decided with Steven (2026-05-21). The plan covers issue AxonIQ/axoniq-fram
 - **Snapshot payload transformation**. Architecturally compatible with the 5.2.0 chain (snapshots flow through the same `EventStore.transaction().source(...)` stream merged in by `SnapshotCapableEventStorageEngine`), but the user-facing API / docs / fixtures (and a `Snapshot.payloadAs(Class<?>)` ergonomic accessor) are deferred. Either decorate `SnapshottingEntityLifecycleHandler`'s converter call site or introduce a `SnapshotPayloadTransformer` SPI hook.
 - **Annotation-based registration**. Programmatic only for now (FR-004); annotations may return if added through an explicit `EventTransformationChain` registry bean (see Part C "Annotation-Based Transformation Registration" in spec for the forward-direction note).
 - **Sender-side transformation** (new-to-old at the sender). Out of scope per Part C of spec.
-- **FR-009 converter-access entry point**. Spec FR-009 describes two entry points for typed payload access. 5.2.0 ships only the declarative target type variant (`transform(Class<T>, Function<T, U>)`). The converter-access variant -- where the transformation receives a `Converter` and converts inline (useful when a single transformation needs multiple representations of the same payload) -- is deferred. Adding it later is purely additive: a new overload on the existing factory.
+- **FR-009 converter-access entry point**. 5.2.0 ships only the declarative target type variant (`transform(Class<T>, BiFunction<T, ProcessingContext, U>)`). The converter-access variant -- where the transformation receives a `Converter` and converts inline (useful when a single transformation needs multiple representations of the same payload) -- is deferred. Adding it later is purely additive: a new overload on the existing factory.
 
 ## Forward-compatibility invariants
 
@@ -244,18 +242,18 @@ The 5.2.0 deliverable is a thin slice of the full design. Everything held to SHO
 
 1. **Generic SPI over `Message`**. `MessageTransformer<M extends Message>` is the base; `EventTransformer` is the only 5.2.0 specialization. _Protects: US8/US9/FR-019 (commands and queries join without an SPI break)._
 2. **Chain models 0..N outputs**. Internal data structures + decorator return shape MUST treat each transformation as producing a `MessageStream` of zero or more outputs from day one. _Protects: US3/US4/FR-003/FR-014 (split and drop without rewriting the chain)._
-3. **Per-`QualifiedName` sub-chain routing**. Transformations grouped by source `QualifiedName`; non-matching lookup is O(1) with no per-event allocation. _Protects: US5/FR-007/FR-011 (chained version hops + lazy non-matching path)._
+3. **Hybrid index: `QualifiedName`-keyed map + predicate list**. Transformations whose `from` is a concrete `MessageType` live in a `QualifiedName -> List` map for O(1) non-matching lookup; transformations whose `from` is a `Predicate<MessageType>` live in a separate flat list scanned linearly. _Protects: US5/FR-007/FR-011 (fixed-point iteration + lazy non-matching path)._
 4. **Factory method names reserved**. `from(...).to(...)`, `rename(...)`, `split(...)`, `drop(...)` are the only public factory shapes; deferred methods are either absent or stubbed -- never ship a shape that would have to be renamed. _Protects: US2/US3/US4 (rename, split, drop API stability)._
 5. **Single `MessageTransformerChain` object**. Builder returns one immutable chain holding all message types; future annotation discovery MUST produce the same object. _Protects: deferred annotation registration + 5.3+ command/query rollout._
 6. **Snapshot pass-through is automatic**. Snapshots flow inline through the same event stream; FR-005 pass-through on unknown `MessageType`s covers them, so adding a snapshot API later needs no wiring change. _Protects: deferred snapshot transformation._
 7. **No annotation-discovery hooks**. The 5.2.0 surface ships no `@Transform`-style annotation, keeping the future annotation mechanism's design space unconstrained. _Protects: Part C annotation-based registration._
-8. **Conflict-detection call sites reserved**. The builder validates at both registration time (per-entry checks) and lock time (cross-entry checks); 5.2.0 may register no checks but the call sites MUST exist. _Protects: US6/FR-008/FR-020 (duplicate, self-loop, cycle, version-order detection)._
-9. **Per-transformer hooks shipped from 5.2.0**. Default methods on the base `MessageTransformer<M>` SPI: `.when(Predicate<M>)` (skip if `false`) and `.onApplied(BiConsumer<M, MessageStream<? extends M>>)` (post-apply observer). Apply uniformly to events, commands, and queries via covariant overrides on each specialization. Matches AF4 `SingleEntryUpcaster.canUpcast` / `doUpcast`. Defaults: "always" / no-op, zero per-event allocation. No chain-wide hooks on the Builder; no generic framework-owned name like `Observability`. _Delivers: US7/FR-013._
+8. **Conflict-detection call sites reserved**. The builder validates at registration time (per-entry: duplicate concrete `from`, self-loop) and lock time (cross-entry: multi-step cycle on the concrete-`from` graph). A defensive runtime safety bound guards against infinite loops from pathological predicate misconfiguration; under normal use it never fires. _Protects: US6/FR-008._
+9. **Per-transformer hook surface reserved (deferred design)**. The eventual `.when(Predicate<M>)` + `.onApplied(BiConsumer<M, MessageStream<? extends M>>)` pair on the base `MessageTransformer<M>` (matching AF4 `canUpcast` / `doUpcast`) is NOT in 5.2.0. The design space is preserved: no chain-wide hooks on the Builder, no generic framework-owned name like `Observability`. Adding the hooks later is a pure additive change. _Protects: US7/FR-013 second half._
 
 ## Complexity Tracking
 
 | Drift / decision | Why needed | Simpler alternative rejected because |
 |---|---|---|
-| One conditional additive change to `axon-framework` (`MessageStream.flatMap`) -- only triggered if 1:N split (FR-003, MAY) lands in 5.2.0 | Chain composition where 1:N split outputs re-enter their own per-`QualifiedName` sub-chain (FR-007) requires `flatMap` on `MessageStream` | Manually composing via existing `mapMessage` + a recursive sub-chain entry is possible but uglier; flatMap is a standard stream operator the API was missing. Fallback path (internal helper) documented in "Required axon-framework additions". |
+| One conditional additive change to `axon-framework` (`MessageStream.flatMap`) | The framework's chain converts `MessageStream<M>` into per-element fixed-point iteration outputs; `flatMap` is the natural primitive. | Manual composition via `mapMessage` + `concatWith` is possible but uglier; flatMap is a standard stream operator missing from `MessageStream`. Fallback path documented in "Required axon-framework additions". |
 | SPI base is generic over `Message` even though only `EventTransformer` ships in 5.2.0 | Forward-compatibility invariant #1 -- avoids an SPI break when commands/queries arrive in 5.3+ | Shipping an event-specific SPI now (`EventTransformer` as the root) would force a refactor of every user-extended transformer when commands land. |
 | Single module hosts both events (5.2.0) and the deferred cqrs/ sub-package (5.3+), matching `axoniq-distributed-messaging` precedent | The handler-registration decoration for commands/queries targets `CommandBus` and `QueryBus` -- both upstream `axon-framework` types -- so the module dependency set does not change between 5.2.0 and 5.3+. No `axoniq-distributed-messaging` dependency is needed. | A separate `-spi` / `-events` / `-cqrs` module split was considered for a different reason (isolating the event ingress from the connector decoration originally proposed for commands/queries). Once the design moved to handler-registration on the bus itself, that dep concern evaporated and the single-module convention applies straightforwardly. |
