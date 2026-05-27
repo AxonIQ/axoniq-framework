@@ -12,6 +12,8 @@ description: "Task list for Distributed Tracing Support (feature 3594)"
 
 **No-ThreadLocal / cross-thread test (MANDATORY — plan.md "Mandatory workflow: no-ThreadLocal / cross-thread context test")**: any task adding a `Tracing*` decorator that nests or propagates spans via `ProcessingContext` MUST include a test that creates the child span on a **different thread** sharing the same `ProcessingContext` (real `UnitOfWorkTestUtils.aUnitOfWork()`) and asserts the spans still connect — written so it would FAIL against a `Context.current()` (thread-local) implementation. The decorator is not "done" without it. Reference: `OpenTelemetrySpanFactoryTest$CrossThreadNestingViaRealUnitOfWork`, `SliceCommandBusTracingIntegrationTest#handlerExecutedOnADifferentThreadStillNestsUnderTheDispatchSpan`.
 
+**Real-Axon-Server cross-process test (MANDATORY for distributed-capable components — plan.md "Mandatory workflow: real-Axon-Server cross-process test")**: every slice whose component can be distributed over Axon Server (command/query buses, query-update emitter, event publication/handling) MUST ship a Testcontainers IT against a real Axon Server asserting the trace continues across the gRPC hop (producing + remote consuming spans share a `traceId`). This is the only check that proves the AF5 connector carries the W3C `traceparent` on message metadata over the wire (AF4 documented it does). Template: `SliceCommandBusTracingAxonServerIT` + `TracingAxonServerTestInfrastructure`. Done for commands (Slice 1); REQUIRED for events (Slice 2, T051a), queries (Slice 3, T057a), query updates (Slice 4, T062a) — written WITH their slice, since the decorators don't exist before then.
+
 **Per-slice human-validation gate (FR-022b)**: Slices P3–P8 each end with a STOP task. The next slice MUST NOT start until the user has accepted the previous slice's span tree.
 
 **Organization**: Phases map 1:1 to plan.md's P1–P10. Story labels: [US1] = operator-facing tracing (spec Story 1), [US4] = SpanFactory consolidation (spec Story 4), [US5] = docs (spec Story 5), [US6] = upstream cleanup (spec Story 6).
@@ -27,6 +29,7 @@ description: "Task list for Distributed Tracing Support (feature 3594)"
 - **P1 (T001–T010): DONE** — five modules build + install; parent OTel BOM, aggregator, framework BOM wired.
 - **P2 (T011–T037): DONE** — api core (Span/SpanScope/SpanFactory/SpanAttributesProvider), NoOp/Multi/Logging factories, 6 attribute providers, SpanNames/ProcessingContextSpanBinding/MetadataContextPropagator helpers, TestSpanFactory, PublicApiSurfaceTest, full OpenTelemetry module (OpenTelemetrySpanFactory + W3C setter/getter), and the Spring autoconfig skeleton (TracingProperties + TracingAutoConfiguration + OpenTelemetryTracingAutoConfiguration + imports) — all tests green.
 - **P3 (T038–T044): DONE** — `TracingCommandBus` + `TracingHandlerEnhancerDefinition` implemented and unit-tested; `MessagingTracingConfigurationEnhancer` (ServiceLoader) registers the CommandBus decorator; `SliceCommandBusTracingIntegrationTest` passes against the real OpenTelemetry SDK (dispatch PRODUCER span → child handle CONSUMER span, same trace, message attributes; NoOp = no spans). Committed in 3 scoped commits. **T045 = human-validation gate (Slice 1) — accepted 2026-05-27.**
+- **Cross-process tracing over real Axon Server (2026-05-27): command bus DONE** — `SliceCommandBusTracingAxonServerIT` proves a command dispatched through a real Axon Server (Testcontainers) produces dispatch + handle spans sharing one trace across the gRPC hop (W3C `traceparent` on metadata; matches AF4 docs). Events/queries/query-updates are REQUIRED to add the analogous IT in their slices (T051a / T057a / T062a) — they have no tracing decorator yet, so the tests land with those slices.
 - **No-ThreadLocal redesign (2026-05-27): DONE** — removed all reliance on OpenTelemetry's thread-local `Context.current()` / `makeCurrent()`. Parents now resolve from message metadata (cross-boundary) and from the active OTel `Context` stored as a `ProcessingContext` resource (in-process); `Span.start()` records/restores that active context instead of `makeCurrent()`. API consequences: `createInternalSpan` gained a `@Nullable ProcessingContext` (B); new `createRootSpan(String, @Nullable ProcessingContext)` (C); `propagateContext` moved `SpanFactory` → `Span`; `MetadataContextPropagator.inject(ProcessingContext)`. Validated by an OTel unit test proving in-process nesting purely through the `ProcessingContext` resource (no thread-local). Confirmed as the OTel-maintainer-recommended reactive pattern (sources in spec.md clarification 2026-05-27). Committed separately. The `io.opentelemetry.context.Context` *value object* is retained as an explicit carrier (it is not a ThreadLocal).
 - **Attribute keys (Option B, 2026-05-27): DONE** — OTel-style dotted `axoniq.*` keys (snake_case leaves, `payload_type`); each provider's key/prefix overridable via constructor to restore AF4 keys. Option C (OTel `messaging.*` semantic conventions) deferred.
 - **Resolved at the gate (2026-05-27):**
@@ -141,6 +144,7 @@ Where `contracts/public-api.md` and `plan.md` disagree, **plan.md is authoritati
 - [ ] T049 [US1] Add eventSink/eventProcessor toggles (`disableBatchTrace`, `distributedInSameTrace`, `distributedInSameTraceTimeLimit=PT2M`) to `TracingProperties`. (P4.4)
 - [ ] T050 [US1] Register `DecoratorDefinition.forType(EventSink.class)` + `forType(EventHandlingComponent.class)` (scope-guarded on `EventProcessorConfiguration` presence) in `MessagingTracingConfigurationEnhancer`. (P4.5)
 - [ ] T051 [US1] Focused Boot integration test `SliceEventTracingIntegrationTest` (PSEP batch root, SEP no-batch parity, cross-thread W3C propagation, toggles); **also assert the `@EventHandler` and (retroactively) `@CommandHandler` per-method enhancer spans now appear via T050a**. (P4.6)
+- [ ] T051a [US1] Real-Axon-Server cross-process IT `SliceEventTracingAxonServerIT`: publish an event over the Axon Server connector; assert the consuming handler span shares the publishing trace per `distributedInSameTrace` semantics. Mirrors `SliceCommandBusTracingAxonServerIT`/`TracingAxonServerTestInfrastructure`. (P4.6a)
 - [ ] T052 [US1] **STOP — Human validation gate for Slice 2.** (P4.7)
 
 ---
@@ -152,6 +156,7 @@ Where `contracts/public-api.md` and `plan.md` disagree, **plan.md is authoritati
 - [ ] T055 [US1] Add `axon.tracing.queryBus.enabled` toggle. (P5.3)
 - [ ] T056 [US1] Register `DecoratorDefinition.forType(QueryBus.class)`. (P5.4)
 - [ ] T057 [US1] Focused test `SliceQueryBusTracingIntegrationTest`. (P5.5)
+- [ ] T057a [US1] Real-Axon-Server cross-process IT `SliceQueryBusTracingAxonServerIT`: dispatch a query over the Axon Server connector; assert the remote handler span shares the dispatch trace. Mirrors `SliceCommandBusTracingAxonServerIT`. (P5.5a)
 - [ ] T058 [US1] **STOP — Human validation gate for Slice 3.** (P5.6)
 
 ---
@@ -162,6 +167,7 @@ Where `contracts/public-api.md` and `plan.md` disagree, **plan.md is authoritati
 - [ ] T060 [US1] Add `axon.tracing.queryUpdateEmitter.enabled` toggle. (P6.2)
 - [ ] T061 [US1] Register `DecoratorDefinition.forType(QueryUpdateEmitter.class)`. (P6.3)
 - [ ] T062 [US1] Focused test `SliceQueryUpdateEmitterTracingIntegrationTest` (subscription query end-to-end). (P6.4)
+- [ ] T062a [US1] Real-Axon-Server cross-process IT `SliceQueryUpdateEmitterTracingAxonServerIT`: subscription-query updates traversing Axon Server; assert update spans share/link the originating query's trace. Mirrors `SliceCommandBusTracingAxonServerIT`. (P6.4a)
 - [ ] T063 [US1] **STOP — Human validation gate for Slice 4.** (P6.5)
 
 ---
