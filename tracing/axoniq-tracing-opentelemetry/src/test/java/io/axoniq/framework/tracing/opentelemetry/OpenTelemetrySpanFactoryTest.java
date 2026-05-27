@@ -34,6 +34,8 @@ import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +44,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -345,6 +349,54 @@ class OpenTelemetrySpanFactoryTest {
                 // then
                 assertThat(injected).containsKey("traceparent");
             }
+        }
+    }
+
+    @Nested
+    class CrossThreadNestingViaRealUnitOfWork {
+
+        /**
+         * The definitive no-{@code ThreadLocal} proof: a child span created and started on a <em>different thread</em>
+         * than its parent still nests under the parent, purely because both resolve through the same
+         * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} of a real {@link UnitOfWork}. A
+         * thread-local-based implementation would make the child a root (the parent's thread-local is invisible on the
+         * child thread), so this test would fail.
+         */
+        @Test
+        void childSpanOnAnotherThreadNestsUnderParentThroughTheProcessingContext() {
+            // given a real UnitOfWork; the parent span is started on the UoW thread
+            UnitOfWork unitOfWork = UnitOfWorkTestUtils.aUnitOfWork();
+            AtomicReference<Throwable> childThreadFailure = new AtomicReference<>();
+
+            unitOfWork.executeWithResult(processingContext -> {
+                Span parent = factory.createRootSpan("Parent", processingContext);
+                SpanScope parentScope = parent.start();
+                try {
+                    // when the child span is created AND started on a different thread, sharing the same context
+                    Thread childThread = new Thread(() -> {
+                        try {
+                            factory.createInternalSpan("Child", processingContext).start().close();
+                        } catch (Throwable t) {
+                            childThreadFailure.set(t);
+                        }
+                    });
+                    childThread.start();
+                    childThread.join();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                } finally {
+                    parentScope.close();
+                }
+                return CompletableFuture.completedFuture(null);
+            }).join();
+
+            // then the child nests under the parent — the context rode on the ProcessingContext, not a thread-local
+            assertThat(childThreadFailure.get()).isNull();
+            SpanData parent = exportedSpanNamed("Parent");
+            SpanData child = exportedSpanNamed("Child");
+            assertThat(child.getTraceId()).isEqualTo(parent.getTraceId());
+            assertThat(child.getParentSpanContext().getSpanId()).isEqualTo(parent.getSpanId());
         }
     }
 }
