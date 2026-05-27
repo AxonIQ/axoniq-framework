@@ -501,6 +501,7 @@ The following files in `axon-5/` describe the API changes:
 ### modules/events/pages/event-processors/dead-letter-queue.adoc
 **Status:** ✅ COMPLETED
 **Changes applied:**
+- Added "Limitation with database exceptions" section (IMPORTANT admonition) documenting that DB/transaction-breaking exceptions cannot be caught by the DLQ, with explanation of why (shared transaction rollback also undoes DLQ entries and the tracking token).
 - Removed AF4 "not available in 5.0" warning — DLQ is now available in AF5
 - Replaced all AF4 configuration examples with AF5 `MessagingConfigurer`/`EventProcessorModule` API
 - Added Spring Boot configuration via properties (`axon.eventhandling.processors.<name>.dlq.enabled=true`)
