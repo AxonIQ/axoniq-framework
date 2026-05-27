@@ -30,57 +30,56 @@ package io.axoniq.framework.tracing;
  * @author AxonIQ
  * @since 5.2.0
  */
+// NB: AF5 `Message` is non-generic. NO ThreadLocal: parents resolve from message metadata
+// (cross-boundary) and from the active span recorded on the passed ProcessingContext (in-process);
+// never from Context.current(). See spec.md clarification 2026-05-27 (ProcessingContext-based active span).
 public interface SpanFactory {
 
     /**
      * Creates a {@link Span} for an outbound (dispatch / producer) operation on the given {@link Message}.
-     * The {@code context} (when non-null) is forwarded to every {@link SpanAttributesProvider} so that
-     * providers can read per-context resources (e.g.,
-     * {@code LegacyResources.AGGREGATE_IDENTIFIER_KEY}).
+     * Parent = the active span on {@code context} (in-process nesting) else a root. The {@code context}
+     * (when non-null) is forwarded to every {@link SpanAttributesProvider}.
      */
-    Span createDispatchSpan(String operationName, Message<?> message, @Nullable ProcessingContext context);
-
-    /** Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message}. */
-    Span createHandlerSpan(String operationName, Message<?> message, @Nullable ProcessingContext context);
+    Span createDispatchSpan(String operationName, Message message, @Nullable ProcessingContext context);
 
     /**
-     * Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message},
-     * with an additional OTel {@code SpanLink} to {@code linkedMessage}'s span context.
-     * <p>
-     * The link is rendered by APM UIs as a clickable cross-trace navigation (not a parent-of relationship,
-     * not an attribute). The single concrete use case is {@code TracingQueryUpdateEmitter} linking a
-     * subscription-query update span back to its originating query — matching AF4
-     * {@code DefaultQueryBusSpanFactory:66}'s {@code createChildHandlerSpan("QueryBus.queryUpdate",
-     * updateMessage, queryMessage)} behaviour. See {@code af4-span-inventory.md} §0 for the
-     * AF4→AF5 diff and rationale.
-     * <p>
-     * Implementations MUST extract the W3C span context from {@code linkedMessage.getMetaData()} and
-     * attach it as an OTel {@code SpanLink}. When no link can be extracted (e.g., the linked message
-     * has no propagated context), the span is still created without the link — never throws.
+     * Creates a {@link Span} for an inbound (handler / consumer) operation. Parent = the context propagated
+     * in {@code message}'s metadata (cross-thread / cross-process) else the active span on {@code context}
+     * else a root. Never reads a thread-bound current span.
      */
-    Span createLinkedHandlerSpan(String operationName, Message<?> message, Message<?> linkedMessage,
+    Span createHandlerSpan(String operationName, Message message, @Nullable ProcessingContext context);
+
+    /**
+     * Like {@link #createHandlerSpan} but with an additional OTel {@code SpanLink} to {@code linkedMessage}'s
+     * span context (clickable cross-trace navigation, not a parent-of). Implementations MUST extract the W3C
+     * span context from {@code linkedMessage.metadata()} and attach it as a link; when none can be extracted
+     * the span is still created without the link — never throws.
+     */
+    Span createLinkedHandlerSpan(String operationName, Message message, Message linkedMessage,
                                  @Nullable ProcessingContext context);
 
     /**
-     * Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}.
-     * Non-Message attributes (e.g., entity type / identifier for snapshot or repository operations) are
-     * attached by the calling decorator via {@link Span#addAttribute(String, String)} directly from local
-     * parameters, or contributed by the standard {@link SpanAttributesProvider}s when the operation runs
-     * inside a {@link ProcessingContext} that carries {@code LegacyResources} resources.
+     * Creates a {@link Span} for an internal operation not directly tied to a {@link Message}. Parent = the
+     * active span on {@code context} (so it nests under the operation that opened it, e.g. a handler span)
+     * else a root. Non-message attributes are attached by the calling decorator via
+     * {@link Span#addAttribute(String, String)}.
      */
-    Span createInternalSpan(String operationName);
+    Span createInternalSpan(String operationName, @Nullable ProcessingContext context);
 
     /**
-     * Propagates the active tracing context (if any) onto the given {@link Message}'s metadata, returning
-     * the (possibly new) {@link Message} that should be dispatched in place of the input. Implementations
-     * MUST be idempotent and MUST NOT throw when no context is active.
+     * Creates a {@link Span} that always starts a new trace (a root), ignoring any active span when resolving
+     * its own parent — for batch / snapshot boundaries on pooled threads that must not attach to a stale
+     * parent. When {@code context} is non-null, starting the span still records it as that context's active
+     * span so children nest under it.
      */
-    <M extends Message<?>> M propagateContext(M message);
+    Span createRootSpan(String operationName, @Nullable ProcessingContext context);
 
     /** Registers a {@link SpanAttributesProvider} that contributes attributes to every span this factory produces. */
     void registerAttributesProvider(SpanAttributesProvider provider);
 }
 ```
+
+> **Propagation moved to `Span`.** AF4's `SpanFactory.propagateContext(message)` injected the *thread-current* span — impossible without a ThreadLocal. It is therefore replaced by `Span.propagateContext(message)` (§1.2): a span injects **its own** context, with no ambient lookup. The dispatch decorator creates + starts the dispatch span, then calls `span.propagateContext(command)`.
 
 ### 1.2 `Span` (interface)
 
@@ -88,17 +87,18 @@ public interface SpanFactory {
 package io.axoniq.framework.tracing;
 
 /**
- * Represents one unit of traced work. A {@code Span} is opened ({@link #start()}), optionally has
- * attributes added or an exception recorded, and is closed via {@link SpanScope#close()}.
+ * Represents one unit of traced work. A {@code Span} is opened ({@link #start()}) and closed via
+ * {@link SpanScope#close()}.
  * <p>
- * For imperative-style code, the convenience helpers {@link #run(Runnable)}, {@link #runSupplier(Supplier)},
- * and {@link #runSupplierAsync(Supplier)} open and close the scope around the given block.
- * In framework code that has access to a {@link ProcessingContext}, prefer binding the span to the
- * context's lifecycle hooks (handled by the internal {@code ProcessingContextSpanBinding} helper).
+ * NO ThreadLocal: when a span is created with a {@link ProcessingContext}, {@link #start()} records it as
+ * that context's active span (so spans created next with that context nest under it) and restores the
+ * previous active span on close — never via {@code makeCurrent()}. Framework code binds the span to the
+ * context lifecycle through {@code ProcessingContextSpanBinding}; the {@code run*} helpers are the
+ * imperative edge (no active-span tracking).
  */
 public interface Span {
 
-    /** Opens this span and returns its {@link SpanScope}. The scope MUST be closed exactly once. */
+    /** Opens this span (recording it active on its creation {@link ProcessingContext}) and returns its {@link SpanScope}. */
     SpanScope start();
 
     /** Sets a key/value attribute on the span. */
@@ -107,13 +107,20 @@ public interface Span {
     /** Records the given exception against the span and marks it as errored. The span is NOT closed. */
     Span recordException(Throwable t);
 
-    /** Runs the given block inside the span's active scope (imperative-edge convenience). */
+    /**
+     * Returns a copy of {@code message} with THIS span's context injected into its metadata, so a remote /
+     * asynchronous handler can continue the trace. Replaces the old factory-level {@code propagateContext}
+     * (which needed a thread-current span); the span propagates itself. No-op factories return the input.
+     */
+    <M extends Message> M propagateContext(M message);
+
+    /** Runs the given block inside the span (imperative-edge convenience; no active-span tracking). */
     void run(Runnable runnable);
 
-    /** Runs the given block inside the span's active scope and returns the result. */
+    /** Runs the given block inside the span and returns the result. */
     <T> T runSupplier(Supplier<T> supplier);
 
-    /** Runs the given async block inside the span's active scope; the span is closed when the future completes. */
+    /** Runs the given async block inside the span; the span is closed when the future completes. */
     <T> CompletableFuture<T> runSupplierAsync(Supplier<CompletableFuture<T>> supplier);
 }
 ```
