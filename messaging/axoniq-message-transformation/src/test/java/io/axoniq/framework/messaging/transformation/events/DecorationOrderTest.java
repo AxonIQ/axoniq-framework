@@ -40,7 +40,10 @@ final class DecorationOrderTest {
 
     @Test
     void decorationOrderLeavesHeadroomBetweenItselfAndInterceptingEventStore() {
-        assertThat(TransformingEventStore.DECORATION_ORDER).isEqualTo(Integer.MIN_VALUE + 1000);
-        assertThat(InterceptingEventStore.DECORATION_ORDER).isEqualTo(Integer.MIN_VALUE + 50);
+        int transformingDecorationOrder = TransformingEventStore.DECORATION_ORDER;
+        int interceptingDecorationOrder = InterceptingEventStore.DECORATION_ORDER;
+
+        assertThat(transformingDecorationOrder).isEqualTo(Integer.MIN_VALUE + 1000);
+        assertThat(interceptingDecorationOrder).isEqualTo(Integer.MIN_VALUE + 50);
     }
 }
