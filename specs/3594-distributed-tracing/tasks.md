@@ -71,12 +71,14 @@ Where `contracts/public-api.md` and `plan.md` disagree, **plan.md is authoritati
 
 ### axoniq-tracing-api — built-in attribute providers (each TDD, one test per provider)
 
-- [ ] T019 [P] [US1] `MessageIdSpanAttributesProvider` (+test) in `.../tracing/attributes/`.
-- [ ] T020 [P] [US1] `MessageNameSpanAttributesProvider` (+test).
-- [ ] T021 [P] [US1] `MessageTypeSpanAttributesProvider` (+test).
-- [ ] T022 [P] [US1] `PayloadTypeSpanAttributesProvider` (+test).
-- [ ] T023 [P] [US1] `MetadataSpanAttributesProvider` (allowlist ctor) (+test).
-- [ ] T024 [P] [US1] `AggregateIdentifierSpanAttributesProvider` sourcing `LegacyResources.AGGREGATE_IDENTIFIER_KEY`, null-context-safe, no `DomainEventMessage` reference (+test).
+> **Attribute-key convention (Option B, decision 2026-05-27):** default keys are OTel-style dotted `axoniq.*` with snake_case leaves (`axoniq.message.id`, `axoniq.message.name`, `axoniq.message.type`, `axoniq.message.payload_type`, `axoniq.metadata.<key>`, `axoniq.aggregate.identifier`). **Every provider takes a constructor that overrides its attribute key** (for `MetadataSpanAttributesProvider`, its prefix), so AF4 keys (`axon_message_name`, …) can be restored. Option C (full OTel `messaging.*` semantic conventions) is a deferred future improvement. See `contracts/public-api.md` §1.7 + `spec.md` clarification 2026-05-27.
+
+- [ ] T019 [P] [US1] `MessageIdSpanAttributesProvider` — default key `axoniq.message.id` + key-override ctor (+test).
+- [ ] T020 [P] [US1] `MessageNameSpanAttributesProvider` — default key `axoniq.message.name` + key-override ctor (+test).
+- [ ] T021 [P] [US1] `MessageTypeSpanAttributesProvider` — default key `axoniq.message.type` + key-override ctor (+test).
+- [ ] T022 [P] [US1] `PayloadTypeSpanAttributesProvider` — default key `axoniq.message.payload_type` (snake_case) + key-override ctor (+test).
+- [ ] T023 [P] [US1] `MetadataSpanAttributesProvider` — default prefix `axoniq.metadata.` + prefix-override and `Set<String>` allowlist ctors (+test).
+- [ ] T024 [P] [US1] `AggregateIdentifierSpanAttributesProvider` sourcing `LegacyResources.AGGREGATE_IDENTIFIER_KEY`, null-context-safe, no `DomainEventMessage` reference, key-override ctor (+test).
 
 ### axoniq-tracing-api — public decorator-authoring helpers (DFI-001)
 

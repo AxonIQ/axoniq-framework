@@ -224,16 +224,20 @@ public final class LoggingSpanFactory implements SpanFactory {
 
 ### 1.7 Built-in `SpanAttributesProvider`s — package `io.axoniq.framework.tracing.attributes`
 
-| Class | Adds attribute(s) |
-|---|---|
-| `MessageIdSpanAttributesProvider` | `axoniq.message.id` |
-| `MessageNameSpanAttributesProvider` | `axoniq.message.name` (qualified name) |
-| `MessageTypeSpanAttributesProvider` | `axoniq.message.type` = `COMMAND` / `EVENT` / `QUERY` |
-| `PayloadTypeSpanAttributesProvider` | `axoniq.message.payloadType` |
-| `MetadataSpanAttributesProvider` | configured allowlist of metadata keys → `axoniq.metadata.<key>` |
-| `AggregateIdentifierSpanAttributesProvider` | `axoniq.aggregate.identifier` — sourced from `LegacyResources.AGGREGATE_IDENTIFIER_KEY` on the `ProcessingContext`. Best-effort: present only when a legacy aggregate-based event storage engine populated the resource. Absent on DCB / entity-based operations. MUST NOT reference the removed `DomainEventMessage` type (constitution v2.1.0). |
+Attribute keys follow **Option B** (see spec.md clarification 2026-05-27): OpenTelemetry-style dotted namespaces (lowercase, snake_case leaf segments), prefixed `axoniq.` to match the new `io.axoniq.framework` group. This modernizes the Axon Framework 4 flat-underscore keys (`axon_message_name`, …). The exact AF4 keys can be restored per provider via the key-override constructor (see below) — e.g. `new MessageNameSpanAttributesProvider("axon_message_name")`.
 
-Each is a `public final class` with a no-arg constructor (and an optional varargs / list constructor for `MetadataSpanAttributesProvider`).
+| Class | Default attribute key | AF4 key (restore via constructor) |
+|---|---|---|
+| `MessageIdSpanAttributesProvider` | `axoniq.message.id` | `axon_message_id` |
+| `MessageNameSpanAttributesProvider` | `axoniq.message.name` (qualified name) | `axon_message_name` |
+| `MessageTypeSpanAttributesProvider` | `axoniq.message.type` = `COMMAND` / `EVENT` / `QUERY` | `axon_message_type` |
+| `PayloadTypeSpanAttributesProvider` | `axoniq.message.payload_type` | `axon_payload_type` |
+| `MetadataSpanAttributesProvider` | `axoniq.metadata.<key>` (prefix overridable; optional allowlist) | `axon_metadata_` prefix |
+| `AggregateIdentifierSpanAttributesProvider` | `axoniq.aggregate.identifier` — sourced from `LegacyResources.AGGREGATE_IDENTIFIER_KEY` on the `ProcessingContext`. Best-effort: present only when a legacy aggregate-based event storage engine populated the resource. Absent on DCB / entity-based operations. MUST NOT reference the removed `DomainEventMessage` type (constitution v2.1.0). | `axon_aggregate_identifier` |
+
+Each is a `public final class` with a no-arg constructor (default key) **plus a constructor accepting the attribute key** (for `MetadataSpanAttributesProvider`: a `String prefix` and/or a `Set<String>` allowlist), so the key can be overridden — including restoring the AF4 key for drop-in dashboard compatibility.
+
+**Future improvement (Option C, deferred — see spec.md clarification 2026-05-27):** map onto OpenTelemetry's official messaging *semantic conventions* (`messaging.message.id`, `messaging.message.conversation_id`, `messaging.operation.name`, …) where they exist, keeping `axoniq.*` only for Axon-specific attributes. Most standards-aligned, but the most divergent from AF4; can be added later without breaking changes (it is just different default keys behind the same providers).
 
 ### 1.8 `@Internal` types (NOT public surface; listed for reviewer reference)
 
