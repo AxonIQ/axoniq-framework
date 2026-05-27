@@ -15,12 +15,12 @@ The single most important design move is the collapse of AF4's nine per-componen
 | Concern (what is being traced) | AF4 — per-component factory + consumer | AF5 — what replaces it in AxoniqFramework |
 |---|---|---|
 | Command dispatch + handling | `CommandBusSpanFactory` (interface) + `DefaultCommandBusSpanFactory`, consumed by `SimpleCommandBus.Builder#spanFactory(...)` | `internal.TracingCommandBus implements CommandBus` registered via `DecoratorDefinition.forType(CommandBus.class)`. Span names: `"CommandBus.dispatchCommand <commandName>"` (kind `PRODUCER`; AF4 used `INTERNAL` for the in-process leg via `createInternalSpan`, `PRODUCER` for the distributed leg) and `"CommandBus.handleCommand <commandName>"` (kind `CONSUMER`). |
-| Event publication | `EventBusSpanFactory` + `DefaultEventBusSpanFactory`, consumed by `SimpleEventBus.Builder#spanFactory(...)`. AF4's `AbstractEventBus#publish` creates **two** spans: (a) `createPublishEventSpan(e)` per event around `propagateContext(...)` at publish-entry (`AbstractEventBus.java:121-122`), and (b) `createCommitEventsSpan()` spanning the surrounding UoW's `prepareCommit` → `commit` → `afterCommit` → `cleanup` phases (`AbstractEventBus.java:160-202`, plus the no-UoW path at `:144`). | `internal.TracingEventSink implements EventSink` registered via `DecoratorDefinition.forType(EventSink.class)`. Produces **two spans per call**, equivalent to AF4: (a) `"EventBus.publishEvent <eventName>"` (kind `PRODUCER`) — one per event, synchronously at publish-entry, around `SpanFactory#propagateContext(event)`, BEFORE delegating; (b) `"EventBus.commitEvents"` — one per `publish(...)` call, bound to the supplied `ProcessingContext` via `ProcessingContextSpanBinding` (opened in `runOnPrepareCommit`, errored in `onError`, closed in `whenComplete`). When `ProcessingContext` is `null`, the commit-events span falls back to a synchronous `Span.run(...)` wrapper around `delegate.publish(...)`. Both spans are creatable from the public `EventSink#publish(ProcessingContext, List<EventMessage>)` signature alone — no event-bus internals are touched. |
+| Event publication | `EventBusSpanFactory` + `DefaultEventBusSpanFactory`, consumed by `SimpleEventBus.Builder#spanFactory(...)`. AF4's `AbstractEventBus#publish` creates **two** spans: (a) `createPublishEventSpan(e)` per event around `propagateContext(...)` at publish-entry (`AbstractEventBus.java:121-122`), and (b) `createCommitEventsSpan()` spanning the surrounding UoW's `prepareCommit` → `commit` → `afterCommit` → `cleanup` phases (`AbstractEventBus.java:160-202`, plus the no-UoW path at `:144`). | `internal.TracingEventSink implements EventSink` registered via `DecoratorDefinition.forType(EventSink.class)`. Produces **two spans per call**, equivalent to AF4: (a) `"EventBus.publishEvent <eventName>"` (kind `PRODUCER`) — one per event, synchronously at publish-entry, around the publish span's `Span#propagateContext(event)` (the span injects its own context), BEFORE delegating; (b) `"EventBus.commitEvents"` — one per `publish(...)` call, bound to the supplied `ProcessingContext` via `ProcessingContextSpanBinding` (opened in `runOnPrepareCommit`, errored in `onError`, closed in `whenComplete`). When `ProcessingContext` is `null`, the commit-events span falls back to a synchronous `Span.run(...)` wrapper around `delegate.publish(...)`. Both spans are creatable from the public `EventSink#publish(ProcessingContext, List<EventMessage>)` signature alone — no event-bus internals are touched. |
 | Event handling (incl. async / pooled streaming) | `EventProcessorSpanFactory` + `DefaultEventProcessorSpanFactory`, consumed by `TrackingEventProcessor.Builder` / `PooledStreamingEventProcessor.Builder`. Produces TWO nested spans: `StreamingEventProcessor.batch` (root per batch) wrapping `EventProcessor.process` (child per event), via `AbstractEventProcessor.processInUnitOfWork`'s `createBatchSpan(...).runCallable(() -> createProcessEventSpan(...).runCallable(handler))` pattern. | `internal.TracingEventHandlingComponent implements EventHandlingComponent` registered via `DecoratorDefinition.forType(EventHandlingComponent.class)`. Produces the same TWO nested spans via lazy-open on the shared `ProcessingContext`: `"StreamingEventProcessor.batch"` (kind `INTERNAL`) opened by `ctx.computeResourceIfAbsent(BATCH_SPAN_KEY, …)` on the first per-event `handle()` call, guarded by `ctx.getResource(Segment.RESOURCE_KEY).isPresent()`; and `"EventProcessor[<processor>].process <eventName>"` (kind `CONSUMER`) per event with the producer's W3C context extracted from metadata. AF4 batch-span coverage parity (token-store write + status update enclosed) verified; rejected alternatives (`TracingEventProcessor` decorator, upstream `BatchInterceptor` SPI, `UnitOfWorkFactory` decoration, drop-batch-span) documented separately. **See [`research-batch-tracing.md`](./research-batch-tracing.md) for full design, AF4 vs Option C coverage matrix, and rejected alternatives.** |
-| Query dispatch + handling | `QueryBusSpanFactory` + `DefaultQueryBusSpanFactory`, consumed by `SimpleQueryBus.Builder#spanFactory(...)` | `internal.TracingQueryBus implements QueryBus` registered via `DecoratorDefinition.forType(QueryBus.class)`. Span name `"QueryBus.query <queryName>"` (kind `CLIENT`/`INTERNAL`) on dispatch, `"QueryBus.handle <queryName>"` (kind `SERVER`) on handling. |
+| Query dispatch + handling | `QueryBusSpanFactory` + `DefaultQueryBusSpanFactory`, consumed by `SimpleQueryBus.Builder#spanFactory(...)` | `internal.TracingQueryBus implements QueryBus` registered via `DecoratorDefinition.forType(QueryBus.class)`. Span name `"QueryBus.query <queryName>"` (kind `PRODUCER`) on dispatch, `"QueryBus.handle <queryName>"` (kind `CONSUMER`) on handling — AF4 OpenTelemetry binding (see clarification 2026-05-27). |
 | Subscription-query updates | `QueryUpdateEmitterSpanFactory` + `DefaultQueryUpdateEmitterSpanFactory`, consumed by `SimpleQueryUpdateEmitter.Builder` | `internal.TracingQueryUpdateEmitter implements QueryUpdateEmitter` registered via `DecoratorDefinition.forType(QueryUpdateEmitter.class)`. Span name `"QueryUpdateEmitter.emit <updateType>"`. |
 | Aggregate / entity load + save | `RepositorySpanFactory` + `DefaultRepositorySpanFactory`, consumed by `AbstractRepository.Builder` | `internal.TracingRepository implements Repository` + `internal.TracingStateManager implements StateManager`, registered via `DecoratorDefinition.forType(Repository.class)` / `…StateManager.class`. Span names `"Repository.load <entityType> <id>"` and `"Repository.save <entityType> <id>"`. |
-| Snapshot write + read | `SnapshotterSpanFactory` + `DefaultSnapshotterSpanFactory`, consumed by `AbstractSnapshotter.Builder` | `internal.TracingSnapshotStore implements SnapshotStore` registered via `DecoratorDefinition.forType(SnapshotStore.class)`. Span names `"SnapshotStore.store <entityType>"` and `"SnapshotStore.load <entityType>"`, via `createInternalSpan(String)` + local `addAttribute`. **AF5 has no `Snapshotter` component** (it's in `stash/todo`); snapshot creation is an inline `SnapshotPolicy`-gated side-effect of `SnapshottingEntityLifecycleHandler.source(...)`, so the store spans nest under the FR-009 sourcing span. `SnapshotStore` is `@Internal` — accepted coupling, no internals modified. AF4's standalone `scheduleSnapshot`→`createSnapshot` two-level trace does **not** survive; the `separateTrace` / `aggregateTypeInSpanName` knobs are dropped (no `Snapshotter` to host them). See clarification 2026-05-26 (option B3). |
+| Snapshot write + read | `SnapshotterSpanFactory` + `DefaultSnapshotterSpanFactory`, consumed by `AbstractSnapshotter.Builder` | `internal.TracingSnapshotStore implements SnapshotStore` registered via `DecoratorDefinition.forType(SnapshotStore.class)`. Span names `"SnapshotStore.store <entityType>"` and `"SnapshotStore.load <entityType>"`, via `createInternalSpan(String, ProcessingContext)` + local `addAttribute` (the context resolves the parent — the FR-009 sourcing span — without a thread-local). **AF5 has no `Snapshotter` component** (it's in `stash/todo`); snapshot creation is an inline `SnapshotPolicy`-gated side-effect of `SnapshottingEntityLifecycleHandler.source(...)`, so the store spans nest under the FR-009 sourcing span. `SnapshotStore` is `@Internal` — accepted coupling, no internals modified. AF4's standalone `scheduleSnapshot`→`createSnapshot` two-level trace does **not** survive; the `separateTrace` / `aggregateTypeInSpanName` knobs are dropped (no `Snapshotter` to host them). See clarification 2026-05-26 (option B3). |
 | ~~Deadline schedule + fire~~ | ~~AF4: `DeadlineManagerSpanFactory` + `DefaultDeadlineManagerSpanFactory`~~ | **Out of scope.** `DeadlineManager` does not exist in Axon Framework 5 (clarification 2026-05-26). No `TracingDeadlineManager`, no enhancer registration, no `TracingProperties` group. |
 | ~~Saga / process-manager invocation~~ | ~~AF4: `SagaManagerSpanFactory` + `DefaultSagaManagerSpanFactory`~~ | **Out of scope.** Sagas / process-managers do not exist in Axon Framework 5 today (clarification 2026-05-26). No `TracingSagaManager`, no enhancer registration, no `TracingProperties` group, no `@SagaEventHandler` wrapping. FR-012 is withdrawn. |
 | `@*Handler` annotation handlers | `TracingHandlerEnhancerDefinition` (already a `HandlerEnhancerDefinition` in AF4) | `internal.TracingHandlerEnhancerDefinition` — direct port of the AF4 class shape, registered as a `HandlerEnhancerDefinition` bean / SPI. Wraps `@CommandHandler`, `@EventHandler`, `@QueryHandler`, `@EventSourcingHandler`. (`@DeadlineHandler` and `@SagaEventHandler` are excluded — see deadline and saga rows above.) |
@@ -62,22 +62,21 @@ final class TracingCommandBus implements CommandBus {
     }
 
     @Override
-    public CompletableFuture<? extends CommandResultMessage<?>> dispatch(
-            CommandMessage<?> command, @Nullable ProcessingContext context) {
+    public CompletableFuture<CommandResultMessage> dispatch(
+            CommandMessage command, @Nullable ProcessingContext context) {
 
-        Span dispatchSpan = spanFactory.createDispatchSpan(SpanNames.CMD_DISPATCH, command);
-        CommandMessage<?> propagated = spanFactory.propagateContext(command);
-
-        if (context != null) {
-            ProcessingContextSpanBinding.bind(context, dispatchSpan);     // open on pre-invocation, close on whenComplete
-            return delegate.dispatch(propagated, context);
-        }
-        return dispatchSpan.runSupplierAsync(() -> delegate.dispatch(propagated, null));
+        // The dispatch span propagates ITSELF onto the command (propagateContext moved SpanFactory -> Span),
+        // inside the started scope — no thread-local "current span".
+        Span dispatchSpan = spanFactory.createDispatchSpan(SpanNames.commandDispatch(command), command, context);
+        return dispatchSpan.runSupplierAsync(
+                () -> delegate.dispatch(dispatchSpan.propagateContext(command), context));
     }
 
     @Override
     public CommandBus subscribe(QualifiedName name, CommandHandler handler) {
-        delegate.subscribe(name, handler);
+        // Wrap the handler so a CONSUMER "handle" span opens on invocation, parented from the command's
+        // propagated metadata and bound to the handling ProcessingContext lifecycle.
+        delegate.subscribe(name, new TracingCommandHandler(handler, spanFactory));
         return this;
     }
 
@@ -172,35 +171,24 @@ public final class TracingConfigurationEnhancer implements ConfigurationEnhancer
 
 In AF4, tracing relied on `UnitOfWork.getCurrent().getResource(...)` and a `ThreadLocal`-driven active span. That model breaks under AF5's async/reactive paradigm and is explicitly forbidden by Constitution §V.
 
-**Decision**: Active span lives on `ProcessingContext` under a `ResourceKey<SpanScope>`, and span open/close is bound to `ProcessingLifecycle` callbacks.
+**Decision**: The active span is tracked on the `ProcessingContext` as a resource, and span open/close is bound to `ProcessingLifecycle` callbacks. Two resources are involved (as built): (1) the **provider's** parent context — for the OpenTelemetry binding, the `io.opentelemetry.context.Context`, stored by `OpenTelemetrySpan.start()` under `OpenTelemetrySpanFactory.ACTIVE_CONTEXT_KEY` and read by the factory to resolve a child's parent — and (2) the **neutral** `SpanScope`, stored by `ProcessingContextSpanBinding` under `SPAN_SCOPE_KEY` purely so the span's lifecycle (record-error, close) can be driven off the context's phases. **No `Context.current()` / `makeCurrent()` / `ThreadLocal` is ever used** — parents come from the provider context resource (in-process) or message metadata (cross-boundary). The as-built `ProcessingContextSpanBinding` (note the `bind(span, context)` argument order and that it starts the span immediately, not on `preInvocation`):
 
 ```java
-@Internal
-final class ProcessingContextSpanBinding {
+public final class ProcessingContextSpanBinding {
 
-    static final ResourceKey<SpanScope> ACTIVE_SPAN = ResourceKey.create("axoniq.tracing.activeSpan");
+    public static final Context.ResourceKey<SpanScope> SPAN_SCOPE_KEY =
+            Context.ResourceKey.withLabel("io.axoniq.framework.tracing.SpanScope");
 
     /**
-     * Opens {@code span} when the processing context enters its invocation phase, and closes it
-     * (or marks it errored, then closes) when the context completes or fails.
+     * Starts {@code span} (which records itself as the active span on {@code context} — see Span#start()),
+     * records any processing error on it, and closes its scope when the context completes.
      */
-    static void bind(ProcessingContext context, Span span) {
-        context.runOnPreInvocation(ctx -> {
-            SpanScope scope = span.start();
-            ctx.putResource(ACTIVE_SPAN, scope);
-        });
-        context.onError((ctx, phase, error) -> {
-            SpanScope scope = ctx.getResource(ACTIVE_SPAN);
-            if (scope != null) {
-                scope.span().recordException(error);
-            }
-        });
-        context.whenComplete(ctx -> {
-            SpanScope scope = ctx.removeResource(ACTIVE_SPAN);
-            if (scope != null) {
-                scope.close();
-            }
-        });
+    public static SpanScope bind(Span span, ProcessingContext context) {
+        SpanScope scope = span.start();
+        context.putResource(SPAN_SCOPE_KEY, scope);
+        context.onError((ctx, phase, error) -> span.recordException(error));
+        context.doFinally(ctx -> scope.close());
+        return scope;
     }
 
     private ProcessingContextSpanBinding() { }
@@ -211,7 +199,7 @@ final class ProcessingContextSpanBinding {
 
 | Property | How it's preserved |
 |---|---|
-| No `ThreadLocal` in framework code | The `ACTIVE_SPAN` resource key is the only source of truth. `OpenTelemetry.Context.makeCurrent()` is called inside `SpanScope.close()` / `SpanScope.start()` only when the user explicitly opts into the imperative `Span.run...` helper. |
+| No `ThreadLocal` in framework code | Parents are resolved from the provider context stored on the `ProcessingContext` (in-process) or from message metadata (cross-boundary). `Context.current()` / `Context.makeCurrent()` are **never** called — not even at the imperative edge (`Span.start()` records the active context on the `ProcessingContext`). See spec.md clarification 2026-05-27. |
 | Works across reactive boundaries | `ProcessingLifecycle` hooks fire on the right phases regardless of which thread the continuation runs on. The span is owned by the context, not by the dispatch thread. |
 | Survives commit and rollback | `onError` records the exception; `whenComplete` always closes the span. Closing is idempotent in the OTel adapter. |
 | Composable | Multiple decorators (tracing + metrics + interception) can all bind their own resources on the same context without colliding (each uses a distinct `ResourceKey<T>`). |
@@ -238,20 +226,23 @@ final class TracingEventSink implements EventSink {
     public CompletableFuture<Void> publish(@Nullable ProcessingContext context,
                                            List<? extends EventMessage<?>> events) {
 
-        // (a) per-event publish span — synchronous, around propagateContext (mirrors AbstractEventBus.java:121-122)
-        List<EventMessage<?>> propagated = events.stream()
-                .map(event -> spanFactory.createDispatchSpan(SpanNames.EVT_PUBLISH, event)
-                                         .runSupplier(() -> spanFactory.propagateContext(event)))
+        // (a) per-event publish span — synchronous, around propagateContext (mirrors AbstractEventBus.java:121-122).
+        //     The span propagates ITSELF onto the event (propagateContext moved SpanFactory -> Span); no thread-local.
+        List<EventMessage> propagated = events.stream()
+                .map(event -> {
+                    Span publishSpan = spanFactory.createDispatchSpan(SpanNames.EVT_PUBLISH, event, context);
+                    return publishSpan.runSupplier(() -> publishSpan.propagateContext(event));
+                })
                 .toList();
 
         // (b) commit-events span — bound to ProcessingContext lifecycle (mirrors AbstractEventBus.java:160-202)
         //     or, when no context is active, run synchronously around the delegate call (mirrors :144).
         if (context != null) {
-            Span commitSpan = spanFactory.createInternalSpan(SpanNames.EVT_COMMIT);
-            ProcessingContextSpanBinding.bind(context, commitSpan);
+            Span commitSpan = spanFactory.createInternalSpan(SpanNames.EVT_COMMIT, context);
+            ProcessingContextSpanBinding.bind(commitSpan, context);
             return delegate.publish(context, propagated);
         }
-        return spanFactory.createInternalSpan(SpanNames.EVT_COMMIT)
+        return spanFactory.createInternalSpan(SpanNames.EVT_COMMIT, null)
                           .runSupplierAsync(() -> delegate.publish(null, propagated));
     }
 
@@ -306,7 +297,7 @@ public final class AggregateIdentifierSpanAttributesProvider implements SpanAttr
 
 **Consequence — SPI shape**: the `SpanAttributesProvider` SPI single method is `Map<String, String> provideForMessage(Message<?> message, @Nullable ProcessingContext context)`. Providers that do not need the context simply ignore it (e.g., `MessageIdSpanAttributesProvider` takes the id off the `Message` itself). The decision rejects the multi-method / default-fallback alternative — every implementation pays the cost of one `@Nullable` parameter; the SPI stays a single SAM and there is no ambiguity about which method the factory calls.
 
-**Consequence — `SpanFactory.create*Span` signatures**: the two message-aware factory methods gain a `@Nullable ProcessingContext` parameter so that decorators (which always have a `ProcessingContext` from the AF5 bus signatures) feed it through to providers. The non-message `createInternalSpan(operationName)` stays as-is — decorators (e.g., `TracingSnapshotStore`, `TracingRepository`) attach their own attributes via `Span#addAttribute(key, value)` from local method parameters; the existing `AggregateIdentifierSpanAttributesProvider` picks up `LegacyResources` data from the `ProcessingContext` when one is active. There is no `provideForSubject(Object)` SPI method and no `createInternalSpan(String, Object)` overload — see §5 below.
+**Consequence — `SpanFactory.create*Span` signatures**: **every** factory method that can have a parent takes a `@Nullable ProcessingContext` (updated 2026-05-27, "option B") — `createDispatchSpan`/`createHandlerSpan`/`createLinkedHandlerSpan` and now also `createInternalSpan(String, @Nullable ProcessingContext)` — so the parent can be resolved from the active span on the context without any thread-local; the message-aware methods additionally forward the context to providers. A new `createRootSpan(String, @Nullable ProcessingContext)` ("option C") forces a new trace. `createInternalSpan` still does **not** iterate providers (no `Message`): decorators (e.g., `TracingSnapshotStore`, `TracingRepository`) attach their own attributes via `Span#addAttribute(key, value)` from local parameters; `AggregateIdentifierSpanAttributesProvider` picks up `LegacyResources` data from the `ProcessingContext` when one is active on a message span. There is no `provideForSubject(Object)` SPI method and no `createInternalSpan(String, Object)` overload — see §5 below. (`propagateContext` moved off `SpanFactory` onto `Span` — a span injects its own context; see §4.)
 
 **Consequence — behavior on DCB / entity operations**: the `axoniq.aggregate.identifier` attribute is intentionally absent on traces produced inside DCB / entity-based event streams (`LegacyResources.AGGREGATE_IDENTIFIER_KEY` is simply not populated by the storage engines for those streams). Trace consumers MUST treat the attribute as optional. Edge case captured in `spec.md` "DCB / entity-based operation" bullet.
 
@@ -318,7 +309,7 @@ public final class AggregateIdentifierSpanAttributesProvider implements SpanAttr
 - **Add the SPI overload with a default body that falls back to a no-context call** — rejected per the SPI-shape question; one method, one signature.
 
 **Alternatives considered**:
-- **OpenTelemetry's `io.opentelemetry.context.Context.current()` everywhere** — rejected: pulls a `ThreadLocal` back into the framework. We rely on it only at imperative-edge `Span.runSupplier(...)` call sites.
+- **OpenTelemetry's `io.opentelemetry.context.Context.current()` everywhere** — rejected: pulls a `ThreadLocal` back into the framework. We never call `Context.current()` / `Context.makeCurrent()` at all — parents are resolved from the active OTel `Context` stored on the `ProcessingContext` (in-process) and from message metadata (cross-boundary). This is the OTel-maintainer-recommended explicit-`Context` pattern for reactive code (sources in spec.md clarification 2026-05-27). The `io.opentelemetry.context.Context` *value object* is used as an explicit carrier — it is not a `ThreadLocal`.
 - **A new `SpanLifecycleInterceptor`** — rejected: introduces a new interceptor level which Constitution §Interceptor Levels forbids (only `MessageDispatchInterceptor` / `MessageHandlerInterceptor` are blessed; tracing plugs in via `DecoratorDefinition` + `HandlerEnhancerDefinition` instead).
 
 ---
@@ -327,17 +318,17 @@ public final class AggregateIdentifierSpanAttributesProvider implements SpanAttr
 
 **Decision**: Trace context travels in `MetaData` under W3C-standard keys (`traceparent`, `tracestate`, `baggage`). Serialisation/deserialisation is handled by `MetadataContextSetter` / `MetadataContextGetter` (W3C `TextMapSetter` / `TextMapGetter` implementations against `MetaData`). These classes are `@Internal` in `axoniq-tracing-opentelemetry`; users get propagation for free without seeing the propagator SPI.
 
-**Send side** (inside `TracingCommandBus.dispatch` and friends):
+**Send side** (inside `TracingCommandBus.dispatch` and friends), using the started dispatch span:
 ```java
-CommandMessage<?> propagated = spanFactory.propagateContext(command);
+CommandMessage propagated = dispatchSpan.propagateContext(command);
 ```
-`SpanFactory#propagateContext(Message)` returns a new `Message` with metadata enriched with the current trace context (`OpenTelemetrySpanFactory` calls `W3CTraceContextPropagator.inject(...)` with `MetadataContextSetter`). `NoOpSpanFactory#propagateContext` returns the message unchanged.
+`Span#propagateContext(Message)` returns a new `Message` with metadata enriched with **that span's own** trace context (`OpenTelemetrySpan` calls `W3CTraceContextPropagator.inject(thisSpansContext, …)` with `MetadataContextSetter`) — no thread-current lookup. `NoOpSpan#propagateContext` returns the message unchanged.
 
 **Receive side** (inside `TracingEventHandlingComponent` and the handler side of `TracingCommandBus`):
 ```java
-Span handleSpan = spanFactory.createHandlerSpan(SpanNames.CMD_HANDLE, command);
+Span handleSpan = spanFactory.createHandlerSpan(SpanNames.commandHandle(command), command, context);
 ```
-`SpanFactory#createHandlerSpan(...)` extracts trace context from the message metadata first (`W3CTraceContextPropagator.extract(...)` with `MetadataContextGetter`) and uses it as the parent of the new handler span.
+`SpanFactory#createHandlerSpan(...)` extracts trace context from the message metadata first (`W3CTraceContextPropagator.extract(Context.root(), …)` with `MetadataContextGetter`); if none is present it falls back to the active span on `context`, else a root — never `Context.current()`.
 
 **Metadata key collisions**: The W3C keys are namespaced enough in practice that real-world apps don't collide. The behaviour on collision is documented in `docs/.../tracing/pages/index.adoc`: the tracing decorator overwrites the existing values on the outgoing message (because trace context only makes sense if it actually matches the active span). Inbound, if a user metadata key happens to be `traceparent`, the receive-side propagator will read it — that is by design (it's the W3C contract). No-op factory simply does not touch metadata.
 

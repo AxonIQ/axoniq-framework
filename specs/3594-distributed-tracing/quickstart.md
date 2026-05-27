@@ -182,7 +182,7 @@ Standard attributes attached by the default `SpanAttributesProvider`s:
 - `axoniq.message.id`
 - `axoniq.message.name`
 - `axoniq.message.type` ∈ {`COMMAND`, `EVENT`, `QUERY`}
-- `axoniq.message.payloadType`
+- `axoniq.message.payload_type`
 - `axoniq.metadata.<allowlisted-key>` (each entry of `MetadataSpanAttributesProvider`'s allowlist)
 - `axoniq.aggregate.identifier` — **conditional**. Sourced from `ProcessingContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)`. Present on traces flowing through a legacy aggregate-based event storage engine (e.g., `AggregateBasedJpaEventStorageEngine`); absent on DCB / entity-based operations (`@EventSourcedEntity(tagKey = ...)` + `@EventTag` model). Trace consumers MUST treat it as optional. (A future `EntityTagSpanAttributesProvider` for the DCB path is a deferred future improvement.)
 
@@ -196,7 +196,7 @@ axon:
     enabled: false
 ```
 
-Or programmatically — simply don't register `TracingConfigurationEnhancer` and don't depend on `axoniq-tracing-opentelemetry`. The framework defaults to `NoOpSpanFactory` and produces no spans (FR-005 / SC-008).
+Or programmatically — leave the `SpanFactory` unset (or `NoOpSpanFactory`) and/or keep the per-concern tracing modules off the classpath. The per-module `ConfigurationEnhancer`s are ServiceLoader-discovered and only decorate a component when a non-no-op `SpanFactory` is configured, so the framework defaults to `NoOpSpanFactory` and produces no spans (FR-005 / SC-008).
 
 ---
 
@@ -204,7 +204,7 @@ Or programmatically — simply don't register `TracingConfigurationEnhancer` and
 
 Trace context propagates automatically through `MetaData`:
 
-- **Outbound** (`CommandBus.dispatch`, `EventBus.publish`, `QueryBus.query`): `SpanFactory#propagateContext(message)` injects W3C `traceparent` / `tracestate` headers into the message metadata.
+- **Outbound** (`CommandBus.dispatch`, `EventBus.publish`, `QueryBus.query`): the dispatch span's `Span#propagateContext(message)` injects W3C `traceparent` / `tracestate` headers into the message metadata (the span injects its own context — no thread-local).
 - **Inbound** (handler side, e.g., `TracingEventHandlingComponent`): the incoming `traceparent` / `tracestate` is extracted and used as the parent of the new handler span.
 
 This works across the Axon Server connector and any other transport that preserves message metadata. No user configuration is required.

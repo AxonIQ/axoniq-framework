@@ -190,17 +190,20 @@ The event store hands the event to an asynchronous `EventProcessor` (e.g., `Pool
 This is where the cross-thread propagation completes. Inside `OpenTelemetrySpanFactory.createHandlerSpan(...)`:
 
 ```java
+// Extraction base is Context.root() — never Context.current() (no ThreadLocal).
 io.opentelemetry.context.Context parent = propagator.extract(
-        io.opentelemetry.context.Context.current(),
-        event.getMetaData(),
+        io.opentelemetry.context.Context.root(),
+        event.metadata(),
         MetadataContextGetter.INSTANCE);
+// When the metadata carries no propagated span, fall back to the active span on
+// the ProcessingContext (ctx2), else a root — see OpenTelemetrySpanFactory#handlerParent.
 io.opentelemetry.api.trace.Span span = tracer.spanBuilder(operationName)
         .setParent(parent)
         .setSpanKind(SpanKind.CONSUMER)
         .startSpan();
 ```
 
-The handler span is rooted under the publisher's trace, not under whatever thread-local context happens to be active on the consumer thread. Constitution §V's no-`ThreadLocal` rule is satisfied because the propagation uses the event metadata, not a process-wide global.
+The handler span is rooted under the publisher's trace, never under a thread-local context. Constitution §V's no-`ThreadLocal` rule is satisfied because the parent comes from the event metadata (cross-boundary) or the `ProcessingContext` resource (in-process) — never `Context.current()`.
 
 **Steps 24–30 — Provider invocation + lifecycle binding on `ctx2`**
 Same shape as Flow 1. Providers fire once for the handler span. The lifecycle binding closes the span when `ctx2` completes.
@@ -233,8 +236,8 @@ sequenceDiagram
     ELH->>TSS: store(qualifiedName, identifier, snapshot)
     Note over ELH,TSS: No Message — `Snapshot` is a record.<br/>A ProcessingContext IS active (sourcing).
 
-    TSS->>SF: createInternalSpan("SnapshotStore.store " + qualifiedName.name())
-    Note over TSS,SF: One-argument overload.<br/>NO Message. Providers are NOT iterated.
+    TSS->>SF: createInternalSpan("SnapshotStore.store " + qualifiedName.name(), ctx)
+    Note over TSS,SF: NO Message. Providers are NOT iterated.<br/>Parent resolved from the active span on ctx<br/>(the FR-009 sourcing span) — no ThreadLocal.
     SF-->>TSS: storeSpan (not yet started)
 
     TSS->>SF: storeSpan.addAttribute("axoniq.entity.type", qualifiedName.name())
@@ -264,8 +267,8 @@ sequenceDiagram
 **Steps 1–2 — Entry point, no `Message` involved**
 AF5 has no `Snapshotter.scheduleSnapshot`. The snapshot is created inline inside `SnapshottingEntityLifecycleHandler.source(...)` (gated by `SnapshotPolicy`), which calls `SnapshotStore.store(qualifiedName, identifier, snapshot)`. We decorate `SnapshotStore` (the registered, `@Internal` component) — `store(...)` receives a `Snapshot` *record*, not a `Message`. A `ProcessingContext` IS active here because the call happens inside `source(...)`, which the FR-009 sourcing decorator has already wrapped.
 
-**Step 3 — `createInternalSpan(String)`**
-The factory builds the span purely from the operation name. **Providers are not iterated.** This is deliberate (see research.md §5 and the snapshot clarifications):
+**Step 3 — `createInternalSpan(String, ProcessingContext)`**
+The factory builds the span from the operation name and resolves its parent from the active span recorded on the passed `ProcessingContext` (here, the FR-009 sourcing span) — no `Context.current()`. **Providers are not iterated** (there is no `Message`). This is deliberate (see research.md §5 and the snapshot clarifications):
 - The decorator already has the typed data it cares about (entity type via `qualifiedName.name()`, identifier, snapshot version).
 - Providers in AF4 only fired on Messages — we are not regressing.
 - Adding provider iteration here would require providers to handle a null `Message`, complicating every provider for no concrete callers.
@@ -275,16 +278,16 @@ The factory builds the span purely from the operation name. **Providers are not 
 
 **Steps 7–10 — `runSupplierAsync` over the async store**
 `SnapshotStore.store(...)` is asynchronous (`CompletableFuture<Void>`). The decorator uses the imperative `Span.runSupplierAsync(...)` helper:
-- Opens the scope (in OpenTelemetry this momentarily makes the OTel `Context.current()` point at the new span — the only place we touch the OTel `ThreadLocal`, and it's at an imperative edge).
+- Opens the scope (`start()`). Because the span was created with `ctx`, starting it records the span as `ctx`'s active span (and restores the previous on close) — via the `ProcessingContext` resource, **never** `Context.current()`/`makeCurrent()`. No `ThreadLocal` is touched anywhere.
 - Runs the supplier (which produces the `CompletableFuture<Void>`).
 - Registers `whenComplete` on the future to close the scope.
 
-Because a `ProcessingContext` IS active during sourcing, the store span naturally nests under the FR-009 sourcing span (the OTel parent is whatever is current when the scope opens). If a decorator author preferred, the span could instead be bound to `ctx` lifecycle hooks via `ProcessingContextSpanBinding`; `runSupplierAsync` is chosen here because the store call is a self-contained async operation, not a UoW-phase-spanning one.
+The store span nests under the FR-009 sourcing span because its parent was resolved (at create time) from the active span on `ctx`. Equivalently, the span could be bound to `ctx` lifecycle hooks via `ProcessingContextSpanBinding`; `runSupplierAsync` is chosen here because the store call is a self-contained async operation, not a UoW-phase-spanning one.
 
 **Why no providers**
 Concretely: imagine a user-defined `TenantSpanAttributesProvider` that reads tenant id from `MetaData`. `SnapshotStore.store(...)` has a `Snapshot` record (which carries metadata) but no `Message` — and the SPI is `provideForMessage(Message, ctx)`. Even if we passed `provideForMessage(null, ctx)`, every provider would have to handle the null Message. That is the price the AF4 SPI didn't pay (it never called providers for snapshot spans), and we're not paying it either. The store-span attributes the decorator attaches (`axoniq.entity.type`, `axoniq.aggregate.identifier`, `axoniq.snapshot.version`) cover the snapshot case directly.
 
-If, in some future iteration, snapshot spans **do** need provider input, the response is a **pure addition**: add `createInternalSpan(String, ProcessingContext)` and have providers handle the `null Message` case. Not in scope today.
+`createInternalSpan` already takes the `ProcessingContext` (for parent resolution); what it does **not** do is iterate providers (there is no `Message`). If, in some future iteration, snapshot spans **do** need provider input, the response is a **pure addition**: iterate providers with a `null Message` and have providers handle that case. Not in scope today.
 
 ### Repository load / save — same shape
 
@@ -293,14 +296,14 @@ If, in some future iteration, snapshot spans **do** need provider input, the res
 ```java
 @Override
 public CompletableFuture<E> load(Object identifier, ProcessingContext ctx) {
-    Span span = spanFactory.createInternalSpan("Repository.load " + entityType());
+    Span span = spanFactory.createInternalSpan("Repository.load " + entityType(), ctx);
     span.addAttribute("axoniq.aggregate.identifier", String.valueOf(identifier));
-    ProcessingContextSpanBinding.bind(ctx, span);
+    ProcessingContextSpanBinding.bind(span, ctx);
     return delegate.load(identifier, ctx);
 }
 ```
 
-Same answer for providers: `createInternalSpan(String)` does not iterate them; the decorator attaches what it knows directly.
+Same answer for providers: `createInternalSpan(String, ProcessingContext)` does not iterate them; the decorator attaches what it knows directly. (The `ProcessingContext` is used for parent resolution, not provider iteration.)
 
 ---
 
@@ -402,7 +405,7 @@ sequenceDiagram
 The first per-event `handle()` calls `perEventCtx.computeResourceIfAbsent(BATCH_SPAN_KEY, …)`. Because `BATCH_SPAN_KEY` is not the overridden key, the call falls through to the batch ctx — the supplier runs once, the span is stored on the **batch ctx**, and every subsequent per-event call in the same batch finds the same span. The batch span is bound to the batch UoW's `whenComplete` via `ProcessingContextSpanBinding`, so it closes after `runOnAfterCommit` — covering token-store write and status update, matching AF4.
 
 **Steps 17–23 — Per-event spans become children of the batch span**
-Once the batch span exists in `BATCH_SPAN_KEY` on the batch ctx, every per-event `createHandlerSpan` call sees it as the currently-active span and parents the per-event span underneath. This is the AF5 mapping of AF4's `createBatchSpan(...).runCallable(() -> createProcessEventSpan(...).runCallable(() -> handler))` nesting.
+Once the batch span exists on the batch ctx, the per-event spans parent under it via the active span recorded on the (shared, fall-through) batch `ProcessingContext` — through the factory's active-context resource, **never** a thread-local / `Context.current()`. This is the AF5 mapping of AF4's `createBatchSpan(...).runCallable(() -> createProcessEventSpan(...).runCallable(() -> handler))` nesting. (Whether a per-event span attaches to the batch span or to the originating publisher's trace carried in the event metadata is governed by the slice-4 `distributedInSameTrace` toggle — see `research-batch-tracing.md`; that precedence is finalized in Slice 2/4, not here.)
 
 **Steps 24–26 — Token-store write and status update are inside the batch span**
 `runOnPrepareCommit` → `storeToken(lastToken, ctx)` and `runOnAfterCommit` → `updateSegmentStatus(...)` both run during `unitOfWork.execute()`, which is still open when the batch span exists. The batch span closes in `whenComplete` (step 27), after `afterCommit` has fired. **AF4 coverage parity is preserved.**

@@ -32,9 +32,12 @@ The AF4 `org.axonframework.tracing.SpanFactory` interface declares **9 methods**
 
 ### Summary
 
-**AF4 → AF5 method count: 9 → 6.** The reduction comes from:
-- **−3 default convenience methods** collapsed into one base method (`createLinkedHandlerSpan`, `createChildHandlerSpan` as defaults; `createRootTrace` as imperative-edge invocation of `createInternalSpan`).
+**AF4 → AF5 `SpanFactory` method count: 9 → 6.** The reduction comes from:
+- **−2 default convenience methods** collapsed (`createHandlerSpan`-base + `createChildHandlerSpan` → the single `createHandlerSpan(String, Message, @Nullable ProcessingContext)`).
 - **−1 overload** (`createInternalSpan(Supplier, Message)`) replaced by decorator-attached attributes (same pattern already in use for snapshot / repository).
+- **`propagateContext` moved off `SpanFactory` onto `Span`** (updated 2026-05-27) — a span injects its own context; the factory has no "current span" to inject without a thread-local.
+- **`createRootTrace` → `createRootSpan(String, @Nullable ProcessingContext)`** (kept as a distinct method, "option C") — forces a new trace for batch/snapshot boundaries; not collapsed into `createInternalSpan`, since the latter now resolves an in-process parent from the `ProcessingContext`.
+- All message-aware methods **and** `createInternalSpan` carry a `@Nullable ProcessingContext` ("option B") so parents resolve from the context's active span — **never** `Context.current()` / a thread-local. See spec.md clarification 2026-05-27.
 - **−1 unused varargs** (`linkedSiblings` on `createDispatchSpan` — zero non-empty production callers).
 - **−1 boolean overload** (`isChildTrace` — moved to config-driven decision in OTel factory).
 - **+1 new narrow method** (`createLinkedHandlerSpan(String, Message, Message, ProcessingContext)`) — closes the one real semantic gap (update→query SpanLink).
