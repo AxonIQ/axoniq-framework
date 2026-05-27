@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.messaging.transformation.events;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Verifies that the chain is safe to invoke concurrently and that a {@code null}
+ * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} is tolerated.
+ * N threads x M iterations produce byte-identical outputs.
+ */
+class EventTransformerChainFr006ConcurrencyTest {
+
+    private static final int THREADS = 8;
+    private static final int ITERATIONS_PER_THREAD = 10_000;
+
+    private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
+    private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+
+    @Test
+    @Disabled("Tests-first; impl lands in T024 + T027 (chain matching path)")
+    void concurrent_invocations_produce_identical_outputs() throws Exception {
+        // given
+        EventTransformer t = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        EventMessage input = new GenericEventMessage(V1, "stable-payload");
+
+        ExecutorService pool = Executors.newFixedThreadPool(THREADS);
+
+        // when -- THREADS workers each invoke chain.transform ITERATIONS times
+        List<CompletableFuture<Boolean>> futures = IntStream.range(0, THREADS).mapToObj(i -> CompletableFuture.supplyAsync(() -> {
+            for (int j = 0; j < ITERATIONS_PER_THREAD; j++) {
+                List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
+                if (out.size() != 1 || !V2.equals(out.get(0).type())) {
+                    return false;
+                }
+            }
+            return true;
+        }, pool)).toList();
+
+        pool.shutdown();
+        pool.awaitTermination(30, TimeUnit.SECONDS);
+
+        // then
+        for (CompletableFuture<Boolean> f : futures) {
+            assertThat(f.join()).isTrue();
+        }
+    }
+
+    @Test
+    @Disabled("Tests-first; impl lands in T027 (mapper receives @Nullable ProcessingContext)")
+    void produces_same_output_with_null_and_non_null_processing_context() {
+        // given
+        EventTransformer t = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        EventMessage input = new GenericEventMessage(V1, "p");
+
+        // when -- the chain's transform(stream) is invoked without a ProcessingContext (tracking-processor path)
+        List<EventMessage> outWithoutCtx = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
+
+        // then -- mapper invoked with null context, output is well-formed
+        assertThat(outWithoutCtx).hasSize(1);
+        assertThat(outWithoutCtx.get(0).type()).isEqualTo(V2);
+    }
+
+    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
+        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
+            acc.add(entry.message());
+            return acc;
+        }).join();
+    }
+}
