@@ -28,26 +28,24 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Verifies the startup-only registration lifecycle: the {@code Builder} is locked once
+ * Startup-only registration lifecycle: the {@code Builder} is locked once
  * {@code build()} is called; subsequent {@code register(...)} attempts throw
- * {@link ChainConfigurationException} with a clear message.
+ * {@link ChainConfigurationException}.
  */
-class ChainLockingTest {
+final class ChainLockingTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T029 (Builder.build() flips the locked flag)")
-    void registration_after_build_throws_chain_configuration_exception() {
-        // given -- a built (locked) chain's builder
+    void registrationAfterBuildThrowsChainConfigurationException() {
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
-        builder.build(); // chain is now locked; further register() on this builder must throw
+        builder.build();
 
-        EventTransformer extra = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformer additionalTransformer = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in);
 
-        // when / then
-        assertThatThrownBy(() -> builder.register(extra))
+        assertThatThrownBy(() -> builder.register(additionalTransformer))
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining("locked");
     }

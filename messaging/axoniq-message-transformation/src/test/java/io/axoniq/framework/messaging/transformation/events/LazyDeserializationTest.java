@@ -35,73 +35,64 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies the chain's non-matching path is lazy: the framework's
+ * The chain's non-matching path is lazy: the framework's
  * {@code MessageConverter.convertPayload(...)} is never invoked when no transformer
  * matches the event's {@link MessageType}, and lookup completes in constant time
  * per event.
  */
-class LazyDeserializationTest {
+final class LazyDeserializationTest {
 
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T026 (non-matching path skips converter)")
-    void converter_is_never_invoked_when_no_transformer_matches() {
-        // given -- mapper-call counter detects converter invocation
+    void converterIsNeverInvokedWhenNoTransformerMatches() {
         AtomicInteger mapperInvocations = new AtomicInteger();
-        EventTransformer t = EventTransformation.from(REGISTERED)
-                                                .to(new MessageType("com.example.CourseCreated", "2.0.0"))
-                                                .transform(JsonNode.class, (in, ctx) -> {
-                                                    mapperInvocations.incrementAndGet();
-                                                    return in;
-                                                });
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)
+                                                                    .to(new MessageType("com.example.CourseCreated", "2.0.0"))
+                                                                    .transform(JsonNode.class, (in, ctx) -> {
+                                                                        mapperInvocations.incrementAndGet();
+                                                                        return in;
+                                                                    });
+        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
 
-        // and -- 1000 events, none matching
-        List<EventMessage> nonMatching = IntStream.range(0, 1000)
+        List<EventMessage> nonMatchingEvents = IntStream.range(0, 1000)
                 .mapToObj(i -> (EventMessage) new GenericEventMessage(UNREGISTERED, "p-" + i))
                 .toList();
 
-        // when
-        List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(nonMatching)));
+        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(nonMatchingEvents)));
 
-        // then
-        assertThat(out).hasSize(1000);
+        assertThat(outputs).hasSize(1000);
         assertThat(mapperInvocations.get()).isZero();
     }
 
     @Test
     @Disabled("Tests-first; impl lands in T026 (concrete-from O(1) QualifiedName-keyed lookup)")
-    void non_matching_lookup_completes_in_constant_time_regardless_of_chain_length() {
-        // given -- a chain with many registered transformers, each for a different type
+    void nonMatchingLookupCompletesInConstantTimeRegardlessOfChainLength() {
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
         for (int i = 0; i < 100; i++) {
-            MessageType ft = new MessageType("com.example.Type" + i, "1.0.0");
-            MessageType tt = new MessageType("com.example.Type" + i, "2.0.0");
-            builder.register(EventTransformation.from(ft).to(tt).transform(JsonNode.class, (in, ctx) -> in));
+            MessageType fromType = new MessageType("com.example.Type" + i, "1.0.0");
+            MessageType toType = new MessageType("com.example.Type" + i, "2.0.0");
+            builder.register(EventTransformation.from(fromType).to(toType).transform(JsonNode.class, (in, ctx) -> in));
         }
         EventTransformerChain chain = builder.build();
+        EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat");
 
-        // and -- one event matching none of them
-        EventMessage heartbeat = new GenericEventMessage(UNREGISTERED, "heartbeat");
+        long startedAt = System.nanoTime();
+        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
+        long elapsedNanos = System.nanoTime() - startedAt;
 
-        // when
-        long start = System.nanoTime();
-        List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(heartbeat))));
-        long elapsed = System.nanoTime() - start;
-
-        // then
-        assertThat(out).hasSize(1);
-        // not a hard threshold -- the JMH suite (T041) sets concrete numbers; here we verify
-        // that 100 registrations don't cause linear-scan blowup (rough: under 10ms is safe)
-        assertThat(elapsed).isLessThan(10_000_000L);
+        assertThat(outputs).hasSize(1);
+        assertThat(elapsedNanos).isLessThan(10_000_000L);
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

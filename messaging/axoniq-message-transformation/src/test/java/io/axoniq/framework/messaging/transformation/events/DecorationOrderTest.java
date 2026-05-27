@@ -30,21 +30,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * handler-side interceptor sees the event. Higher order value = outer wrap; see
  * {@code DefaultComponentRegistry} decorator-application loop.
  */
-class DecorationOrderTest {
+final class DecorationOrderTest {
 
     @Test
-    void transforming_event_store_decoration_order_is_outer_than_intercepting_event_store() {
-        // given -- both constants are public static finals defined at class level
-
-        // when / then -- ascending order applied first; higher order wraps lower one
+    void decorationOrderIsHigherThanInterceptingEventStore() {
         assertThat(TransformingEventStore.DECORATION_ORDER)
                 .isGreaterThan(InterceptingEventStore.DECORATION_ORDER);
     }
 
     @Test
-    void transforming_event_store_uses_min_value_plus_1000_for_headroom() {
-        // given / when / then -- the +1000 offset (vs InterceptingEventStore's +50) leaves
-        // a deliberate gap so users / framework can slot other decorators between them
+    void decorationOrderLeavesHeadroomBetweenItselfAndInterceptingEventStore() {
         assertThat(TransformingEventStore.DECORATION_ORDER).isEqualTo(Integer.MIN_VALUE + 1000);
         assertThat(InterceptingEventStore.DECORATION_ORDER).isEqualTo(Integer.MIN_VALUE + 50);
     }

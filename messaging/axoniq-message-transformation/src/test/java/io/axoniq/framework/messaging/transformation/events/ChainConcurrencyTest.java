@@ -38,11 +38,11 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies that the chain is safe to invoke concurrently and that a {@code null}
- * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} is tolerated.
+ * The chain is safe to invoke concurrently and tolerates a {@code null}
+ * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
  * N threads x M iterations produce byte-identical outputs.
  */
-class ChainConcurrencyTest {
+final class ChainConcurrencyTest {
 
     private static final int THREADS = 8;
     private static final int ITERATIONS_PER_THREAD = 10_000;
@@ -52,19 +52,18 @@ class ChainConcurrencyTest {
 
     @Test
     @Disabled("Tests-first; impl lands in T024 + T027 (chain matching path)")
-    void concurrent_invocations_produce_identical_outputs() throws Exception {
-        // given
-        EventTransformer t = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
-        EventMessage input = new GenericEventMessage(V1, "stable-payload");
+    void concurrentInvocationsProduceIdenticalOutputs() throws Exception {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
+                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventMessage stableInput = new GenericEventMessage(V1, "stable-payload");
 
         ExecutorService pool = Executors.newFixedThreadPool(THREADS);
 
-        // when -- THREADS workers each invoke chain.transform ITERATIONS times
-        List<CompletableFuture<Boolean>> futures = IntStream.range(0, THREADS).mapToObj(i -> CompletableFuture.supplyAsync(() -> {
-            for (int j = 0; j < ITERATIONS_PER_THREAD; j++) {
-                List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
-                if (out.size() != 1 || !V2.equals(out.get(0).type())) {
+        List<CompletableFuture<Boolean>> workers = IntStream.range(0, THREADS).mapToObj(i -> CompletableFuture.supplyAsync(() -> {
+            for (int iteration = 0; iteration < ITERATIONS_PER_THREAD; iteration++) {
+                List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(stableInput))));
+                if (outputs.size() != 1 || !V2.equals(outputs.getFirst().type())) {
                     return false;
                 }
             }
@@ -74,32 +73,31 @@ class ChainConcurrencyTest {
         pool.shutdown();
         pool.awaitTermination(30, TimeUnit.SECONDS);
 
-        // then
-        for (CompletableFuture<Boolean> f : futures) {
-            assertThat(f.join()).isTrue();
+        for (CompletableFuture<Boolean> worker : workers) {
+            assertThat(worker.join()).isTrue();
         }
     }
 
     @Test
     @Disabled("Tests-first; impl lands in T027 (mapper receives @Nullable ProcessingContext)")
-    void produces_same_output_with_null_and_non_null_processing_context() {
-        // given
-        EventTransformer t = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+    void producesSameOutputWithNullAndNonNullProcessingContext() {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
+                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage input = new GenericEventMessage(V1, "p");
 
-        // when -- the chain's transform(stream) is invoked without a ProcessingContext (tracking-processor path)
         List<EventMessage> outWithoutCtx = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
 
-        // then -- mapper invoked with null context, output is well-formed
         assertThat(outWithoutCtx).hasSize(1);
-        assertThat(outWithoutCtx.get(0).type()).isEqualTo(V2);
+        assertThat(outWithoutCtx.getFirst().type()).isEqualTo(V2);
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

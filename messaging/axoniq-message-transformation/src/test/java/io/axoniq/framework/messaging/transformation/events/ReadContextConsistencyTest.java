@@ -41,62 +41,57 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 /**
- * Verifies that all three event read contexts -- entity load via
- * {@code EventStore.transaction(...).source(...)}, DCB reads via the same
- * {@code source(...)}, and tracking-processor reads via {@code EventStore.open(...)}
+ * All three event read contexts -- entity load via
+ * {@code EventStore.transaction(...).source(...)}, DCB read via the same
+ * {@code source(...)}, and tracking-processor read via {@code EventStore.open(...)}
  * -- observe the identical transformed result for the same stored event.
  */
-class ReadContextConsistencyTest {
+final class ReadContextConsistencyTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T030 (TransformingEventStore wraps transaction + open)")
-    void entity_load_and_dcb_read_and_tracking_processor_all_observe_the_same_transformed_event() {
-        // given
-        EventTransformerChain chain = EventTransformerChain.builder().build(); // populated with v1->v2 transformer
+    void entityLoadAndDcbReadAndTrackingProcessorAllObserveSameTransformedEvent() {
+        EventTransformerChain chainWithV1ToV2 = EventTransformerChain.builder().build();
         MessageConverter converter = Mockito.mock(MessageConverter.class);
-        EventStore delegate = Mockito.mock(EventStore.class);
-        EventStoreTransaction tx = Mockito.mock(EventStoreTransaction.class);
-        ProcessingContext ctx = Mockito.mock(ProcessingContext.class);
+        EventStore delegateStore = Mockito.mock(EventStore.class);
+        EventStoreTransaction delegateTransaction = Mockito.mock(EventStoreTransaction.class);
+        ProcessingContext context = Mockito.mock(ProcessingContext.class);
 
-        EventMessage stored = new GenericEventMessage(V1, "v1-payload");
+        EventMessage storedV1Event = new GenericEventMessage(V1, "v1-payload");
 
-        when(delegate.transaction(ctx)).thenReturn(tx);
-        // doReturn(...) bypasses Mockito's generic-inference issue with the wildcard
-        // return type of EventStoreTransaction.source(...).
-        doReturn(MessageStream.fromIterable(List.of(stored)))
-                .when(tx).source(Mockito.any(SourcingCondition.class), Mockito.any());
-        when(delegate.open(Mockito.any(StreamingCondition.class), Mockito.any()))
-                .thenReturn(MessageStream.fromIterable(List.of(stored)));
+        when(delegateStore.transaction(context)).thenReturn(delegateTransaction);
+        // doReturn bypasses Mockito's generic-inference issue with the wildcard return type
+        // of EventStoreTransaction.source(...).
+        doReturn(MessageStream.fromIterable(List.of(storedV1Event)))
+                .when(delegateTransaction).source(Mockito.any(SourcingCondition.class), Mockito.any());
+        when(delegateStore.open(Mockito.any(StreamingCondition.class), Mockito.any()))
+                .thenReturn(MessageStream.fromIterable(List.of(storedV1Event)));
 
-        TransformingEventStore store = new TransformingEventStore(delegate, chain, converter);
+        TransformingEventStore decoratedStore = new TransformingEventStore(delegateStore, chainWithV1ToV2, converter);
 
-        // when -- (a) entity load via transaction().source()
-        SourcingCondition srcCond = Mockito.mock(SourcingCondition.class);
-        List<EventMessage> entityLoad = drain(store.transaction(ctx).source(srcCond));
+        SourcingCondition sourcingCondition = Mockito.mock(SourcingCondition.class);
+        List<EventMessage> entityLoad = drain(decoratedStore.transaction(context).source(sourcingCondition));
+        List<EventMessage> dcbRead = drain(decoratedStore.transaction(context).source(sourcingCondition));
+        StreamingCondition streamingCondition = Mockito.mock(StreamingCondition.class);
+        List<EventMessage> trackingProcessorRead = drain(decoratedStore.open(streamingCondition, context));
 
-        // and -- (b) DCB read via the same source() entry point
-        List<EventMessage> dcbRead = drain(store.transaction(ctx).source(srcCond));
-
-        // and -- (c) tracking-processor read via open()
-        StreamingCondition strCond = Mockito.mock(StreamingCondition.class);
-        List<EventMessage> trackingRead = drain(store.open(strCond, ctx));
-
-        // then -- all three see v2
         assertThat(entityLoad).hasSize(1);
-        assertThat(entityLoad.get(0).type()).isEqualTo(V2);
+        assertThat(entityLoad.getFirst().type()).isEqualTo(V2);
         assertThat(dcbRead).hasSize(1);
-        assertThat(dcbRead.get(0).type()).isEqualTo(V2);
-        assertThat(trackingRead).hasSize(1);
-        assertThat(trackingRead.get(0).type()).isEqualTo(V2);
+        assertThat(dcbRead.getFirst().type()).isEqualTo(V2);
+        assertThat(trackingProcessorRead).hasSize(1);
+        assertThat(trackingProcessorRead.getFirst().type()).isEqualTo(V2);
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

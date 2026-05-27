@@ -39,87 +39,81 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies both {@code transform(...)} overloads:
- * {@code transform(Class<T>, BiFunction)} for non-generic input types and
- * {@code transform(TypeReference<T>, BiFunction)} for generic input types
- * (e.g. {@code Map<String, Object>}).
+ * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for
+ * non-generic input types and {@code transform(TypeReference<T>, BiFunction)} for generic
+ * input types such as {@code Map<String, Object>}.
  */
-class TypedPayloadAccessTest {
+final class TypedPayloadAccessTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Nested
-    class ClassOverload {
+    final class ClassOverload {
 
         @Test
         @Disabled("Tests-first; impl lands in T024 (Class<T> overload) + T027 (chain invokes converter)")
-        void converts_payload_to_jsonnode_before_invoking_mapper() {
-            // given
-            EventTransformer t = EventTransformation.from(V1)
-                                                    .to(V2)
-                                                    .transform(JsonNode.class, (jsonNode, ctx) -> {
-                                                        ObjectNode v2 = JsonNodeFactory.instance.objectNode();
-                                                        v2.put("name", jsonNode.get("name").asText());
-                                                        return v2;
-                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        void convertsPayloadToJsonNodeBeforeInvokingMapper() {
+            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                    .to(V2)
+                                                                    .transform(JsonNode.class, (jsonNode, ctx) -> {
+                                                                        ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                        v2.put("name", jsonNode.get("name").asText());
+                                                                        return v2;
+                                                                    });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
 
-            ObjectNode v1 = JsonNodeFactory.instance.objectNode();
-            v1.put("name", "Math 101");
-            EventMessage input = new GenericEventMessage(V1, v1);
+            ObjectNode v1Payload = JsonNodeFactory.instance.objectNode();
+            v1Payload.put("name", "Math 101");
+            EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-            // when
-            List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
+            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-            // then
-            assertThat(out).hasSize(1);
-            assertThat(out.get(0).type()).isEqualTo(V2);
-            JsonNode result = (JsonNode) out.get(0).payload();
-            assertThat(result.get("name").asText()).isEqualTo("Math 101");
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(V2);
+            JsonNode transformedPayload = (JsonNode) outputs.getFirst().payload();
+            assertThat(transformedPayload.get("name").asText()).isEqualTo("Math 101");
         }
     }
 
     @Nested
-    class TypeReferenceOverload {
+    final class TypeReferenceOverload {
 
         @Test
         @Disabled("Tests-first; impl lands in T024 (TypeReference<T> overload)")
-        void preserves_generic_type_so_lambda_parameter_type_is_inferred_at_compile_time() {
-            // given -- TypeReference<Map<String, Object>> binds T at compile time;
-            // the lambda's `payload` parameter is inferred as Map<String, Object>, no cast required
+        void preservesGenericTypeSoLambdaParameterTypeIsInferredAtCompileTime() {
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer t = EventTransformation.from(V1)
-                                                    .to(V2)
-                                                    .transform(mapType, (payload, ctx) -> {
-                                                        Map<String, Object> result = new HashMap<>(payload);
-                                                        result.put("upgraded", true);
-                                                        return result;
-                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                    .to(V2)
+                                                                    .transform(mapType, (payload, ctx) -> {
+                                                                        Map<String, Object> result = new HashMap<>(payload);
+                                                                        result.put("upgraded", true);
+                                                                        return result;
+                                                                    });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
 
             Map<String, Object> v1Payload = new HashMap<>();
             v1Payload.put("name", "Math 101");
-            EventMessage input = new GenericEventMessage(V1, v1Payload);
+            EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-            // when
-            List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
+            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-            // then
-            assertThat(out).hasSize(1);
-            assertThat(out.get(0).type()).isEqualTo(V2);
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(V2);
             @SuppressWarnings("unchecked")
-            Map<String, Object> result = (Map<String, Object>) out.get(0).payload();
-            assertThat(result).containsEntry("name", "Math 101")
-                              .containsEntry("upgraded", true);
+            Map<String, Object> transformedPayload = (Map<String, Object>) outputs.getFirst().payload();
+            assertThat(transformedPayload).containsEntry("name", "Math 101")
+                                          .containsEntry("upgraded", true);
         }
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

@@ -35,41 +35,39 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies that events stored without an explicit version are treated as version
- * {@code "0.0.1"} (AF5 default) and match transformations registered for that version.
- * No special API is required from the user.
+ * Events stored without an explicit version are treated as version {@code "0.0.1"}
+ * (AF5 default) and match transformations registered for that version. No special
+ * API is required from the user.
  */
-class LegacyUnversionedEventTest {
+final class LegacyUnversionedEventTest {
 
     private static final QualifiedName NAME = new QualifiedName("com.example.LegacyEvent");
-    private static final MessageType DEFAULT_V = new MessageType(NAME, "0.0.1");
+    private static final MessageType DEFAULT_VERSION = new MessageType(NAME, "0.0.1");
     private static final MessageType V2 = new MessageType(NAME, "2.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T023 + T027")
-    void unversioned_event_matches_a_transformation_registered_for_default_version() {
-        // given -- transformer registered for the default version
-        EventTransformer t = EventTransformation.from(DEFAULT_V).to(V2).transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+    void unversionedEventMatchesTransformationRegisteredForDefaultVersion() {
+        EventTransformer defaultVersionToV2Transformer = EventTransformation.from(DEFAULT_VERSION)
+                                                                            .to(V2)
+                                                                            .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(defaultVersionToV2Transformer).build();
+        EventMessage legacyUnversionedEvent = new GenericEventMessage(new MessageType(NAME), JsonNodeFactory.instance.objectNode());
 
-        // and -- an event constructed with just QualifiedName (defaulting version to "0.0.1")
-        EventMessage legacy = new GenericEventMessage(new MessageType(NAME), JsonNodeFactory.instance.objectNode());
+        assertThat(legacyUnversionedEvent.type().version()).isEqualTo("0.0.1");
 
-        // sanity: the MessageType the framework picked is the default version
-        assertThat(legacy.type().version()).isEqualTo("0.0.1");
+        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent))));
 
-        // when
-        List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(legacy))));
-
-        // then
-        assertThat(out).hasSize(1);
-        assertThat(out.get(0).type()).isEqualTo(V2);
+        assertThat(outputs).hasSize(1);
+        assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

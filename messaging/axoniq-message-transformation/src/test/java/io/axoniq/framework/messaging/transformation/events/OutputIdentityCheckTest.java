@@ -39,35 +39,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Verifies the resolver-permitting output-identity check (T028). For 1:1 transformations
- * with a payload mapper, the framework attempts to resolve the output payload's
- * {@link MessageType} via {@code MessageTypeResolver.resolve(Class<?>)} and compares it
- * to the declared {@code to}. Three cases:
- * (a) typed POJO mismatch -> raises; (b) typed POJO match -> no exception;
+ * Resolver-permitting output-identity check for 1:1 transformations with a payload mapper.
+ * The framework attempts to resolve the output payload's {@link MessageType} via
+ * {@code MessageTypeResolver.resolve(Class<?>)} and compares it to the declared {@code to}.
+ * Three cases: (a) typed POJO mismatch -> raises; (b) typed POJO match -> no exception;
  * (c) untyped output (JsonNode / Map / raw bytes) -> resolver returns empty, check is skipped.
  */
-class OutputIdentityCheckTest {
+final class OutputIdentityCheckTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Nested
-    class PojoOutput {
+    final class PojoOutput {
 
         @Test
-        @Disabled("Tests-first; impl lands in T028 (FR-018 identity check via MessageTypeResolver)")
-        void mismatch_between_declared_to_and_resolved_pojo_message_type_raises() {
-            // given -- a transformation whose mapper returns a POJO whose @Event-resolved
-            // MessageType differs from the declared `to`
-            EventTransformer t = EventTransformation.from(V1)
-                                                    .to(V2)
-                                                    .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
-            EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        @Disabled("Tests-first; impl lands in T028 (identity check via MessageTypeResolver)")
+        void mismatchBetweenDeclaredToAndResolvedPojoMessageTypeRaises() {
+            EventTransformer wrongTypeProducingTransformer = EventTransformation.from(V1)
+                                                                                .to(V2)
+                                                                                .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
+            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
+            EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
-
-            // when / then -- the mismatch surfaces with declared-to, actual-output, and stream position
-            assertThatThrownBy(() -> drain(chain.transform(MessageStream.fromIterable(List.of(input)))))
+            assertThatThrownBy(() -> drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)))))
                     .isInstanceOf(ChainConfigurationException.class)
                     .hasMessageContaining(V2.toString())
                     .hasMessageContaining(WrongTypePojo.class.getName());
@@ -75,60 +70,54 @@ class OutputIdentityCheckTest {
 
         @Test
         @Disabled("Tests-first; impl lands in T028")
-        void match_between_declared_to_and_resolved_pojo_message_type_passes_silently() {
-            // given -- a transformation whose mapper returns a POJO matching V2's identity
-            EventTransformer t = EventTransformation.from(V1)
-                                                    .to(V2)
-                                                    .transform(JsonNode.class, (in, ctx) -> new SamplePojoV2());
-            EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        void matchBetweenDeclaredToAndResolvedPojoMessageTypePassesSilently() {
+            EventTransformer matchingPojoTransformer = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(JsonNode.class, (in, ctx) -> new SamplePojoV2());
+            EventTransformerChain chain = EventTransformerChain.builder().register(matchingPojoTransformer).build();
+            EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-            // when / then -- no exception
-            List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
-            assertThat(out).hasSize(1);
+            assertThat(outputs).hasSize(1);
         }
     }
 
     @Nested
-    class UntypedOutput {
+    final class UntypedOutput {
 
         @Test
         @Disabled("Tests-first; impl lands in T028 (resolver returns Optional.empty for JsonNode / Map)")
-        void jsonnode_output_skips_identity_check_silently() {
-            // given -- mapper returns a JsonNode (no class-level identity annotation)
-            EventTransformer t = EventTransformation.from(V1)
-                                                    .to(V2)
-                                                    .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
-            EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        void jsonNodeOutputSkipsIdentityCheckSilently() {
+            EventTransformer jsonNodeProducingTransformer = EventTransformation.from(V1)
+                                                                               .to(V2)
+                                                                               .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
+            EventTransformerChain chain = EventTransformerChain.builder().register(jsonNodeProducingTransformer).build();
+            EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-            // when / then -- check is skipped (resolver returns empty); no exception
-            List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
-            assertThat(out).hasSize(1);
-            assertThat(out.get(0).type()).isEqualTo(V2);
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(V2);
         }
 
         @Test
         @Disabled("Tests-first; impl lands in T028")
-        void map_output_skips_identity_check_silently() {
-            // given -- mapper returns a Map
-            EventTransformer t = EventTransformation.from(V1)
-                                                    .to(V2)
-                                                    .transform(JsonNode.class, (in, ctx) -> {
-                                                        Map<String, Object> result = new HashMap<>();
-                                                        result.put("key", "value");
-                                                        return result;
-                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+        void mapOutputSkipsIdentityCheckSilently() {
+            EventTransformer mapProducingTransformer = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(JsonNode.class, (in, ctx) -> {
+                                                                              Map<String, Object> result = new HashMap<>();
+                                                                              result.put("key", "value");
+                                                                              return result;
+                                                                          });
+            EventTransformerChain chain = EventTransformerChain.builder().register(mapProducingTransformer).build();
+            EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-            // when / then -- check is skipped
-            List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
-            assertThat(out).hasSize(1);
-            assertThat(out.get(0).type()).isEqualTo(V2);
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(V2);
         }
     }
 
@@ -141,9 +130,11 @@ class OutputIdentityCheckTest {
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

@@ -36,61 +36,55 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies that the event envelope (message identifier, metadata, identity-related fields)
- * is preserved across transformation. A 1:1 transformer may rewrite payload and
+ * The event envelope (message identifier, metadata, identity-related fields) is
+ * preserved across transformation. A 1:1 transformer may rewrite payload and
  * {@link MessageType}, but framework-controlled envelope fields flow through unchanged.
  */
-class EnvelopePreservationTest {
+final class EnvelopePreservationTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T027 (chain matching path) + T030 (envelope preservation in TransformingEventStore)")
-    void output_message_carries_same_identifier_as_input_after_a_one_to_one_transformation() {
-        // given
-        EventTransformer t = EventTransformation.from(V1)
-                                                .to(V2)
-                                                .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+    void outputMessageCarriesSameIdentifierAsInputAfterOneToOneTransformation() {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                .to(V2)
+                                                                .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-        // when
-        List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
-
-        // then
-        assertThat(out).hasSize(1);
-        assertThat(out.get(0).identifier()).isEqualTo(input.identifier());
-        assertThat(out.get(0).type()).isEqualTo(V2);
+        assertThat(outputs).hasSize(1);
+        assertThat(outputs.getFirst().identifier()).isEqualTo(storedV1Event.identifier());
+        assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
 
     @Test
     @Disabled("Tests-first; impl lands in T027")
-    void metadata_flows_forward_unchanged() {
-        // given
-        EventTransformer t = EventTransformation.from(V1)
-                                                .to(V2)
-                                                .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
-
+    void metadataFlowsForwardUnchanged() {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                .to(V2)
+                                                                .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         Metadata metadata = Metadata.from(Map.of("correlationId", "abc-123", "userId", "u-42"));
-        EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode())
+        EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode())
                 .andMetadata(metadata);
 
-        // when
-        List<EventMessage> out = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
+        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-        // then
-        assertThat(out).hasSize(1);
-        assertThat(out.get(0).metadata()).containsEntry("correlationId", "abc-123");
-        assertThat(out.get(0).metadata()).containsEntry("userId", "u-42");
+        assertThat(outputs).hasSize(1);
+        assertThat(outputs.getFirst().metadata()).containsEntry("correlationId", "abc-123");
+        assertThat(outputs.getFirst().metadata()).containsEntry("userId", "u-42");
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

@@ -35,72 +35,66 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)} —
- * the 1:1 structural payload transformation that closes the issue's MUST scope (US1).
- * Covers scenarios 1 + 2: a stored v1 event is observed as v2 by handlers consuming the
- * chain's output stream.
+ * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)} -- the
+ * 1:1 structural payload transformation that closes the issue's MUST scope (US1).
+ * A stored v1 event is observed as v2 by handlers consuming the chain's output stream.
  */
-class StructuralTransformationTest {
+final class StructuralTransformationTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T023 (EventTransformation factory) + T024 (transform overloads) + T027 (chain matching)")
-    void stored_v1_event_is_observed_as_v2_after_registering_a_v1_to_v2_transformation() {
-        // given
-        EventTransformer t = EventTransformation.from(V1)
-                                                .to(V2)
-                                                .transform(JsonNode.class, (v1, ctx) -> {
-                                                    int capacity = v1.get("capacity").asInt();
-                                                    ObjectNode v2 = JsonNodeFactory.instance.objectNode();
-                                                    v2.put("minCapacity", capacity);
-                                                    v2.put("maxCapacity", capacity);
-                                                    return v2;
-                                                });
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+    void storedV1EventIsObservedAsV2AfterRegisteringV1ToV2Transformation() {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                .to(V2)
+                                                                .transform(JsonNode.class, (v1, ctx) -> {
+                                                                    int capacity = v1.get("capacity").asInt();
+                                                                    ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                    v2.put("minCapacity", capacity);
+                                                                    v2.put("maxCapacity", capacity);
+                                                                    return v2;
+                                                                });
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
 
         ObjectNode v1Payload = JsonNodeFactory.instance.objectNode();
         v1Payload.put("capacity", 30);
-        EventMessage stored = new GenericEventMessage(V1, v1Payload);
+        EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-        // when
-        List<EventMessage> observed = drain(chain.transform(MessageStream.fromIterable(List.of(stored))));
+        List<EventMessage> observed = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-        // then -- consumer observes v2
         assertThat(observed).hasSize(1);
-        assertThat(observed.get(0).type()).isEqualTo(V2);
-        JsonNode out = (JsonNode) observed.get(0).payload();
-        assertThat(out.get("minCapacity").asInt()).isEqualTo(30);
-        assertThat(out.get("maxCapacity").asInt()).isEqualTo(30);
+        assertThat(observed.getFirst().type()).isEqualTo(V2);
+        JsonNode transformedPayload = (JsonNode) observed.getFirst().payload();
+        assertThat(transformedPayload.get("minCapacity").asInt()).isEqualTo(30);
+        assertThat(transformedPayload.get("maxCapacity").asInt()).isEqualTo(30);
     }
 
     @Test
     @Disabled("Tests-first; impl lands in T023 / T027")
-    void a_single_transformation_is_observed_by_every_consumer_of_the_chain() {
-        // given -- same chain consumed twice (mimics two handlers reading the same stream)
-        EventTransformer t = EventTransformation.from(V1)
-                                                .to(V2)
-                                                .transform(JsonNode.class, (v1, ctx) -> v1.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(t).build();
+    void singleTransformationIsObservedByEveryConsumerOfTheChain() {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                .to(V2)
+                                                                .transform(JsonNode.class, (v1, ctx) -> v1.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        EventMessage stored = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        List<EventMessage> firstConsumer = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> secondConsumer = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
-        // when
-        List<EventMessage> observerA = drain(chain.transform(MessageStream.fromIterable(List.of(stored))));
-        List<EventMessage> observerB = drain(chain.transform(MessageStream.fromIterable(List.of(stored))));
-
-        // then -- both consumers see identical transformed event
-        assertThat(observerA).hasSize(1);
-        assertThat(observerB).hasSize(1);
-        assertThat(observerA.get(0).type()).isEqualTo(V2);
-        assertThat(observerB.get(0).type()).isEqualTo(V2);
+        assertThat(firstConsumer).hasSize(1);
+        assertThat(secondConsumer).hasSize(1);
+        assertThat(firstConsumer.getFirst().type()).isEqualTo(V2);
+        assertThat(secondConsumer.getFirst().type()).isEqualTo(V2);
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }

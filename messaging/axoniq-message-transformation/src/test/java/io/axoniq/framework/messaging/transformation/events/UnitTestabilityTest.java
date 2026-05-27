@@ -34,55 +34,49 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Verifies that a transformation produced by the factory is unit-testable from a plain
- * JUnit test with no event store, no processor, no framework bootstrap, and no
+ * A transformation produced by the factory is unit-testable from a plain JUnit test
+ * with no event store, no processor, no framework bootstrap, and no
  * {@code ProcessingContext} -- the only dependency a user needs is the transformer itself.
  */
-class UnitTestabilityTest {
+final class UnitTestabilityTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
     @Disabled("Tests-first; impl lands in T023 + T024 (factory produces a directly-invocable EventTransformer)")
-    void transformation_is_invocable_without_a_chain_or_event_store() {
-        // given -- the bare transformer produced by the factory
-        EventTransformer t = EventTransformation.from(V1)
-                                                .to(V2)
-                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+    void transformationIsInvocableWithoutChainOrEventStore() {
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                .to(V2)
+                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        MessageStream<? extends EventMessage> result = v1ToV2Transformer.transform(storedV1Event, null);
 
-        // when -- invoked directly, passing a null ProcessingContext
-        MessageStream<? extends EventMessage> result = t.transform(input, null);
-
-        // then -- single output, type updated to v2
-        List<EventMessage> out = drain(result);
-        assertThat(out).hasSize(1);
-        assertThat(out.get(0).type()).isEqualTo(V2);
+        List<EventMessage> outputs = drain(result);
+        assertThat(outputs).hasSize(1);
+        assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
 
     @Test
     @Disabled("Tests-first; impl lands in T038 (rename factory entry point)")
-    void rename_transformation_is_invocable_without_a_payload_mapper() {
-        // given
-        EventTransformer t = EventTransformation.rename(V1, V2);
+    void renameTransformationIsInvocableWithoutPayloadMapper() {
+        EventTransformer renameTransformer = EventTransformation.rename(V1, V2);
+        EventMessage storedV1Event = new GenericEventMessage(V1, "payload");
 
-        EventMessage input = new GenericEventMessage(V1, "payload");
+        List<EventMessage> outputs = drain(renameTransformer.transform(storedV1Event, null));
 
-        // when
-        List<EventMessage> out = drain(t.transform(input, null));
-
-        // then
-        assertThat(out).hasSize(1);
-        assertThat(out.get(0).type()).isEqualTo(V2);
-        assertThat(out.get(0).payload()).isEqualTo("payload");
+        assertThat(outputs).hasSize(1);
+        assertThat(outputs.getFirst().type()).isEqualTo(V2);
+        assertThat(outputs.getFirst().payload()).isEqualTo("payload");
     }
 
     private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        return stream.<List<EventMessage>>reduce(new ArrayList<>(), (acc, entry) -> {
-            acc.add(entry.message());
-            return acc;
+        List<EventMessage> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry.message());
+            return null;
         }).join();
+        return collected;
     }
 }
