@@ -233,6 +233,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.NullMarked;
 
@@ -250,10 +251,16 @@ import org.jspecify.annotations.NullMarked;
 final class TransformingEventStoreTransaction implements EventStoreTransaction {
 
     /**
-     * @param delegate the inner {@link EventStoreTransaction} to wrap
-     * @param chain    the application's {@link EventTransformerChain}
+     * @param delegate  the inner {@link EventStoreTransaction} to wrap
+     * @param chain     the application's {@link EventTransformerChain} (passive registry)
+     * @param converter the active {@link MessageConverter}; same instance the parent
+     *                  {@link TransformingEventStore} holds, used to convert payloads to each
+     *                  matched transformer's declared {@code inputType} before invoking the
+     *                  mapper. Resolved at decorator-registration time, NOT at user-build time.
      */
-    TransformingEventStoreTransaction(EventStoreTransaction delegate, EventTransformerChain chain) { /* ... */ }
+    TransformingEventStoreTransaction(EventStoreTransaction delegate,
+                                       EventTransformerChain chain,
+                                       MessageConverter converter) { /* ... */ }
 
     /** Returns the delegate's stream piped through the chain. */
     @Override
