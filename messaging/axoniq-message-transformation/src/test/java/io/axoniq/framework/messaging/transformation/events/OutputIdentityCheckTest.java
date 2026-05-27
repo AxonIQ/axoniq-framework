@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * (a) typed POJO mismatch -> raises; (b) typed POJO match -> no exception;
  * (c) untyped output (JsonNode / Map / raw bytes) -> resolver returns empty, check is skipped.
  */
-class EventTransformerChainFr018Test {
+class OutputIdentityCheckTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");

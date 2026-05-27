@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * matches the event's {@link MessageType}, and lookup completes in constant time
  * per event.
  */
-class EventTransformerChainFr011LazyTest {
+class LazyDeserializationTest {
 
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");

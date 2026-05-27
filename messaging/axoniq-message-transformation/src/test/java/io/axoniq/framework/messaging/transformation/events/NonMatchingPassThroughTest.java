@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * through the chain unchanged, and that no payload conversion happens on the non-matching
  * path.
  */
-class EventTransformerChainFr005Test {
+class NonMatchingPassThroughTest {
 
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");

@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * {@link EventStore} decorator that applies an {@link EventTransformerChain} to every
- * read path (entity loads, DCB reads, tracking-processor reads). Installed automatically
+ * read path (entity loads, DCB reads, tracking-processor reads, ...). Installed automatically
  * by {@code EventTransformationConfigurationEnhancer}; not constructed by users.
  *
  * @author AxonIQ

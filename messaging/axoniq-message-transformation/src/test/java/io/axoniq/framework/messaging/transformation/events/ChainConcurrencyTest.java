@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} is tolerated.
  * N threads x M iterations produce byte-identical outputs.
  */
-class EventTransformerChainFr006ConcurrencyTest {
+class ChainConcurrencyTest {
 
     private static final int THREADS = 8;
     private static final int ITERATIONS_PER_THREAD = 10_000;

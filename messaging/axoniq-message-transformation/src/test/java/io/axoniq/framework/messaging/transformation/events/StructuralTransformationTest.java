@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Covers scenarios 1 + 2: a stored v1 event is observed as v2 by handlers consuming the
  * chain's output stream.
  */
-class EventTransformationFr001Test {
+class StructuralTransformationTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
