@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * is preserved across transformation. A 1:1 transformer may rewrite payload and
  * {@link MessageType}, but framework-controlled envelope fields flow through unchanged.
  */
-class EventEnvelopeFr010Test {
+class EnvelopePreservationTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");

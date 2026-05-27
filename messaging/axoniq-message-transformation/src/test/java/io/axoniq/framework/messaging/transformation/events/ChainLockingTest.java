@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code build()} is called; subsequent {@code register(...)} attempts throw
  * {@link ChainConfigurationException} with a clear message.
  */
-class EventTransformerChainFr004LockTest {
+class ChainLockingTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");

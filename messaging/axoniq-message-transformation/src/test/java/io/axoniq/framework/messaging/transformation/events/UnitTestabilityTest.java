@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * JUnit test with no event store, no processor, no framework bootstrap, and no
  * {@code ProcessingContext} -- the only dependency a user needs is the transformer itself.
  */
-class EventTransformationFr017Test {
+class UnitTestabilityTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");

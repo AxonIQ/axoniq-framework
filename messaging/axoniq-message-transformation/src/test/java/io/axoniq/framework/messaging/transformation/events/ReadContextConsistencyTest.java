@@ -46,7 +46,7 @@ import static org.mockito.Mockito.when;
  * {@code source(...)}, and tracking-processor reads via {@code EventStore.open(...)}
  * -- observe the identical transformed result for the same stored event.
  */
-class TransformingEventStoreFr012Test {
+class ReadContextConsistencyTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");

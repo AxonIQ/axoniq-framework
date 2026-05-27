@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code "0.0.1"} (AF5 default) and match transformations registered for that version.
  * No special API is required from the user.
  */
-class EventTransformationFr016Test {
+class LegacyUnversionedEventTest {
 
     private static final QualifiedName NAME = new QualifiedName("com.example.LegacyEvent");
     private static final MessageType DEFAULT_V = new MessageType(NAME, "0.0.1");
