@@ -35,7 +35,7 @@ import java.util.Objects;
  * the error path). It is the shared building block the tracing decorators use to wrap handler-side spans, and is
  * available to external decorator authors building their own tracing.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 public final class ProcessingContextSpanBinding {

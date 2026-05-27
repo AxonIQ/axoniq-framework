@@ -31,7 +31,7 @@ import org.axonframework.common.annotation.Internal;
  * discovered enhancer, not a type applications construct directly.
  *
  * @param commandBusEnabled whether the {@code CommandBus} is decorated with tracing
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 @Internal

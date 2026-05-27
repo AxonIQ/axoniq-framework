@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.tracing.slice;
+package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.tracing.SpanNames;
 import io.opentelemetry.api.trace.SpanKind;
@@ -48,13 +48,13 @@ import static org.awaitility.Awaitility.await;
  * A single application connects to Axon Server and dispatches a command <em>to itself</em> through the server. The
  * dispatch and handle both happen in the same JVM, so one OpenTelemetry SDK / exporter captures both spans. The point
  * is the gRPC round-trip through Axon Server: it verifies the W3C {@code traceparent} rides on the command's metadata
- * across the server boundary (the no-ThreadLocal propagation contract, FR-015 / SC-009).
+ * across the server boundary (the no-ThreadLocal propagation contract).
  * <p>
  * The expected outcome: a {@code CommandBus.dispatchCommand <name>} span (kind {@link SpanKind#PRODUCER}) and a
  * {@code CommandBus.handleCommand <name>} span (kind {@link SpanKind#CONSUMER}) that share the same trace, with the
  * handle span parented on the dispatch span.
  */
-class SliceCommandBusTracingAxonServerIT {
+class CommandBusTracingAxonServerIT {
 
     private static final TracingAxonServerTestInfrastructure INFRASTRUCTURE =
             new TracingAxonServerTestInfrastructure();

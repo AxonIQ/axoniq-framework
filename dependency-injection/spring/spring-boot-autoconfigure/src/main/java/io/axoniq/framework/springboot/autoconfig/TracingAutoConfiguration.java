@@ -50,7 +50,7 @@ import org.springframework.context.annotation.Bean;
  * The whole configuration backs off when {@code axon.tracing.enabled} is set to {@code false}, and each built-in
  * attribute provider can be toggled individually through {@code axon.tracing.attribute-providers.*} properties.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 @AutoConfiguration

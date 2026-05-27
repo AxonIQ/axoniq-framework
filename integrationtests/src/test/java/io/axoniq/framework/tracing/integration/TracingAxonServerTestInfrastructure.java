@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.tracing.slice;
+package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.tracing.SpanFactory;
@@ -47,6 +47,7 @@ import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastru
  * metadata across the Axon Server gRPC boundary. The captured spans are exposed via {@link #spanExporter()} for
  * assertions.
  *
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 final class TracingAxonServerTestInfrastructure implements TestInfrastructure {

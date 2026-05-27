@@ -38,8 +38,9 @@ import java.util.Map;
  * This type is {@link Internal} because it is an implementation detail of the OpenTelemetry binding; it is exposed
  * only so the {@link OpenTelemetrySpanFactory} and tests can reference the shared {@link #INSTANCE}.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 @Internal
 public final class MetadataContextSetter implements TextMapSetter<Map<String, String>> {

@@ -28,8 +28,9 @@ import org.jspecify.annotations.Nullable;
  * configured, allowing the tracing decorators to be wired unconditionally while imposing no measurable overhead: every
  * operation reduces to a single dispatch returning shared no-op instances.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class NoOpSpanFactory implements SpanFactory {
 

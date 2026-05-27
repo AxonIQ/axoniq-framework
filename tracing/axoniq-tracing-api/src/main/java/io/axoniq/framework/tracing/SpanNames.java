@@ -31,7 +31,7 @@ import org.axonframework.messaging.core.Message;
  * The constants on this class are grown incrementally as tracing slices land; the command-bus names are present from
  * the first slice.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 public final class SpanNames {

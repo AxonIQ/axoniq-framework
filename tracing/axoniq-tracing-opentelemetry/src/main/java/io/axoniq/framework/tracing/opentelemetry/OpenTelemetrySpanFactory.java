@@ -64,8 +64,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * The factory also implements {@link MetadataContextPropagator}, exposing the lower-level inject/fields building
  * blocks so external decorator authors can propagate context onto messages that the built-in decorators do not handle.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class OpenTelemetrySpanFactory implements SpanFactory, MetadataContextPropagator {
 

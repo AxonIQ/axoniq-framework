@@ -32,8 +32,9 @@ import org.slf4j.LoggerFactory;
  * This factory performs no context propagation: {@link #propagateContext(Message)} returns the message unchanged.
  * Combine it with the OpenTelemetry factory through {@link MultiSpanFactory} to get both logging and real tracing.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class LoggingSpanFactory implements SpanFactory {
 

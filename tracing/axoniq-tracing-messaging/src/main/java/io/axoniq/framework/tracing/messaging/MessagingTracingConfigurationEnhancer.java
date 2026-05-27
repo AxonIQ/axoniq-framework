@@ -36,7 +36,7 @@ import org.axonframework.messaging.commandhandling.CommandBus;
  * disabled) and the corresponding toggle in {@link MessagingTracingSettings} is enabled. In this slice the
  * {@link CommandBus} is decorated; further messaging components are added by later slices.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 @Internal

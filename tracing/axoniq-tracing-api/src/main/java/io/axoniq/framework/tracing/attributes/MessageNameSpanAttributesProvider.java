@@ -32,8 +32,9 @@ import java.util.Objects;
  * attribute key is {@link #MESSAGE_NAME} ({@code axoniq.message.name}); a different key can be supplied through the
  * constructor — for example to keep the Axon Framework 4 key {@code axon_message_name}.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class MessageNameSpanAttributesProvider implements SpanAttributesProvider {
 

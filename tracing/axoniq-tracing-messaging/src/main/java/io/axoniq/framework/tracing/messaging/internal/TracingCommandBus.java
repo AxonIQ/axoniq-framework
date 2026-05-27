@@ -49,7 +49,7 @@ import java.util.concurrent.CompletableFuture;
  * This decorator is registered by {@code MessagingTracingConfigurationEnhancer}; it is never instantiated directly by
  * applications.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 @Internal

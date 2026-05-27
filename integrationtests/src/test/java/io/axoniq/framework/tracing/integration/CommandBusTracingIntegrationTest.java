@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.tracing.slice;
+package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.tracing.NoOpSpanFactory;
 import io.axoniq.framework.tracing.SpanFactory;
@@ -66,11 +66,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Slice 1 integration test: a dispatched command, routed through a {@link TracingCommandBus} backed by the real
+ * Integration test: a dispatched command, routed through a {@link TracingCommandBus} backed by the real
  * OpenTelemetry SDK, produces a connected dispatch → handle span tree with the expected names, kinds and attributes.
  * Spans are captured with an {@link InMemorySpanExporter} (no Docker required).
  */
-class SliceCommandBusTracingIntegrationTest {
+class CommandBusTracingIntegrationTest {
 
     private static final QualifiedName COMMAND_NAME = new QualifiedName("BookRoom");
     private static final String DISPATCH_SPAN = "CommandBus.dispatchCommand BookRoom";

@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests validating the wiring of {@link TracingAutoConfiguration} and {@link OpenTelemetryTracingAutoConfiguration}
  * through Spring Boot's {@link ApplicationContextRunner}.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 class TracingAutoConfigurationTest {

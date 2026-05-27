@@ -28,8 +28,9 @@ package io.axoniq.framework.tracing;
  * the context completes; see {@link ProcessingContextSpanBinding}. For imperative code it is closed in a
  * try-with-resources block by the {@link Span#run(Runnable)} family of helpers.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.5
  */
 public interface SpanScope extends AutoCloseable {
 

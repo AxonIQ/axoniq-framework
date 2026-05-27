@@ -53,8 +53,9 @@ import java.util.Objects;
  * Instances must always be created by the {@link OpenTelemetrySpanFactory}, which resolves the proper parent context
  * before configuring the {@link SpanBuilder}.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 @Internal
 public final class OpenTelemetrySpan implements Span {

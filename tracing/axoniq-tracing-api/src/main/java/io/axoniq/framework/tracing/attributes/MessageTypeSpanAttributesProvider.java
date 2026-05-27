@@ -36,8 +36,9 @@ import java.util.Objects;
  * ({@code axoniq.message.type}); a different key can be supplied through the constructor — for example to keep the Axon
  * Framework 4 key {@code axon_message_type}.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class MessageTypeSpanAttributesProvider implements SpanAttributesProvider {
 

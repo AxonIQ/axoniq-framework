@@ -34,12 +34,13 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Architectural guard enforcing the public API surface of {@code axoniq-tracing-api} (FR-016 / SC-003). The tracing
+ * Architectural guard enforcing the public API surface of {@code axoniq-tracing-api} (the single consolidated
+ * SpanFactory design). The tracing
  * feature deliberately ships a single consolidated {@link SpanFactory}; this test fails the build if any of the
  * forbidden per-component {@code *SpanFactory} interfaces are reintroduced, and pins the set of public types in the
  * base package.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 class PublicApiSurfaceTest {
@@ -84,7 +85,7 @@ class PublicApiSurfaceTest {
 
         assertThat(offenders)
                 .withFailMessage("Forbidden per-component *SpanFactory types found: %s. The feature ships a single "
-                                         + "consolidated SpanFactory (FR-016/SC-003).", offenders)
+                                         + "consolidated SpanFactory.", offenders)
                 .isEmpty();
     }
 

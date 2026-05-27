@@ -47,9 +47,10 @@ import java.util.function.Supplier;
  * tracking. Framework code that has a {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} should bind
  * the span to its lifecycle through {@link ProcessingContextSpanBinding}.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
  * @see SpanFactory
- * @since 5.2.0
+ * @since 4.6.0
  */
 public interface Span {
 

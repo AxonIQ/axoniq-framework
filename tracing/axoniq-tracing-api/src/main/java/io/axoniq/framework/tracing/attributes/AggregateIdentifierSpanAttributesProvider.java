@@ -38,8 +38,9 @@ import java.util.Objects;
  * resource. It is absent for dynamic-consistency-boundary / entity-based operations and whenever no context is
  * available. This provider intentionally does not reference any Axon Framework 4-era message type.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class AggregateIdentifierSpanAttributesProvider implements SpanAttributesProvider {
 

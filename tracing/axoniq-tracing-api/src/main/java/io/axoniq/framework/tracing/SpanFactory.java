@@ -41,8 +41,9 @@ import org.jspecify.annotations.Nullable;
  * The default implementation is {@link NoOpSpanFactory}; the OpenTelemetry binding ships
  * {@code OpenTelemetrySpanFactory}. Multiple factories can be composed with {@link MultiSpanFactory}.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public interface SpanFactory {
 

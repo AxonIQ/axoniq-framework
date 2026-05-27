@@ -40,7 +40,7 @@ import org.springframework.context.annotation.Bean;
  * The configuration backs off when {@code axon.tracing.enabled} is set to {@code false}, or when another
  * {@link SpanFactory} bean is already defined.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 @AutoConfiguration(before = TracingAutoConfiguration.class)

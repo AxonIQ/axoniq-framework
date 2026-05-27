@@ -36,7 +36,7 @@ import java.util.Map;
  * entries. {@link #fields()} reports the reserved metadata keys this propagator owns, so callers can detect and
  * document collisions with user metadata.
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 public interface MetadataContextPropagator {

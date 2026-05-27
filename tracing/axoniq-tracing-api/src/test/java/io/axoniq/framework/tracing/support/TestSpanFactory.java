@@ -48,8 +48,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code verify*} methods rather than mocking. Ported from Axon Framework 4's {@code TestSpanFactory} and adapted to
  * the consolidated Axon Framework 5 {@link SpanFactory} API.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public class TestSpanFactory implements SpanFactory {
 

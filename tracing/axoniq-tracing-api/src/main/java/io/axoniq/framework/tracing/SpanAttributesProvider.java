@@ -37,8 +37,9 @@ import java.util.Map;
  * <p>
  * Implementations MUST NOT reference Axon Framework 4-era types that have been removed from Axon Framework 5.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 @FunctionalInterface
 public interface SpanAttributesProvider {

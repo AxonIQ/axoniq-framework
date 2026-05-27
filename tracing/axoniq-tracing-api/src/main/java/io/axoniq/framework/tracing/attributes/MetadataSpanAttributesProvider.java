@@ -37,8 +37,9 @@ import java.util.Set;
  * {@code axon_metadata_}. An optional allowlist restricts which metadata keys are added; an empty allowlist means all
  * keys. Entries with a {@code null} value are skipped.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 public final class MetadataSpanAttributesProvider implements SpanAttributesProvider {
 

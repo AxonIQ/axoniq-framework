@@ -42,13 +42,14 @@ import java.util.stream.Collectors;
  * {@link HandlerEnhancerDefinition} that wraps annotation-based message handlers in a tracing {@link Span} named after
  * the handling method (for example {@code "RoomBookingHandler.handle(BookRoom)"}).
  * <p>
- * In this slice only {@code @CommandHandler} methods are enhanced; coverage of {@code @EventHandler},
- * {@code @QueryHandler} and {@code @EventSourcingHandler} is added by later slices. The decision whether to enhance a
+ * Currently only {@code @CommandHandler} methods are enhanced; coverage of {@code @EventHandler},
+ * {@code @QueryHandler} and {@code @EventSourcingHandler} will be added later. The decision whether to enhance a
  * handler is made at wrap time (before any per-invocation work): handlers that are not traced are returned unchanged,
- * so the reflective span-name machinery is never engaged on their hot path (FR-003a).
+ * so the reflective span-name machinery is never engaged on their hot path.
  *
- * @author AxonIQ
- * @since 5.2.0
+ * @author Mateusz Nowak
+ * @author Mitchell Herrijgers
+ * @since 4.6.0
  */
 @Internal
 public final class TracingHandlerEnhancerDefinition implements HandlerEnhancerDefinition {

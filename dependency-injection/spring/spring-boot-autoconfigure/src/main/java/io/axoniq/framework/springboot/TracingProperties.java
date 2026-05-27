@@ -35,7 +35,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *       enabled: true
  * }</pre>
  *
- * @author AxonIQ
+ * @author Mateusz Nowak
  * @since 5.2.0
  */
 @ConfigurationProperties(prefix = "axon.tracing")
