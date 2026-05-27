@@ -161,6 +161,20 @@ Where `contracts/public-api.md` and `plan.md` disagree, **plan.md is authoritati
 
 ---
 
+## Phase 5b: Slice 3b — Distributed bus connector tracing (plan P5b, FR-030) — [US1]/[US4]
+
+**Goal**: trace the distributed-transport leg (the connector's send/receive over Axon Server gRPC), reproducing AF4's `AxonServerCommandBus.dispatch/handle` visibility — by decorating the **generic** `CommandBusConnector` / `QueryBusConnector`. Placed after Slices 1 & 3 because the connector spans nest between each bus's dispatch and handle spans.
+
+- [ ] T058b1 Create module `tracing/axoniq-tracing-distributed` (`pom.xml` → `axoniq-tracing-api` + `axoniq-distributed-messaging`; `@NullMarked` package-infos; root aggregator + BOM entries). TDD-EXEMPT scaffolding. (P5b.1)
+- [ ] T058b2 [US1] TDD `TracingCommandBusConnector implements CommandBusConnector` (`CommandBusConnector.dispatch <name>` send leg + `CommandBusConnector.handle <name>` receive leg, nesting between bus dispatch/handle; `describeWrapperOf`) + unit tests **incl. the mandatory cross-thread no-ThreadLocal test**. (P5b.2)
+- [ ] T058b3 [US1] TDD `TracingQueryBusConnector implements QueryBusConnector` (query side, same pattern) + unit tests. (P5b.3)
+- [ ] T058b4 [US1] Add `axon.tracing.commandBusConnector.enabled` / `axon.tracing.queryBusConnector.enabled` toggles to `TracingProperties`; wire into autoconfig. (P5b.4)
+- [ ] T058b5 [US1] `DistributedTracingConfigurationEnhancer` (@Internal, ServiceLoader) registering `DecoratorDefinition.forType(CommandBusConnector.class)` + `forType(QueryBusConnector.class)`; add `META-INF/services` entry; update `SpanNames`. (P5b.5)
+- [ ] T058b6 [US1] **Real-Axon-Server cross-process IT** `SliceConnectorTracingAxonServerIT`: dispatch a command (and query) over Axon Server; assert the nested tree bus-dispatch → `CommandBusConnector.dispatch` → `CommandBusConnector.handle` → bus-handle in one trace (the connector legs are only observable over a real transport). Mirrors `SliceCommandBusTracingAxonServerIT`. (P5b.6)
+- [ ] T058b7 [US1] **STOP — Human validation gate for Slice 3b.** Confirm connector span names/kinds vs AF4 `AxonServerCommandBus.dispatch/handle`. (P5b.7)
+
+---
+
 ## Phase 6: Slice 4 — TracingQueryUpdateEmitter (plan P6) — [US1]
 
 - [ ] T059 [US1] TDD + impl `TracingQueryUpdateEmitter` (schedule+emit two-span pattern; complete/completeExceptionally single spans; `createLinkedHandlerSpan` link to originating query). (P6.1)
@@ -219,7 +233,7 @@ Where `contracts/public-api.md` and `plan.md` disagree, **plan.md is authoritati
 - **Phase 1 (Setup)**: no deps.
 - **Phase 2 (Foundational)**: depends on Phase 1; BLOCKS all slices.
 - **Phase 3 (Slice 1)**: depends on Phase 2.
-- **Phases 4–8 (Slices 2–6)**: strictly sequential — each blocked by the previous slice's STOP gate (FR-022b). No parallelization across slices.
+- **Phases 4–8 (Slices 2–6), plus Phase 5b (Slice 3b — connector tracing, after Slice 3)**: strictly sequential — each blocked by the previous slice's STOP gate (FR-022b). No parallelization across slices. Order: Slice 2 (events) → Slice 3 (queries) → **Slice 3b (connectors)** → Slice 4 (query updates) → Slice 5 (repository) → Slice 6 (snapshots).
 - **Phase 9**: depends on Slices 1–6.
 - **Phase 10**: depends on Phases 1–9 merged.
 

@@ -46,7 +46,7 @@ After the AxoniqFramework migration lands, all dead tracing source in the upstre
 - **Implementation MUST proceed component-by-component as vertical end-to-end slices** in the order given by FR-022b. Each slice ends with an explicit human-validation checkpoint; the next slice does not start until the user has accepted the previous slice's span tree. One feature branch, one rollup PR.
 
 **Scale/Scope**:
-- 5 new Maven modules (`tracing/axoniq-tracing-api`, `tracing/axoniq-tracing-messaging`, `tracing/axoniq-tracing-modelling`, `tracing/axoniq-tracing-eventsourcing`, `tracing/axoniq-tracing-opentelemetry`).
+- 5 new Maven modules created up-front in P1 (`tracing/axoniq-tracing-api`, `tracing/axoniq-tracing-messaging`, `tracing/axoniq-tracing-modelling`, `tracing/axoniq-tracing-eventsourcing`, `tracing/axoniq-tracing-opentelemetry`), **plus a 6th — `tracing/axoniq-tracing-distributed`** — added in Slice 3b (P5b) for connector-level tracing (FR-030; depends on `axoniq-tracing-api` + `axoniq-distributed-messaging`).
 - 1 new autoconfig class + 1 new `TracingProperties` class + 1 new entry in `AutoConfiguration.imports` in the existing `axoniq-spring-boot-autoconfigure` module.
 - ~7 component-tracing decorators (commands, events sink, event handling component, query bus, query update emitter, repository/state, snapshotter), plus the annotation `HandlerEnhancerDefinition` wrapper. Deadlines and sagas / process-managers are excluded — see clarifications 2026-05-26.
 - ~6 built-in `SpanAttributesProvider` implementations (parity with AF4).
@@ -346,6 +346,15 @@ Any component that can be **distributed over Axon Server** — command bus, quer
     - **P5.5**: Focused Boot integration test (`SliceQueryBusTracingIntegrationTest`).
     - **P5.5a**: **Real-Axon-Server cross-process IT** (`SliceQueryBusTracingAxonServerIT`, per "Mandatory workflow: real-Axon-Server cross-process test"): dispatch a query through the Axon Server connector and assert the remote handler span shares the dispatch trace. Mirrors `SliceCommandBusTracingAxonServerIT`.
     - **P5.6**: **STOP — Human validation gate for Slice 3.**
+
+   **P5b — Slice 3b: Distributed bus connector tracing (`TracingCommandBusConnector` + `TracingQueryBusConnector`)** (Story 1 / 4, **FR-030**). Placed here — after both the command (Slice 1) and query (Slice 3) buses are traced — because the connector spans nest *between* a bus's dispatch and handle spans, and one slice covers both connectors (decided 2026-05-27; see spec.md clarification). Sub-tasks:
+    - **P5b.1**: New module `tracing/axoniq-tracing-distributed` (`pom.xml` depends on `axoniq-tracing-api` + `axoniq-distributed-messaging`; `@NullMarked` package-info; root aggregator + BOM entries). **TDD-exempt scaffolding** (like P1).
+    - **P5b.2**: `TracingCommandBusConnector implements CommandBusConnector` decorator + unit tests (incl. the mandatory cross-thread no-ThreadLocal test). Decorates the **generic** `io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector`. Produces `CommandBusConnector.dispatch <name>` (sending leg) + `CommandBusConnector.handle <name>` (receiving leg) spans, nesting between the bus dispatch/handle spans via metadata/`ProcessingContext` propagation. Confirm exact names/kinds vs AF4 `AxonServerCommandBus.dispatch/handle` at the gate.
+    - **P5b.3**: `TracingQueryBusConnector implements QueryBusConnector` decorator + unit tests (same pattern, query side).
+    - **P5b.4**: `axon.tracing.commandBusConnector.enabled` / `axon.tracing.queryBusConnector.enabled` toggles on `TracingProperties`; wire into autoconfig.
+    - **P5b.5**: `DistributedTracingConfigurationEnhancer` (@Internal, ServiceLoader) registering `DecoratorDefinition.forType(CommandBusConnector.class)` + `forType(QueryBusConnector.class)`; add its `META-INF/services` entry. Update `SpanNames`.
+    - **P5b.6**: **Real-Axon-Server cross-process IT** (`SliceConnectorTracingAxonServerIT`): dispatch a command (and query) over Axon Server and assert the full nested tree — bus-dispatch → `CommandBusConnector.dispatch` (sending) → `CommandBusConnector.handle` (receiving) → bus-handle — all in one trace. This is the slice's primary verification (the connector legs are only observable over a real transport). Plus a focused in-JVM test for the decorator unit behaviour.
+    - **P5b.7**: **STOP — Human validation gate for Slice 3b.** Confirm the connector span names/kinds against AF4's `AxonServerCommandBus.dispatch/handle`.
 
 6. **P6 — Slice 4: `TracingQueryUpdateEmitter`** (Story 1 / 4, FR-008 — query update portion):
     - **P6.1**: `TracingQueryUpdateEmitter` decorator + unit tests. Implements the AF4 two-span pattern for `emit`: a schedule span (when the emission is queued) plus an emit span (when delivery actually happens). Plus single spans for `complete` / `completeExceptionally`.
