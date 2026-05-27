@@ -60,14 +60,14 @@ otel:
 Start the app, dispatch a command, and look at your trace backend. You'll see a connected trace:
 
 ```
-CommandBus.dispatchCommand RegisterStudent          [CLIENT]
-└─ CommandBus.handleCommand RegisterStudent         [SERVER]
+CommandBus.dispatchCommand RegisterStudent          [PRODUCER]
+└─ CommandBus.handleCommand RegisterStudent         [CONSUMER]
    └─ Repository.load Student studentId-42
    └─ Repository.save Student studentId-42
    └─ EventBus.publishEvent StudentRegistered       [PRODUCER]
       └─ EventProcessor[studentProjection].process StudentRegistered  [CONSUMER]
-         └─ QueryBus.query GetStudentById          [CLIENT]
-            └─ QueryBus.handle GetStudentById     [SERVER]
+         └─ QueryBus.query GetStudentById          [PRODUCER]
+            └─ QueryBus.handle GetStudentById     [CONSUMER]
 ```
 
 ### 5. Customise (optional)
@@ -163,13 +163,13 @@ MessagingConfigurer.create()
 
 | Concern | Span name template | Span kind |
 |---|---|---|
-| Command dispatch | `CommandBus.dispatchCommand <commandName>` | `CLIENT` (distributed) / `INTERNAL` (in-process) |
-| Command handling | `CommandBus.handleCommand <commandName>` | `SERVER` |
+| Command dispatch | `CommandBus.dispatchCommand <commandName>` | `PRODUCER` (AF4 binding; `INTERNAL` for the in-process leg once distributed/in-process branching lands) |
+| Command handling | `CommandBus.handleCommand <commandName>` | `CONSUMER` |
 | Event publication (per event, around context propagation) | `EventBus.publishEvent <eventName>` | `PRODUCER` |
 | Event commit (per `publish(...)` call, around UoW prepare/commit/after-commit phases) | `EventBus.commitEvents` | `INTERNAL` |
 | Event handling | `EventProcessor[<name>].process <eventName>` | `CONSUMER` |
-| Query dispatch | `QueryBus.query <queryName>` | `CLIENT` / `INTERNAL` |
-| Query handling | `QueryBus.handle <queryName>` | `SERVER` |
+| Query dispatch | `QueryBus.query <queryName>` | `PRODUCER` |
+| Query handling | `QueryBus.handle <queryName>` | `CONSUMER` |
 | Query update emit | `QueryUpdateEmitter.emit <updateType>` | `PRODUCER` |
 | Entity load | `Repository.load <entityType> <id>` | `INTERNAL` |
 | Entity save | `Repository.save <entityType> <id>` | `INTERNAL` |

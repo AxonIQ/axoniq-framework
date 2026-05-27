@@ -303,20 +303,22 @@ The task-executor agent (or human implementer) MUST respect this gate. No skippi
     - **No component decorators yet.** No per-slice integration tests yet.
 
 3. **P3 — Slice 1: `TracingCommandBus` + `@CommandHandler` enhancement** (Story 1 / 4, FR-006, FR-013):
-    - **P3.1**: `TracingCommandBus` decorator + unit tests (`TracingCommandBusTest`). Ports `DefaultCommandBusSpanFactoryTest` from AF4 first, then improves to behaviour-only assertions. Dispatch + handle spans, kinds (`CLIENT` / `SERVER` for distributed, `INTERNAL` for in-process), distributed-vs-in-process branching, metadata-based W3C context propagation via `MetadataContextSetter` / `MetadataContextGetter`. Span lifecycle bound to `ProcessingContext` via `ProcessingContextSpanBinding` (FR-013a).
+    - **P3.1**: `TracingCommandBus` decorator + unit tests (`TracingCommandBusTest`). Ports `DefaultCommandBusSpanFactoryTest` from AF4 first, then improves to behaviour-only assertions. Dispatch + handle spans, kinds per AF4's OpenTelemetry binding (`createDispatchSpan` → `PRODUCER`, `createHandlerSpan` → `CONSUMER`, `createInternalSpan` → `INTERNAL`; AF4's in-process dispatch leg used `createInternalSpan` → `INTERNAL`, the distributed leg used `createDispatchSpan` → `PRODUCER`), metadata-based W3C context propagation via `MetadataContextSetter` / `MetadataContextGetter`. Span lifecycle bound to `ProcessingContext` via `ProcessingContextSpanBinding` (FR-013a).
     - **P3.2**: Introduce `TracingHandlerEnhancerDefinition` with `@CommandHandler` coverage + unit tests (`TracingHandlerEnhancerDefinitionTest` with `@Nested CommandHandlerEnhancement`). Ports `TracingHandlerEnhancerDefinitionTest` from AF4 first; only the `@CommandHandler` cases land in this slice — the other annotations are explicitly out of scope here and produce no enhancement until their slice runs. **Eager-name guard (FR-003a)**: the `SpanFactory` takes an eager `String` (not AF4's `Supplier<String>`), so the enhancer MUST decide it will open a span (enabled + handler-type not suppressed) **before** building the reflective span name `getSpanName(target, signature)`, computing the name only on the span-creating branch — never eagerly per invocation. Add a unit test asserting the name builder is **not** invoked when the enhancer is disabled / the handler type is suppressed (e.g. spy/recording the name supplier, or asserting via a handler whose name-build would throw). This guard matters most for `@EventSourcingHandler` (slice 6) on the replay hot path, but the pattern is established here in slice 1. See `af4-span-inventory.md` §0 rows 7/7a and §1.9.
+        - **AUTO-WIRING DEFERRED TO SLICE 2 (decision 2026-05-27).** `TracingHandlerEnhancerDefinition` (with `@CommandHandler` coverage) is **implemented and unit-tested** in this slice, but it is **not registered into the live annotation pipeline here**. AF5 has no config-aware handler-enhancer registration API (no AF4-style `Configurer.registerHandlerEnhancerDefinition(Function<Configuration,…>)`); the only seam is registering a `HandlerDefinition` **component**, which is a single global slot shared by command/query/event handling. Because that wiring is global and is first genuinely needed once the enhancer is applied through the real pipeline, it is introduced and validated **once** in slice 2 (see P4.3a) rather than command-only here. Consequently slice 1's integration test asserts the dispatch + handle spans only (not the per-method enhancer span). Full research, approach, and limitations: see the "Handler-enhancer auto-wiring in AF5" appendix below and `spec.md` clarification 2026-05-27.
     - **P3.3**: Add `axon.tracing.commandBus.enabled` toggle to `TracingProperties`. Wire it into `TracingAutoConfiguration` so that the `CommandBus` decoration is skipped when disabled. Unit test the toggle via the Spring `ApplicationContextRunner`.
-    - **P3.4**: Register `DecoratorDefinition.forType(CommandBus.class)` and the `HandlerEnhancerDefinition` in `MessagingTracingConfigurationEnhancer` (in `axoniq-tracing-messaging`; add its `META-INF/services` entry). Update `SpanNames` (in `axoniq-tracing-api`) for the command-bus spans.
-    - **P3.5**: Focused Boot integration test (`SliceCommandBusTracingIntegrationTest`) using `@SpringBootTest` + `InMemorySpanExporter` SDK. Asserts (a) a dispatched command produces the expected dispatch span with `CLIENT`/`INTERNAL` kind, (b) the handler produces the expected child handler span with the right `SERVER`/`INTERNAL` kind, (c) the `@CommandHandler`-annotated method produces the enhancer-added child span with the right attributes, (d) `axon.tracing.commandBus.enabled=false` skips decoration. Span name + kind + attributes asserted against the corresponding rows in `af4-span-inventory.md` §1 (the AF4 → AF5 mapping audit).
+    - **P3.4**: Register `DecoratorDefinition.forType(CommandBus.class)` in `MessagingTracingConfigurationEnhancer` (in `axoniq-tracing-messaging`; add its `META-INF/services` entry). Update `SpanNames` (in `axoniq-tracing-api`) for the command-bus spans. **(The `HandlerEnhancerDefinition` is NOT wired here — see P3.2 deferral note and P4.3a.)**
+    - **P3.5**: Focused Boot integration test (`SliceCommandBusTracingIntegrationTest`) using `@SpringBootTest` + `InMemorySpanExporter` SDK. Asserts (a) a dispatched command produces the expected dispatch span with `PRODUCER` kind, (b) the handler produces the expected child handler span with `CONSUMER` kind, (c) ~~the `@CommandHandler`-annotated method produces the enhancer-added child span~~ **— DEFERRED to slice 2 (P4.3a), since handler-enhancer auto-wiring is global and lands in slice 2; the `@CommandHandler` per-method span is validated then (see P4.6)**, (d) `axon.tracing.commandBus.enabled=false` skips decoration. Span name + kind + attributes asserted against the corresponding rows in `af4-span-inventory.md` §1 (the AF4 → AF5 mapping audit).
     - **P3.6**: **STOP — Human validation gate for Slice 1.** Commit. Run `./mvnw -Pintegration-test verify -pl integrationtests -Dtest=SliceCommandBusTracingIntegrationTest`. Post the asserted span tree to the user. Wait for go/no-go before starting Slice 2.
 
 4. **P4 — Slice 2: `TracingEventSink` + `TracingEventHandlingComponent` + `@EventHandler` enhancement** (Story 1 / 4, FR-007, FR-007a):
     - **P4.1**: `TracingEventSink` decorator + unit tests. Implements the AF4 two-span pattern (per-event publish span synchronous around `propagateContext`, UoW-scoped commit span bound to `ProcessingContext` lifecycle via `runOnPrepareCommit` / `onError` / `whenComplete`). Falls back to `Span.run(...)` when `ProcessingContext == null`. See spec.md clarification entry on `TracingEventSink` and `flows.md` Flow 2.
     - **P4.2**: `TracingEventHandlingComponent` decorator + unit tests. Per-event consumer span (`EventProcessor.process <eventName>`, kind `CONSUMER`). Lazy batch span via `ctx.computeResourceIfAbsent(BATCH_SPAN_KEY, …)` gated on `ctx.getResource(Segment.RESOURCE_KEY).isPresent()`. Batch span bound to UoW lifecycle. See `research-batch-tracing.md` and `flows.md` Flow 4.
     - **P4.3**: Extend `TracingHandlerEnhancerDefinition` to cover `@EventHandler` + unit tests (a new `@Nested EventHandlerEnhancement` block in `TracingHandlerEnhancerDefinitionTest`).
+    - **P4.3a**: **Auto-wire `TracingHandlerEnhancerDefinition` into the live annotation pipeline (deferred from slice 1).** Register a `HandlerDefinition` framework component (via the messaging tracing enhancer / Spring autoconfig `ConfigurationEnhancer`) that bundles the configured `SpanFactory`-bearing `TracingHandlerEnhancerDefinition` on top of the AF5 defaults — see the "Handler-enhancer auto-wiring in AF5" appendix for the exact code, the AF4 difference, and the limitations. **This single wiring activates the per-method span for every annotation type the enhancer currently gates on — i.e. BOTH `@CommandHandler` (implemented in slice 1) AND `@EventHandler` (this slice).** Therefore P4.3a MUST verify the `@CommandHandler` per-method span retroactively as well (re-enable the slice-1 integration assertion (c), and/or assert it in `SliceEventTracingIntegrationTest`). The enhancer self-gates per message type, so command and event per-method spans appear only for their respective handlers. Unit-test the registration (component present, composes with — does not replace — the standard `ClasspathHandlerDefinition` definitions/enhancers).
     - **P4.4**: Add `axon.tracing.eventSink.enabled`, `axon.tracing.eventProcessor.enabled`, `axon.tracing.eventProcessor.disableBatchTrace`, `axon.tracing.eventProcessor.distributedInSameTrace`, `axon.tracing.eventProcessor.distributedInSameTraceTimeLimit` (default `PT2M`) toggles to `TracingProperties`. Semantics match AF4's `DefaultEventProcessorSpanFactory` (FR-007a).
     - **P4.5**: Register `DecoratorDefinition.forType(EventSink.class)` and `DecoratorDefinition.forType(EventHandlingComponent.class)` in `MessagingTracingConfigurationEnhancer`. The `EventHandlingComponent` registration uses a `cfg.getOptionalComponent(EventProcessorConfiguration.class).isPresent()` scope guard (covers both `PooledStreamingEventProcessor` and `SubscribingEventProcessor`; FR-007a).
-    - **P4.6**: Focused Boot integration test (`SliceEventTracingIntegrationTest`) covering (a) PSEP: per-event spans nested under a single batch root span enclosing the UoW's prepare-commit (token-store write) and after-commit (segment-status update); (b) `SubscribingEventProcessor`: per-event spans inheriting the publisher's trace, **no** batch span (AF4 parity, FR-007a); (c) cross-thread W3C propagation between publication and async handling via `MetadataContextSetter`/`Getter`; (d) all five new toggles behave as documented.
+    - **P4.6**: Focused Boot integration test (`SliceEventTracingIntegrationTest`) covering (a) PSEP: per-event spans nested under a single batch root span enclosing the UoW's prepare-commit (token-store write) and after-commit (segment-status update); (b) `SubscribingEventProcessor`: per-event spans inheriting the publisher's trace, **no** batch span (AF4 parity, FR-007a); (c) cross-thread W3C propagation between publication and async handling via `MetadataContextSetter`/`Getter`; (d) all five new toggles behave as documented; (e) **the `@EventHandler` per-method enhancer span appears (P4.3a wiring); and the `@CommandHandler` per-method enhancer span now also appears (retroactively activated by the same P4.3a wiring) — re-enable the slice-1 integration assertion (c) at this point.**
     - **P4.7**: **STOP — Human validation gate for Slice 2.** Commit, run the slice test, post span tree, wait for go/no-go.
 
 5. **P5 — Slice 3: `TracingQueryBus` + `@QueryHandler` enhancement** (Story 1 / 4, FR-008 — query bus portion):
@@ -381,3 +383,87 @@ Each phase's tasks file (produced by `/speckit-tasks`) inherits the constitution
 - **Slice rationale**: the chosen order (Command → Event → Query → QueryUpdate → Repository → SnapshotStore) starts with the simplest single-span dispatch+handle case (CommandBus) so the core abstractions get exercised end-to-end with minimum noise from multi-span patterns. EventSink + EventHandling lands second because it's the highest-stress test of the abstractions (two-span publish+commit, cross-thread propagation, batch detection, AF4 subscribing-processor parity) — any gaps in the core abstractions surface here before three more slices are built on top. QueryBus is a near-clone of CommandBus and validates the dispatch+handle pattern at a different message type. QueryUpdateEmitter, Repository, and SnapshotStore are the multi-span / non-Message specialised cases. (Slice 6 decorates AF5's `SnapshotStore`, not a `Snapshotter` — AF5 has no `Snapshotter` component; see spec.md clarification 2026-05-26 B3.)
 - **Core abstraction changes during slice work**: if a later slice exposes a gap in `SpanFactory` / `Span` / `SpanScope` / `SpanAttributesProvider` / `ProcessingContextSpanBinding` (e.g., a new method is needed, an existing signature is wrong, a `ResourceKey` shape needs widening), the implementer MUST flag the change to the user before committing it — one-line summary of what's being changed and why, then proceed if the user accepts. Tests for the abstraction change land alongside the production change (no untested API growth).
 - **AF5 anchoring types check**: the plan introduces no new dependency on a type outside Constitution §"AF5 Anchoring Types". All decorator interfaces wrapped — `CommandBus`, `EventSink`, `EventHandlingComponent`, `QueryBus`, `QueryUpdateEmitter`, `Repository`, `StateManager`, `SnapshotStore` — are listed there or are direct subtypes of types listed there. **Note**: `SnapshotStore` is `@Internal` in AF5 (not a stable public type); decorating it is an accepted, documented coupling (the only viable snapshot-tracing decoration point, since AF5 exposes no `Snapshotter`) — flagged here so a constitution reviewer sees the deliberate exception. See spec.md clarification 2026-05-26 (B3).
+
+---
+
+## Appendix: Handler-enhancer auto-wiring in AF5 (research, approach, limitations)
+
+*Captured 2026-05-27 while building slice 1. Drives P4.3a. The "per-method handler span" below is the innermost span produced by `TracingHandlerEnhancerDefinition` wrapping an annotated handler `MessageHandlingMember` — e.g. `RoomBookingHandler.handle(BookRoom)` `[INTERNAL]` — and is distinct from the bus-level dispatch/handle spans that `TracingCommandBus` already produces. Verified against `AxonFramework5` (`5.2.0-SNAPSHOT`) and `AxonFramework4` clones.*
+
+### Trace shape with vs. without the per-method span
+
+```
+without (slice 1 as shipped):              with the enhancer wired (P4.3a):
+CommandBus.dispatchCommand BookRoom         CommandBus.dispatchCommand BookRoom      [PRODUCER]
+└─ CommandBus.handleCommand BookRoom        └─ CommandBus.handleCommand BookRoom     [CONSUMER]
+                                               └─ RoomBookingHandler.handle(BookRoom) [INTERNAL]  ← enhancer span
+```
+
+### AF4 mechanism (what we are porting from)
+
+`HandlerEnhancerDefinition` is an SPI that wraps each annotated handler method. AF4 exposed a **first-class, config-aware** registration on the configurer:
+
+```java
+// AF4 — org.axonframework.config.Configurer:492
+Configurer registerHandlerEnhancerDefinition(Function<Configuration, HandlerEnhancerDefinition> handlerEnhancerBuilder);
+// usage: cfg.registerHandlerEnhancerDefinition(
+//            c -> TracingHandlerEnhancerDefinition.builder().spanFactory(c.spanFactory()).build());
+```
+
+The builder lambda receives the `Configuration`, so it can pull the configured `SpanFactory`. AF4's `AnnotatedHandlerInspector` applied registered enhancers alongside the classpath (ServiceLoader) ones.
+
+### AF5 mechanism (what we must target)
+
+`HandlerEnhancerDefinition` still exists (`org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition`) and is applied — but **only through a `HandlerDefinition`**. `MultiHandlerDefinition` (a `HandlerDefinition`) holds a `HandlerEnhancerDefinition` and wraps each member with it (`MultiHandlerDefinition.java:34-37`, ordered factory at `:68`). `AnnotatedHandlerInspector.inspectType(...)` has **no** enhancer parameter and no reference to enhancers — enhancers are entirely a property of the `HandlerDefinition`.
+
+The annotated handling components obtain their `HandlerDefinition` from the configuration:
+
+```java
+// AF5 — CommandHandlingModule.java:202 (identical shape: QueryHandlingModule:204, EventHandlingComponentsConfigurer:107/130)
+c.getOptionalComponent(HandlerDefinition.class)
+ .orElse(ClasspathHandlerDefinition.forClass(c.getClass()))
+```
+
+The default `ClasspathHandlerDefinition.forClass(...)` builds `MultiHandlerDefinition.ordered(findDelegates(cl))`, whose enhancer is `ClasspathHandlerEnhancerDefinition` — **ServiceLoader-discovered, no-arg constructors only**. A no-arg enhancer cannot receive the configured `SpanFactory`.
+
+### The gap (AF5 vs AF4)
+
+AF5 has **no** `registerHandlerEnhancerDefinition(Function<Configuration,…>)` equivalent on the configurer / component registry. The **only** seam for a config-aware (SpanFactory-bearing) enhancer is to register a whole `HandlerDefinition` **component**:
+
+| | AF4 | AF5 |
+|---|---|---|
+| Enhancer SPI | `HandlerEnhancerDefinition` | `HandlerEnhancerDefinition` (same name, package `…core.annotation`) |
+| Applied via | `AnnotatedHandlerInspector` | `MultiHandlerDefinition` (a `HandlerDefinition`) |
+| Config-aware registration API | `Configurer.registerHandlerEnhancerDefinition(Function<Config,…>)` | **none** — only `getOptionalComponent(HandlerDefinition.class)` |
+| Default enhancer source | classpath + registered | classpath (ServiceLoader, no-arg) only |
+| Per-message-type slot | per-enhancer | one global `HandlerDefinition` shared by command/query/event |
+
+### Approach for P4.3a
+
+Register a `HandlerDefinition` component that reconstructs the AF5 default and adds the tracing enhancer on top:
+
+```java
+registry.registerComponent(HandlerDefinition.class, config -> {
+    SpanFactory spanFactory = config.getComponent(SpanFactory.class);
+    ClassLoader cl = getClass().getClassLoader();           // or the application class loader
+    HandlerEnhancerDefinition enhancers = MultiHandlerEnhancerDefinition.ordered(
+            ClasspathHandlerEnhancerDefinition.forClassLoader(cl),   // keep standard enhancers
+            new TracingHandlerEnhancerDefinition(spanFactory));      // add ours
+    return MultiHandlerDefinition.ordered(
+            enhancers,
+            ClasspathHandlerDefinition.forClassLoader(cl));          // keep standard handler definitions
+});
+```
+
+(Confirm the exact `MultiHandlerDefinition.ordered(HandlerEnhancerDefinition, HandlerDefinition…)` / `MultiHandlerEnhancerDefinition.ordered(…)` overloads against the AF5 source at implementation time.) **This one registration activates the per-method span for every annotation type the enhancer gates on** — at slice 2 that is **both `@CommandHandler` (slice 1) and `@EventHandler` (slice 2)**; later slices widen the gating to `@QueryHandler` (slice 3) and `@EventSourcingHandler` (slice 6) with no wiring change. The enhancer self-gates per `Message` type (`canHandleMessageType(...)`), so each handler kind gets a span only once its slice has enabled it.
+
+### Limitations / accepted risks
+
+1. **Single global slot.** `HandlerDefinition` is one component shared by command, query and event annotated components. Mitigated by the enhancer self-gating per message type.
+2. **Collision with a user-supplied `HandlerDefinition`.** If the application registers its own `HandlerDefinition` component, ours and theirs conflict. The default `ClasspathHandlerDefinition` is created inline (not a registered component), so there is no `getOptionalComponent`-decorate seam for the fallback. Preferred mitigation: register a `DecoratorDefinition.forType(HandlerDefinition.class)` that composes on top of whatever is present **if** the registry applies decorators to `getOptionalComponent` results (verify); otherwise register the component only when absent and document that a custom `HandlerDefinition` opts out of per-method tracing.
+3. **Reconstruction fragility.** We must rebuild the default composition so the standard `Method{Command,Event,Query}HandlerDefinition` and the standard enhancers (`MessageHandlerInterceptorDefinition`, `HandlerTimeoutHandlerEnhancerDefinition`, `ReplayAwareMessageHandlerWrapper`) survive. If AF5 changes that composition, our reconstruction can silently drift — prefer decorate-on-top over replace.
+4. **No first-class API.** This is heavier than AF4's one-liner. Worth a follow-up upstream request to add an AF5 config-aware handler-enhancer registration hook so this becomes a clean, non-global registration; track alongside the P10 upstream work.
+
+### Why deferred from slice 1 to slice 2
+
+Slice 1's headline (`TracingCommandBus` dispatch + handle spans) is complete and tested without the per-method span. The wiring above is global and shared across all annotation types, so it is introduced and validated **once** in slice 2 — where the enhancer must run through the real annotation pipeline anyway — instead of command-only in slice 1. `TracingHandlerEnhancerDefinition` (`@CommandHandler` coverage) is already implemented + unit-tested in slice 1; only its auto-wiring moved. When P4.3a lands it retroactively activates the `@CommandHandler` per-method span, which slice 2's test re-verifies (re-enabling slice-1 integration assertion (c)).

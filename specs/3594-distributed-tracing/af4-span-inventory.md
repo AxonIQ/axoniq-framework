@@ -61,8 +61,8 @@ The AF4 `org.axonframework.tracing.SpanFactory` interface declares **9 methods**
 
 | AF4 method | AF4 caller (file:line) | What it traces | AF5 decorator + span | Status |
 |---|---|---|---|---|
-| `createDispatchCommandSpan(cmd, distributed)` | `SimpleCommandBus:124`, `AxonServerCommandBus` (dispatch leg) | Command dispatch (in-process vs distributed) | `TracingCommandBus.dispatch()` → `"CommandBus.dispatchCommand <name>"` (kind `CLIENT` if distributed, `INTERNAL` otherwise) | Covered (FR-006) |
-| `createHandleCommandSpan(cmd, distributed)` | `SimpleCommandBus:191`, `AxonServerCommandBus` (handler leg) | Command handling | `TracingCommandBus.handle()` or `TracingHandlerEnhancerDefinition` → `"CommandBus.handleCommand <name>"` (kind `SERVER`) | Covered (FR-006) |
+| `createDispatchCommandSpan(cmd, distributed)` | `SimpleCommandBus:124`, `AxonServerCommandBus` (dispatch leg) | Command dispatch (in-process vs distributed) | `TracingCommandBus.dispatch()` → `"CommandBus.dispatchCommand <name>"` (kind `PRODUCER`, via `createDispatchSpan`). **AF4 truth:** the distributed leg used `createDispatchSpan` → `PRODUCER`, the in-process leg used `createInternalSpan` → `INTERNAL`. Slice-1 emits `PRODUCER` for both; the in-process→`INTERNAL` branch is added when the distributed command bus is wired. | Covered (FR-006) |
+| `createHandleCommandSpan(cmd, distributed)` | `SimpleCommandBus:191`, `AxonServerCommandBus` (handler leg) | Command handling | `TracingCommandBus` (handler wrapper) or `TracingHandlerEnhancerDefinition` → `"CommandBus.handleCommand <name>"` (kind `CONSUMER`) | Covered (FR-006) |
 | `propagateContext(cmd)` | `SimpleCommandBus:164`, `DefaultCommandBusSpanFactory:55` | Inject context | `TracingCommandBus` | Covered (FR-015) |
 
 ### 1.3 `EventBusSpanFactory`
@@ -86,7 +86,7 @@ See [`research-batch-tracing.md`](./research-batch-tracing.md) for the full batc
 
 | AF4 method | AF4 caller (file:line) | What it traces | AF5 decorator + span | Status |
 |---|---|---|---|---|
-| `createQuerySpan(query, distributed)` | `SimpleQueryBus:174`, `AxonServerQueryBus` | Regular query dispatch / handling (in-process vs distributed) | `TracingQueryBus.query()` → `"QueryBus.query <name>"` (kind `CLIENT`/`INTERNAL`) on dispatch, `"QueryBus.handle <name>"` (kind `SERVER`) on handling | Covered (FR-008) |
+| `createQuerySpan(query, distributed)` | `SimpleQueryBus:174`, `AxonServerQueryBus` | Regular query dispatch / handling (in-process vs distributed) | `TracingQueryBus.query()` → `"QueryBus.query <name>"` (kind `PRODUCER`) on dispatch, `"QueryBus.handle <name>"` (kind `CONSUMER`) on handling | Covered (FR-008) |
 | `createSubscriptionQuerySpan(query, distributed)` | Default factory + handler enhancer | Subscription query dispatch (initial result) | `TracingQueryBus.subscriptionQuery()` → same shape as `createQuerySpan` for initial result | Covered (FR-008) |
 | `createSubscriptionQueryProcessUpdateSpan(update, query)` | `DefaultQueryBusSpanFactory:66` | Handler-side processing of incoming subscription-query update | `TracingQueryBus` or `TracingQueryUpdateEmitter` consumer path → `SpanFactory.createInternalSpan(...)` | Covered (FR-008) |
 | `createScatterGatherSpan(query, distributed)` | `SimpleQueryBus:409` | Scatter-gather query dispatch wrapper | `TracingQueryBus.scatterGather()` → `"QueryBus.scatterGather <name>"` | Covered (FR-008) |
