@@ -35,19 +35,32 @@ import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.CommandBusTestUtils;
+import org.axonframework.messaging.commandhandling.CommandHandler;
 import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -134,6 +147,36 @@ class SliceCommandBusTracingIntegrationTest {
         assertThat(spanExporter.getFinishedSpanItems()).isEmpty();
     }
 
+    @Test
+    void handlerExecutedOnADifferentThreadStillNestsUnderTheDispatchSpan() {
+        // given a command bus whose (tracing-wrapped) handler runs on a SEPARATE thread, inside a real UnitOfWork
+        ExecutorService handlerExecutor = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "handler-thread"));
+        AtomicReference<String> handlerThreadName = new AtomicReference<>();
+        String dispatchThreadName = Thread.currentThread().getName();
+        try {
+            CommandBus tracingBus =
+                    new TracingCommandBus(new AsyncHandlerCommandBus(handlerExecutor, handlerThreadName), spanFactory);
+            tracingBus.subscribe(COMMAND_NAME, (command, context) -> MessageStream.just(
+                    new GenericCommandResultMessage(new MessageType("Result"), "booked")));
+
+            // when
+            tracingBus.dispatch(bookRoom(), null).join();
+        } finally {
+            handlerExecutor.shutdownNow();
+        }
+
+        // then the handler really ran on another thread ...
+        assertThat(handlerThreadName.get()).isNotNull().isNotEqualTo(dispatchThreadName);
+
+        // ... yet the handle span still nests under the dispatch span — the trace context rode on the command's
+        // metadata (and the handler span's own parent on its UnitOfWork's ProcessingContext), never on a ThreadLocal.
+        await().untilAsserted(() -> assertThat(spanNames()).contains(DISPATCH_SPAN, HANDLE_SPAN));
+        SpanData dispatchSpan = spanNamed(DISPATCH_SPAN);
+        SpanData handleSpan = spanNamed(HANDLE_SPAN);
+        assertThat(handleSpan.getTraceId()).isEqualTo(dispatchSpan.getTraceId());
+        assertThat(handleSpan.getParentSpanContext().getSpanId()).isEqualTo(dispatchSpan.getSpanId());
+    }
+
     private static CommandMessage bookRoom() {
         return new GenericCommandMessage(new MessageType(COMMAND_NAME), new BookRoom("room-42"));
     }
@@ -155,5 +198,48 @@ class SliceCommandBusTracingIntegrationTest {
 
     private record BookRoom(String roomId) {
 
+    }
+
+    /**
+     * A {@link CommandBus} that runs the subscribed handler on a dedicated executor thread, inside its own real
+     * {@link UnitOfWork}, to simulate a dispatch thread and a handler thread that differ (as a distributed bus would).
+     */
+    private static final class AsyncHandlerCommandBus implements CommandBus {
+
+        private final ExecutorService executor;
+        private final AtomicReference<String> handlerThreadName;
+        private final Map<QualifiedName, CommandHandler> handlers = new ConcurrentHashMap<>();
+
+        private AsyncHandlerCommandBus(ExecutorService executor, AtomicReference<String> handlerThreadName) {
+            this.executor = executor;
+            this.handlerThreadName = handlerThreadName;
+        }
+
+        @Override
+        public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
+                                                                @Nullable ProcessingContext processingContext) {
+            CommandHandler handler = handlers.get(command.type().qualifiedName());
+            return CompletableFuture.supplyAsync(() -> {
+                                        handlerThreadName.set(Thread.currentThread().getName());
+                                        UnitOfWork unitOfWork = UnitOfWorkTestUtils.aUnitOfWork();
+                                        return unitOfWork.executeWithResult(
+                                                handlerContext -> handler.handle(command, handlerContext)
+                                                                         .first()
+                                                                         .asCompletableFuture()
+                                        ).join();
+                                    }, executor)
+                                    .thenApply(entry -> entry == null ? null : entry.message());
+        }
+
+        @Override
+        public CommandBus subscribe(QualifiedName name, CommandHandler commandHandler) {
+            handlers.put(name, commandHandler);
+            return this;
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            // not relevant to this test
+        }
     }
 }

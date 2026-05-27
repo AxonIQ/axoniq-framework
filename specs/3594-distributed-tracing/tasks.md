@@ -10,6 +10,8 @@ description: "Task list for Distributed Tracing Support (feature 3594)"
 
 **Tests**: TDD is MANDATORY for this feature (spec.md FR-022a). Every production-code task in P2–P9 is preceded by a failing test, written by invoking the `test-driven-development` skill and porting the AF4 equivalent test first. P1 (scaffolding) and P10 (deletion) are TDD-exempt.
 
+**No-ThreadLocal / cross-thread test (MANDATORY — plan.md "Mandatory workflow: no-ThreadLocal / cross-thread context test")**: any task adding a `Tracing*` decorator that nests or propagates spans via `ProcessingContext` MUST include a test that creates the child span on a **different thread** sharing the same `ProcessingContext` (real `UnitOfWorkTestUtils.aUnitOfWork()`) and asserts the spans still connect — written so it would FAIL against a `Context.current()` (thread-local) implementation. The decorator is not "done" without it. Reference: `OpenTelemetrySpanFactoryTest$CrossThreadNestingViaRealUnitOfWork`, `SliceCommandBusTracingIntegrationTest#handlerExecutedOnADifferentThreadStillNestsUnderTheDispatchSpan`.
+
 **Per-slice human-validation gate (FR-022b)**: Slices P3–P8 each end with a STOP task. The next slice MUST NOT start until the user has accepted the previous slice's span tree.
 
 **Organization**: Phases map 1:1 to plan.md's P1–P10. Story labels: [US1] = operator-facing tracing (spec Story 1), [US4] = SpanFactory consolidation (spec Story 4), [US5] = docs (spec Story 5), [US6] = upstream cleanup (spec Story 6).

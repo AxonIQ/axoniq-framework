@@ -290,6 +290,14 @@ Phases P3–P8 are vertical slices. **The next slice MUST NOT start until the pr
 
 The task-executor agent (or human implementer) MUST respect this gate. No skipping, no batching, no "I'll come back to it" — the next slice is blocked until the user has accepted the previous slice. The same gate applies after the cross-component E2E test in P9 before the Jaeger testcontainers test runs.
 
+### Mandatory workflow: no-ThreadLocal / cross-thread context test (Constitution §V)
+
+Tracing carries parent/child context through the `ProcessingContext` resource (the unit-of-work scoped carrier), **never** a `ThreadLocal` / `Context.current()` (see spec.md clarification 2026-05-27). A passing single-threaded test does **not** prove this — a thread-local implementation would pass it too. Therefore **every slice whose component relies on `ProcessingContext` to nest or propagate spans MUST ship a test that exercises the context across two different threads** and asserts the spans still connect:
+
+- **Pattern.** Create a real `ProcessingContext` with `org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils.aUnitOfWork()` (or run inside `unitOfWork.executeWithResult(ctx -> …)`). Start the parent span on one thread; create + start the child span on a **different** `Thread` (or executor) sharing the **same** `ProcessingContext`; assert the child has the parent's `traceId` and `parentSpanId`. For dispatch→handle (cross-boundary) the carrier is message metadata — run the handler on a separate thread and assert the same.
+- **Prove it is not vacuous.** The test must be written so that it would **fail** against a thread-local implementation. Reference proof: `OpenTelemetrySpanFactoryTest$CrossThreadNestingViaRealUnitOfWork` and `SliceCommandBusTracingIntegrationTest#handlerExecutedOnADifferentThreadStillNestsUnderTheDispatchSpan` — both verified to fail when parent resolution is switched to `Context.current()`.
+- **Scope.** Required for slices that introduce in-process span nesting through `ProcessingContext` (the handler-enhancer span, the event batch span, repository inner spans, snapshot store/load nesting) and for the dispatch→handle metadata path of each bus. A new `Tracing*` decorator is **not** "done" without it.
+
 ### Phase listing
 
 1. **P1 — Foundations**: parent POM updates (add `<opentelemetry.version>` property + OTel BOM import), the five new Maven modules' scaffolding (`pom.xml` with the validated dependency wiring — `-api → axon-messaging`; `-messaging → -api + axon-messaging`; `-modelling → -api + axon-modelling`; `-eventsourcing → -api + axon-eventsourcing`; `-opentelemetry → -api + opentelemetry-api`; `package-info.java` with `@NullMarked`, root aggregator wiring, BOM entries). No production code yet — this lands the empty modules so the build is green before any classes arrive. **TDD-exempt.**
