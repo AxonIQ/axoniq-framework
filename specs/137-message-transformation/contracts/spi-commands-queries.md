@@ -5,7 +5,7 @@
 **Module**: `axoniq-framework/messaging/axoniq-message-transformation/`
 **Packages**: `io.axoniq.framework.messaging.transformation.commandhandling`, `io.axoniq.framework.messaging.transformation.queryhandling`
 
-Two sub-packages mirroring the `axoniq-distributed-messaging` convention. Commands and queries share the same `MessageTransformerChain` instance as events (one chain per application) but live in their own sub-packages and are installed by their own enhancers, so neither layer pulls the other in. Covers US8 (commands) and US9 (queries). User-facing factories and end-to-end usage are in [public-api.md](public-api.md); event SPI is in [spi-events.md](spi-events.md); chain-level concerns are in [spi-base.md](spi-base.md).
+Two sub-packages mirroring the `axoniq-distributed-messaging` convention. Each message type has its own typed chain (`CommandTransformerChain`, `QueryTransformerChain`) and its own enhancer, so neither layer pulls the other in. Covers US8 (commands) and US9 (queries). User-facing factories and end-to-end usage are in [public-api.md](public-api.md); event SPI is in [spi-events.md](spi-events.md); shared SPI base + chain-separation rationale in [spi-base.md](spi-base.md).
 
 ## `CommandTransformer`
 
@@ -41,6 +41,52 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 - **1:1 only** (FR-019): `CommandTransformation` does not expose `split(...)` or `drop(...)`. The chain Builder also rejects any multi-output / zero-output `MessageTransformer<CommandMessage>` at `.build()` lock time, in case one is constructed via the SPI directly.
 
 **Cross-references**: FR-018, FR-019, US8.
+
+---
+
+## `CommandTransformerChain`
+
+Public, immutable chain of `CommandTransformer` instances. Same shape as `EventTransformerChain` ([spi-events.md](spi-events.md)) typed to `CommandMessage`, plus the single-message overload required by bus wrapping (commands arrive one at a time at `CommandBus.subscribe(...)`-time wrappers, not as streams).
+
+```java
+package io.axoniq.framework.messaging.transformation.commandhandling;
+
+import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Immutable chain of {@link CommandTransformer} instances. Built once at startup; register
+ * with the Axon configuration as a {@code CommandTransformerChain.class}-typed component.
+ *
+ * @author AxonIQ
+ * @since 5.3+
+ */
+@NullMarked
+public final class CommandTransformerChain {
+
+    /** Stream-in / stream-out; used in tests or if a future caller exposes commands as a stream. */
+    public MessageStream<? extends CommandMessage> transform(MessageStream<CommandMessage> stream) { /* ... */ }
+
+    /**
+     * Single-message entry point used by {@code TransformingCommandBus}'s subscribe-time
+     * wrapping. Output is {@link MessageStream.Single} because commands are 1:1 only (FR-019).
+     */
+    public MessageStream.Single<? extends CommandMessage> transform(CommandMessage message,
+                                                                     @Nullable ProcessingContext context) { /* ... */ }
+
+    public static Builder builder() { /* ... */ }
+
+    public static final class Builder {
+        public Builder register(CommandTransformer transformer) { /* ... */ }
+        public CommandTransformerChain build() { /* ... */ }
+    }
+}
+```
+
+Behaviour (FR-004 startup-only, FR-007 fixed-point iteration with last-match-wins, FR-008 conflicts, FR-011 hybrid lookup) is shared across the three typed chains; see [spi-base.md](spi-base.md).
 
 ---
 
@@ -87,6 +133,12 @@ See also spec Part C "Query response transformation `[Deferred]`".
 
 ---
 
+## `QueryTransformerChain`
+
+Parallel to `CommandTransformerChain` above, typed to `QueryMessage`. Same shape -- stream entry point + the single-message overload required by `QueryBus.subscribe(...)`-time wrapping. Same shared behaviour clauses (FR-004 / FR-007 last-match / FR-008 / FR-011). Omitted here to avoid repetition; see [spi-base.md](spi-base.md) and the `CommandTransformerChain` block above.
+
+---
+
 ## `TransformingCommandBus` (integration type, 5.3+, internal)
 
 Decorator on `CommandBus` (NOT on `CommandBusConnector`) that wraps every registered `CommandHandler` at subscription time. Decorating the bus rather than the connector matters: a user can drop in transformation without taking a dependency on a distributed-messaging module, and tests can exercise transformation without going over the wire. The chain fires on every incoming command -- whether local or remote, since both paths flow through `CommandBus.subscribe(...)` (annotation-based subscriptions go through it via `AnnotatedCommandHandlingComponent.registerHandler(...)`).
@@ -94,11 +146,11 @@ Decorator on `CommandBus` (NOT on `CommandBusConnector`) that wraps every regist
 ```java
 package io.axoniq.framework.messaging.transformation.commandhandling;
 
-import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.CommandHandler;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.NullMarked;
 
 /**
@@ -122,10 +174,14 @@ public final class TransformingCommandBus implements CommandBus {
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     /**
-     * @param delegate the inner {@link CommandBus} to wrap
-     * @param chain    the application's {@link MessageTransformerChain}
+     * @param delegate  the inner {@link CommandBus} to wrap
+     * @param chain     the application's {@link CommandTransformerChain} (passive registry)
+     * @param converter the active {@link MessageConverter}; resolved from
+     *                  {@code Configuration} by the enhancer at decorator-registration time
      */
-    public TransformingCommandBus(CommandBus delegate, MessageTransformerChain chain) { /* ... */ }
+    public TransformingCommandBus(CommandBus delegate,
+                                   CommandTransformerChain chain,
+                                   MessageConverter converter) { /* ... */ }
 
     /** Wraps {@code handler} so the chain runs before the delegate handler. */
     @Override
@@ -150,9 +206,9 @@ Mirror of `TransformingCommandBus` for queries -- decorates `QueryBus`, not the 
 ```java
 package io.axoniq.framework.messaging.transformation.queryhandling;
 
-import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.jspecify.annotations.NullMarked;
@@ -173,10 +229,14 @@ public final class TransformingQueryBus implements QueryBus {
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     /**
-     * @param delegate the inner {@link QueryBus} to wrap
-     * @param chain    the application's {@link MessageTransformerChain}
+     * @param delegate  the inner {@link QueryBus} to wrap
+     * @param chain     the application's {@link QueryTransformerChain}
+     * @param converter the active {@link MessageConverter}; same resolution pattern as
+     *                  {@link TransformingCommandBus}
      */
-    public TransformingQueryBus(QueryBus delegate, MessageTransformerChain chain) { /* ... */ }
+    public TransformingQueryBus(QueryBus delegate,
+                                 QueryTransformerChain chain,
+                                 MessageConverter converter) { /* ... */ }
 
     /** Wraps {@code handler} so the chain runs before the delegate handler. */
     @Override
@@ -194,7 +254,7 @@ public final class TransformingQueryBus implements QueryBus {
 
 ## `CommandTransformationConfigurationEnhancer` + `QueryTransformationConfigurationEnhancer` (5.3+)
 
-Two separate enhancers, one per sub-package, each installing its own bus decorator. They share the same `MessageTransformerChain` component that `EventTransformationConfigurationEnhancer` looks up.
+Two separate enhancers, one per sub-package, each installing its own bus decorator and looking up its own typed chain component (`CommandTransformerChain.class` / `QueryTransformerChain.class`) -- independent of `EventTransformerChain`.
 
 ```java
 package io.axoniq.framework.messaging.transformation.commandhandling.configuration;
@@ -206,8 +266,10 @@ import org.jspecify.annotations.NullMarked;
 /**
  * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs the
  * {@link io.axoniq.framework.messaging.transformation.commandhandling.TransformingCommandBus}
- * decorator. Reads the user-supplied {@code MessageTransformerChain} from the component
- * registry; a no-op if none is registered.
+ * decorator. Reads the user-supplied {@code CommandTransformerChain} AND the active
+ * {@code MessageConverter} from the component registry at decorator-registration time
+ * (same pattern as {@code EventTransformationConfigurationEnhancer}, see
+ * [spi-events.md](spi-events.md)); a no-op if no chain is registered.
  *
  * @author AxonIQ
  * @since 5.3+
@@ -228,10 +290,10 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs the
+ * Mirror of {@code CommandTransformationConfigurationEnhancer} for queries: reads
+ * {@code QueryTransformerChain} + {@code MessageConverter} and installs the
  * {@link io.axoniq.framework.messaging.transformation.queryhandling.TransformingQueryBus}
- * decorator. Reads the user-supplied {@code MessageTransformerChain} from the component
- * registry; a no-op if none is registered.
+ * decorator. No-op if no chain is registered.
  *
  * @author AxonIQ
  * @since 5.3+

@@ -5,7 +5,7 @@
 **Module**: `axoniq-framework/messaging/axoniq-message-transformation/`
 
 The user-facing API consists of three things:
-1. The **`MessageTransformerChain.builder()`** for registering transformations and locking the chain.
+1. A **typed chain per message type** -- `EventTransformerChain.builder()` (5.2.0), plus `CommandTransformerChain.builder()` / `QueryTransformerChain.builder()` (5.3+). Each is registered as its own component.
 2. The per-type **factories** (`EventTransformation`, plus `CommandTransformation` and `QueryTransformation` in 5.3+) that produce `MessageTransformer` instances without the user writing SPI code.
 3. The **registration pattern** in Axon configuration (a `ConfigurationEnhancer` does the wiring; the user only registers the chain instance).
 
@@ -15,16 +15,16 @@ See also: [shared SPI base](spi-base.md), [event SPI](spi-events.md), [commands 
 
 ## Chain registration (entry point)
 
-The user constructs **exactly one** chain per application and registers it with the framework configuration. The framework wires it into the `EventStore` decorator in 5.2.0 and (when commands/queries arrive in 5.3+) the `CommandBus` and `QueryBus` decorators too -- all from the same chain instance.
+The user constructs **one chain per message type** -- transformers do not overlap across types, so each chain is independent. In 5.2.0 that's just `EventTransformerChain`; in 5.3+ `CommandTransformerChain` and `QueryTransformerChain` join. Each is registered as its own component; each is picked up by its own `ConfigurationEnhancer` and wired into its own decorator (`TransformingEventStore` / `TransformingCommandBus` / `TransformingQueryBus`).
 
 ```java
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
+import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import org.axonframework.messaging.core.MessageType;
 
-// 1. Build the chain.
-MessageTransformerChain chain = MessageTransformerChain.builder()
+// 1. Build the events chain.
+EventTransformerChain eventChain = EventTransformerChain.builder()
     .register(EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
                                  .to(new MessageType("com.example.CourseCreated", "2.0.0"))
                                  .transform(JsonNode.class, (v1, ctx) -> { /* restructure capacity -> min/max */ }))
@@ -33,23 +33,22 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
     .build();
 
 // 2. Register the chain with the Axon configuration.
-//    The EventTransformationConfigurationEnhancer (5.2.0), joined by the per-sub-package
-//    CommandTransformationConfigurationEnhancer + QueryTransformationConfigurationEnhancer
-//    (5.3+), discover the chain and install the decorators (TransformingEventStore on
-//    EventStore; TransformingCommandBus / TransformingQueryBus on the respective buses in 5.3+).
+//    EventTransformationConfigurationEnhancer discovers it and installs TransformingEventStore.
+//    For commands / queries (5.3+), the user builds CommandTransformerChain / QueryTransformerChain
+//    in parallel and registers each as its own component; their enhancers wire the respective bus decorators.
 EventSourcingConfigurer.create()
-    .componentRegistry(cr -> cr.registerComponent(MessageTransformerChain.class, c -> chain))
+    .componentRegistry(cr -> cr.registerComponent(EventTransformerChain.class, c -> eventChain))
     .start();
 ```
 
 Full end-to-end example covering events + commands + queries is shown below.
 
-**Contract**:
+**Contract** (applies to every typed chain):
 - `.build()` returns an immutable chain; further registration is rejected (FR-004).
 - Registration order = chain application order (FR-004).
 - Version ranges expressed via `from(Predicate<MessageType>)` (FR-005, FR-020).
-- Conflict classes from FR-008 (duplicate concrete `from`, self-loop, multi-step cycle on concrete edges) are detected before any event is processed. A defensive runtime safety bound guards against infinite loops from pathological misconfiguration; under normal use it never fires.
-- **The chain is a passive registry.** It does NOT hold a `MessageConverter` reference and does NOT perform conversion. The framework's `EventTransformationConfigurationEnhancer` resolves the registered `MessageConverter` from the {@code Configuration} at decorator-registration time and passes it into the `TransformingEventStore` constructor (pattern mirrored from `AnnotatedEventSourcedEntityModule` and `EventSourcingConfigurationDefaults`). Users therefore never need to thread a converter through the builder.
+- Conflict classes from FR-008 (duplicate concrete `from`, self-loop, multi-step cycle on concrete edges) are detected before any message is processed. A defensive runtime safety bound guards against infinite loops from pathological misconfiguration; under normal use it never fires.
+- **Each chain is a passive registry.** It does NOT hold a `MessageConverter` reference. The framework's per-type `ConfigurationEnhancer` resolves the registered `MessageConverter` from {@code Configuration} at decorator-registration time and passes it into the matching `Transforming*` decorator (pattern mirrored from `AnnotatedEventSourcedEntityModule` and `EventSourcingConfigurationDefaults`). Users never thread a converter through the builder.
 
 ---
 
@@ -71,7 +70,7 @@ import java.util.function.Predicate;
  * ({@link #from(MessageType)} / {@link #from(Predicate)},
  * {@link #rename(MessageType, MessageType)}, {@link #split(MessageType)},
  * {@link #drop(MessageType)}) and register the result with
- * {@code MessageTransformerChain.builder().register(...)}.
+ * {@code EventTransformerChain.builder().register(...)}.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -379,19 +378,21 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import io.axoniq.framework.messaging.transformation.MessageTransformerChain;
+import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.TransformedEvent;
-import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformation;     // 5.3+
+import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformerChain;   // 5.3+
+import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformation;    // 5.3+
+import io.axoniq.framework.messaging.transformation.queryhandling.QueryTransformerChain;       // 5.3+
 import io.axoniq.framework.messaging.transformation.queryhandling.QueryTransformation;         // 5.3+
 
 import org.axonframework.messaging.core.MessageType;
 
 import java.util.List;
 
-MessageTransformerChain chain = MessageTransformerChain.builder()
+// ---------- Events chain (5.2.0) ----------
 
-    // ---------- Events (5.2.0) ----------
+EventTransformerChain eventChain = EventTransformerChain.builder()
 
     // US1 -- 1:1 structural transformation (FR-001, MUST in 5.2.0).
     //   v1 had a single `capacity` field, v2 splits into min/max.
@@ -408,12 +409,10 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
                                  }))
 
     // US2 -- pure rename, payload unchanged (FR-002, SHOULD in 5.2.0)
-    //   After a domain refinement, CourseOpened becomes CourseCreated.
     .register(EventTransformation.rename(new MessageType("com.example.CourseOpened",  "1.0.0"),
                                           new MessageType("com.example.CourseCreated", "1.0.0")))
 
-    // US3 -- 1:N split, declared order is delivery order (FR-003, FR-010, MAY in 5.2.0)
-    //   StudentEnrolledAndCourseUpdated bundled two facts; split them apart.
+    // US3 -- 1:N split (FR-003, FR-010, MAY in 5.2.0)
     .register(EventTransformation.split(new MessageType("com.example.StudentEnrolledAndCourseUpdated", "1.0.0"))
                                  .transform(JsonNode.class, (v1, ctx) -> List.of(
                                      TransformedEvent.of(new MessageType("com.example.StudentEnrolled",       "1.0.0"),
@@ -422,15 +421,12 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
                                                          v1.get("courseUpdate"))
                                  )))
 
-    // US4 -- 1:0 drop, tracking token still advances (FR-003, FR-014, MAY in 5.2.0)
-    //   SystemHeartbeat was accidentally stored; suppress it cleanly.
+    // US4 -- 1:0 drop (FR-003, FR-014, MAY in 5.2.0)
     .register(EventTransformation.drop(new MessageType("com.example.SystemHeartbeat", "1.0.0")))
 
-    // US5 -- chaining across versions (FR-007, MAY in 5.2.0)
-    //   Combined with US1's v1->v2 above, this v2->v3 hop completes a v1 -> v2 -> v3 chain.
-    //   Also illustrates the from(Predicate) overload: match any 2.x version, not just 2.0.0.
+    // US5 -- chaining across versions, predicate-based `from` (FR-007, MAY in 5.2.0)
     //   Note: MessageType.qualifiedName() returns a QualifiedName record (NOT a String);
-    //         use .name() (or .toString()) to compare to the fully-qualified name string.
+    //         use .name() to compare to the fully-qualified name string.
     .register(EventTransformation.from(mt -> mt.qualifiedName().name().equals("com.example.CourseCreated")
                                               && mt.version().startsWith("2."))
                                  .to  (new MessageType("com.example.CourseCreated", "3.0.0"))
@@ -442,10 +438,14 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
                                      return v3;
                                  }))
 
-    // ---------- Commands (5.3+) ----------
+    .build();
 
-    // US8 -- 1:1 command transformation (FR-019)
-    //   Receiver fills a default `enrollmentReason` before dispatching to the v2 handler.
+// ---------- Command chain (5.3+) ----------
+
+// US8 -- 1:1 command transformation (FR-019). Receiver fills a default `enrollmentReason`.
+// CommandTransformation does NOT expose split(...): 1:N / 1:0 are compile-time forbidden
+// for commands and queries (FR-019). Commands and queries are single-intent.
+CommandTransformerChain commandChain = CommandTransformerChain.builder()
     .register(CommandTransformation.from(new MessageType("com.example.EnrollStudent", "1.0.0"))
                                    .to  (new MessageType("com.example.EnrollStudent", "2.0.0"))
                                    .transform(JsonNode.class, (v1, ctx) -> {
@@ -453,14 +453,12 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
                                        v2.put("enrollmentReason", "UNKNOWN");
                                        return v2;
                                    }))
+    .build();
 
-    // CommandTransformation does NOT expose split(...) -- 1:N / 1:0 are compile-time forbidden
-    // for commands and queries (FR-019). Commands and queries are single-intent.
+// ---------- Query chain (5.3+) ----------
 
-    // ---------- Queries (5.3+) ----------
-
-    // US9 -- 1:1 query transformation (FR-019)
-    //   Receiver fills a default `includeArchived` filter for queries sent by older callers.
+// US9 -- 1:1 query transformation (FR-019). Receiver fills `includeArchived` default.
+QueryTransformerChain queryChain = QueryTransformerChain.builder()
     .register(QueryTransformation.from(new MessageType("com.example.FindCoursesByFaculty", "1.0.0"))
                                  .to  (new MessageType("com.example.FindCoursesByFaculty", "2.0.0"))
                                  .transform(JsonNode.class, (v1, ctx) -> {
@@ -468,12 +466,16 @@ MessageTransformerChain chain = MessageTransformerChain.builder()
                                      v2.put("includeArchived", false);
                                      return v2;
                                  }))
-
     .build();
 
-// Register with the Axon configuration. The ConfigurationEnhancers do the rest.
+// Register each chain as its own component. The matching ConfigurationEnhancers wire
+// each into its own decorator (TransformingEventStore / TransformingCommandBus /
+// TransformingQueryBus).
 EventSourcingConfigurer.create()
-    .componentRegistry(cr -> cr.registerComponent(MessageTransformerChain.class, c -> chain))
+    .componentRegistry(cr -> cr
+        .registerComponent(EventTransformerChain.class,   c -> eventChain)
+        .registerComponent(CommandTransformerChain.class, c -> commandChain)     // 5.3+
+        .registerComponent(QueryTransformerChain.class,   c -> queryChain))      // 5.3+
     .start();
 ```
 
@@ -506,4 +508,4 @@ misconfiguration; under normal use it never fires.
 - `TransformingEventStore`, `TransformingEventStoreTransaction`, `TransformingCommandBus`, `TransformingQueryBus` are `@Internal` -- users do not instantiate them; the `ConfigurationEnhancer` does.
 - The append / dispatch / publish paths are not decorated; transformations run at READ / receive only (FR-021).
 - Sender-side transformation (new-to-old at the sender, "downcasting" in industry terms) is explicitly out of scope (spec Part C).
-- Annotation-based registration is deferred to a future release; programmatic registration via `MessageTransformerChain.builder()` is the only path in 5.2.0 (FR-004, Forward-compatibility invariant #5).
+- Annotation-based registration is deferred to a future release; programmatic registration via `EventTransformerChain.builder()` (and the future `CommandTransformerChain.builder()` / `QueryTransformerChain.builder()`) is the only path in 5.2.0 (FR-004, Forward-compatibility invariant #5).
