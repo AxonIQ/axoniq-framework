@@ -27,7 +27,6 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -36,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * The chain is safe to invoke concurrently and tolerates a {@code null}
@@ -62,7 +62,7 @@ final class ChainConcurrencyTest {
 
         List<CompletableFuture<Boolean>> workers = IntStream.range(0, THREADS).mapToObj(i -> CompletableFuture.supplyAsync(() -> {
             for (int iteration = 0; iteration < ITERATIONS_PER_THREAD; iteration++) {
-                List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(stableInput))));
+                List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(stableInput))));
                 if (outputs.size() != 1 || !V2.equals(outputs.getFirst().type())) {
                     return false;
                 }
@@ -71,7 +71,8 @@ final class ChainConcurrencyTest {
         }, pool)).toList();
 
         pool.shutdown();
-        pool.awaitTermination(30, TimeUnit.SECONDS);
+        boolean terminated = pool.awaitTermination(30, TimeUnit.SECONDS);
+        assertThat(terminated).as("worker pool did not terminate within 30s").isTrue();
 
         for (CompletableFuture<Boolean> worker : workers) {
             assertThat(worker.join()).isTrue();
@@ -86,18 +87,9 @@ final class ChainConcurrencyTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage input = new GenericEventMessage(V1, "p");
 
-        List<EventMessage> outWithoutCtx = drain(chain.transform(MessageStream.fromIterable(List.of(input))));
+        List<EventMessage> outWithoutCtx = collectMessages(chain.transform(MessageStream.fromIterable(List.of(input))));
 
         assertThat(outWithoutCtx).hasSize(1);
         assertThat(outWithoutCtx.getFirst().type()).isEqualTo(V2);
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }

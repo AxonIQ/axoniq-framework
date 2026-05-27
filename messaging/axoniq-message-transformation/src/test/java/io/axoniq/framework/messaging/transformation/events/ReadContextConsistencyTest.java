@@ -33,10 +33,10 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
@@ -73,10 +73,10 @@ final class ReadContextConsistencyTest {
         TransformingEventStore decoratedStore = new TransformingEventStore(delegateStore, chainWithV1ToV2, converter);
 
         SourcingCondition sourcingCondition = Mockito.mock(SourcingCondition.class);
-        List<EventMessage> entityLoad = drain(decoratedStore.transaction(context).source(sourcingCondition));
-        List<EventMessage> dcbRead = drain(decoratedStore.transaction(context).source(sourcingCondition));
+        List<EventMessage> entityLoad = collectMessages(decoratedStore.transaction(context).source(sourcingCondition));
+        List<EventMessage> dcbRead = collectMessages(decoratedStore.transaction(context).source(sourcingCondition));
         StreamingCondition streamingCondition = Mockito.mock(StreamingCondition.class);
-        List<EventMessage> trackingProcessorRead = drain(decoratedStore.open(streamingCondition, context));
+        List<EventMessage> trackingProcessorRead = collectMessages(decoratedStore.open(streamingCondition, context));
 
         assertThat(entityLoad).hasSize(1);
         assertThat(entityLoad.getFirst().type()).isEqualTo(V2);
@@ -84,14 +84,5 @@ final class ReadContextConsistencyTest {
         assertThat(dcbRead.getFirst().type()).isEqualTo(V2);
         assertThat(trackingProcessorRead).hasSize(1);
         assertThat(trackingProcessorRead.getFirst().type()).isEqualTo(V2);
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }

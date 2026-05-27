@@ -27,12 +27,12 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * The chain's non-matching path is lazy: the framework's
@@ -61,7 +61,7 @@ final class LazyDeserializationTest {
                 .mapToObj(i -> (EventMessage) new GenericEventMessage(UNREGISTERED, "p-" + i))
                 .toList();
 
-        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(nonMatchingEvents)));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(nonMatchingEvents)));
 
         assertThat(outputs).hasSize(1000);
         assertThat(mapperInvocations.get()).isZero();
@@ -69,7 +69,9 @@ final class LazyDeserializationTest {
 
     @Test
     @Disabled("Tests-first; impl lands in T026 (concrete-from O(1) QualifiedName-keyed lookup)")
-    void nonMatchingLookupCompletesInConstantTimeRegardlessOfChainLength() {
+    void nonMatchingLookupReturnsInputUnchangedRegardlessOfChainLength() {
+        // Functional contract only -- the constant-time complexity claim is verified by JMH (T041),
+        // not by wall-clock timing in a unit test (flaky under CI load).
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
         for (int i = 0; i < 100; i++) {
             MessageType fromType = new MessageType("com.example.Type" + i, "1.0.0");
@@ -79,20 +81,9 @@ final class LazyDeserializationTest {
         EventTransformerChain chain = builder.build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat");
 
-        long startedAt = System.nanoTime();
-        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
-        long elapsedNanos = System.nanoTime() - startedAt;
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
 
         assertThat(outputs).hasSize(1);
-        assertThat(elapsedNanos).isLessThan(10_000_000L);
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
+        assertThat(outputs.getFirst()).isSameAs(unregisteredEvent);
     }
 }

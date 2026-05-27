@@ -23,12 +23,12 @@ import io.axoniq.framework.messaging.transformation.MessageTransformer;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.eventOf;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -37,14 +37,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 final class EventTransformerContractTest {
 
-    private static final MessageType TYPE_V1 = new MessageType("com.example.Sample", "1.0.0");
-    private static final MessageType TYPE_V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
+    private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
     void canBeImplementedAsLambdaSinceItIsFunctionalInterface() {
         EventTransformer identityTransformer = (message, context) -> MessageStream.just(message);
 
-        MessageStream<? extends EventMessage> result = identityTransformer.transform(eventOf(TYPE_V1, "payload"), null);
+        MessageStream<? extends EventMessage> result = identityTransformer.transform(eventOf(V1, "payload"), null);
 
         assertThat(result).isNotNull();
         assertThat(identityTransformer).isInstanceOf(MessageTransformer.class);
@@ -52,19 +52,19 @@ final class EventTransformerContractTest {
 
     @Test
     void returnsSingleMessageStreamForOneToOneTransformer() {
-        EventTransformer v1ToV2Transformer = (message, context) -> MessageStream.just(eventOf(TYPE_V2, "v2-payload"));
+        EventTransformer v1ToV2Transformer = (message, context) -> MessageStream.just(eventOf(V2, "v2-payload"));
 
-        List<EventMessage> outputs = drain(v1ToV2Transformer.transform(eventOf(TYPE_V1, "v1-payload"), null));
+        List<EventMessage> outputs = collectMessages(v1ToV2Transformer.transform(eventOf(V1, "v1-payload"), null));
 
         assertThat(outputs).hasSize(1);
-        assertThat(outputs.getFirst().type()).isEqualTo(TYPE_V2);
+        assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
 
     @Test
     void canReturnEmptyStreamForDropTransformer() {
         EventTransformer droppingTransformer = (message, context) -> MessageStream.empty();
 
-        List<EventMessage> outputs = drain(droppingTransformer.transform(eventOf(TYPE_V1, "payload"), null));
+        List<EventMessage> outputs = collectMessages(droppingTransformer.transform(eventOf(V1, "payload"), null));
 
         assertThat(outputs).isEmpty();
     }
@@ -72,11 +72,11 @@ final class EventTransformerContractTest {
     @Test
     void canReturnMultiElementStreamForSplitTransformer() {
         EventTransformer splittingTransformer = (message, context) -> MessageStream.fromIterable(List.of(
-                eventOf(TYPE_V2, "out-1"),
-                eventOf(TYPE_V2, "out-2")
+                eventOf(V2, "out-1"),
+                eventOf(V2, "out-2")
         ));
 
-        List<EventMessage> outputs = drain(splittingTransformer.transform(eventOf(TYPE_V1, "payload"), null));
+        List<EventMessage> outputs = collectMessages(splittingTransformer.transform(eventOf(V1, "payload"), null));
 
         assertThat(outputs).hasSize(2);
         assertThat(outputs).extracting(EventMessage::payload).containsExactly("out-1", "out-2");
@@ -86,19 +86,6 @@ final class EventTransformerContractTest {
     void toleratesNullProcessingContext() {
         EventTransformer identityTransformer = (message, context) -> MessageStream.just(message);
 
-        assertThat(drain(identityTransformer.transform(eventOf(TYPE_V1, "payload"), null))).hasSize(1);
-    }
-
-    private static EventMessage eventOf(MessageType type, Object payload) {
-        return new GenericEventMessage(type, payload);
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
+        assertThat(collectMessages(identityTransformer.transform(eventOf(V1, "payload"), null))).hasSize(1);
     }
 }

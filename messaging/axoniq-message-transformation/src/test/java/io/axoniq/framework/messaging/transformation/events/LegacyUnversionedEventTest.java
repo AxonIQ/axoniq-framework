@@ -29,10 +29,10 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * Events stored without an explicit version are treated as version {@code "0.0.1"}
@@ -56,18 +56,9 @@ final class LegacyUnversionedEventTest {
 
         assertThat(legacyUnversionedEvent.type().version()).isEqualTo("0.0.1");
 
-        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent))));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }

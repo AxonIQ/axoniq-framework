@@ -28,10 +28,10 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * A transformation produced by the factory is unit-testable from a plain JUnit test
@@ -53,7 +53,7 @@ final class UnitTestabilityTest {
 
         MessageStream<? extends EventMessage> result = v1ToV2Transformer.transform(storedV1Event, null);
 
-        List<EventMessage> outputs = drain(result);
+        List<EventMessage> outputs = collectMessages(result);
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
@@ -64,19 +64,10 @@ final class UnitTestabilityTest {
         EventTransformer renameTransformer = EventTransformation.rename(V1, V2);
         EventMessage storedV1Event = new GenericEventMessage(V1, "payload");
 
-        List<EventMessage> outputs = drain(renameTransformer.transform(storedV1Event, null));
+        List<EventMessage> outputs = collectMessages(renameTransformer.transform(storedV1Event, null));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
         assertThat(outputs.getFirst().payload()).isEqualTo("payload");
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }

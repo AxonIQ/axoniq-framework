@@ -27,11 +27,11 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * Events whose {@link MessageType} matches no registered transformation pass through the
@@ -51,7 +51,7 @@ final class NonMatchingPassThroughTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        List<EventMessage> observed = drain(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst()).isSameAs(unregisteredEvent);
@@ -71,17 +71,8 @@ final class NonMatchingPassThroughTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        drain(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
+        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
 
         assertThat(mapperInvocations.get()).isZero();
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }

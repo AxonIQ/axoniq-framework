@@ -29,11 +29,11 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * The event envelope (message identifier, metadata, identity-related fields) is
@@ -54,7 +54,7 @@ final class EnvelopePreservationTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().identifier()).isEqualTo(storedV1Event.identifier());
@@ -72,19 +72,10 @@ final class EnvelopePreservationTest {
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode())
                 .andMetadata(metadata);
 
-        List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().metadata()).containsEntry("correlationId", "abc-123");
         assertThat(outputs.getFirst().metadata()).containsEntry("userId", "u-42");
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }

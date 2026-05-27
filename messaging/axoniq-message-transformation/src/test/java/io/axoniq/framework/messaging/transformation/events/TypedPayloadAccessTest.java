@@ -31,12 +31,12 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 
 /**
  * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for
@@ -67,7 +67,7 @@ final class TypedPayloadAccessTest {
             v1Payload.put("name", "Math 101");
             EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
@@ -97,7 +97,7 @@ final class TypedPayloadAccessTest {
             v1Payload.put("name", "Math 101");
             EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-            List<EventMessage> outputs = drain(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
@@ -106,14 +106,5 @@ final class TypedPayloadAccessTest {
             assertThat(transformedPayload).containsEntry("name", "Math 101")
                                           .containsEntry("upgraded", true);
         }
-    }
-
-    private static List<EventMessage> drain(MessageStream<? extends EventMessage> stream) {
-        List<EventMessage> collected = new ArrayList<>();
-        stream.<Void>reduce(null, (acc, entry) -> {
-            collected.add(entry.message());
-            return null;
-        }).join();
-        return collected;
     }
 }
