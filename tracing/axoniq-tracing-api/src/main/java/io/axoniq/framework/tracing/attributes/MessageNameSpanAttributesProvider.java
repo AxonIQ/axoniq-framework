@@ -25,10 +25,12 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * Adds the message's {@link org.axonframework.messaging.core.QualifiedName qualified name} to the span under the
- * {@code axoniq.message.name} attribute.
+ * Adds the message's {@link org.axonframework.messaging.core.QualifiedName qualified name} to the span. By default the
+ * attribute key is {@link #MESSAGE_NAME} ({@code axoniq.message.name}); a different key can be supplied through the
+ * constructor — for example to keep the Axon Framework 4 key {@code axon_message_name}.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -36,12 +38,30 @@ import java.util.Map;
 public final class MessageNameSpanAttributesProvider implements SpanAttributesProvider {
 
     /**
-     * Attribute key under which the message's qualified name is recorded.
+     * Default attribute key under which the message's qualified name is recorded.
      */
     public static final String MESSAGE_NAME = "axoniq.message.name";
 
+    private final String attributeKey;
+
+    /**
+     * Creates a provider recording the message name under the default {@link #MESSAGE_NAME} key.
+     */
+    public MessageNameSpanAttributesProvider() {
+        this(MESSAGE_NAME);
+    }
+
+    /**
+     * Creates a provider recording the message name under the given {@code attributeKey}.
+     *
+     * @param attributeKey the span attribute key to record the message name under
+     */
+    public MessageNameSpanAttributesProvider(String attributeKey) {
+        this.attributeKey = Objects.requireNonNull(attributeKey, "attributeKey may not be null");
+    }
+
     @Override
     public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
-        return Map.of(MESSAGE_NAME, message.type().qualifiedName().name());
+        return Map.of(attributeKey, message.type().qualifiedName().name());
     }
 }

@@ -25,10 +25,13 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * Adds the {@link Message#payloadType() payload type} to the span under the {@code axoniq.message.payloadType}
- * attribute.
+ * Adds the {@link Message#payloadType() payload type} to the span. By default the attribute key is
+ * {@link #PAYLOAD_TYPE} ({@code axoniq.message.payload_type} — dotted namespace with a snake_case leaf, per the
+ * OpenTelemetry attribute-naming convention); a different key can be supplied through the constructor — for example to
+ * keep the Axon Framework 4 key {@code axon_payload_type}.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -36,12 +39,30 @@ import java.util.Map;
 public final class PayloadTypeSpanAttributesProvider implements SpanAttributesProvider {
 
     /**
-     * Attribute key under which the message payload type is recorded.
+     * Default attribute key under which the message payload type is recorded.
      */
-    public static final String PAYLOAD_TYPE = "axoniq.message.payloadType";
+    public static final String PAYLOAD_TYPE = "axoniq.message.payload_type";
+
+    private final String attributeKey;
+
+    /**
+     * Creates a provider recording the payload type under the default {@link #PAYLOAD_TYPE} key.
+     */
+    public PayloadTypeSpanAttributesProvider() {
+        this(PAYLOAD_TYPE);
+    }
+
+    /**
+     * Creates a provider recording the payload type under the given {@code attributeKey}.
+     *
+     * @param attributeKey the span attribute key to record the payload type under
+     */
+    public PayloadTypeSpanAttributesProvider(String attributeKey) {
+        this.attributeKey = Objects.requireNonNull(attributeKey, "attributeKey may not be null");
+    }
 
     @Override
     public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
-        return Map.of(PAYLOAD_TYPE, message.payloadType().getName());
+        return Map.of(attributeKey, message.payloadType().getName());
     }
 }

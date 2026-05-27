@@ -25,9 +25,12 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * Adds the {@link Message#identifier() message identifier} to the span under the {@code axoniq.message.id} attribute.
+ * Adds the {@link Message#identifier() message identifier} to the span. By default the attribute key is
+ * {@link #MESSAGE_ID} ({@code axoniq.message.id}); a different key can be supplied through the constructor — for
+ * example to keep the Axon Framework 4 key {@code axon_message_id}.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -35,12 +38,30 @@ import java.util.Map;
 public final class MessageIdSpanAttributesProvider implements SpanAttributesProvider {
 
     /**
-     * Attribute key under which the message identifier is recorded.
+     * Default attribute key under which the message identifier is recorded.
      */
     public static final String MESSAGE_ID = "axoniq.message.id";
 
+    private final String attributeKey;
+
+    /**
+     * Creates a provider recording the message identifier under the default {@link #MESSAGE_ID} key.
+     */
+    public MessageIdSpanAttributesProvider() {
+        this(MESSAGE_ID);
+    }
+
+    /**
+     * Creates a provider recording the message identifier under the given {@code attributeKey}.
+     *
+     * @param attributeKey the span attribute key to record the message identifier under
+     */
+    public MessageIdSpanAttributesProvider(String attributeKey) {
+        this.attributeKey = Objects.requireNonNull(attributeKey, "attributeKey may not be null");
+    }
+
     @Override
     public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
-        return Map.of(MESSAGE_ID, message.identifier());
+        return Map.of(attributeKey, message.identifier());
     }
 }

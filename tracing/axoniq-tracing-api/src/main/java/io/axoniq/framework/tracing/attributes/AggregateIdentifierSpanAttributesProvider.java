@@ -26,10 +26,13 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * Adds the aggregate identifier to the span under the {@code axoniq.aggregate.identifier} attribute, when one is
- * available on the {@link ProcessingContext} via {@link LegacyResources#AGGREGATE_IDENTIFIER_KEY}.
+ * Adds the aggregate identifier to the span when one is available on the {@link ProcessingContext} via
+ * {@link LegacyResources#AGGREGATE_IDENTIFIER_KEY}. By default the attribute key is {@link #AGGREGATE_IDENTIFIER}
+ * ({@code axoniq.aggregate.identifier}); a different key can be supplied through the constructor — for example to keep
+ * the Axon Framework 4 key {@code axon_aggregate_identifier}.
  * <p>
  * This is best-effort: the attribute is present only when a legacy aggregate-based event storage engine populated the
  * resource. It is absent for dynamic-consistency-boundary / entity-based operations and whenever no context is
@@ -41,9 +44,27 @@ import java.util.Map;
 public final class AggregateIdentifierSpanAttributesProvider implements SpanAttributesProvider {
 
     /**
-     * Attribute key under which the aggregate identifier is recorded.
+     * Default attribute key under which the aggregate identifier is recorded.
      */
     public static final String AGGREGATE_IDENTIFIER = "axoniq.aggregate.identifier";
+
+    private final String attributeKey;
+
+    /**
+     * Creates a provider recording the aggregate identifier under the default {@link #AGGREGATE_IDENTIFIER} key.
+     */
+    public AggregateIdentifierSpanAttributesProvider() {
+        this(AGGREGATE_IDENTIFIER);
+    }
+
+    /**
+     * Creates a provider recording the aggregate identifier under the given {@code attributeKey}.
+     *
+     * @param attributeKey the span attribute key to record the aggregate identifier under
+     */
+    public AggregateIdentifierSpanAttributesProvider(String attributeKey) {
+        this.attributeKey = Objects.requireNonNull(attributeKey, "attributeKey may not be null");
+    }
 
     @Override
     public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
@@ -54,6 +75,6 @@ public final class AggregateIdentifierSpanAttributesProvider implements SpanAttr
         if (aggregateIdentifier == null) {
             return Map.of();
         }
-        return Map.of(AGGREGATE_IDENTIFIER, aggregateIdentifier);
+        return Map.of(attributeKey, aggregateIdentifier);
     }
 }

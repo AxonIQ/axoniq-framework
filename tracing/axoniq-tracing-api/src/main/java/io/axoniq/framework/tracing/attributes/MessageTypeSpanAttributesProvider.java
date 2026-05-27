@@ -28,10 +28,13 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * Adds the high-level message category ({@code COMMAND}, {@code EVENT} or {@code QUERY}) to the span under the
- * {@code axoniq.message.type} attribute. For messages that are none of those, the message's simple class name is used.
+ * Adds the high-level message category ({@code COMMAND}, {@code EVENT} or {@code QUERY}) to the span. For messages that
+ * are none of those, the message's simple class name is used. By default the attribute key is {@link #MESSAGE_TYPE}
+ * ({@code axoniq.message.type}); a different key can be supplied through the constructor — for example to keep the Axon
+ * Framework 4 key {@code axon_message_type}.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -39,13 +42,31 @@ import java.util.Map;
 public final class MessageTypeSpanAttributesProvider implements SpanAttributesProvider {
 
     /**
-     * Attribute key under which the message category is recorded.
+     * Default attribute key under which the message category is recorded.
      */
     public static final String MESSAGE_TYPE = "axoniq.message.type";
 
+    private final String attributeKey;
+
+    /**
+     * Creates a provider recording the message category under the default {@link #MESSAGE_TYPE} key.
+     */
+    public MessageTypeSpanAttributesProvider() {
+        this(MESSAGE_TYPE);
+    }
+
+    /**
+     * Creates a provider recording the message category under the given {@code attributeKey}.
+     *
+     * @param attributeKey the span attribute key to record the message category under
+     */
+    public MessageTypeSpanAttributesProvider(String attributeKey) {
+        this.attributeKey = Objects.requireNonNull(attributeKey, "attributeKey may not be null");
+    }
+
     @Override
     public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
-        return Map.of(MESSAGE_TYPE, categoryOf(message));
+        return Map.of(attributeKey, categoryOf(message));
     }
 
     private static String categoryOf(Message message) {

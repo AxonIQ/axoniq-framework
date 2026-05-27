@@ -25,15 +25,17 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
- * Adds message metadata entries to the span, each under the key {@code axoniq.metadata.<metadataKey>}.
+ * Adds message metadata entries to the span, each under the key {@code <prefix><metadataKey>}.
  * <p>
- * By default (no-argument constructor) every metadata entry of the message is added. When constructed with an explicit
- * allowlist of keys, only those keys present in the message metadata are added. Entries with a {@code null} value are
- * skipped.
+ * By default the prefix is {@link #METADATA_PREFIX} ({@code axoniq.metadata.}) and every metadata entry is added. The
+ * prefix can be overridden through the constructor — for example to keep the Axon Framework 4 prefix
+ * {@code axon_metadata_}. An optional allowlist restricts which metadata keys are added; an empty allowlist means all
+ * keys. Entries with a {@code null} value are skipped.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -41,34 +43,48 @@ import java.util.Map;
 public final class MetadataSpanAttributesProvider implements SpanAttributesProvider {
 
     /**
-     * Prefix prepended to each metadata key to form the span attribute key.
+     * Default prefix prepended to each metadata key to form the span attribute key.
      */
     public static final String METADATA_PREFIX = "axoniq.metadata.";
 
-    private final @Nullable List<String> allowedKeys;
+    private final String prefix;
+    private final Set<String> allowedKeys;
 
     /**
-     * Creates a provider that adds all metadata entries of the message.
+     * Creates a provider that adds all metadata entries under the default {@link #METADATA_PREFIX} prefix.
      */
     public MetadataSpanAttributesProvider() {
-        this.allowedKeys = null;
+        this(METADATA_PREFIX, Set.of());
     }
 
     /**
-     * Creates a provider that adds only the given metadata keys, when present on the message.
+     * Creates a provider that adds the given metadata keys (when present) under the default {@link #METADATA_PREFIX}
+     * prefix. An empty set means all keys.
      *
-     * @param allowedKeys the metadata keys to add
+     * @param allowedKeys the metadata keys to add, or an empty set for all keys
      */
-    public MetadataSpanAttributesProvider(String... allowedKeys) {
-        this.allowedKeys = List.of(allowedKeys);
+    public MetadataSpanAttributesProvider(Set<String> allowedKeys) {
+        this(METADATA_PREFIX, allowedKeys);
+    }
+
+    /**
+     * Creates a provider that adds the given metadata keys (when present) under the given {@code prefix}. An empty
+     * allowlist means all keys.
+     *
+     * @param prefix      the prefix prepended to each metadata key to form the span attribute key
+     * @param allowedKeys the metadata keys to add, or an empty set for all keys
+     */
+    public MetadataSpanAttributesProvider(String prefix, Set<String> allowedKeys) {
+        this.prefix = Objects.requireNonNull(prefix, "prefix may not be null");
+        this.allowedKeys = Set.copyOf(Objects.requireNonNull(allowedKeys, "allowedKeys may not be null"));
     }
 
     @Override
     public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
         Map<String, String> attributes = new HashMap<>();
         message.metadata().forEach((key, value) -> {
-            if (value != null && (allowedKeys == null || allowedKeys.contains(key))) {
-                attributes.put(METADATA_PREFIX + key, value);
+            if (value != null && (allowedKeys.isEmpty() || allowedKeys.contains(key))) {
+                attributes.put(prefix + key, value);
             }
         });
         return attributes;

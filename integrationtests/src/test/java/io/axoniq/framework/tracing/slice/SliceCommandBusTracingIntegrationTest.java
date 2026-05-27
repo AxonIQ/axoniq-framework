@@ -111,7 +111,7 @@ class SliceCommandBusTracingIntegrationTest {
         assertThat(dispatchSpan.getKind()).isEqualTo(SpanKind.PRODUCER);
         assertThat(attribute(dispatchSpan, "axoniq.message.name")).isEqualTo("BookRoom");
         assertThat(attribute(dispatchSpan, "axoniq.message.type")).isEqualTo("COMMAND");
-        assertThat(attribute(dispatchSpan, "axoniq.message.payloadType")).isEqualTo(BookRoom.class.getName());
+        assertThat(attribute(dispatchSpan, "axoniq.message.payload_type")).isEqualTo(BookRoom.class.getName());
         assertThat(attribute(dispatchSpan, "axoniq.message.id")).isNotNull();
 
         // handle span is a consumer-side span, child of the dispatch span (same trace, parent = dispatch)

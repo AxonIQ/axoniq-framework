@@ -27,6 +27,8 @@ import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AttributeProvidersTest {
@@ -109,12 +111,44 @@ class AttributeProvidersTest {
             Message withMetadata = event.andMetadata(java.util.Map.of("tenant", "acme", "secret", "hidden"));
 
             // when
-            var attributes = new MetadataSpanAttributesProvider("tenant").provideForMessage(withMetadata, null);
+            var attributes = new MetadataSpanAttributesProvider(Set.of("tenant")).provideForMessage(withMetadata, null);
 
             // then
             assertThat(attributes)
                     .containsEntry(MetadataSpanAttributesProvider.METADATA_PREFIX + "tenant", "acme")
                     .doesNotContainKey(MetadataSpanAttributesProvider.METADATA_PREFIX + "secret");
+        }
+
+        @Test
+        void usesTheGivenPrefixWhenOverridden() {
+            // given the Axon Framework 4 prefix
+            Message withMetadata = event.andMetadata(java.util.Map.of("tenant", "acme"));
+
+            // when
+            var attributes =
+                    new MetadataSpanAttributesProvider("axon_metadata_", Set.of()).provideForMessage(withMetadata, null);
+
+            // then
+            assertThat(attributes).containsEntry("axon_metadata_tenant", "acme");
+        }
+    }
+
+    @Nested
+    class CustomAttributeKeyOverride {
+
+        @Test
+        void singleValueProvidersUseTheGivenKey() {
+            // given the legacy Axon Framework 4 keys
+            var id = new MessageIdSpanAttributesProvider("axon_message_id").provideForMessage(event, null);
+            var name = new MessageNameSpanAttributesProvider("axon_message_name").provideForMessage(event, null);
+            var type = new MessageTypeSpanAttributesProvider("axon_message_type").provideForMessage(event, null);
+            var payload = new PayloadTypeSpanAttributesProvider("axon_payload_type").provideForMessage(event, null);
+
+            // then
+            assertThat(id).containsKey("axon_message_id");
+            assertThat(name).containsEntry("axon_message_name", event.type().qualifiedName().name());
+            assertThat(type).containsEntry("axon_message_type", "EVENT");
+            assertThat(payload).containsEntry("axon_payload_type", String.class.getName());
         }
     }
 
