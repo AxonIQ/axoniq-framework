@@ -9,7 +9,7 @@ Shared SPI base for events (5.2.0) and -- when delivered -- commands and queries
 
 ## `MessageTransformer<M extends Message>`
 
-Generic SPI base. Single-message input, stream output: each transformer emits zero elements (drop), one (1:1), or N (1:N split) for one matched input message. `M` is preserved across the call -- a transformer does not turn a command into an event. The chain (see `MessageTransformerChain` below) composes many transformers into a stream-in / stream-out pipeline; this per-transformer SPI is intentionally the simpler shape so user code stays a plain `BiFunction`-equivalent that returns a `MessageStream`.
+Generic SPI base. Single-message input, stream output: each transformer emits zero elements (drop), one (1:1), or N (1:N split) for one matched input message. `M` is preserved across the call -- a transformer does not turn a command into an event. Each message type has its own typed chain that composes many transformers into a stream-in / stream-out pipeline: `EventTransformerChain` ([spi-events.md](spi-events.md), 5.2.0) and the deferred `CommandTransformerChain` / `QueryTransformerChain` ([spi-commands-queries.md](spi-commands-queries.md), 5.3+). This per-transformer SPI is intentionally the simpler shape so user code stays a plain `BiFunction`-equivalent returning a `MessageStream`.
 
 ```java
 package io.axoniq.framework.messaging.transformation;
@@ -67,92 +67,21 @@ public interface MessageTransformer<M extends Message> {
 
 ---
 
-## `MessageTransformerChain`
+## Chains are per message type
 
-One chain per application, holding all registered transformers across message types. Built once at startup; locked at `.build()`.
+Each message type has its own typed chain holding only its transformers. There is NO shared `MessageTransformerChain` -- separation is intentional (transformers do not overlap across message types: you never register the same instance against both an event and a command). The typed chains are defined in their respective files:
 
-```java
-package io.axoniq.framework.messaging.transformation;
+- `EventTransformerChain` -- [spi-events.md](spi-events.md), ships 5.2.0
+- `CommandTransformerChain` -- [spi-commands-queries.md](spi-commands-queries.md), 5.3+
+- `QueryTransformerChain` -- [spi-commands-queries.md](spi-commands-queries.md), 5.3+
 
-import org.axonframework.messaging.core.Message;
-import org.axonframework.messaging.core.MessageStream;
-import org.jspecify.annotations.NullMarked;
-
-/**
- * Immutable chain of {@link MessageTransformer} instances applied at message read time.
- * Built once at startup via {@link Builder} and locked on {@link Builder#build()}.
- * Register the chain with the Axon configuration as a single component; the framework
- * installs the read-side decorators automatically.
- *
- * @author AxonIQ
- * @since 5.2.0
- */
-@NullMarked
-public final class MessageTransformerChain {
-
-    /**
-     * Apply the chain to the given stream. Each input element is processed by fixed-point
-     * iteration: walk the registrations in order, last match wins, restart on each match,
-     * terminate when nothing matches. Non-matching elements pass through unchanged in
-     * constant time (O(1) for concrete-{@code from}; O(P) when predicate-based {@code from}
-     * transformations are registered).
-     *
-     * @param stream the input stream
-     * @param <M>    the {@link Message} subtype of the stream
-     * @return the transformed stream
-     */
-    public <M extends Message> MessageStream<? extends M> transform(MessageStream<M> stream) { /* ... */ }
-
-    /**
-     * Start building a new chain.
-     *
-     * @return a fresh {@link Builder}
-     */
-    public static Builder builder() { /* ... */ }
-
-    /**
-     * Fluent builder for {@link MessageTransformerChain}. Registration order = application
-     * order. Calling {@link #build()} returns an immutable, locked chain.
-     */
-    public static final class Builder {
-
-        /**
-         * Register a transformer with the chain.
-         *
-         * @param transformer the transformer to add
-         * @return this builder
-         * @throws ChainConfigurationException if the chain is already locked, the transformer's
-         *                                     {@code from} duplicates one already registered, or
-         *                                     {@code from == to} (self-loop)
-         */
-        public Builder register(MessageTransformer<?> transformer) { /* ... */ }
-
-        /**
-         * Lock the chain and return an immutable instance. Runs multi-step cycle detection
-         * on the graph of concrete-{@code MessageType} {@code from -> to} edges.
-         *
-         * @return the locked chain
-         * @throws ChainConfigurationException on a multi-step cycle
-         */
-        public MessageTransformerChain build() { /* ... */ }
-    }
-}
-```
-
-**Contract**:
-- **Startup-only registration** (FR-004). Late `register(...)` after `.build()` throws.
-- **Fixed-point iteration** (FR-007): for each input message, walk the registrations in registration order; **the last match wins** (later registrations override earlier overlapping ones); on match, restart from the top with the output (1:1) or recurse per output (1:N); terminate when nothing matches (or on drop). Subsumes both same-name version chains and cross-name renames.
-- **Hybrid lookup** (FR-011): transformations whose `from` is a concrete `MessageType` live in a `QualifiedName`-keyed map for O(1) non-matching lookup; transformations whose `from` is a `Predicate<MessageType>` live in a separate flat list, scanned linearly. Snapshots flow through unchanged (FR-005, no entries match).
-- **Dispatch by message subtype `M`**: events flow only through `MessageTransformer<EventMessage>` entries, commands only through `MessageTransformer<CommandMessage>`, queries only through `MessageTransformer<QueryMessage>`.
-- **Conflict detection** (FR-008): duplicate concrete `from` (registration time), self-loop (registration time), multi-step cycle on the concrete-`from -> to` graph (lock time). A defensive runtime safety bound guards against pathological infinite loops; under normal use it never fires.
-
-**Cross-references**: FR-004, FR-005, FR-007, FR-008, FR-011, FR-013, FR-020, US1, US5, US6, US7.
+All three share the same shape: a `builder()` that returns an immutable, locked chain on `build()`; one `register(...)` overload; one `transform(MessageStream<MessageSubtype>) -> MessageStream<? extends MessageSubtype>` method. They differ only in the bound `M`. Behaviour (FR-004 startup-only registration, FR-007 fixed-point iteration with last-match-wins, FR-008 conflict detection, FR-011 hybrid lookup) is identical across all three -- documented once per chain in its file, not duplicated here.
 
 ---
 
 ## `ChainConfigurationException`
 
-Thrown by `MessageTransformerChain.Builder` when FR-008 conflicts are detected. Runtime exceptions from inside a transformer propagate to the caller with full context (FR-015) -- no silent skip.
+Shared across all typed chains. Thrown by any chain's `Builder` when FR-008 conflicts are detected. Runtime exceptions from inside a transformer propagate to the caller with full context (FR-015) -- no silent skip.
 
 ```java
 package io.axoniq.framework.messaging.transformation;
@@ -160,11 +89,12 @@ package io.axoniq.framework.messaging.transformation;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Thrown by {@link MessageTransformerChain.Builder} on chain misconfiguration: duplicate
- * {@code from}, self-loop, multi-step cycle, version-order violation, or registration
- * after the chain has been locked. Runtime exceptions from inside a transformer's mapper
- * propagate to the caller directly; this type is reserved for configuration errors at
- * registration or lock time.
+ * Thrown by {@code EventTransformerChain.Builder} (and the future
+ * {@code CommandTransformerChain.Builder} / {@code QueryTransformerChain.Builder}) on chain
+ * misconfiguration: duplicate {@code from}, self-loop, multi-step cycle, version-order
+ * violation, or registration after the chain has been locked. Runtime exceptions from inside
+ * a transformer's mapper propagate to the caller directly; this type is reserved for
+ * configuration errors at registration or lock time.
  *
  * @author AxonIQ
  * @since 5.2.0

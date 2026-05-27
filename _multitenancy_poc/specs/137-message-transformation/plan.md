@@ -115,11 +115,12 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |              so no axoniq-distributed-messaging dependency is needed)
 |-- src/main/java/io/axoniq/framework/messaging/transformation/
 |     |-- MessageTransformer.java               # generic SPI base: transform(M, ProcessingContext) -> MessageStream<? extends M>
-|     |-- MessageTransformerChain.java          # fixed-point iteration; hybrid QN-index + predicate list (FR-007, FR-011); .build() locks (FR-004)
-|     |-- ChainConfigurationException.java      # thrown by Builder on FR-008 conflicts + FR-018 + FR-004 lock + defensive runtime safety bound
+|     |-- ChainConfigurationException.java      # shared across all typed chains; FR-008 conflicts + FR-004 lock + defensive runtime safety bound
 |     |
 |     |-- events/                               # 5.2.0
 |     |     |-- EventTransformer.java           # specialization: extends MessageTransformer<EventMessage>
+|     |     |-- EventTransformerChain.java      # typed chain for events; fixed-point iteration;
+|     |     |                                   # hybrid QN-index + predicate list (FR-007, FR-011); .build() locks (FR-004)
 |     |     |
 |     |     |-- EventTransformation.java        # factory: from(...).to(...).transform(...) (FR-001, MUST),
 |     |     |                                   # rename(...) (FR-002, SHOULD), split(...).transform(...)
@@ -135,10 +136,12 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |     |     |
 |     |     `-- configuration/
 |     |           `-- EventTransformationConfigurationEnhancer.java
-|     |                                         # registers the chain + wires the EventStore decorator
+|     |                                         # looks up EventTransformerChain + MessageConverter from Configuration;
+|     |                                         # wires TransformingEventStore decorator
 |     |
 |     |-- commandhandling/                      # 5.3+ (sub-package reserved; empty in 5.2.0)
 |     |     |-- CommandTransformer.java         # extends MessageTransformer<CommandMessage>
+|     |     |-- CommandTransformerChain.java    # typed chain for commands; same shape as EventTransformerChain
 |     |     |-- CommandTransformation.java
 |     |     |-- TransformingCommandBus.java     # decorator on CommandBus (NOT on CommandBusConnector);
 |     |     |                                   # DECORATION_ORDER = Integer.MIN_VALUE + 1000
@@ -147,6 +150,7 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |     |
 |     `-- queryhandling/                        # 5.3+ (sub-package reserved; empty in 5.2.0)
 |           |-- QueryTransformer.java           # extends MessageTransformer<QueryMessage>
+|           |-- QueryTransformerChain.java      # typed chain for queries; same shape
 |           |-- QueryTransformation.java
 |           |-- TransformingQueryBus.java       # decorator on QueryBus (NOT on QueryBusConnector);
 |           |                                   # DECORATION_ORDER = Integer.MIN_VALUE + 1000
@@ -192,22 +196,22 @@ The internal SPI is stream-in / stream-out and reuses AF5's `MessageStream`. One
 
 ### Chain composition (architectural)
 
-There is exactly **one** `MessageTransformerChain` object per application. The user builds it once at startup; the chain is locked and immutable thereafter (FR-004). For each incoming message the chain runs fixed-point iteration over the registered transformers in registration order; the **last match wins** (new registrations override earlier overlapping ones); on match, restart from the top; terminate when nothing matches (FR-007). The user sees one chain, one builder, one registration call style across events (5.2.0) and -- when delivered -- commands and queries (5.3+).
+There is exactly **one chain per message type**, NOT one shared chain. Transformers do not overlap across types (an event transformer is not a command transformer), so each chain is independent and typed: `EventTransformerChain` (5.2.0), plus `CommandTransformerChain` and `QueryTransformerChain` (5.3+). Each is built once at startup and locked at `.build()` (FR-004). For each incoming message the chain runs fixed-point iteration over its registrations in registration order; the **last match wins** (new registrations override earlier overlapping ones); on match, restart from the top; terminate when nothing matches (FR-007). Same shape, same behaviour clauses, three separate types.
 
-**The chain is a passive registry** -- it holds the registered transformers + their `from`/`to`/mapper metadata, but does NOT hold a `MessageConverter` reference and does NOT perform conversion. The `EventTransformationConfigurationEnhancer` (5.2.0), joined by per-sub-package `CommandTransformationConfigurationEnhancer` + `QueryTransformationConfigurationEnhancer` (5.3+), reads the user-registered chain from the registry AND resolves the active `MessageConverter` from `Configuration` at decorator-registration time, then constructs the wrapping decorator with both:
+**Each chain is a passive registry** -- it holds the registered transformers + their `from`/`to`/mapper metadata, but does NOT hold a `MessageConverter` reference and does NOT perform conversion. Each `*ConfigurationEnhancer` reads its own typed chain from the registry AND resolves the active `MessageConverter` from `Configuration` at decorator-registration time, then constructs the wrapping decorator with both:
 
 ```java
 // Pattern verified in EventSourcingConfigurationDefaults.java:96-108 and
 // AnnotatedEventSourcedEntityModule.buildMetaModel(Configuration):113-131
 registry.registerDecorator(EventStore.class, TransformingEventStore.DECORATION_ORDER,
     (config, name, delegate) -> {
-        MessageTransformerChain chain = config.getComponent(MessageTransformerChain.class);
+        EventTransformerChain chain = config.getComponent(EventTransformerChain.class);
         MessageConverter converter = config.getComponent(MessageConverter.class);
         return new TransformingEventStore(delegate, chain, converter);
     });
 ```
 
-So the user never threads a converter through `MessageTransformerChain.builder()`. The decorator owns the converter and calls `MessageConverter.convertPayload(message, inputType)` before invoking each matched transformer's mapper.
+So the user never threads a converter through `EventTransformerChain.builder()` (or its command/query siblings). The decorator owns the converter and calls `MessageConverter.convertPayload(message, inputType)` before invoking each matched transformer's mapper.
 
 ## Required axon-framework additions
 
@@ -259,7 +263,7 @@ The 5.2.0 deliverable is a thin slice of the full design. Everything held to SHO
 2. **Chain models 0..N outputs**. Internal data structures + decorator return shape MUST treat each transformation as producing a `MessageStream` of zero or more outputs from day one. _Protects: US3/US4/FR-003/FR-014 (split and drop without rewriting the chain)._
 3. **Hybrid index: `QualifiedName`-keyed map + predicate list**. Transformations whose `from` is a concrete `MessageType` live in a `QualifiedName -> List` map for O(1) non-matching lookup; transformations whose `from` is a `Predicate<MessageType>` live in a separate flat list scanned linearly. _Protects: US5/FR-007/FR-011 (fixed-point iteration + lazy non-matching path)._
 4. **Factory method names reserved**. `from(...).to(...)`, `rename(...)`, `split(...)`, `drop(...)` are the only public factory shapes; deferred methods are either absent or stubbed -- never ship a shape that would have to be renamed. _Protects: US2/US3/US4 (rename, split, drop API stability)._
-5. **Single `MessageTransformerChain` object**. Builder returns one immutable chain holding all message types; future annotation discovery MUST produce the same object. _Protects: deferred annotation registration + 5.3+ command/query rollout._
+5. **One typed chain per message type**. 5.2.0 ships `EventTransformerChain`; 5.3+ adds `CommandTransformerChain` and `QueryTransformerChain` as independent siblings, each with its own builder, its own component registration, and its own enhancer. No shared `MessageTransformerChain` exists -- transformers never overlap across message types, so a shared chain has no usage rationale. Future annotation discovery MUST target the typed chain instances. _Protects: deferred annotation registration + 5.3+ command/query rollout._
 6. **Snapshot pass-through is automatic on the entity-load path**. `SnapshotEventMessage` (subtype of `EventMessage`, lives at `eventsourcing/eventstore/SnapshotEventMessage.java`) is prepended into the entity-load stream by `SnapshotCapableEventStorageEngine` only when `condition.strategy() instanceof SourcingStrategy.Snapshot` (verified at `SnapshotCapableEventStorageEngine.java:82-107`). That stream reaches the chain through `transaction(...).source(...)`, so FR-005 unknown-`MessageType` pass-through covers it. **Note**: tracking-processor reads (`open(StreamingCondition, ...)`) do NOT carry snapshots -- only post-snapshot events. Adding a snapshot transformation API later therefore needs zero wiring change on the entity-load path (good), but a snapshot transformation that also wants to fire on tracking-processor reads will need its own hook regardless. _Protects: deferred snapshot transformation on the entity-load path._
 7. **No annotation-discovery hooks**. The 5.2.0 surface ships no `@Transform`-style annotation, keeping the future annotation mechanism's design space unconstrained. _Protects: Part C annotation-based registration._
 8. **Conflict-detection call sites reserved**. The builder validates at registration time (per-entry: duplicate concrete `from`, self-loop) and lock time (cross-entry: multi-step cycle on the concrete-`from` graph). A defensive runtime safety bound guards against infinite loops from pathological predicate misconfiguration; under normal use it never fires. _Protects: US6/FR-008._
