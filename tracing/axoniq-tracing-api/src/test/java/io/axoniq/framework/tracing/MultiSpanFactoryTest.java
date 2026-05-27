@@ -84,12 +84,13 @@ class MultiSpanFactoryTest {
     }
 
     @Test
-    void propagateContextReturnsAMessage() {
+    void spanPropagateContextFansOutToEveryDelegate() {
         // given
-        testSubject.createDispatchSpan("op", message, null).start();
+        Span span = testSubject.createDispatchSpan("op", message, null);
+        span.start();
 
         // when
-        Message result = testSubject.propagateContext(message);
+        Message result = span.propagateContext(message);
 
         // then
         assertThat(result).isNotNull();

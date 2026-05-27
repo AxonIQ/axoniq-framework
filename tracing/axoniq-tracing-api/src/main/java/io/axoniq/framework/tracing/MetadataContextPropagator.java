@@ -19,6 +19,9 @@
 
 package io.axoniq.framework.tracing;
 
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -26,12 +29,12 @@ import java.util.Map;
  * text-map representation (for the OpenTelemetry binding, the W3C Trace Context {@code traceparent} / {@code
  * tracestate} entries).
  * <p>
- * The propagator is the lower-level building block underneath
- * {@link SpanFactory#propagateContext(org.axonframework.messaging.core.Message)} and is
- * exposed publicly so external decorator authors can propagate context onto messages that are not handled by the
- * built-in decorators. {@link #inject()} renders the currently-active tracing context as metadata entries to be
- * merged into an outbound message; {@link #fields()} reports the reserved metadata keys this propagator owns, so
- * callers can detect and document collisions with user metadata.
+ * This is the lower-level building block underneath {@link Span#propagateContext(org.axonframework.messaging.core.Message)}
+ * and is exposed publicly so external decorator authors can propagate context onto messages that the built-in
+ * decorators do not handle. It never reads a thread-bound "current span": {@link #inject(ProcessingContext)} renders
+ * the span that is <em>active on the given {@link ProcessingContext}</em> (see {@link Span#start()}) as metadata
+ * entries. {@link #fields()} reports the reserved metadata keys this propagator owns, so callers can detect and
+ * document collisions with user metadata.
  *
  * @author AxonIQ
  * @since 5.2.0
@@ -39,19 +42,20 @@ import java.util.Map;
 public interface MetadataContextPropagator {
 
     /**
-     * Renders the currently-active tracing context as metadata entries to merge into an outbound message. Returns an
-     * empty map when no context is active; never {@code null}.
+     * Renders the tracing context that is active on the given {@code context} as metadata entries to merge into an
+     * outbound message. Returns an empty map when no span is active on the context; never {@code null} and never reads
+     * a thread-local.
      *
-     * @return the propagation metadata entries for the active context, possibly empty
+     * @param context the processing context whose active span's context is rendered
+     * @return the propagation metadata entries for the context's active span, possibly empty
      */
-    Map<String, String> inject();
+    Map<String, String> inject(ProcessingContext context);
 
     /**
      * Returns the reserved metadata keys this propagator reads from and writes to (for the OpenTelemetry binding,
-     * {@code traceparent} and {@code tracestate}). Useful for detecting and documenting collisions with user
-     * metadata.
+     * {@code traceparent} and {@code tracestate}). Useful for detecting and documenting collisions with user metadata.
      *
      * @return the reserved propagation metadata keys
      */
-    java.util.Collection<String> fields();
+    Collection<String> fields();
 }

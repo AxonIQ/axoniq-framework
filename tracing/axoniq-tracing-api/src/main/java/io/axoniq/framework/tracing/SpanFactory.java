@@ -32,6 +32,12 @@ import org.jspecify.annotations.Nullable;
  * interface — the per-component span shapes (names, kinds, attributes, cross-process metadata propagation) are
  * implementation details of those internal decorators.
  * <p>
+ * <b>No {@code ThreadLocal}.</b> A span's parent is never read from a thread-bound "current span". Parents are resolved
+ * from (1) the propagated context carried in a {@link Message}'s metadata (cross-thread / cross-process) and (2) the
+ * active span recorded on the supplied {@link ProcessingContext} (in-process nesting; see {@link Span#start()}). When
+ * neither yields a parent, the span starts a new trace (a root). To force a new trace regardless of any active span,
+ * use {@link #createRootSpan(String)}.
+ * <p>
  * The default implementation is {@link NoOpSpanFactory}; the OpenTelemetry binding ships
  * {@code OpenTelemetrySpanFactory}. Multiple factories can be composed with {@link MultiSpanFactory}.
  *
@@ -41,10 +47,10 @@ import org.jspecify.annotations.Nullable;
 public interface SpanFactory {
 
     /**
-     * Creates a {@link Span} for an outbound (dispatch / producer) operation on the given {@link Message}. The
-     * {@code context}, when non-{@code null}, is forwarded to every registered {@link SpanAttributesProvider} so that
-     * providers can read per-context resources (for example
-     * {@link org.axonframework.messaging.core.LegacyResources#AGGREGATE_IDENTIFIER_KEY}).
+     * Creates a {@link Span} for an outbound (dispatch / producer) operation on the given {@link Message}. The parent
+     * is the active span on {@code context} (when present), so a message dispatched from within another traced
+     * operation nests under it; otherwise a root span. The {@code context}, when non-{@code null}, is also forwarded
+     * to every registered {@link SpanAttributesProvider}.
      *
      * @param operationName the span name
      * @param message       the message the operation acts on
@@ -54,7 +60,10 @@ public interface SpanFactory {
     Span createDispatchSpan(String operationName, Message message, @Nullable ProcessingContext context);
 
     /**
-     * Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message}.
+     * Creates a {@link Span} for an inbound (handler / consumer) operation on the given {@link Message}. The parent is
+     * the tracing context propagated in {@code message}'s metadata (cross-thread / cross-process); when none is
+     * present, the active span on {@code context}; when neither is present, a root span. Never reads a thread-bound
+     * current span.
      *
      * @param operationName the span name
      * @param message       the message being handled
@@ -68,7 +77,8 @@ public interface SpanFactory {
      * additional link to {@code linkedMessage}'s span context. The link is rendered by APM UIs as a clickable
      * cross-trace navigation (not a parent-of relationship, not an attribute). Implementations MUST extract the
      * propagated context from {@code linkedMessage}'s metadata and attach it as a span link; when no link can be
-     * extracted the span is still created without the link, and this method never throws.
+     * extracted the span is still created without the link, and this method never throws. Parent resolution is as in
+     * {@link #createHandlerSpan(String, Message, ProcessingContext)}.
      *
      * @param operationName the span name
      * @param message       the message being handled
@@ -80,25 +90,29 @@ public interface SpanFactory {
                                  @Nullable ProcessingContext context);
 
     /**
-     * Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}. Non-message
-     * attributes (for example an entity type or identifier for snapshot or repository operations) are attached by the
-     * calling decorator via {@link Span#addAttribute(String, String)}.
+     * Creates a {@link Span} for an internal operation that is not directly tied to a {@link Message}. The parent is
+     * the active span on {@code context} (when present), so the internal span nests under the operation that opened it
+     * (for example a handler span); otherwise a root span. Non-message attributes are attached by the calling decorator
+     * via {@link Span#addAttribute(String, String)}.
      *
      * @param operationName the span name
+     * @param context       the active processing context, or {@code null} when none is available
      * @return the created span (not yet started)
      */
-    Span createInternalSpan(String operationName);
+    Span createInternalSpan(String operationName, @Nullable ProcessingContext context);
 
     /**
-     * Propagates the active tracing context (if any) onto the given {@link Message}'s metadata, returning the
-     * (possibly new) message that should be dispatched in place of the input. Implementations MUST be idempotent and
-     * MUST NOT throw when no context is active.
+     * Creates a {@link Span} that always starts a new trace (a root), ignoring any active span when resolving its own
+     * parent. Use this for operations that legitimately begin their own trace and must not attach to a stale or
+     * unrelated active span — for example an event-processing batch boundary or an out-of-band snapshot operation
+     * running on a pooled thread. When {@code context} is non-{@code null}, starting the span still records it as that
+     * context's active span, so spans created next with that context nest under this root.
      *
-     * @param message the message to enrich with the active tracing context
-     * @param <M>     the message type
-     * @return the message carrying the propagated tracing context, or the input message when no context is active
+     * @param operationName the span name
+     * @param context       the processing context the root should become the active span of, or {@code null}
+     * @return the created root span (not yet started)
      */
-    <M extends Message> M propagateContext(M message);
+    Span createRootSpan(String operationName, @Nullable ProcessingContext context);
 
     /**
      * Registers a {@link SpanAttributesProvider} that contributes attributes to every span this factory produces.

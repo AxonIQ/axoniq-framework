@@ -51,7 +51,7 @@ class NoOpSpanFactoryTest {
         AtomicBoolean executed = new AtomicBoolean(false);
 
         // when
-        testSubject.createInternalSpan("op").run(() -> executed.set(true));
+        testSubject.createInternalSpan("op", null).run(() -> executed.set(true));
 
         // then
         assertThat(executed).isTrue();
@@ -67,9 +67,9 @@ class NoOpSpanFactoryTest {
     }
 
     @Test
-    void propagateContextReturnsTheSameMessageInstance() {
+    void spanPropagateContextReturnsTheSameMessageInstance() {
         // when
-        Message result = testSubject.propagateContext(message);
+        Message result = testSubject.createDispatchSpan("op", message, null).propagateContext(message);
 
         // then
         assertThat(result).isSameAs(message);
@@ -78,7 +78,7 @@ class NoOpSpanFactoryTest {
     @Test
     void addAttributeAndRecordExceptionAreNoOpsReturningTheSpan() {
         // given
-        Span span = testSubject.createInternalSpan("op");
+        Span span = testSubject.createInternalSpan("op", null);
 
         // when / then
         assertThat(span.addAttribute("k", "v")).isSameAs(span);

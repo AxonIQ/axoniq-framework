@@ -75,7 +75,7 @@ public final class TracingCommandBus implements CommandBus {
                                                             @Nullable ProcessingContext processingContext) {
         Span span = spanFactory.createDispatchSpan(SpanNames.commandDispatch(command), command, processingContext);
         return span.runSupplierAsync(
-                () -> delegate.dispatch(spanFactory.propagateContext(command), processingContext)
+                () -> delegate.dispatch(span.propagateContext(command), processingContext)
         );
     }
 

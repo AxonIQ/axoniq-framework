@@ -98,7 +98,7 @@ public final class TracingHandlerEnhancerDefinition implements HandlerEnhancerDe
 
         @Override
         public MessageStream<?> handle(Message message, ProcessingContext context, @Nullable T target) {
-            Span span = spanFactory.createInternalSpan(spanName(target));
+            Span span = spanFactory.createInternalSpan(spanName(target), context);
             ProcessingContextSpanBinding.bind(span, context);
             return super.handle(message, context, target);
         }

@@ -66,7 +66,8 @@ public class TestSpanFactory implements SpanFactory {
         DISPATCH,
         HANDLER,
         LINKED_HANDLER,
-        INTERNAL
+        INTERNAL,
+        ROOT
     }
 
     /**
@@ -95,18 +96,13 @@ public class TestSpanFactory implements SpanFactory {
     }
 
     @Override
-    public Span createInternalSpan(String operationName) {
+    public Span createInternalSpan(String operationName, @Nullable ProcessingContext context) {
         return record(new TestSpan(TestSpanType.INTERNAL, operationName, null));
     }
 
     @Override
-    public <M extends Message> M propagateContext(M message) {
-        synchronized (activeSpans) {
-            if (!activeSpans.isEmpty()) {
-                propagatedContexts.put(message, activeSpans.getFirst());
-            }
-        }
-        return message;
+    public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
+        return record(new TestSpan(TestSpanType.ROOT, operationName, null));
     }
 
     @Override
@@ -278,6 +274,12 @@ public class TestSpanFactory implements SpanFactory {
             this.exception = t;
             logger.debug("Recorded exception for span {}", name, t);
             return this;
+        }
+
+        @Override
+        public <M extends Message> M propagateContext(M message) {
+            propagatedContexts.put(message, this);
+            return message;
         }
 
         private void close() {

@@ -61,13 +61,13 @@ public final class NoOpSpanFactory implements SpanFactory {
     }
 
     @Override
-    public Span createInternalSpan(String operationName) {
+    public Span createInternalSpan(String operationName, @Nullable ProcessingContext context) {
         return NO_OP_SPAN;
     }
 
     @Override
-    public <M extends Message> M propagateContext(M message) {
-        return message;
+    public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
+        return NO_OP_SPAN;
     }
 
     @Override
@@ -90,6 +90,11 @@ public final class NoOpSpanFactory implements SpanFactory {
         @Override
         public Span recordException(Throwable t) {
             return this;
+        }
+
+        @Override
+        public <M extends Message> M propagateContext(M message) {
+            return message;
         }
     }
 

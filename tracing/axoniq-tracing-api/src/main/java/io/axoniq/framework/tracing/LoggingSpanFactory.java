@@ -64,13 +64,13 @@ public final class LoggingSpanFactory implements SpanFactory {
     }
 
     @Override
-    public Span createInternalSpan(String operationName) {
+    public Span createInternalSpan(String operationName, @Nullable ProcessingContext context) {
         return new LoggingSpan(operationName);
     }
 
     @Override
-    public <M extends Message> M propagateContext(M message) {
-        return message;
+    public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
+        return new LoggingSpan(operationName);
     }
 
     @Override
@@ -102,6 +102,11 @@ public final class LoggingSpanFactory implements SpanFactory {
         public Span recordException(Throwable t) {
             logger.warn("Span [{}] recorded exception", operationName, t);
             return this;
+        }
+
+        @Override
+        public <M extends Message> M propagateContext(M message) {
+            return message;
         }
     }
 

@@ -72,17 +72,13 @@ public final class MultiSpanFactory implements SpanFactory {
     }
 
     @Override
-    public Span createInternalSpan(String operationName) {
-        return fanOut(factory -> factory.createInternalSpan(operationName));
+    public Span createInternalSpan(String operationName, @Nullable ProcessingContext context) {
+        return fanOut(factory -> factory.createInternalSpan(operationName, context));
     }
 
     @Override
-    public <M extends Message> M propagateContext(M message) {
-        M result = message;
-        for (SpanFactory delegate : delegates) {
-            result = delegate.propagateContext(result);
-        }
-        return result;
+    public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
+        return fanOut(factory -> factory.createRootSpan(operationName, context));
     }
 
     @Override
@@ -125,6 +121,15 @@ public final class MultiSpanFactory implements SpanFactory {
         public Span recordException(Throwable t) {
             spans.forEach(span -> span.recordException(t));
             return this;
+        }
+
+        @Override
+        public <M extends Message> M propagateContext(M message) {
+            M result = message;
+            for (Span span : spans) {
+                result = span.propagateContext(result);
+            }
+            return result;
         }
     }
 

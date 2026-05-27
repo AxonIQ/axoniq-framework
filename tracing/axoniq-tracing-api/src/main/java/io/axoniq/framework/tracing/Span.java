@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.tracing;
 
+import org.axonframework.messaging.core.Message;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -27,19 +29,23 @@ import java.util.function.Supplier;
  * (distributed) applications.
  * <p>
  * A {@code Span} is an abstraction that lets AxoniqFramework offer tracing capabilities without depending on a
- * specific tracing provider. A span is opened by calling {@link #start()}, which both starts the span and makes it
- * the active span for subsequently created spans, and returns a {@link SpanScope}. Closing that scope (via
- * {@link SpanScope#close()}) ends the span. Every {@link #start()} must be paired with exactly one
- * {@link SpanScope#close()}.
+ * specific tracing provider. A span is opened by calling {@link #start()} and ended by closing the returned
+ * {@link SpanScope}. Every {@link #start()} must be paired with exactly one {@link SpanScope#close()}.
  * <p>
- * For imperative-style code the convenience helpers {@link #run(Runnable)}, {@link #runSupplier(Supplier)} and
- * {@link #runSupplierAsync(Supplier)} open and close the scope around the given block. Framework code that has access
- * to a {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} should instead bind the span to the
- * context's lifecycle hooks through {@link ProcessingContextSpanBinding}, so the span scope tracks the framework's
- * processing phases correctly across asynchronous and reactive continuations.
+ * <b>No {@code ThreadLocal}.</b> Parent/child relationships are never derived from a thread-bound "current span".
+ * Instead, when a span is created within a {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} (the
+ * context is passed to the {@link SpanFactory} factory method), starting it records the span as that context's active
+ * span; spans subsequently created from the same {@link SpanFactory} with that context become its children, and the
+ * previous active span is restored when this span's {@link SpanScope} is closed. Cross-boundary parenting (across
+ * threads or processes) instead rides on message metadata via {@link #propagateContext(Message)} on the dispatch side
+ * and {@link SpanFactory#createHandlerSpan(String, Message, org.axonframework.messaging.core.unitofwork.ProcessingContext)}
+ * on the handling side.
  * <p>
- * Spans are created by a {@link SpanFactory}, which is implemented by the tracing provider of choice (for example the
- * OpenTelemetry binding).
+ * For imperative-style code with no {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} available,
+ * the convenience helpers {@link #run(Runnable)}, {@link #runSupplier(Supplier)} and
+ * {@link #runSupplierAsync(Supplier)} open and close the scope around the given block; such spans perform no active-span
+ * tracking. Framework code that has a {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} should bind
+ * the span to its lifecycle through {@link ProcessingContextSpanBinding}.
  *
  * @author AxonIQ
  * @see SpanFactory
@@ -48,8 +54,11 @@ import java.util.function.Supplier;
 public interface Span {
 
     /**
-     * Starts this span, makes it the active span for the current execution, and returns its {@link SpanScope}. The
-     * returned scope MUST be closed exactly once; closing it ends the span.
+     * Starts this span and returns its {@link SpanScope}. When the span was created with a
+     * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}, starting it records this span as that
+     * context's active span (without any {@code ThreadLocal}), so spans created next from the same {@link SpanFactory}
+     * with that context nest under it; closing the returned scope restores the previously-active span. The returned
+     * scope MUST be closed exactly once; closing it ends the span.
      *
      * @return the {@link SpanScope} governing this span; never {@code null}
      */
@@ -75,8 +84,23 @@ public interface Span {
     Span recordException(Throwable t);
 
     /**
-     * Starts the span, runs the given block inside its active scope, and ends the span afterwards. Exceptions are
-     * recorded on the span and rethrown. The {@link Runnable} runs synchronously on the calling thread.
+     * Returns a copy of the given {@code message} with this span's tracing context injected into its metadata, so a
+     * remote or asynchronous handler can continue the same trace by extracting it (see
+     * {@link SpanFactory#createHandlerSpan(String, Message, org.axonframework.messaging.core.unitofwork.ProcessingContext)}).
+     * This replaces deriving the context to propagate from a thread-bound "current span": the span propagates
+     * <em>itself</em>. Implementations that perform no propagation (no-op, logging) return the input unchanged and
+     * never throw.
+     *
+     * @param message the message to enrich with this span's tracing context
+     * @param <M>     the message type
+     * @return the message carrying this span's propagated tracing context (possibly the same instance)
+     */
+    <M extends Message> M propagateContext(M message);
+
+    /**
+     * Starts the span, runs the given block inside it, and ends the span afterwards. Exceptions are recorded on the
+     * span and rethrown. The {@link Runnable} runs synchronously on the calling thread. This imperative-edge helper
+     * performs no active-span tracking; nesting is expressed through a {@code ProcessingContext}, not this helper.
      *
      * @param runnable the block to run
      */
@@ -92,9 +116,8 @@ public interface Span {
     }
 
     /**
-     * Starts the span, runs the given supplier inside its active scope, ends the span afterwards, and returns the
-     * supplied value. Exceptions are recorded on the span and rethrown. The {@link Supplier} runs synchronously on the
-     * calling thread.
+     * Starts the span, runs the given supplier inside it, ends the span afterwards, and returns the supplied value.
+     * Exceptions are recorded on the span and rethrown. The {@link Supplier} runs synchronously on the calling thread.
      *
      * @param supplier the value-producing block to run
      * @param <T>      the supplied value type
@@ -112,9 +135,9 @@ public interface Span {
     }
 
     /**
-     * Starts the span and runs the given asynchronous supplier inside its active scope; the span is ended when the
-     * returned {@link CompletableFuture} completes (normally or exceptionally). A failure of the future is recorded on
-     * the span. A synchronous failure of the supplier itself is recorded, the span ended, and the throwable rethrown.
+     * Starts the span and runs the given asynchronous supplier inside it; the span is ended when the returned
+     * {@link CompletableFuture} completes (normally or exceptionally). A failure of the future is recorded on the span.
+     * A synchronous failure of the supplier itself is recorded, the span ended, and the throwable rethrown.
      *
      * @param supplier the block producing the {@link CompletableFuture} to trace
      * @param <T>      the future's result type
