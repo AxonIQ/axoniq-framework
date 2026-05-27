@@ -7,7 +7,7 @@
 The user-facing API consists of three things:
 1. A **typed chain per message type** -- `EventTransformerChain.builder()` (5.2.0), plus `CommandTransformerChain.builder()` / `QueryTransformerChain.builder()` (5.3+). Each is registered as its own component.
 2. The per-type **factories** (`EventTransformation`, plus `CommandTransformation` and `QueryTransformation` in 5.3+) that produce `MessageTransformer` instances without the user writing SPI code.
-3. The **registration pattern** in Axon configuration (a `ConfigurationEnhancer` does the wiring; the user only registers the chain instance).
+3. The **registration pattern** in Axon configuration (a `ConfigurationEnhancer` per message type does the wiring; the user only registers the typed chain instance(s) as components).
 
 See also: [shared SPI base](spi-base.md), [event SPI](spi-events.md), [commands and queries SPI](spi-commands-queries.md).
 
