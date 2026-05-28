@@ -34,34 +34,46 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.List;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * All three event read contexts -- entity load via
- * {@code EventStore.transaction(...).source(...)}, DCB read via the same
- * {@code source(...)}, and tracking-processor read via {@code EventStore.open(...)}
- * -- observe the identical transformed result for the same stored event.
+ * All three spec-defined event read contexts observe the identical transformed result for the
+ * same stored event:
+ * <ul>
+ *     <li>Entity load: single-entity-tag {@link SourcingCondition} on
+ *     {@link EventStoreTransaction#source(SourcingCondition)}.</li>
+ *     <li>DCB read: multi-entity-tag {@link SourcingCondition} (OR of entity tags) on the same
+ *     {@link EventStoreTransaction#source(SourcingCondition)} method.</li>
+ *     <li>Tracking processor read: unbounded {@link StreamingCondition} on
+ *     {@link EventStore#open(StreamingCondition, ProcessingContext)}.</li>
+ * </ul>
+ * The conditions reach the delegate unchanged (storage-engine filtering runs BEFORE the chain),
+ * and each context yields the same V2 transformed event for the same stored V1 event.
  */
 final class ReadContextConsistencyTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
-    void entityLoadAndDcbReadAndTrackingProcessorAllObserveSameTransformedEvent() {
+    void allThreeReadContextsObserveTheSameTransformedEventAndForwardTheConditionUnchanged() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
-        MessageConverter converter = Mockito.mock(MessageConverter.class);
 
         ObjectNode payload = JsonNodeFactory.instance.objectNode().put("k", "v");
         EventMessage storedV1Event = new GenericEventMessage(V1, payload);
@@ -75,18 +87,34 @@ final class ReadContextConsistencyTest {
         when(delegateStore.open(any(StreamingCondition.class), any()))
                 .thenAnswer(invocation -> MessageStream.fromIterable(List.of(storedV1Event)));
 
-        TransformingEventStore decoratedStore = new TransformingEventStore(delegateStore, chain, converter);
-
+        TransformingEventStore decoratedStore = new TransformingEventStore(delegateStore, chain, CONVERTER);
         ProcessingContext context = new StubProcessingContext();
-        SourcingCondition sourcingCondition = SourcingCondition.conditionFor(EventCriteria.havingAnyTag());
+
+        // Entity load: single-entity scope (one aggregate tag, bounded stream).
+        SourcingCondition entityLoadCondition = SourcingCondition.conditionFor(
+                EventCriteria.havingTags(Tag.of("course", "course-123")));
+        // DCB read: multi-entity scope spanning two entities (OR of tags, bounded stream).
+        SourcingCondition dcbReadCondition = SourcingCondition.conditionFor(
+                EventCriteria.havingTags(Tag.of("course", "course-123"))
+                             .or()
+                             .havingTags(Tag.of("student", "student-456")));
+        // Tracking processor: unbounded streaming view from the start of history.
         StreamingCondition streamingCondition = StreamingCondition.startingFrom(null);
 
-        List<EventMessage> entityLoad = collectMessages(decoratedStore.transaction(context).source(sourcingCondition));
-        List<EventMessage> dcbRead = collectMessages(decoratedStore.transaction(context).source(sourcingCondition));
-        List<EventMessage> trackingProcessorRead = collectMessages(decoratedStore.open(streamingCondition, context));
+        List<EventMessage> entityLoad =
+                collectMessages(decoratedStore.transaction(context).source(entityLoadCondition));
+        List<EventMessage> dcbRead =
+                collectMessages(decoratedStore.transaction(context).source(dcbReadCondition));
+        List<EventMessage> trackingProcessorRead =
+                collectMessages(decoratedStore.open(streamingCondition, context));
 
         assertThat(entityLoad).extracting(EventMessage::type).containsExactly(V2);
         assertThat(dcbRead).extracting(EventMessage::type).containsExactly(V2);
         assertThat(trackingProcessorRead).extracting(EventMessage::type).containsExactly(V2);
+
+        // Storage-engine filtering runs BEFORE the chain: the conditions reach the delegate unchanged.
+        verify(delegateTransaction).source(eq(entityLoadCondition), any());
+        verify(delegateTransaction).source(eq(dcbReadCondition), any());
+        verify(delegateStore).open(eq(streamingCondition), any());
     }
 }
