@@ -42,6 +42,18 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 
 **Cross-references**: FR-018, FR-019, US8.
 
+### Command result transformation (deferred)
+
+Parallel to the query response case below, for commands. `CommandResultMessage extends
+ResultMessage extends Message` (verified at `messaging/commandhandling/CommandResultMessage.java`,
+`messaging/core/ResultMessage.java`), so a future
+`CommandResultTransformer extends MessageTransformer<CommandResultMessage>` slots into the
+generic base with no SPI change. Decoration point: `TransformingCommandBus.dispatch(...)`
+(verified at `messaging/commandhandling/CommandBus.java`) piping the returned
+`CompletableFuture<CommandResultMessage>` through a parallel chain lookup.
+
+See spec Part C "Command result transformation `[Deferred]`" for the deferral rationale.
+
 ---
 
 ## `CommandTransformerChain`
@@ -129,7 +141,8 @@ Queries are bidirectional: a `QueryMessage` request flows to a handler, and a `M
 
 **Why deferred**: receiver-side reading of an old-vs-new response IS read-time transformation (fits this work's read-only invariant, FR-021), distinct from sender-side new-to-old downcasting (out of scope per spec Part C). It is deferred from the first cut to keep the 5.3+ slice focused on request-side coverage; the decoration point would be `TransformingQueryBus.query(...)` piping the returned `MessageStream<QueryResponseMessage>` through a parallel chain lookup. No 5.2.0 wiring change is needed.
 
-See also spec Part C "Query response transformation `[Deferred]`".
+See also spec Part C "Query response transformation `[Deferred]`" and the parallel
+"Command result transformation (deferred)" under `CommandTransformer` above.
 
 ---
 

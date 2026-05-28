@@ -557,7 +557,22 @@ Wiring would attach to `TransformingQueryBus.query(...)` and pipe the returned
 transformation (deferred)").
 
 **When to revisit**: alongside US9 delivery, or once concrete query-versioning cases surface
-where receiver-side response transformation is the cleanest solution.
+where receiver-side response transformation is the cleanest solution. See also "Command
+result transformation `[Deferred]`" below for the parallel command-side rationale.
+
+---
+
+#### Command result transformation `[Deferred]`
+
+Parallel to the query response deferral above, for commands. Most command results are `Void`
+or a single identifier and need no transformation, but `CommandResultMessage` can carry an
+arbitrary payload through the `MessageConverter`, so the same versioning pressure can apply.
+US8 covers the *request* side of commands (5.3+); the result side is held to a later release
+to keep the first cut focused.
+
+SPI shape and decoration point are in
+[contracts/spi-commands-queries.md](contracts/spi-commands-queries.md) ("Command result
+transformation (deferred)").
 
 ---
 
