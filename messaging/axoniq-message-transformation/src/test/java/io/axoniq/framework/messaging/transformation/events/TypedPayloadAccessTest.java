@@ -72,7 +72,7 @@ final class TypedPayloadAccessTest {
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
             assertThat(outputs.getFirst().payload())
-                    .asInstanceOf(InstanceOfAssertFactories.type(JsonNode.class))
+                    .asInstanceOf(type(JsonNode.class))
                     .satisfies(node -> assertThat(node.get("name").asText()).isEqualTo("Math 101"));
         }
     }
