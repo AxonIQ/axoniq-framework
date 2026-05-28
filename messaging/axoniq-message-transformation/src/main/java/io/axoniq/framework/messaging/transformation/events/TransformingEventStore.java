@@ -24,6 +24,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -57,6 +58,12 @@ public final class TransformingEventStore implements EventStore {
      */
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
+    /** Per-{@link ProcessingContext} cache key for the wrapping transaction; mirrors the
+     *  {@code InterceptingEventStore} pattern so successive {@code transaction(ctx)} calls
+     *  in the same context return the same wrapping instance. */
+    private static final Context.ResourceKey<EventStoreTransaction> TRANSACTION_KEY =
+            Context.ResourceKey.withLabel("transformingEventStoreTransaction");
+
     private final EventStore delegate;
     private final EventTransformerChain chain;
     private final MessageConverter converter;
@@ -77,16 +84,16 @@ public final class TransformingEventStore implements EventStore {
 
     @Override
     public EventStoreTransaction transaction(ProcessingContext processingContext) {
-        // Tests-first stub: returns a TransformingEventStoreTransaction whose source() does
-        // not yet apply the chain. Body lands with T030 / T031.
-        return new TransformingEventStoreTransaction(delegate.transaction(processingContext), chain, converter);
+        return processingContext.computeResourceIfAbsent(
+                TRANSACTION_KEY,
+                () -> new TransformingEventStoreTransaction(
+                        delegate.transaction(processingContext), chain, processingContext, converter));
     }
 
     @Override
     public MessageStream<EventMessage> open(StreamingCondition condition,
                                             @Nullable ProcessingContext context) {
-        // Tests-first stub: delegates without applying the chain. Body lands with T030.
-        return delegate.open(condition, context);
+        return chain.transform(delegate.open(condition, context), context, converter);
     }
 
     @Override

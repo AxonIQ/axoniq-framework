@@ -27,6 +27,7 @@ import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
@@ -49,29 +50,33 @@ final class TransformingEventStoreTransaction implements EventStoreTransaction {
 
     private final EventStoreTransaction delegate;
     private final EventTransformerChain chain;
+    private final ProcessingContext context;
     private final MessageConverter converter;
 
     /**
      * Package-private; instances are produced by
-     * {@link TransformingEventStore#transaction(org.axonframework.messaging.core.unitofwork.ProcessingContext)}.
+     * {@link TransformingEventStore#transaction(ProcessingContext)}.
      *
      * @param delegate  the inner {@link EventStoreTransaction} to wrap
      * @param chain     the application's {@link EventTransformerChain}
+     * @param context   the active processing context the wrapped transaction was created
+     *                  for; threaded through to mappers via the chain per FR-009
      * @param converter the active {@link MessageConverter}
      */
     TransformingEventStoreTransaction(EventStoreTransaction delegate,
                                        EventTransformerChain chain,
+                                       ProcessingContext context,
                                        MessageConverter converter) {
         this.delegate = requireNonNull(delegate, "delegate");
         this.chain = requireNonNull(chain, "chain");
+        this.context = requireNonNull(context, "context");
         this.converter = requireNonNull(converter, "converter");
     }
 
     @Override
     public MessageStream<? extends EventMessage> source(SourcingCondition condition,
                                                          @Nullable Consumer<Position> resumePositionCallback) {
-        // Tests-first stub: delegates without applying the chain. Body lands with T031.
-        return delegate.source(condition, resumePositionCallback);
+        return chain.transform(delegate.source(condition, resumePositionCallback), context, converter);
     }
 
     @Override
