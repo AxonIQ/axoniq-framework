@@ -23,15 +23,18 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Event-specific {@link MessageTransformer}. Use the {@code EventTransformation} factory
- * rather than implementing directly. The event envelope (entity type, entity identifier,
- * tracking token, sequence number) is preserved across transformation. Snapshot events
- * ({@code SnapshotEventMessage}, prepended by the snapshot-capable storage engine onto
- * the entity-load stream when {@code SourcingStrategy.Snapshot} is active) pass through
- * unchanged unless a user explicitly registers a transformation matching their
- * {@link org.axonframework.messaging.core.MessageType}; that hook is reserved for a
- * future release (see plan.md).
+ * rather than implementing directly. See {@link MessageTransformer} for the transformation
+ * contract; this interface narrows the message type to {@link EventMessage}.
+ * <p>
+ * A transformer rewrites only the {@link EventMessage} itself -- its
+ * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Properties
+ * that live alongside the event in the read stream -- the tags resolved at append time
+ * and any tracking-position or sequence information carried on the
+ * {@link MessageStream.Entry} context -- are not part of the message and are not
+ * modified by the chain. For 1:N splits, every output is delivered against the same
+ * stream position as the input.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
@@ -67,7 +70,7 @@ import org.jspecify.annotations.NullMarked;
  *
  * @param type    identity of the replacement event
  * @param payload new payload; its runtime type drives downstream conversion
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
@@ -110,7 +113,7 @@ import org.jspecify.annotations.NullMarked;
  * {@code EventTransformerChain.class}-typed component; the framework installs the
  * read-side decorators automatically.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
@@ -166,7 +169,7 @@ import org.jspecify.annotations.Nullable;
  * path (entity loads, DCB reads, tracking-processor reads). Installed automatically by
  * {@code EventTransformationConfigurationEnhancer}; not constructed by users.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
@@ -243,7 +246,7 @@ import org.jspecify.annotations.NullMarked;
  * {@link #source(SourcingCondition)} only; append / position methods delegate unchanged
  * because the chain runs at read time.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
@@ -300,7 +303,7 @@ import org.jspecify.annotations.NullMarked;
  * {@link EventTransformerChain} and the active {@link MessageConverter} from the
  * {@code Configuration} at decorator-registration time; a no-op if no chain is registered.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
