@@ -24,7 +24,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -43,7 +42,6 @@ final class NonMatchingPassThroughTest {
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T023 + T026 (non-matching pass-through path)")
     void eventWhoseTypeMatchesNoRegisteredTransformerPassesThroughUnchanged() {
         EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)
                                                                     .to(new MessageType("com.example.CourseCreated", "2.0.0"))
@@ -59,7 +57,6 @@ final class NonMatchingPassThroughTest {
     }
 
     @Test
-    @Disabled("Tests-first; impl lands in T026 (lazy: no converter invocation on non-matching)")
     void noPayloadConversionHappensForNonMatchingEvents() {
         AtomicInteger mapperInvocations = new AtomicInteger();
         EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)

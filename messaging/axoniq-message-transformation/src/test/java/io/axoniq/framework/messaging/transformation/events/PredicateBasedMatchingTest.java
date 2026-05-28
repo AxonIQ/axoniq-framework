@@ -20,11 +20,11 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,17 +46,16 @@ final class PredicateBasedMatchingTest {
     private static final MessageType UNRELATED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T023 (from(Predicate) factory) + T027 (chain predicate-list lookup)")
     void everyEventWhoseTypeSatisfiesThePredicateGetsTransformed() {
-        EventTransformer oneToThreeRangeTransformer = EventTransformation.from(mt -> mt.version().startsWith("1."))
-                                                                          .to(V3)
-                                                                          .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformer oneToThreeRangeTransformer = EventTransformation.from(
+                mt -> "com.example.CourseCreated".equals(mt.qualifiedName().name()) && mt.version().startsWith("1.")
+        ).to(V3).transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(oneToThreeRangeTransformer).build();
 
-        EventMessage v1Event = new GenericEventMessage(V1, "p");
-        EventMessage v1PatchEvent = new GenericEventMessage(V1_PATCH, "p");
-        EventMessage v2Event = new GenericEventMessage(V2, "p");
-        EventMessage unrelatedEvent = new GenericEventMessage(UNRELATED, "p");
+        EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        EventMessage v1PatchEvent = new GenericEventMessage(V1_PATCH, JsonNodeFactory.instance.objectNode());
+        EventMessage v2Event = new GenericEventMessage(V2, JsonNodeFactory.instance.objectNode());
+        EventMessage unrelatedEvent = new GenericEventMessage(UNRELATED, JsonNodeFactory.instance.objectNode());
 
         List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(
                 List.of(v1Event, v1PatchEvent, v2Event, unrelatedEvent))));
@@ -66,14 +65,13 @@ final class PredicateBasedMatchingTest {
     }
 
     @Test
-    @Disabled("Tests-first; impl lands in T026 (non-matching path skips predicate list)")
     void eventWhoseTypeFailsThePredicatePassesThroughUnchanged() {
         EventTransformer onlyHeartbeatsTransformer = EventTransformation.from(mt -> mt.qualifiedName().name().equals(UNRELATED.qualifiedName().name()))
                                                                          .to(V3)
                                                                          .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(onlyHeartbeatsTransformer).build();
 
-        EventMessage v1Event = new GenericEventMessage(V1, "p");
+        EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
         List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event))));
 

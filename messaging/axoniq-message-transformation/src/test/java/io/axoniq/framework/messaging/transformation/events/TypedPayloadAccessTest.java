@@ -27,7 +27,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +36,8 @@ import java.util.Map;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 /**
  * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for
@@ -53,8 +53,7 @@ final class TypedPayloadAccessTest {
     final class ClassOverload {
 
         @Test
-        @Disabled("Tests-first; impl lands in T024 (Class<T> overload) + T027 (chain invokes converter)")
-        void convertsPayloadToJsonNodeBeforeInvokingMapper() {
+            void convertsPayloadToJsonNodeBeforeInvokingMapper() {
             EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                     .to(V2)
                                                                     .transform(JsonNode.class, (jsonNode, ctx) -> {
@@ -72,9 +71,9 @@ final class TypedPayloadAccessTest {
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
-            JsonNode transformedPayload = (JsonNode) outputs.getFirst().payload();
-            assertNotNull(transformedPayload);
-            assertThat(transformedPayload.get("name").asText()).isEqualTo("Math 101");
+            assertThat(outputs.getFirst().payload())
+                    .asInstanceOf(InstanceOfAssertFactories.type(JsonNode.class))
+                    .satisfies(node -> assertThat(node.get("name").asText()).isEqualTo("Math 101"));
         }
     }
 
@@ -82,8 +81,7 @@ final class TypedPayloadAccessTest {
     final class TypeReferenceOverload {
 
         @Test
-        @Disabled("Tests-first; impl lands in T024 (TypeReference<T> overload)")
-        void preservesGenericTypeSoLambdaParameterTypeIsInferredAtCompileTime() {
+            void preservesGenericTypeSoLambdaParameterTypeIsInferredAtCompileTime() {
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
             EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
@@ -103,10 +101,10 @@ final class TypedPayloadAccessTest {
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> transformedPayload = (Map<String, Object>) outputs.getFirst().payload();
-            assertThat(transformedPayload).containsEntry("name", "Math 101")
-                                          .containsEntry("upgraded", true);
+            assertThat(outputs.getFirst().payload())
+                    .asInstanceOf(MAP)
+                    .containsEntry("name", "Math 101")
+                    .containsEntry("upgraded", true);
         }
     }
 }

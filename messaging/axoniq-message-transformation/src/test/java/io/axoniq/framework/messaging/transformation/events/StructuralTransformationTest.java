@@ -26,7 +26,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -45,7 +44,6 @@ final class StructuralTransformationTest {
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T023 (EventTransformation factory) + T024 (transform overloads) + T027 (chain matching)")
     void storedV1EventIsObservedAsV2AfterRegisteringV1ToV2Transformation() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                 .to(V2)
@@ -72,7 +70,6 @@ final class StructuralTransformationTest {
     }
 
     @Test
-    @Disabled("Tests-first; impl lands in T023 / T027")
     void singleTransformationIsObservedByEveryConsumerOfTheChain() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                 .to(V2)

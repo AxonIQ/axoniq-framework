@@ -125,7 +125,7 @@ final class OutputIdentityCheckTest {
     private static final class WrongTypePojo {
     }
 
-    /** Helper POJO that would resolve to V2 once @Event-annotated (impl detail of T028). */
+    /** Helper POJO that would resolve to V2 once {@code @Event}-annotated. */
     private static final class SamplePojoV2 {
     }
 }

@@ -44,7 +44,7 @@ import static java.util.Objects.requireNonNull;
  * read path (entity loads, DCB reads, tracking-processor reads, ...). Installed automatically
  * by {@code EventTransformationConfigurationEnhancer}; not constructed by users.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @Internal

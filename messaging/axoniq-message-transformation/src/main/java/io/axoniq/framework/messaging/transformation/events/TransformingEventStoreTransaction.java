@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
  * Applies the chain to {@link #source(SourcingCondition)} only; append / position methods
  * delegate unchanged because the chain runs at read time.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @Internal
