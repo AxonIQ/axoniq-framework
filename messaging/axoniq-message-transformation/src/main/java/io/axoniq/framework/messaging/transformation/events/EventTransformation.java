@@ -24,7 +24,6 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
-import java.lang.reflect.Type;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
@@ -115,7 +114,7 @@ public final class EventTransformation {
         }
 
         /**
-         * Supply the payload mapping behaviour for a non-generic input type.
+         * Supply the payload mapping behavior for a non-generic input type.
          *
          * @param <T>           input payload type
          * @param <U>           output payload type

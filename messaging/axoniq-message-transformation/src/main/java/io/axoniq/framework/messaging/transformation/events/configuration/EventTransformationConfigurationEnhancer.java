@@ -38,6 +38,12 @@ import org.axonframework.messaging.core.conversion.MessageConverter;
  */
 public final class EventTransformationConfigurationEnhancer implements ConfigurationEnhancer {
 
+    /**
+     * Instantiated by the {@link java.util.ServiceLoader}; not intended for direct use.
+     */
+    public EventTransformationConfigurationEnhancer() {
+    }
+
     @Override
     public void enhance(ComponentRegistry registry) {
         registry.registerDecorator(

@@ -69,6 +69,10 @@ public final class TransformingEventStore implements EventStore {
     private final MessageConverter converter;
 
     /**
+     * Constructs the decorator. Wired automatically by the framework via
+     * {@code EventTransformationConfigurationEnhancer}; applications do not call this
+     * constructor directly.
+     *
      * @param delegate  the inner {@link EventStore} to wrap
      * @param chain     the application's {@link EventTransformerChain} (passive registry)
      * @param converter the active {@link MessageConverter} used to convert payloads to

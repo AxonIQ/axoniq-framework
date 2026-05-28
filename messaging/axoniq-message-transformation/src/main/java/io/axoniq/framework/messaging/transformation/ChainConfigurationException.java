@@ -33,6 +33,8 @@ import org.jspecify.annotations.Nullable;
 public final class ChainConfigurationException extends RuntimeException {
 
     /**
+     * Constructs a new exception with the given detail message.
+     *
      * @param message human-readable description of the problem
      */
     public ChainConfigurationException(String message) {
@@ -40,6 +42,8 @@ public final class ChainConfigurationException extends RuntimeException {
     }
 
     /**
+     * Constructs a new exception with the given detail message and underlying cause.
+     *
      * @param message human-readable description of the problem
      * @param cause   the underlying cause, may be {@code null}
      */
