@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * read-side decorators automatically. Each input event passes through the chain via
  * fixed-point iteration; when multiple transformers match, the latest registration wins.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 public final class EventTransformerChain {

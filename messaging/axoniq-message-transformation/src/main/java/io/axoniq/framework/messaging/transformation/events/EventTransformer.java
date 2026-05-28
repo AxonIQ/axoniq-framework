@@ -27,10 +27,18 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Event-specific {@link MessageTransformer}. Use the {@code EventTransformation} factory
- * rather than implementing directly. The event envelope (entity type, entity identifier,
- * tracking token, sequence number) is preserved across transformation.
+ * rather than implementing directly. See {@link MessageTransformer} for the transformation
+ * contract; this interface narrows the message type to {@link EventMessage}.
+ * <p>
+ * A transformer rewrites only the {@link EventMessage} itself -- its
+ * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Properties
+ * that live alongside the event in the read stream -- the tags resolved at append time
+ * and any tracking-position or sequence information carried on the
+ * {@link MessageStream.Entry} context -- are not part of the message and are not
+ * modified by the chain. For 1:N splits, every output is delivered against the same
+ * stream position as the input.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @FunctionalInterface
