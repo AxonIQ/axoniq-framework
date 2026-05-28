@@ -86,16 +86,27 @@ final class BuiltEventTransformer implements EventTransformer {
         if (!matcher.matches(message.type())) {
             return MessageStream.just(message);
         }
+        return MessageStream.just(applyTo(message, context));
+    }
+
+    /**
+     * Applies this transformer to {@code message} assuming the {@link #matcher} has already
+     * matched. The chain calls this directly to skip a redundant match check.
+     *
+     * @param message the matched input
+     * @param context the active processing context, or {@code null}
+     * @return the transformed output
+     */
+    EventMessage applyTo(EventMessage message, @Nullable ProcessingContext context) {
         var typedPayload = extractTypedPayload(message);
         var mappedPayload = mapper.apply(typedPayload, context);
-        EventMessage output = new GenericEventMessage(
+        return new GenericEventMessage(
                 message.identifier(),
                 toType,
                 mappedPayload,
                 message.metadata(),
                 message.timestamp()
         );
-        return MessageStream.just(output);
     }
 
     /** Returns the payload typed as {@link #inputType}: handed through directly if it is
