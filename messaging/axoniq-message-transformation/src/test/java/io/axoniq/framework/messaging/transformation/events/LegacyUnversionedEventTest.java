@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +48,7 @@ final class LegacyUnversionedEventTest {
     private static final MessageType DEFAULT_VERSION = new MessageType(NAME, "0.0.1");
     private static final MessageType V2 = new MessageType(NAME, "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
     void unversionedEventMatchesTransformationRegisteredForDefaultVersion() {
@@ -57,7 +60,7 @@ final class LegacyUnversionedEventTest {
 
         assertThat(legacyUnversionedEvent.type().version()).isEqualTo("0.0.1");
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent)), null, CONVERTER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent)), null, CONVERTER, RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);

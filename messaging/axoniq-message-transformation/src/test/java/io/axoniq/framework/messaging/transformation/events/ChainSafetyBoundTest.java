@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +48,7 @@ final class ChainSafetyBoundTest {
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
     void exceedingTheConfiguredBoundRaisesChainConfigurationExceptionNamingTheOverride() {
@@ -60,7 +63,7 @@ final class ChainSafetyBoundTest {
                                                                   .build();
         EventMessage event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        assertThatThrownBy(() -> collectMessages(cyclingChain.transform(MessageStream.fromIterable(List.of(event)), null, CONVERTER)))
+        assertThatThrownBy(() -> collectMessages(cyclingChain.transform(MessageStream.fromIterable(List.of(event)), null, CONVERTER, RESOLVER)))
                 .isInstanceOf(CompletionException.class)
                 .cause()
                 .isInstanceOf(ChainConfigurationException.class)

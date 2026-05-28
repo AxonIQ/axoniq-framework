@@ -27,6 +27,7 @@ import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
@@ -40,6 +41,7 @@ import org.mockito.Mockito;
 
 import java.util.List;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +70,7 @@ final class ReadContextConsistencyTest {
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
     void allThreeReadContextsObserveTheSameTransformedEventAndForwardTheConditionUnchanged() {
@@ -87,7 +90,7 @@ final class ReadContextConsistencyTest {
         when(delegateStore.open(any(StreamingCondition.class), any()))
                 .thenAnswer(invocation -> MessageStream.fromIterable(List.of(storedV1Event)));
 
-        TransformingEventStore decoratedStore = new TransformingEventStore(delegateStore, chain, CONVERTER);
+        TransformingEventStore decoratedStore = new TransformingEventStore(delegateStore, chain, CONVERTER, RESOLVER);
         ProcessingContext context = new StubProcessingContext();
 
         // Entity load: single-entity scope (one aggregate tag, bounded stream).

@@ -24,14 +24,16 @@ import io.axoniq.framework.messaging.transformation.events.TransformingEventStor
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 
 /**
  * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs the
  * {@link TransformingEventStore} decorator on the application's {@link EventStore}. Reads
- * the user-supplied {@link EventTransformerChain} and the active {@link MessageConverter}
- * from the {@code Configuration} at decorator-registration time; when no chain is
- * registered the decorator is a no-op pass-through.
+ * the user-supplied {@link EventTransformerChain}, the active {@link MessageConverter}, and
+ * the active {@link MessageTypeResolver} from the {@code Configuration} at
+ * decorator-registration time; when no chain is registered the decorator is a no-op
+ * pass-through.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -51,7 +53,10 @@ public final class EventTransformationConfigurationEnhancer implements Configura
                 TransformingEventStore.DECORATION_ORDER,
                 (config, name, delegate) -> config.getOptionalComponent(EventTransformerChain.class)
                                                   .<EventStore>map(chain -> new TransformingEventStore(
-                                                          delegate, chain, config.getComponent(MessageConverter.class)))
+                                                          delegate,
+                                                          chain,
+                                                          config.getComponent(MessageConverter.class),
+                                                          config.getComponent(MessageTypeResolver.class)))
                                                   .orElse(delegate));
     }
 }

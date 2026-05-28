@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +49,7 @@ final class UnitTestabilityTest {
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
     void transformationIsInvocableThroughASingleTransformerChain() {
@@ -57,21 +60,21 @@ final class UnitTestabilityTest {
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
         List<EventMessage> outputs = collectMessages(
-                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
 
     @Test
-    @Disabled("Tests-first; impl lands in T038 (rename factory entry point)")
+    @Disabled("Tests-first; impl lands with the rename factory entry point.")
     void renameTransformationIsInvocableThroughASingleTransformerChain() {
         EventTransformer renameTransformer = EventTransformation.rename(V1, V2);
         EventTransformerChain chain = EventTransformerChain.builder().register(renameTransformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, "payload");
 
         List<EventMessage> outputs = collectMessages(
-                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);

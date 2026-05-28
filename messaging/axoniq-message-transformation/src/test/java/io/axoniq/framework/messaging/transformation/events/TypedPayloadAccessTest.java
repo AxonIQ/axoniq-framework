@@ -20,24 +20,30 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.ParameterizedType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.recordingConverter;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
@@ -51,12 +57,13 @@ final class TypedPayloadAccessTest {
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Nested
     final class ClassOverload {
 
         @Test
-            void convertsPayloadToJsonNodeBeforeInvokingMapper() {
+        void fastPathSkipsConverterWhenPayloadIsAlreadyOfDeclaredInputClass() {
             EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                     .to(V2)
                                                                     .transform(JsonNode.class, (jsonNode, ctx) -> {
@@ -70,8 +77,40 @@ final class TypedPayloadAccessTest {
             v1Payload.put("name", "Math 101");
             EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+            List<EventMessage> outputs = collectMessages(
+                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
 
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(V2);
+            assertThat(outputs.getFirst().payload())
+                    .asInstanceOf(type(JsonNode.class))
+                    .satisfies(node -> assertThat(node.get("name").asText()).isEqualTo("Math 101"));
+        }
+
+        @Test
+        void slowPathInvokesConverterWithDeclaredInputClassWhenStoredPayloadIsADifferentType() {
+            // Stored payload is a raw JSON String; the transformer declares JsonNode.class -- the
+            // framework must invoke MessageConverter.convertPayload(message, JsonNode.class)
+            // before invoking the mapper.
+            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                    .to(V2)
+                                                                    .transform(JsonNode.class, (jsonNode, ctx) -> {
+                                                                        ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                        v2.put("name", jsonNode.get("name").asText());
+                                                                        return v2;
+                                                                    });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+
+            EventMessage storedV1Event = new GenericEventMessage(V1, "{\"name\":\"Math 101\"}");
+            EventStreamTestUtils.RecordingMessageConverter<JsonNode> recording =
+                    recordingConverter(message -> parseJson((String) message.payload()));
+
+            List<EventMessage> outputs = collectMessages(
+                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, recording, RESOLVER));
+
+            assertThat(recording.invocationCount()).isEqualTo(1);
+            assertThat(recording.lastRequestedType()).isEqualTo(JsonNode.class);
+            assertThat(recording.lastRequestedMessage()).isSameAs(storedV1Event);
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
             assertThat(outputs.getFirst().payload())
@@ -84,7 +123,7 @@ final class TypedPayloadAccessTest {
     final class TypeReferenceOverload {
 
         @Test
-            void preservesGenericTypeSoLambdaParameterTypeIsInferredAtCompileTime() {
+        void fastPathSkipsConverterWhenPayloadIsAlreadyAMap() {
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
             EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
@@ -100,7 +139,8 @@ final class TypedPayloadAccessTest {
             v1Payload.put("name", "Math 101");
             EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+            List<EventMessage> outputs = collectMessages(
+                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
@@ -109,5 +149,88 @@ final class TypedPayloadAccessTest {
                     .containsEntry("name", "Math 101")
                     .containsEntry("upgraded", true);
         }
+
+        @Test
+        void slowPathInvokesConverterWithParameterizedTypeWhenStoredPayloadIsADifferentType() {
+            // Stored payload is a raw JSON String; the transformer declares TypeReference<Map<String, Object>> --
+            // the framework must invoke MessageConverter.convertPayload(message, parameterizedMapType) so
+            // the generic parameters survive (TypeReference preserves the parameterized type at runtime).
+            TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
+            };
+            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                    .to(V2)
+                                                                    .transform(mapType, (payload, ctx) -> {
+                                                                        Map<String, Object> result = new HashMap<>(payload);
+                                                                        result.put("upgraded", true);
+                                                                        return result;
+                                                                    });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+
+            EventMessage storedV1Event = new GenericEventMessage(V1, "{\"name\":\"Math 101\"}");
+            EventStreamTestUtils.RecordingMessageConverter<Map<String, Object>> recording =
+                    recordingConverter(message -> parseJsonToMap((String) message.payload()));
+
+            List<EventMessage> outputs = collectMessages(
+                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, recording, RESOLVER));
+
+            assertThat(recording.invocationCount()).isEqualTo(1);
+            assertThat(recording.lastRequestedType())
+                    .as("framework must pass the parameterized Map<String, Object> type, not the raw class")
+                    .isInstanceOf(ParameterizedType.class)
+                    .isEqualTo(mapType.getType());
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(V2);
+            assertThat(outputs.getFirst().payload())
+                    .asInstanceOf(MAP)
+                    .containsEntry("name", "Math 101")
+                    .containsEntry("upgraded", true);
+        }
     }
+
+    @Nested
+    final class MalformedPayload {
+
+        @Test
+        void converterReturningNullSurfacesAsIllegalStateExceptionIdentifyingTheEvent() {
+            // When the converter resolves the stored payload to null (malformed / missing
+            // persisted bytes), the chain MUST raise a clear error pinpointing the event.
+            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+                                                                    .to(V2)
+                                                                    .transform(JsonNode.class, (jsonNode, ctx) -> jsonNode);
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventMessage storedV1Event = new GenericEventMessage(V1, "{}");
+            EventStreamTestUtils.RecordingMessageConverter<JsonNode> nullReturningConverter =
+                    recordingConverter(message -> null);
+
+            assertThatThrownBy(() -> collectMessages(
+                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null,
+                                    nullReturningConverter, RESOLVER)))
+                    .hasRootCauseInstanceOf(IllegalStateException.class)
+                    .rootCause()
+                    .hasMessageContaining("resolved the stored payload to null")
+                    .hasMessageContaining(JsonNode.class.getTypeName())
+                    .hasMessageContaining(storedV1Event.identifier())
+                    .hasMessageContaining(V1.toString());
+        }
+    }
+
+    private static JsonNode parseJson(String json) {
+        try {
+            return new ObjectMapper().readTree(json);
+        } catch (Exception failure) {
+            throw new AssertionError("test fixture failed to parse json", failure);
+        }
+    }
+
+    private static Map<String, Object> parseJsonToMap(String json) {
+        try {
+            return new ObjectMapper().readValue(json, JACKSON_MAP_TYPE);
+        } catch (Exception failure) {
+            throw new AssertionError("test fixture failed to parse json to map", failure);
+        }
+    }
+
+    private static final com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>> JACKSON_MAP_TYPE =
+            new com.fasterxml.jackson.core.type.TypeReference<>() {
+            };
 }

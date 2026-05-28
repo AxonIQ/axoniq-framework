@@ -26,6 +26,7 @@ import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -52,31 +53,37 @@ final class TransformingEventStoreTransaction implements EventStoreTransaction {
     private final EventTransformerChain chain;
     private final ProcessingContext context;
     private final MessageConverter converter;
+    private final MessageTypeResolver messageTypeResolver;
 
     /**
      * Package-private; instances are produced by
      * {@link TransformingEventStore#transaction(ProcessingContext)}.
      *
-     * @param delegate  the inner {@link EventStoreTransaction} to wrap
-     * @param chain     the application's {@link EventTransformerChain}
-     * @param context   the active processing context the wrapped transaction was created
-     *                  for; threaded through to mappers via the chain per FR-009
-     * @param converter the active {@link MessageConverter}
+     * @param delegate             the inner {@link EventStoreTransaction} to wrap
+     * @param chain                the application's {@link EventTransformerChain}
+     * @param context              the active processing context the wrapped transaction was
+     *                             created for; threaded through to mappers via the chain
+     * @param converter            the active {@link MessageConverter}
+     * @param messageTypeResolver  the active {@link MessageTypeResolver} used to verify
+     *                             mapper output identity against the declared {@code to}
      */
     TransformingEventStoreTransaction(EventStoreTransaction delegate,
                                        EventTransformerChain chain,
                                        ProcessingContext context,
-                                       MessageConverter converter) {
+                                       MessageConverter converter,
+                                       MessageTypeResolver messageTypeResolver) {
         this.delegate = requireNonNull(delegate, "delegate");
         this.chain = requireNonNull(chain, "chain");
         this.context = requireNonNull(context, "context");
         this.converter = requireNonNull(converter, "converter");
+        this.messageTypeResolver = requireNonNull(messageTypeResolver, "messageTypeResolver");
     }
 
     @Override
     public MessageStream<? extends EventMessage> source(SourcingCondition condition,
                                                          @Nullable Consumer<Position> resumePositionCallback) {
-        return chain.transform(delegate.source(condition, resumePositionCallback), context, converter);
+        return chain.transform(
+                delegate.source(condition, resumePositionCallback), context, converter, messageTypeResolver);
     }
 
     @Override

@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +30,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Startup-only registration lifecycle: the {@code Builder} is locked once
  * {@code build()} is called; subsequent {@code register(...)} attempts throw
- * {@link ChainConfigurationException}.
+ * {@link ChainConfigurationException}. Also: raw lambdas (any {@link EventTransformer}
+ * not produced by the {@link EventTransformation} factory) cannot be registered with the
+ * chain because they carry no routing metadata.
  */
 final class ChainLockingTest {
 
@@ -46,5 +49,14 @@ final class ChainLockingTest {
         assertThatThrownBy(() -> builder.register(additionalTransformer))
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining("locked");
+    }
+
+    @Test
+    void rawLambdaTransformerCannotBeRegisteredBecauseItCarriesNoRoutingMetadata() {
+        EventTransformer rawLambda = (message, context) -> MessageStream.just(message);
+
+        assertThatThrownBy(() -> EventTransformerChain.builder().register(rawLambda))
+                .isInstanceOf(ChainConfigurationException.class)
+                .hasMessageContaining("EventTransformation factory");
     }
 }

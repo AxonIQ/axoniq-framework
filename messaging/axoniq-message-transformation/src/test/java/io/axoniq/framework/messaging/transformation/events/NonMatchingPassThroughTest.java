@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedMessageTypeResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -43,6 +45,7 @@ final class NonMatchingPassThroughTest {
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = neverInvokedMessageTypeResolver();
 
     @Test
     void eventWhoseTypeMatchesNoRegisteredTransformerPassesThroughUnchanged() {
@@ -52,7 +55,7 @@ final class NonMatchingPassThroughTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER, RESOLVER));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst()).isSameAs(unregisteredEvent);
@@ -71,7 +74,7 @@ final class NonMatchingPassThroughTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER));
+        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER, RESOLVER));
 
         assertThat(mapperInvocations.get()).isZero();
     }

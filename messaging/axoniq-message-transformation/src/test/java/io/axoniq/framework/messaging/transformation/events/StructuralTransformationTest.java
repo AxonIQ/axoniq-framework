@@ -25,26 +25,29 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)} -- the
- * 1:1 structural payload transformation that closes the issue's MUST scope (US1).
- * A stored v1 event is observed as v2 by handlers consuming the chain's output stream.
+ * 1:1 structural payload transformation. A stored v1 event is observed as v2 by handlers
+ * consuming the chain's output stream.
  */
 final class StructuralTransformationTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
     void storedV1EventIsObservedAsV2AfterRegisteringV1ToV2Transformation() {
@@ -63,7 +66,7 @@ final class StructuralTransformationTest {
         v1Payload.put("capacity", 30);
         EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst().type()).isEqualTo(V2);
@@ -80,8 +83,8 @@ final class StructuralTransformationTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> firstConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
-        List<EventMessage> secondConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+        List<EventMessage> firstConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> secondConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
 
         assertThat(firstConsumer).hasSize(1);
         assertThat(secondConsumer).hasSize(1);

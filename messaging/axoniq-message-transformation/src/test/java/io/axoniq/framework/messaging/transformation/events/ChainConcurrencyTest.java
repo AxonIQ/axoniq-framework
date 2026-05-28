@@ -25,8 +25,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -39,6 +43,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,10 +65,22 @@ final class ChainConcurrencyTest {
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
-    void concurrentInvocationsProduceIdenticalOutputs() {
+    void concurrentInvocationsWithNullContextProduceIdenticalOutputs() {
+        runConcurrencyScenario(null);
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void concurrentInvocationsWithNonNullContextProduceIdenticalOutputs() {
+        EventMessage seedMessage = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        runConcurrencyScenario(StubProcessingContext.forMessage(seedMessage));
+    }
+
+    private static void runConcurrencyScenario(@Nullable ProcessingContext context) {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
@@ -77,7 +94,7 @@ final class ChainConcurrencyTest {
             List<CompletableFuture<Void>> workers = IntStream.range(0, THREADS)
                     .mapToObj(threadIndex -> CompletableFuture.runAsync(() -> {
                         awaitStart(startingGun);
-                        runIterations(chain, stableInput, stablePayload, firstFailedIteration);
+                        runIterations(chain, stableInput, stablePayload, context, firstFailedIteration);
                     }, pool))
                     .toList();
 
@@ -102,10 +119,11 @@ final class ChainConcurrencyTest {
     private static void runIterations(EventTransformerChain chain,
                                       EventMessage input,
                                       JsonNode expectedPayload,
+                                      @Nullable ProcessingContext context,
                                       AtomicInteger firstFailedIteration) {
         for (int iteration = 0; iteration < ITERATIONS_PER_THREAD; iteration++) {
             List<EventMessage> outputs = collectMessages(
-                    chain.transform(MessageStream.fromIterable(List.of(input)), null, CONVERTER));
+                    chain.transform(MessageStream.fromIterable(List.of(input)), context, CONVERTER, RESOLVER));
             if (outputs.size() != 1
                     || !V2.equals(outputs.getFirst().type())
                     || !expectedPayload.equals(outputs.getFirst().payload())) {

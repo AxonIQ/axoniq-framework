@@ -23,6 +23,7 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -32,11 +33,15 @@ import org.jspecify.annotations.Nullable;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 /**
  * Shared helpers for event-transformation tests.
  */
-abstract class EventStreamTestUtils {
+final class EventStreamTestUtils {
 
     private EventStreamTestUtils() {
     }
@@ -72,6 +77,73 @@ abstract class EventStreamTestUtils {
         return new NeverInvokedMessageConverter();
     }
 
+    /**
+     * Records each {@code convertPayload(...)} invocation and returns
+     * {@code converterFunction.apply(message)} -- the test supplies the conversion behaviour.
+     * Use this when the test's subject-under-test IS the chain's slow-path conversion call
+     * (stored payload class differs from the transformer's declared input type).
+     */
+    static <T> RecordingMessageConverter<T> recordingConverter(Function<Message, T> converterFunction) {
+        return new RecordingMessageConverter<>(converterFunction);
+    }
+
+    /**
+     * Recording {@link MessageConverter} returning {@code converterFunction.apply(message)} from
+     * {@code convertPayload(...)}. Captures the most recent {@code (message, targetType)} pair so
+     * tests can assert the framework supplied the declared input {@link Type}. Other converter
+     * methods fail loudly: they should not be needed on the chain's payload-conversion path.
+     */
+    static final class RecordingMessageConverter<T> implements MessageConverter {
+
+        private final Function<Message, T> converterFunction;
+        private final AtomicInteger invocationCount = new AtomicInteger();
+        private final AtomicReference<@Nullable Type> lastRequestedType = new AtomicReference<>();
+        private final AtomicReference<@Nullable Message> lastRequestedMessage = new AtomicReference<>();
+
+        private RecordingMessageConverter(Function<Message, T> converterFunction) {
+            this.converterFunction = converterFunction;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <M extends Message, U> @Nullable U convertPayload(M message, @NonNull Type targetType) {
+            invocationCount.incrementAndGet();
+            lastRequestedType.set(targetType);
+            lastRequestedMessage.set(message);
+            return (U) converterFunction.apply(message);
+        }
+
+        @Override
+        public <M extends Message> M convertMessage(M message, @NonNull Type targetType) {
+            throw new AssertionError("MessageConverter.convertMessage was unexpectedly invoked in a test.");
+        }
+
+        @Override
+        public <U> U convert(@Nullable Object input, @NonNull Type targetType) {
+            throw new AssertionError("MessageConverter.convert was unexpectedly invoked in a test.");
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeProperty("kind", "recordingConverter");
+            descriptor.describeProperty("invocationCount", invocationCount.get());
+        }
+
+        int invocationCount() {
+            return invocationCount.get();
+        }
+
+        @Nullable
+        Type lastRequestedType() {
+            return lastRequestedType.get();
+        }
+
+        @Nullable
+        Message lastRequestedMessage() {
+            return lastRequestedMessage.get();
+        }
+    }
+
     private static final class NeverInvokedMessageConverter implements MessageConverter {
         @Override
         public <M extends Message, T> @Nullable T convertPayload(M message, @NonNull Type targetType) {
@@ -94,5 +166,38 @@ abstract class EventStreamTestUtils {
         public void describeTo(ComponentDescriptor descriptor) {
             descriptor.describeProperty("kind", "neverInvokedConverter");
         }
+    }
+
+    /**
+     * A {@link MessageTypeResolver} stand-in for tests that do not care about the chain's
+     * output identity check. It always returns {@link Optional#empty()}, which the chain
+     * treats as "skip the check". Useful for any test whose subject-under-test is not the
+     * identity check itself.
+     */
+    static MessageTypeResolver alwaysEmptyMessageTypeResolver() {
+        return alwaysEmpty -> Optional.empty();
+    }
+
+    /**
+     * A {@link MessageTypeResolver} stand-in for tests where the chain's identity check must
+     * NOT be reached (e.g. non-matching pass-through tests). Any invocation fails the test
+     * with an {@link AssertionError}.
+     */
+    static MessageTypeResolver neverInvokedMessageTypeResolver() {
+        return cls -> {
+            throw new AssertionError(
+                    "MessageTypeResolver.resolve was unexpectedly invoked in a test; "
+                            + "no transformer should have matched this event.");
+        };
+    }
+
+    /**
+     * A {@link MessageTypeResolver} stand-in that resolves the given {@code resolvedClass}
+     * to {@code resolvedType} and returns {@link Optional#empty()} for every other class.
+     * Useful for the output-identity-check tests where one specific output class must
+     * resolve to a known type while the rest of the world is treated as untyped.
+     */
+    static MessageTypeResolver resolverFor(Class<?> resolvedClass, MessageType resolvedType) {
+        return cls -> cls == resolvedClass ? Optional.of(resolvedType) : Optional.empty();
     }
 }

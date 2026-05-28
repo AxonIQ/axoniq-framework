@@ -20,18 +20,27 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -49,7 +58,9 @@ import static java.util.Objects.requireNonNull;
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public final class EventTransformerChain {
+public final class EventTransformerChain implements DescribableComponent {
+
+    private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     /**
      * Default safety bound on per-event iteration. Covers any reasonable migration chain
@@ -92,45 +103,60 @@ public final class EventTransformerChain {
 
     /**
      * Apply the chain to the given stream using the supplied {@link MessageConverter} for
-     * any input type / payload type mismatch and threading the active
-     * {@link ProcessingContext} (when present) through to each matched transformer's mapper
-     * per FR-009. Called by the {@code TransformingEventStore} decorator at production read
-     * time.
+     * any input type / payload type mismatch, threading the active {@link ProcessingContext}
+     * (when present) through to each matched transformer's mapper, and verifying that every
+     * mapper output's resolved identity matches the transformer's declared {@code to} via
+     * the supplied {@link MessageTypeResolver}. Called by the {@code TransformingEventStore}
+     * decorator at production read time.
      *
-     * @param stream    the input stream of events
-     * @param context   the active processing context, or {@code null} on the tracking
-     *                  processor read path when the caller did not supply one
-     * @param converter the framework's payload converter
+     * @param stream             the input stream of events
+     * @param context            the active processing context, or {@code null} on the
+     *                           tracking processor read path when the caller did not supply
+     *                           one
+     * @param converter          the framework's payload converter
+     * @param messageTypeResolver the resolver used to verify the mapper's output identity
+     *                           against the declared {@code to}; if the resolver returns
+     *                           {@link java.util.Optional#empty()} for the output's class
+     *                           (typical for untyped representations such as {@code JsonNode}
+     *                           or {@code Map}), the check is skipped
      * @return the transformed stream
      */
     public MessageStream<EventMessage> transform(MessageStream<? extends EventMessage> stream,
                                                  @Nullable ProcessingContext context,
-                                                 MessageConverter converter) {
+                                                 MessageConverter converter,
+                                                 MessageTypeResolver messageTypeResolver) {
         requireNonNull(converter, "converter");
-        return stream.mapMessage(event -> applyChainToOneEvent(event, context, converter));
+        requireNonNull(messageTypeResolver, "messageTypeResolver");
+        // Entry-level map (not mapMessage) keeps the engine-attached Context in scope so the
+        // chain can include the stream position in diagnostic exceptions.
+        return stream.map(entry -> entry.map(event -> applyChainToOneEvent(
+                event, entry, context, converter, messageTypeResolver)));
     }
 
     /**
      * Applies the chain to a single event with fixed-point iteration: find the
      * latest-registered transformer that matches, apply it, repeat until no transformer
-     * matches.
+     * matches. The {@code entryContext} (the stream entry's resource bag) is threaded
+     * through unchanged so diagnostic exceptions can read the stream position from it.
      */
     private EventMessage applyChainToOneEvent(EventMessage event,
+                                              Context entryContext,
                                               @Nullable ProcessingContext context,
-                                              MessageConverter converter) {
+                                              MessageConverter converter,
+                                              MessageTypeResolver messageTypeResolver) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
             var match = findLastMatch(current);
             if (match == null) {
                 return current;
             }
-            current = match.applyTo(current, context, converter);
+            current = match.applyTo(current, entryContext, context, converter, messageTypeResolver);
         }
         throw new ChainConfigurationException(
                 "Chain exceeded " + maxIterationsPerEvent + " iterations on a single event; "
                         + "likely a cyclic or self-matching transformer (raise the bound via "
                         + "Builder.maxIterationsPerEvent(int) if your domain genuinely has more hops). "
-                        + "Last event type: " + current.type());
+                        + "Last event: " + BuiltEventTransformer.describeEvent(current, entryContext));
     }
 
     /**
@@ -172,6 +198,40 @@ public final class EventTransformerChain {
         return concreteCandidate.sequence() > predicateCandidate.sequence()
                 ? concreteCandidate.transformer()
                 : predicateCandidate.transformer();
+    }
+
+    /**
+     * Exposes the chain's populated structure for framework diagnostics
+     * ({@code AxonConfiguration.describe(...)} / Spring Boot Actuator endpoints): the
+     * registered-transformation count, the concrete-{@code from} fan-out per
+     * {@link QualifiedName}, the predicate-{@code from} fan-out, and the safety bound.
+     */
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("transformationCount", transformerCount());
+        descriptor.describeProperty("concreteFromIndex", concreteFromDescription());
+        descriptor.describeProperty("predicateFromList", predicateFromDescription());
+        descriptor.describeProperty("maxIterationsPerEvent", maxIterationsPerEvent);
+    }
+
+    private int transformerCount() {
+        return predicateFromList.size()
+                + concreteFromIndex.values().stream().mapToInt(List::size).sum();
+    }
+
+    /** Concrete-from buckets rendered as {@code qualifiedName -> [transformer-toString, ...]}. */
+    private Map<String, List<String>> concreteFromDescription() {
+        Map<String, List<String>> rendered = HashMap.newHashMap(concreteFromIndex.size());
+        concreteFromIndex.forEach((qualifiedName, bucket) ->
+                rendered.put(qualifiedName.name(), bucket.stream()
+                                                          .map(entry -> entry.transformer().toString())
+                                                          .toList()));
+        return rendered;
+    }
+
+    /** Predicate-from transformers rendered by their {@code toString()}. */
+    private List<String> predicateFromDescription() {
+        return predicateFromList.stream().map(entry -> entry.transformer().toString()).toList();
     }
 
     /**
@@ -253,13 +313,35 @@ public final class EventTransformerChain {
         }
 
         /**
-         * Lock the chain and return an immutable instance.
+         * Lock the chain and return an immutable instance. Emits a DEBUG entry listing each
+         * registered transformer's {@code from} (and {@code to} for 1:1 transformers); this is
+         * the only framework-emitted log in 5.2.0.
          *
          * @return the locked chain
          */
         public EventTransformerChain build() {
             locked = true;
-            return new EventTransformerChain(concreteFromIndex, predicateFromList, maxIterationsPerEvent);
+            EventTransformerChain chain = new EventTransformerChain(
+                    concreteFromIndex, predicateFromList, maxIterationsPerEvent);
+            logChainContents(chain);
+            return chain;
+        }
+
+        private static void logChainContents(EventTransformerChain chain) {
+            if (!logger.isDebugEnabled()) {
+                return;
+            }
+            int count = chain.transformerCount();
+            if (count == 0) {
+                logger.debug("EventTransformerChain built with 0 transformations (no-op pass-through).");
+                return;
+            }
+            String summary = Stream.concat(
+                            chain.concreteFromIndex.values().stream().flatMap(List::stream),
+                            chain.predicateFromList.stream())
+                    .map(entry -> entry.transformer().toString())
+                    .collect(Collectors.joining(", "));
+            logger.debug("EventTransformerChain built with {} transformation(s): [{}]", count, summary);
         }
     }
 

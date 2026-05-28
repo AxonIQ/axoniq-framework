@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.eventOf;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Contract test for the {@link EventTransformer} SPI shape: lambda construction,
@@ -97,6 +98,22 @@ final class EventTransformerContractTest {
     }
 
     @Test
+    void factoryBuiltTransformerSpiOverrideThrowsToForceCallersThroughTheChain() {
+        // The factory-built transformer's transform(message, context) override is a tombstone:
+        // it forces all production paths through EventTransformerChain.transform(...), which is
+        // where the framework supplies the MessageConverter, MessageTypeResolver, and threads
+        // the ProcessingContext. A previous incident hid a ctx-propagation bug behind a
+        // "standalone" override that bypassed the chain.
+        EventTransformer factoryBuilt = EventTransformation.from(V1).to(V2)
+                                                            .transform(JsonNode.class, (in, ctx) -> in);
+
+        assertThatThrownBy(() -> factoryBuilt.transform(eventOf(V1, "payload"), null))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("EventTransformerChain.transform")
+                .hasMessageContaining("messageTypeResolver");
+    }
+
+    @Test
     void chainForwardsTheActiveProcessingContextToTheUsersMapper() {
         AtomicReference<@Nullable ProcessingContext> seenContext = new AtomicReference<>();
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
@@ -109,7 +126,10 @@ final class EventTransformerContractTest {
         var realContext = StubProcessingContext.forMessage(input);
 
         collectMessages(chain.transform(
-                MessageStream.fromIterable(List.of(input)), realContext, EventStreamTestUtils.neverInvokedConverter()));
+                MessageStream.fromIterable(List.of(input)),
+                realContext,
+                EventStreamTestUtils.neverInvokedConverter(),
+                EventStreamTestUtils.alwaysEmptyMessageTypeResolver()));
 
         assertThat(seenContext.get()).isSameAs(realContext);
     }

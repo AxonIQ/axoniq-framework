@@ -26,6 +26,7 @@ import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -67,23 +68,31 @@ public final class TransformingEventStore implements EventStore {
     private final EventStore delegate;
     private final EventTransformerChain chain;
     private final MessageConverter converter;
+    private final MessageTypeResolver messageTypeResolver;
 
     /**
      * Constructs the decorator. Wired automatically by the framework via
      * {@code EventTransformationConfigurationEnhancer}; applications do not call this
      * constructor directly.
      *
-     * @param delegate  the inner {@link EventStore} to wrap
-     * @param chain     the application's {@link EventTransformerChain} (passive registry)
-     * @param converter the active {@link MessageConverter} used to convert payloads to
-     *                  each matched transformer's declared {@code inputType}
+     * @param delegate             the inner {@link EventStore} to wrap
+     * @param chain                the application's {@link EventTransformerChain} (passive
+     *                             registry)
+     * @param converter            the active {@link MessageConverter} used to convert
+     *                             payloads to each matched transformer's declared
+     *                             {@code inputType}
+     * @param messageTypeResolver  the active {@link MessageTypeResolver} used to verify
+     *                             each mapper's output identity against the declared
+     *                             {@code to}
      */
     public TransformingEventStore(EventStore delegate,
                                    EventTransformerChain chain,
-                                   MessageConverter converter) {
+                                   MessageConverter converter,
+                                   MessageTypeResolver messageTypeResolver) {
         this.delegate = requireNonNull(delegate, "delegate");
         this.chain = requireNonNull(chain, "chain");
         this.converter = requireNonNull(converter, "converter");
+        this.messageTypeResolver = requireNonNull(messageTypeResolver, "messageTypeResolver");
     }
 
     @Override
@@ -91,13 +100,14 @@ public final class TransformingEventStore implements EventStore {
         return processingContext.computeResourceIfAbsent(
                 TRANSACTION_KEY,
                 () -> new TransformingEventStoreTransaction(
-                        delegate.transaction(processingContext), chain, processingContext, converter));
+                        delegate.transaction(processingContext), chain, processingContext,
+                        converter, messageTypeResolver));
     }
 
     @Override
     public MessageStream<EventMessage> open(StreamingCondition condition,
                                             @Nullable ProcessingContext context) {
-        return chain.transform(delegate.open(condition, context), context, converter);
+        return chain.transform(delegate.open(condition, context), context, converter, messageTypeResolver);
     }
 
     @Override
@@ -132,5 +142,6 @@ public final class TransformingEventStore implements EventStore {
         descriptor.describeProperty("delegate", delegate);
         descriptor.describeProperty("chain", chain);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("messageTypeResolver", messageTypeResolver);
     }
 }

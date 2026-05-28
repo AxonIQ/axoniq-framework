@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ import java.util.stream.IntStream;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedMessageTypeResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -46,6 +48,7 @@ final class LazyDeserializationTest {
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
+    private static final MessageTypeResolver RESOLVER = neverInvokedMessageTypeResolver();
 
     @Test
     void converterIsNeverInvokedWhenNoTransformerMatches() {
@@ -62,7 +65,7 @@ final class LazyDeserializationTest {
                 .mapToObj(index -> (EventMessage) new GenericEventMessage(UNREGISTERED, "p-" + index))
                 .toList();
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(nonMatchingEvents), null, CONVERTER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(nonMatchingEvents), null, CONVERTER, RESOLVER));
 
         assertThat(outputs).hasSize(1000);
         assertThat(mapperInvocations.get()).isZero();
@@ -79,7 +82,7 @@ final class LazyDeserializationTest {
         EventTransformerChain chain = builder.build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat");
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER, RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst()).isSameAs(unregisteredEvent);
