@@ -22,9 +22,13 @@ package io.axoniq.framework.messaging.transformation.events;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.Type;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Factory producing {@link EventTransformer} instances. Use one of the static methods
@@ -48,7 +52,8 @@ public final class EventTransformation {
      * @return a builder awaiting {@code to(...)}
      */
     public static SingleEventTransformationBuilder from(MessageType source) {
-        throw new UnsupportedOperationException("Tests-first stub; impl lands in T023");
+        requireNonNull(source, "source");
+        return new SingleEventTransformationBuilder(new FromMatcher.Concrete(source));
     }
 
     /**
@@ -59,7 +64,8 @@ public final class EventTransformation {
      * @return a builder awaiting {@code to(...)}
      */
     public static SingleEventTransformationBuilder from(Predicate<MessageType> sourcePredicate) {
-        throw new UnsupportedOperationException("Tests-first stub; impl lands in T023");
+        requireNonNull(sourcePredicate, "sourcePredicate");
+        return new SingleEventTransformationBuilder(new FromMatcher.PredicateBased(sourcePredicate));
     }
 
     /**
@@ -71,13 +77,18 @@ public final class EventTransformation {
      * @return the resulting {@link EventTransformer}
      */
     public static EventTransformer rename(MessageType source, MessageType target) {
-        throw new UnsupportedOperationException("Tests-first stub; impl lands in T038");
+        requireNonNull(source, "source");
+        requireNonNull(target, "target");
+        throw new UnsupportedOperationException("EventTransformation.rename is not yet implemented.");
     }
 
     /** Continuation of {@link #from(MessageType)} / {@link #from(Predicate)}; supplies {@code to(...)}. */
     public static final class SingleEventTransformationBuilder {
 
-        SingleEventTransformationBuilder() {
+        private final FromMatcher matcher;
+
+        private SingleEventTransformationBuilder(FromMatcher matcher) {
+            this.matcher = matcher;
         }
 
         /**
@@ -87,14 +98,20 @@ public final class EventTransformation {
          * @return a builder awaiting {@code transform(...)}
          */
         public SingleEventTransformationWithTargetBuilder to(MessageType target) {
-            throw new UnsupportedOperationException("Tests-first stub; impl lands in T024");
+            requireNonNull(target, "target");
+            return new SingleEventTransformationWithTargetBuilder(matcher, target);
         }
     }
 
     /** Continuation of {@code from(...).to(...)}; supplies the payload mapper. */
     public static final class SingleEventTransformationWithTargetBuilder {
 
-        SingleEventTransformationWithTargetBuilder() {
+        private final FromMatcher matcher;
+        private final MessageType toType;
+
+        private SingleEventTransformationWithTargetBuilder(FromMatcher matcher, MessageType toType) {
+            this.matcher = matcher;
+            this.toType = toType;
         }
 
         /**
@@ -103,12 +120,14 @@ public final class EventTransformation {
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the type the stored payload is converted to before invocation
-         * @param payloadMapper maps the input payload + processing context to its transformed output
+         * @param payloadMapper maps the input payload and processing context to its transformed output
          * @return the resulting {@link EventTransformer}
          */
         public <T, U> EventTransformer transform(Class<T> inputType,
-                                                  BiFunction<T, ProcessingContext, U> payloadMapper) {
-            throw new UnsupportedOperationException("Tests-first stub; impl lands in T024");
+                                                 BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) {
+            requireNonNull(inputType, "inputType");
+            requireNonNull(payloadMapper, "payloadMapper");
+            return build(inputType, payloadMapper);
         }
 
         /**
@@ -118,12 +137,19 @@ public final class EventTransformation {
          * @param <T>           input payload type
          * @param <U>           output payload type
          * @param inputType     the {@link TypeReference} the stored payload is converted to
-         * @param payloadMapper maps the input payload + processing context to its transformed output
+         * @param payloadMapper maps the input payload and processing context to its transformed output
          * @return the resulting {@link EventTransformer}
          */
         public <T, U> EventTransformer transform(TypeReference<T> inputType,
-                                                  BiFunction<T, ProcessingContext, U> payloadMapper) {
-            throw new UnsupportedOperationException("Tests-first stub; impl lands in T024");
+                                                 BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) {
+            requireNonNull(inputType, "inputType");
+            requireNonNull(payloadMapper, "payloadMapper");
+            return build(inputType.getType(), payloadMapper);
+        }
+
+        private EventTransformer build(Type inputType,
+                                       BiFunction<?, @Nullable ProcessingContext, ?> payloadMapper) {
+            return new BuiltEventTransformer(matcher, toType, inputType, payloadMapper);
         }
     }
 }

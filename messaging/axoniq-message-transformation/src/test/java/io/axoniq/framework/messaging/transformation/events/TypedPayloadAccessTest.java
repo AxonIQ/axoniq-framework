@@ -37,6 +37,7 @@ import java.util.Map;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for
@@ -72,6 +73,7 @@ final class TypedPayloadAccessTest {
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
             JsonNode transformedPayload = (JsonNode) outputs.getFirst().payload();
+            assertNotNull(transformedPayload);
             assertThat(transformedPayload.get("name").asText()).isEqualTo("Math 101");
         }
     }
