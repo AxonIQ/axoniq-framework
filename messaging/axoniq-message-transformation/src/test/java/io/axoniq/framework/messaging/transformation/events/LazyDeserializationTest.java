@@ -24,7 +24,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,7 +45,6 @@ final class LazyDeserializationTest {
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T026 (non-matching path skips converter)")
     void converterIsNeverInvokedWhenNoTransformerMatches() {
         AtomicInteger mapperInvocations = new AtomicInteger();
         EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)
@@ -58,7 +56,7 @@ final class LazyDeserializationTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
 
         List<EventMessage> nonMatchingEvents = IntStream.range(0, 1000)
-                .mapToObj(i -> (EventMessage) new GenericEventMessage(UNREGISTERED, "p-" + i))
+                .mapToObj(index -> (EventMessage) new GenericEventMessage(UNREGISTERED, "p-" + index))
                 .toList();
 
         List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(nonMatchingEvents)));
@@ -68,14 +66,11 @@ final class LazyDeserializationTest {
     }
 
     @Test
-    @Disabled("Tests-first; impl lands in T026 (concrete-from O(1) QualifiedName-keyed lookup)")
     void nonMatchingLookupReturnsInputUnchangedRegardlessOfChainLength() {
-        // Functional contract only -- the constant-time complexity claim is verified by JMH (T041),
-        // not by wall-clock timing in a unit test (flaky under CI load).
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
-        for (int i = 0; i < 100; i++) {
-            MessageType fromType = new MessageType("com.example.Type" + i, "1.0.0");
-            MessageType toType = new MessageType("com.example.Type" + i, "2.0.0");
+        for (int index = 0; index < 100; index++) {
+            MessageType fromType = new MessageType("com.example.Type" + index, "1.0.0");
+            MessageType toType = new MessageType("com.example.Type" + index, "2.0.0");
             builder.register(EventTransformation.from(fromType).to(toType).transform(JsonNode.class, (in, ctx) -> in));
         }
         EventTransformerChain chain = builder.build();

@@ -26,7 +26,6 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,7 +45,6 @@ final class LegacyUnversionedEventTest {
     private static final MessageType V2 = new MessageType(NAME, "2.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T023 + T027")
     void unversionedEventMatchesTransformationRegisteredForDefaultVersion() {
         EventTransformer defaultVersionToV2Transformer = EventTransformation.from(DEFAULT_VERSION)
                                                                             .to(V2)
