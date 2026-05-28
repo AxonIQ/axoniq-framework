@@ -44,7 +44,6 @@ final class UnitTestabilityTest {
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T023 + T024 (factory produces a directly-invocable EventTransformer)")
     void transformationIsInvocableWithoutChainOrEventStore() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                 .to(V2)

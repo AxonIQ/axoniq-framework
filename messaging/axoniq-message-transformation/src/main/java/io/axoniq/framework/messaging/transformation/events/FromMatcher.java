@@ -27,14 +27,9 @@ import java.util.function.Predicate;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Sealed strategy for matching the {@code from} side of an event transformation.
- * <p>
- * The two permitted shapes mirror the two {@code EventTransformation.from(...)} overloads:
- * a concrete {@link MessageType} (exact-equality match) or a {@link Predicate}
- * (semver / regex / range matching). The {@link EventTransformerChain} inspects the
- * concrete shape via pattern matching to route the transformer into the
- * {@link org.axonframework.messaging.core.QualifiedName}-keyed index or the predicate
- * scan list.
+ * Sealed strategy for matching the {@code from} side of an event transformation. Either
+ * exact equality against a concrete {@link MessageType} ({@link Concrete}) or a
+ * user-supplied {@link Predicate} ({@link PredicateBased}).
  *
  * @author AxonIQ
  * @since 5.2.0
