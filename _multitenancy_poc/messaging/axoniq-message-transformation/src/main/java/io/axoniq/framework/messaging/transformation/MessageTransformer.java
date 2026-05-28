@@ -35,7 +35,7 @@ import org.jspecify.annotations.Nullable;
  * which produces implementations behind the scenes.
  *
  * @param <M> the {@link Message} subtype this transformer accepts and emits
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @FunctionalInterface
