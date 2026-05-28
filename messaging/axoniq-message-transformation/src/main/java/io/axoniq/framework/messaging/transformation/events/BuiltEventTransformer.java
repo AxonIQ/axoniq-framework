@@ -22,12 +22,12 @@ package io.axoniq.framework.messaging.transformation.events;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.jspecify.annotations.Nullable;
 
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.function.BiFunction;
 
@@ -35,71 +35,82 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * The {@link EventTransformer} implementation produced by the {@link EventTransformation}
- * factory.
- * <p>
- * In production this runs inside an {@link EventTransformerChain}, which deserializes the
- * stored payload to the declared input type via {@code MessageConverter} before invoking
- * the user's mapper. For unit tests that invoke {@code transform(...)} directly without a
- * chain, supply an event whose payload is already an instance of the declared input type
- * (e.g. a {@code JsonNode} when the transformer was registered with {@code JsonNode.class}).
+ * factory. Internal because the {@code EventTransformer} interface is the public
+ * lambda-friendly SPI, and consumers should only ever get instances through the factory.
  *
+ * @param <T> the input payload type declared at registration
+ * @param <U> the output payload type the mapper produces
  * @author Laura Devriendt
  * @since 5.2.0
  */
 @Internal
-final class BuiltEventTransformer implements EventTransformer {
+final class BuiltEventTransformer<T, U> implements EventTransformer {
 
     private final FromMatcher matcher;
     private final MessageType toType;
     private final Type inputType;
-    private final BiFunction<@Nullable Object, @Nullable ProcessingContext, @Nullable Object> mapper;
+    private final Class<T> rawInputClass;
+    private final BiFunction<T, @Nullable ProcessingContext, U> mapper;
 
     /**
      * Constructs a built transformer.
      *
-     * @param matcher   the {@code from}-side matcher
-     * @param toType    the {@code to} identity applied to the output message
-     * @param inputType the {@link Type} the payload is converted to before invoking the mapper
-     * @param mapper    the user-supplied payload mapping function
+     * @param matcher       the {@code from}-side matcher
+     * @param toType        the {@code to} identity applied to the output message
+     * @param inputType     the declared input {@link Type}, preserved with any generic
+     *                      parameters for the framework's {@code MessageConverter}
+     * @param rawInputClass the raw {@link Class} of the input type, used for the same-class
+     *                      fast path (avoiding a no-op converter call when the payload
+     *                      already satisfies the input type)
+     * @param mapper        the user-supplied payload mapping function
      */
     BuiltEventTransformer(FromMatcher matcher,
                           MessageType toType,
                           Type inputType,
-                          BiFunction<?, @Nullable ProcessingContext, ?> mapper) {
+                          Class<T> rawInputClass,
+                          BiFunction<T, @Nullable ProcessingContext, U> mapper) {
         this.matcher = requireNonNull(matcher, "matcher");
         this.toType = requireNonNull(toType, "toType");
         this.inputType = requireNonNull(inputType, "inputType");
-        this.mapper = widenMapper(requireNonNull(mapper, "mapper"));
+        this.rawInputClass = requireNonNull(rawInputClass, "rawInputClass");
+        this.mapper = requireNonNull(mapper, "mapper");
     }
 
-    /** Erases the mapper's generic input / output types; safe because the framework only
-     *  invokes it with values already converted to {@link #inputType}. */
-    @SuppressWarnings("unchecked")
-    private static BiFunction<@Nullable Object, @Nullable ProcessingContext, @Nullable Object> widenMapper(
-            BiFunction<?, @Nullable ProcessingContext, ?> mapper) {
-        return (BiFunction<@Nullable Object, @Nullable ProcessingContext, @Nullable Object>) mapper;
-    }
-
+    /**
+     * Direct invocation is unsupported. Factory-built transformers must be registered with an
+     * {@link EventTransformerChain} which supplies the framework's {@link MessageConverter}
+     * and threads the {@link ProcessingContext}. Tests exercise the same chain path that
+     * production uses, ensuring there is no test-only behavior divergence.
+     *
+     * @throws UnsupportedOperationException always
+     */
     @Override
     public MessageStream<? extends EventMessage> transform(EventMessage message,
                                                            @Nullable ProcessingContext context) {
-        if (!matcher.matches(message.type())) {
-            return MessageStream.just(message);
-        }
-        return MessageStream.just(applyTo(message, context));
+        throw new UnsupportedOperationException(
+                "Factory-built EventTransformer instances must be invoked through "
+                        + "EventTransformerChain.transform(stream, context, converter); "
+                        + "direct invocation is not supported.");
     }
 
     /**
      * Applies this transformer to {@code message} assuming the {@link #matcher} has already
-     * matched. The chain calls this directly to skip a redundant match check.
+     * matched. The chain calls this directly to skip a redundant match check; the framework
+     * supplies the {@link MessageConverter} for input type / payload type mismatches and
+     * threads the active {@link ProcessingContext} to the user's mapper per FR-009.
      *
-     * @param message the matched input
-     * @param context the active processing context, or {@code null}
+     * @param message   the matched input
+     * @param context   the active processing context, or {@code null} on the tracking
+     *                  processor read path
+     * @param converter the framework's payload converter
      * @return the transformed output
      */
-    EventMessage applyTo(EventMessage message, @Nullable ProcessingContext context) {
-        var typedPayload = extractTypedPayload(message);
-        var mappedPayload = mapper.apply(typedPayload, context);
+    EventMessage applyTo(EventMessage message,
+                         @Nullable ProcessingContext context,
+                         MessageConverter converter) {
+        requireNonNull(converter, "converter");
+        T typedPayload = extractTypedPayload(message, converter);
+        U mappedPayload = mapper.apply(typedPayload, context);
         return new GenericEventMessage(
                 message.identifier(),
                 toType,
@@ -109,24 +120,19 @@ final class BuiltEventTransformer implements EventTransformer {
         );
     }
 
-    /** Returns the payload typed as {@link #inputType}: handed through directly if it is
-     *  already an instance of the input type, otherwise asks {@code payloadAs(...)} to
-     *  convert (which requires a converter on the message, or fails). */
-    private @Nullable Object extractTypedPayload(EventMessage message) {
-        var payload = message.payload();
-        var rawInputType = rawClassOf(inputType);
-        if (rawInputType != null && rawInputType.isInstance(payload)) {
-            return payload;
+    /**
+     * Returns the payload typed as {@link #rawInputClass}. Fast path: when the payload is
+     * already an instance of the raw input class, hand it through via the checked
+     * {@code Class.cast}. Otherwise {@code payloadAs(inputType, converter)} delegates
+     * deserialization to the framework's converter, which preserves the generic parameters
+     * carried by {@link #inputType} (relevant for {@code TypeReference<T>} registrations).
+     */
+    private T extractTypedPayload(EventMessage message, MessageConverter converter) {
+        Object payload = message.payload();
+        if (rawInputClass.isInstance(payload)) {
+            return rawInputClass.cast(payload);
         }
-        return message.payloadAs(inputType, null);
-    }
-
-    private static @Nullable Class<?> rawClassOf(Type type) {
-        return switch (type) {
-            case Class<?> cls -> cls;
-            case ParameterizedType pt -> pt.getRawType() instanceof Class<?> raw ? raw : null;
-            default -> null;
-        };
+        return message.payloadAs(inputType, converter);
     }
 
     /**
@@ -136,25 +142,6 @@ final class BuiltEventTransformer implements EventTransformer {
      */
     FromMatcher matcher() {
         return matcher;
-    }
-
-    /**
-     * The declared {@code to} identity applied to outputs.
-     *
-     * @return the {@code to} identity
-     */
-    MessageType toType() {
-        return toType;
-    }
-
-    /**
-     * The input payload type declared at registration. The chain passes this to its
-     * {@code MessageConverter} before invoking the mapper.
-     *
-     * @return the input {@link Type}
-     */
-    Type inputType() {
-        return inputType;
     }
 
     @Override

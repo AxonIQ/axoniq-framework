@@ -19,14 +19,19 @@
 
 package io.axoniq.framework.messaging.transformation.events.configuration;
 
+import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
+import io.axoniq.framework.messaging.transformation.events.TransformingEventStore;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 
 /**
  * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs the
- * {@code TransformingEventStore} decorator. Reads the user-supplied
- * {@code EventTransformerChain} and the active {@code MessageConverter} from the
- * {@code Configuration} at decorator-registration time.
+ * {@link TransformingEventStore} decorator on the application's {@link EventStore}. Reads
+ * the user-supplied {@link EventTransformerChain} and the active {@link MessageConverter}
+ * from the {@code Configuration} at decorator-registration time; when no chain is
+ * registered the decorator is a no-op pass-through.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -35,6 +40,12 @@ public final class EventTransformationConfigurationEnhancer implements Configura
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        // Tests-first stub: no-op. The registerDecorator call lands with T032.
+        registry.registerDecorator(
+                EventStore.class,
+                TransformingEventStore.DECORATION_ORDER,
+                (config, name, delegate) -> config.getOptionalComponent(EventTransformerChain.class)
+                                                  .<EventStore>map(chain -> new TransformingEventStore(
+                                                          delegate, chain, config.getComponent(MessageConverter.class)))
+                                                  .orElse(delegate));
     }
 }

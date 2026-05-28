@@ -127,7 +127,7 @@ public final class EventTransformation {
                                                  BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) {
             requireNonNull(inputType, "inputType");
             requireNonNull(payloadMapper, "payloadMapper");
-            return build(inputType, payloadMapper);
+            return new BuiltEventTransformer<>(matcher, toType, inputType, inputType, payloadMapper);
         }
 
         /**
@@ -144,12 +144,8 @@ public final class EventTransformation {
                                                  BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) {
             requireNonNull(inputType, "inputType");
             requireNonNull(payloadMapper, "payloadMapper");
-            return build(inputType.getType(), payloadMapper);
-        }
-
-        private EventTransformer build(Type inputType,
-                                       BiFunction<?, @Nullable ProcessingContext, ?> payloadMapper) {
-            return new BuiltEventTransformer(matcher, toType, inputType, payloadMapper);
+            return new BuiltEventTransformer<>(
+                    matcher, toType, inputType.getType(), inputType.getTypeAsClass(), payloadMapper);
         }
     }
 }

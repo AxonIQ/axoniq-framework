@@ -23,6 +23,8 @@ import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
@@ -89,13 +91,23 @@ public final class EventTransformerChain {
     }
 
     /**
-     * Apply the chain to the given stream. Non-matching elements pass through unchanged.
+     * Apply the chain to the given stream using the supplied {@link MessageConverter} for
+     * any input type / payload type mismatch and threading the active
+     * {@link ProcessingContext} (when present) through to each matched transformer's mapper
+     * per FR-009. Called by the {@code TransformingEventStore} decorator at production read
+     * time.
      *
-     * @param stream the input stream of events
+     * @param stream    the input stream of events
+     * @param context   the active processing context, or {@code null} on the tracking
+     *                  processor read path when the caller did not supply one
+     * @param converter the framework's payload converter
      * @return the transformed stream
      */
-    public MessageStream<? extends EventMessage> transform(MessageStream<EventMessage> stream) {
-        return stream.mapMessage(this::applyChainToOneEvent);
+    public MessageStream<EventMessage> transform(MessageStream<? extends EventMessage> stream,
+                                                 @Nullable ProcessingContext context,
+                                                 MessageConverter converter) {
+        requireNonNull(converter, "converter");
+        return stream.mapMessage(event -> applyChainToOneEvent(event, context, converter));
     }
 
     /**
@@ -103,14 +115,16 @@ public final class EventTransformerChain {
      * latest-registered transformer that matches, apply it, repeat until no transformer
      * matches.
      */
-    private EventMessage applyChainToOneEvent(EventMessage event) {
+    private EventMessage applyChainToOneEvent(EventMessage event,
+                                              @Nullable ProcessingContext context,
+                                              MessageConverter converter) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
             var match = findLastMatch(current);
             if (match == null) {
                 return current;
             }
-            current = match.applyTo(current, null);
+            current = match.applyTo(current, context, converter);
         }
         throw new ChainConfigurationException(
                 "Chain exceeded " + maxIterationsPerEvent + " iterations on a single event; "
@@ -124,7 +138,7 @@ public final class EventTransformerChain {
      * none matches. Scans only the relevant concrete bucket and the predicate list, picking
      * whichever has the higher overall registration order.
      */
-    private @Nullable BuiltEventTransformer findLastMatch(EventMessage event) {
+    private @Nullable BuiltEventTransformer<?, ?> findLastMatch(EventMessage event) {
         var eventType = event.type();
         var concreteBucket = concreteFromIndex.get(eventType.qualifiedName());
         if (concreteBucket == null && predicateFromList.isEmpty()) {
@@ -146,7 +160,7 @@ public final class EventTransformerChain {
         return null;
     }
 
-    private static @Nullable BuiltEventTransformer pickByRegistrationOrder(
+    private static @Nullable BuiltEventTransformer<?, ?> pickByRegistrationOrder(
             @Nullable RegisteredTransformer concreteCandidate,
             @Nullable RegisteredTransformer predicateCandidate) {
         if (concreteCandidate == null) {
@@ -222,7 +236,7 @@ public final class EventTransformerChain {
                 throw new ChainConfigurationException(
                         "Chain is locked after build(); further registration is rejected.");
             }
-            if (!(transformer instanceof BuiltEventTransformer built)) {
+            if (!(transformer instanceof BuiltEventTransformer<?, ?> built)) {
                 throw new ChainConfigurationException(
                         "Transformer must be produced by EventTransformation factory; "
                                 + "raw EventTransformer instances cannot be registered with the chain.");
@@ -254,6 +268,6 @@ public final class EventTransformerChain {
      * lets {@link #findLastMatch} pick the latest match across the concrete index and the
      * predicate list without keeping a parallel flat list.
      */
-    private record RegisteredTransformer(long sequence, BuiltEventTransformer transformer) {
+    private record RegisteredTransformer(long sequence, BuiltEventTransformer<?, ?> transformer) {
     }
 }
