@@ -31,8 +31,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Events stored without an explicit version are treated as version {@code "0.0.1"}

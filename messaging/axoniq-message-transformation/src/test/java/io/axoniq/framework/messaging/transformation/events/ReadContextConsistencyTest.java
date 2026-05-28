@@ -35,8 +35,8 @@ import org.mockito.Mockito;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 

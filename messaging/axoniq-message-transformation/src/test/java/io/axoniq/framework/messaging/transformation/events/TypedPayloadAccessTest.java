@@ -35,8 +35,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for

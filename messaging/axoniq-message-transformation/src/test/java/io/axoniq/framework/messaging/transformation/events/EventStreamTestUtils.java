@@ -36,8 +36,8 @@ abstract class EventStreamTestUtils {
     }
 
     /**
-     * Consume every element from {@code stream} and return them as an {@link ArrayList} of
-     * their {@link EventMessage} payloads. After this call the stream is exhausted.
+     * Consume every {@link EventMessage} from {@code stream} and return them as a
+     * {@link List}. After this call the stream is exhausted.
      */
     static List<EventMessage> collectMessages(MessageStream<? extends EventMessage> stream) {
         List<EventMessage> collected = new ArrayList<>();

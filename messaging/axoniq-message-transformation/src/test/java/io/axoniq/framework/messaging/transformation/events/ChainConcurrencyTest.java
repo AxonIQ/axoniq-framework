@@ -34,8 +34,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The chain is safe to invoke concurrently and tolerates a {@code null}
@@ -52,7 +52,7 @@ final class ChainConcurrencyTest {
 
     @Test
     @Disabled("Tests-first; impl lands in T024 + T027 (chain matching path)")
-    void concurrentInvocationsProduceIdenticalOutputs() throws Exception {
+    void concurrentInvocationsProduceIdenticalOutputs() throws InterruptedException {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();

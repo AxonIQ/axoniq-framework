@@ -31,14 +31,14 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The chain's non-matching path is lazy: the framework's
  * {@code MessageConverter.convertPayload(...)} is never invoked when no transformer
- * matches the event's {@link MessageType}, and lookup completes in constant time
- * per event.
+ * matches the event's {@link MessageType}, and events pass through unchanged regardless
+ * of chain length. (Wall-clock complexity is verified by JMH, not here.)
  */
 final class LazyDeserializationTest {
 
