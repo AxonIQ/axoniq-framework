@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  * chain, supply an event whose payload is already an instance of the declared input type
  * (e.g. a {@code JsonNode} when the transformer was registered with {@code JsonNode.class}).
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @Internal

@@ -28,7 +28,7 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
  * {@code EventTransformerChain} and the active {@code MessageConverter} from the
  * {@code Configuration} at decorator-registration time.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 public final class EventTransformationConfigurationEnhancer implements ConfigurationEnhancer {

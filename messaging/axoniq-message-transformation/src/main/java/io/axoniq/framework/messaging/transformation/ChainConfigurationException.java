@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  * transformer's mapper propagate to the caller directly; this type covers
  * configuration errors detected by the framework.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 public final class ChainConfigurationException extends RuntimeException {

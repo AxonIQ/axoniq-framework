@@ -19,13 +19,20 @@
 
 package io.axoniq.framework.messaging.transformation.events;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.eventOf;
@@ -87,5 +94,21 @@ final class EventTransformerContractTest {
         EventTransformer identityTransformer = (message, context) -> MessageStream.just(message);
 
         assertThat(collectMessages(identityTransformer.transform(eventOf(V1, "payload"), null))).hasSize(1);
+    }
+
+    @Test
+    void factoryBuiltTransformerForwardsNonNullProcessingContextToMapper() {
+        AtomicReference<@Nullable ProcessingContext> seenContext = new AtomicReference<>();
+        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
+                .transform(JsonNode.class, (in, ctx) -> {
+                    seenContext.set(ctx);
+                    return in.deepCopy();
+                });
+        EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        var realContext = StubProcessingContext.forMessage(input);
+
+        collectMessages(v1ToV2Transformer.transform(input, realContext));
+
+        assertThat(seenContext.get()).isSameAs(realContext);
     }
 }

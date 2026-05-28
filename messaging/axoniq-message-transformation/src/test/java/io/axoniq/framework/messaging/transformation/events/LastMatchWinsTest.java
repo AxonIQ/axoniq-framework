@@ -26,7 +26,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -47,7 +46,6 @@ final class LastMatchWinsTest {
     private static final MessageType V3 = new MessageType("com.example.CourseCreated", "3.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T027 (chain fixed-point iteration with last-match-wins)")
     void laterConcreteRegistrationOverridesEarlierPredicateRegistrationOnOverlappingMatch() {
         EventTransformer earlierPredicateToV3 = EventTransformation.from(mt -> mt.version().startsWith("1."))
                                                                     .to(V3)

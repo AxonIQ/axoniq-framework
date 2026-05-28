@@ -31,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * exact equality against a concrete {@link MessageType} ({@link Concrete}) or a
  * user-supplied {@link Predicate} ({@link PredicateBased}).
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @Internal

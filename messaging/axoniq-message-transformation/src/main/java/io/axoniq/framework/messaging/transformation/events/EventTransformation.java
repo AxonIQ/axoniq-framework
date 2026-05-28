@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * {@link #rename(MessageType, MessageType)}) and register the result with
  * {@code EventTransformerChain.builder().register(...)}.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 public final class EventTransformation {

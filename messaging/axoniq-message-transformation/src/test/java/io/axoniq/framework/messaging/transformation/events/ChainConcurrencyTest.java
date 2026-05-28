@@ -20,76 +20,95 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The chain is safe to invoke concurrently and tolerates a {@code null}
- * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
- * N threads x M iterations produce byte-identical outputs.
+ * The chain is safe to invoke concurrently. Eight workers, started simultaneously via a
+ * {@link CountDownLatch} starting gun, each runs ten thousand chain invocations against
+ * the same shared chain instance and the same input event. Any divergence in output type
+ * or payload content fails the test with the iteration index of the first failure.
  */
 final class ChainConcurrencyTest {
 
     private static final int THREADS = 8;
     private static final int ITERATIONS_PER_THREAD = 10_000;
 
+    /** Sentinel for "no worker has recorded a failure yet". Any non-negative value is a real iteration index. */
+    private static final int NO_FAILURE_RECORDED = -1;
+
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T024 + T027 (chain matching path)")
-    void concurrentInvocationsProduceIdenticalOutputs() throws InterruptedException {
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void concurrentInvocationsProduceIdenticalOutputs() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
-        EventMessage stableInput = new GenericEventMessage(V1, "stable-payload");
+        ObjectNode stablePayload = JsonNodeFactory.instance.objectNode().put("k", "v");
+        EventMessage stableInput = new GenericEventMessage(V1, stablePayload);
 
-        ExecutorService pool = Executors.newFixedThreadPool(THREADS);
+        CountDownLatch startingGun = new CountDownLatch(1);
+        AtomicInteger firstFailedIteration = new AtomicInteger(NO_FAILURE_RECORDED);
 
-        List<CompletableFuture<Boolean>> workers = IntStream.range(0, THREADS).mapToObj(i -> CompletableFuture.supplyAsync(() -> {
-            for (int iteration = 0; iteration < ITERATIONS_PER_THREAD; iteration++) {
-                List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(stableInput))));
-                if (outputs.size() != 1 || !V2.equals(outputs.getFirst().type())) {
-                    return false;
-                }
-            }
-            return true;
-        }, pool)).toList();
+        try (ExecutorService pool = Executors.newFixedThreadPool(THREADS)) {
+            List<CompletableFuture<Void>> workers = IntStream.range(0, THREADS)
+                    .mapToObj(threadIndex -> CompletableFuture.runAsync(() -> {
+                        awaitStart(startingGun);
+                        runIterations(chain, stableInput, stablePayload, firstFailedIteration);
+                    }, pool))
+                    .toList();
 
-        pool.shutdown();
-        boolean terminated = pool.awaitTermination(30, TimeUnit.SECONDS);
-        assertThat(terminated).as("worker pool did not terminate within 30s").isTrue();
+            startingGun.countDown();
+            workers.forEach(CompletableFuture::join);
+        }
 
-        for (CompletableFuture<Boolean> worker : workers) {
-            assertThat(worker.join()).isTrue();
+        assertThat(firstFailedIteration.get())
+                .as("expected no worker iteration to fail; value below is the index of the failing iteration")
+                .isEqualTo(NO_FAILURE_RECORDED);
+    }
+
+    private static void awaitStart(CountDownLatch startingGun) {
+        try {
+            startingGun.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("worker interrupted before start", interrupted);
         }
     }
 
-    @Test
-    @Disabled("Tests-first; impl lands in T027 (mapper receives @Nullable ProcessingContext)")
-    void producesSameOutputWithNullAndNonNullProcessingContext() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
-                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
-        EventMessage input = new GenericEventMessage(V1, "p");
-
-        List<EventMessage> outWithoutCtx = collectMessages(chain.transform(MessageStream.fromIterable(List.of(input))));
-
-        assertThat(outWithoutCtx).hasSize(1);
-        assertThat(outWithoutCtx.getFirst().type()).isEqualTo(V2);
+    private static void runIterations(EventTransformerChain chain,
+                                      EventMessage input,
+                                      JsonNode expectedPayload,
+                                      AtomicInteger firstFailedIteration) {
+        for (int iteration = 0; iteration < ITERATIONS_PER_THREAD; iteration++) {
+            List<EventMessage> outputs = collectMessages(
+                    chain.transform(MessageStream.fromIterable(List.of(input))));
+            if (outputs.size() != 1
+                    || !V2.equals(outputs.getFirst().type())
+                    || !expectedPayload.equals(outputs.getFirst().payload())) {
+                firstFailedIteration.compareAndSet(NO_FAILURE_RECORDED, iteration);
+                return;
+            }
+        }
     }
 }

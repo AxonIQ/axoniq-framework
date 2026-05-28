@@ -44,7 +44,7 @@ import static java.util.Objects.requireNonNull;
  * Once built, the chain is immutable and safe to invoke concurrently from any number of
  * threads.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 public final class EventTransformerChain {

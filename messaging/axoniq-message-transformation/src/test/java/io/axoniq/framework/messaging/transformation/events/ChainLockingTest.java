@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import org.axonframework.messaging.core.MessageType;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,7 +37,6 @@ final class ChainLockingTest {
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T029 (Builder.build() flips the locked flag)")
     void registrationAfterBuildThrowsChainConfigurationException() {
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
         builder.build();

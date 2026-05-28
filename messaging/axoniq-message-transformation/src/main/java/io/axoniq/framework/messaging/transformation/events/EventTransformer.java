@@ -30,7 +30,7 @@ import org.jspecify.annotations.Nullable;
  * rather than implementing directly. The event envelope (entity type, entity identifier,
  * tracking token, sequence number) is preserved across transformation.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @FunctionalInterface

@@ -26,7 +26,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,7 +45,6 @@ final class EnvelopePreservationTest {
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
-    @Disabled("Tests-first; impl lands in T027 (chain matching path) + T030 (envelope preservation in TransformingEventStore)")
     void outputMessageCarriesSameIdentifierAsInputAfterOneToOneTransformation() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                 .to(V2)
@@ -62,7 +60,6 @@ final class EnvelopePreservationTest {
     }
 
     @Test
-    @Disabled("Tests-first; impl lands in T027")
     void metadataFlowsForwardUnchanged() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                 .to(V2)
