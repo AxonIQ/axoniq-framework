@@ -32,9 +32,9 @@ Each ADR must contain these sections:
 
 Additional custom sections are allowed when useful.
 
-Each ADR should be concise and must not exceed 100 lines.
+Each ADR should be concise and must not exceed 150 lines.
 
-If one ADR references another ADR, it should use local links in markdown with label contnaing ADR name and link to file.
+If one ADR references another ADR, it should use local links in markdown with a label containing the ADR name and link to the file.
 Example: [ADR-000](./000-adr-conventions.md)
 
 ## Consequences

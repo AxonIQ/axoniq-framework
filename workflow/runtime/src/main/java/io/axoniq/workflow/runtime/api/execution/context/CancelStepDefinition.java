@@ -24,7 +24,7 @@ import jakarta.annotation.Nullable;
 /**
  * Specification for terminating a single step with cancellation.
  *
-   * @param primitiveMetadata metadata containing name of the step to cancel
+ * @param primitiveMetadata metadata containing name of the step to cancel
  * @param cause             optional cancellation cause
  * @author Simon Zambrovski
  * @since 1.0.0

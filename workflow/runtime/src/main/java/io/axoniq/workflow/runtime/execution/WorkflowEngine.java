@@ -22,6 +22,7 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
@@ -37,8 +38,12 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -56,27 +61,37 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final SafePointStore safePointStore;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
+    private final AtomicReference<TrackingToken> currentTrackingToken = new AtomicReference<>();
+    private final AtomicReference<TrackingToken> lastProcessedTrackingToken = new AtomicReference<>();
 
     /**
      * Creates a new workflow engine.
      *
      * @param workflowConfigurationRegistry configuration registry.
      * @param workflowExecutionRepository   execution registry.
+     * @param safePointStore                engine safe point tracking token store.
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
-            @Nonnull WorkflowExecutionRepository workflowExecutionRepository
+            @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
+            @Nonnull SafePointStore safePointStore
     ) {
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
+        this.safePointStore = safePointStore;
     }
 
     @Nonnull
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
+        var currentTrackingToken = captureCurrentTrackingToken(processingContext);
+        // ensure there is always a restart token resource available, even an empty one
+        processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY,
+                                      Optional.ofNullable(lastProcessedTrackingToken.get()));
         logger.trace("Received eventMessage {} {} {}",
                      processingContext.resources().get(TrackingToken.RESOURCE_KEY),
                      eventMessage.identifier(),
@@ -101,6 +116,9 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             }
         }
 
+        if (currentTrackingToken != null) {
+            lastProcessedTrackingToken.set(currentTrackingToken);
+        }
         logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
         return MessageStream.empty();
     }
@@ -112,6 +130,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
+        captureCurrentTrackingToken(context);
         logger.debug("Replay status changed to {} at {}",
                      statusChange.status(),
                      context.resources().get(TrackingToken.RESOURCE_KEY));
@@ -138,6 +157,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                     .filter(e -> e.state().workflowStatus().isTerminal())
                     .map(WorkflowExecution::workflowId)
                     .forEach(workflowExecutionRepository::remove);
+            persistEngineSafePoint();
 
             var allExecution = workflowExecutionRepository.findAll();
             if (allExecution.isEmpty()) {
@@ -168,6 +188,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                                  execution.workflowId(),
                                                  finished.state().workflowStatus());
                                     this.workflowExecutionRepository.remove(execution.workflowId());
+                                    persistEngineSafePoint();
                                 }
                         );
                     } catch (Throwable t) {
@@ -213,6 +234,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                      logger.debug("Creating a new workflow with '{}'", eventMessage.payload());
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                  });
+                                 persistEngineSafePoint();
                                  if (isRunning.get()) { // if the engine is already running, start the workflow immediately
                                      execute(execution);
                                  }
@@ -247,6 +269,49 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         for (var execution : executions) {
             execution.interrupt();
         }
+        persistEngineSafePoint();
         workflowExecutionRepository.clear();
+    }
+
+    /**
+     * Initializes the current and last processed tracking tokens.
+     *
+     * @param safePoint safe point tracking token passed on reset / empty store start.
+     */
+    public void initializeSafePoint(@Nullable TrackingToken safePoint) {
+        lastProcessedTrackingToken.set(safePoint);
+        currentTrackingToken.set(safePoint);
+    }
+
+    @Nullable
+    private TrackingToken captureCurrentTrackingToken(@Nonnull ProcessingContext processingContext) {
+        var token = (TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY);
+        if (token != null) {
+            currentTrackingToken.set(token);
+        }
+        return token;
+    }
+
+    private void persistEngineSafePoint() {
+        var safePoint = determineEngineSafePoint();
+        if (safePoint != null) {
+            safePointStore.storeSafePointToken(safePoint).join();
+        }
+    }
+
+    private TrackingToken determineEngineSafePoint() {
+        var executions = workflowExecutionRepository.findAll();
+        if (executions.isEmpty()) {
+            return currentTrackingToken.get();
+        }
+        TrackingToken earliestToken = null;
+        for (var execution : executions) {
+            var executionToken = execution.restartToken();
+            if (executionToken == null) {
+                return null;
+            }
+            earliestToken = earliestToken == null ? executionToken : earliestToken.lowerBound(executionToken);
+        }
+        return earliestToken;
     }
 }

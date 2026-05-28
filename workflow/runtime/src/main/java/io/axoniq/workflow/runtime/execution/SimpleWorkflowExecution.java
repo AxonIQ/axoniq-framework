@@ -37,6 +37,7 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +56,7 @@ import java.util.function.Predicate;
 
 import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
+import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.resolveRestartToken;
 import static java.lang.Thread.currentThread;
 
 /**
@@ -75,6 +77,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     // Attributes
     private final String workflowId;
     private final String workflowName;
+    @Nullable
+    private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
@@ -108,6 +112,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
                                                     "Workflow name must not be null");
         this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
+        this.restartToken = resolveRestartToken(processingContext);
 
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
@@ -521,6 +526,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public String workflowId() {
         return this.workflowId;
+    }
+
+    @Override
+    @Nullable
+    public TrackingToken restartToken() {
+        return restartToken;
     }
 
     @Nonnull

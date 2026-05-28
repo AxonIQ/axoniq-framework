@@ -27,6 +27,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -204,6 +205,16 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     @Nonnull
     String workflowId();
+
+    /**
+     * Returns this execution's restart token.
+     * <p>
+     * This is the earliest tracking token the execution needs to restart correctly.
+     *
+     * @return restart token, or {@code null} if unavailable
+     */
+    @Nullable
+    TrackingToken restartToken();
 
     /**
      * Returns the configuration of the workflow.
