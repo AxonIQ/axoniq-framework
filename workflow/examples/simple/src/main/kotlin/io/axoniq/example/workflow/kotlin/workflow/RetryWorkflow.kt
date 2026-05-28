@@ -22,6 +22,7 @@ package io.axoniq.example.workflow.kotlin.workflow
 import io.axoniq.workflow.dsl.kotlin.Kontext
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.seconds
 
 class KotlinRetryWorkflow {
     val retryAttempts = AtomicInteger(0)
@@ -29,23 +30,31 @@ class KotlinRetryWorkflow {
 
     fun Kontext.onExecute() {
         // Step 1: awaitExecute with retryPolicy
-        awaitExecute("retryStep", {
+        awaitExecute(
+            stepName = "retryStep",
+            timeout = 5.seconds,
+            retryPolicy = RetryPolicy.maxRetries(3)
+        ) { _, _ ->
             val attempt = retryAttempts.incrementAndGet()
             if (attempt < 3) {
                 throw RuntimeException("Retry attempt $attempt")
             }
             mapOf("status" to "success")
-        }, retryPolicy = RetryPolicy.maxRetries(3))
+        }
 
         // Step 2: execute with retryPolicy
-        val result = execute("asyncRetryStep", { _, _ ->
+        val result = execute(
+            stepName = "asyncRetryStep",
+            timeout = 5.seconds,
+            retryPolicy = RetryPolicy.maxRetries(2)
+        ) { _, _ ->
             val attempt = asyncRetryAttempts.incrementAndGet()
             if (attempt < 2) {
                 throw RuntimeException("Async retry attempt $attempt")
             }
             mapOf("status" to "success")
-        }, retryPolicy = RetryPolicy.maxRetries(2))
-        
+        }
+
         result.await()
     }
 }

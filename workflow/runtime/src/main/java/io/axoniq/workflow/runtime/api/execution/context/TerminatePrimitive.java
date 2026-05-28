@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;
 
@@ -38,6 +39,7 @@ public interface TerminatePrimitive {
      */
     void terminate(@Nonnull TerminateCommand command);
 
+    @Internal
     record TerminateCommand(
             boolean error,
             @Nullable Throwable cause,
@@ -50,24 +52,47 @@ public interface TerminatePrimitive {
             Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
         }
 
+        /**
+         * Indicates whether this command targets a single step cancellation instead of whole-workflow termination.
+         *
+         * @return {@code true} when this command cancels a specific step, otherwise {@code false}
+         */
         public boolean isStepCancellation() {
             return stepName != null;
         }
 
-        public static TerminateCommand cancel(@Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(false, null, eventNameCustomizer, null, null);
-        }
-
+        /**
+         * Creates a workflow cancellation command.
+         *
+         * @param cause optional cancellation cause
+         * @param eventNameCustomizer customizer for published event names
+         * @return termination command representing workflow cancellation
+         */
         public static TerminateCommand cancel(@Nullable Throwable cause,
                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
             return new TerminateCommand(false, cause, eventNameCustomizer, null, null);
         }
 
+        /**
+         * Creates a workflow failure command.
+         *
+         * @param cause optional failure cause
+         * @param eventNameCustomizer customizer for published event names
+         * @return termination command representing workflow failure
+         */
         public static TerminateCommand fail(@Nullable Throwable cause,
                                             @Nonnull EventNameCustomizer eventNameCustomizer) {
             return new TerminateCommand(true, cause, eventNameCustomizer, null, null);
         }
 
+        /**
+         * Creates a cancellation command for a specific running step.
+         *
+         * @param stepName logical name of the step to cancel
+         * @param cause optional cancellation cause
+         * @param eventNameCustomizer customizer for published event names
+         * @return termination command representing step cancellation
+         */
         public static TerminateCommand cancelledStep(@Nonnull String stepName,
                                                      @Nullable Throwable cause,
                                                      @Nonnull EventNameCustomizer eventNameCustomizer) {

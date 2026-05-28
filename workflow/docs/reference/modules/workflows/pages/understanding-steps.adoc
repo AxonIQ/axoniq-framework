@@ -76,7 +76,7 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 |void
 |xref:waiting-for-events.adoc[]
 
-|`sleepAsync`
+|`sleep`
 |No
 |`WorkflowStepResult`
 |xref:waiting-for-events.adoc[]
@@ -138,11 +138,12 @@ Both `execute` and `waitForEvent` return a `WorkflowStepResult`:
 // non-blocking execute
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 // non-blocking wait for event
 var approval = ctx.waitForEvent("awaitApproval",
-        ManagerApproved.class, Duration.ofMinutes(30));
+        EventConditions.fromQualifiedName(ctx.resolve(ManagerApproved.class)),
+        step -> step.timeout(Duration.ofMinutes(30)));
 
 // check and wait on either
 if (shipping.isCompleted()) {
@@ -164,21 +165,25 @@ This applies to `awaitExecute`, `execute`, and `awaitEvent` alike.
 
 [horizontal]
 Default:: **5 seconds**—used when you don't pass an explicit `Duration`.
-Override per step:: Pass a `Duration` parameter to `awaitExecute`, `execute`, or `awaitEvent`.
+Override per step:: Customize the step definition with `timeout(...)`.
 
 [source,java]
 ----
 // Uses the default 5-second timeout
-ctx.awaitExecute("quickCheck", Boolean.class, QuickService::check);
+ctx.awaitExecute("quickCheck",
+        Map.of(),
+        (pc, input) -> Map.of("passed", QuickService::check()));
 
 // Explicit 30-second timeout for an action
 ctx.awaitExecute("slowOperation", ctx.workflowPayload(),
                  SlowService::process,
-                 Duration.ofSeconds(30), defaults());
+                 step -> step.timeout(Duration.ofSeconds(30)));
 
 // Explicit 15-minute timeout for waiting on an external event
 ctx.awaitEvent("awaitPayment", PaymentConfirmed.class,
-               Duration.ofMinutes(15));
+               associate(payloadProperty("orderId"),
+                         equalsTo(ctx.workflowPayload().get("orderId"))),
+               step -> step.timeout(Duration.ofMinutes(15)));
 ----
 
 [IMPORTANT]
@@ -202,31 +207,31 @@ That's what payload reducers control.
 Each step has two reducers:
 
 [horizontal]
-`parameterMapping`:: Controls the *input*—what payload the step's action receives.
-`resultMapping`:: Controls the *output*—what happens to the step's result after it completes.
+`parameterPayloadReducer`:: Controls the *input*—what payload the step's action receives.
+`resultPayloadReducer`:: Controls the *output*—what happens to the step's result after it completes.
 
 === Available options
 
 [cols="1,2,2"]
 |===
-|Reducer |As input (`parameterMapping`) |As output (`resultMapping`)
+|Reducer |As input (`parameterPayloadReducer`) |As output (`resultPayloadReducer`)
 
-|`LOCAL_ONLY` _(default for input)_
+|`LocalOnlyPayloadReducer.INSTANCE` _(default for input)_
 |The action receives only the local payload you passed in. It doesn't see the global workflow state.
 |Only the local result is kept. The global payload is untouched.
 
-|`GLOBAL_ONLY` _(default for output)_
+|`GlobalOnlyPayloadReducer.INSTANCE` _(default for output)_
 |The action receives only the global workflow payload. The local payload is ignored.
 |The step's result is discarded. The global payload stays as-is.
 
-|`COMBINE_GLOBAL_AND_LOCAL`
+|`CombineGlobalAndLocalPayloadReducer.INSTANCE`
 |The action receives both merged—local values overwrite global values with the same key.
 |The step's result is merged back into the global payload.
 |===
 
 === Why does this matter?
 
-With the defaults (`LOCAL_ONLY` input, `GLOBAL_ONLY` output), steps are isolated—they only see what you explicitly pass them, and their results don't leak into the global state. This keeps things predictable.
+With the defaults (`LocalOnlyPayloadReducer.INSTANCE` for input and `GlobalOnlyPayloadReducer.INSTANCE` for output), steps are isolated—they only see what you explicitly pass them, and their results don't leak into the global state. This keeps things predictable.
 
 Sometimes you want a step to see the full workflow context, or you want the result to update the global payload for subsequent steps. That's when you change the reducer.
 
@@ -243,24 +248,19 @@ ctx.awaitExecute("reserveStock",
 ----
 <.> The action receives `{customerId=456}` only—it can't see `orderId` or `email`.
 
-[source,kotlin]
+[source,java]
 ----
-// Step sees everything: global + local merged
-awaitExecute(
-    "processOrder",
-    { payload ->
-        // payload = {orderId=123, customerId=456, email=joe@example.com, priority=high}
-        OrderService.process(payload)
-    },
-    local = mapOf("priority" to "high"),
-    parameterMapping = PayloadReducer.COMBINE_GLOBAL_AND_LOCAL, // <1>
-    resultMapping = PayloadReducer.COMBINE_GLOBAL_AND_LOCAL     // <2>
-)
+ctx.awaitExecute(
+        "processOrder",
+        payload("priority", "high").getValues(),
+        OrderService::process,
+        step -> step.parameterPayloadReducer(CombineGlobalAndLocalPayloadReducer.INSTANCE)
+                    .resultPayloadReducer(CombineGlobalAndLocalPayloadReducer.INSTANCE)
+);
 ----
-<.> The action receives the global payload merged with the local `priority` field.
-<.> The step's result is merged back into the global payload, so subsequent steps can see it.
+The action receives the global payload merged with the local `priority` field, and the step's result is merged back into the global payload so subsequent steps can see it.
 
-In Java, the full-form `awaitExecute` with `PayloadProcessor` uses `LOCAL_ONLY` for input and `GLOBAL_ONLY` for output by default.
+In Java, the full-form `awaitExecute` with `PayloadProcessor` uses `LocalOnlyPayloadReducer.INSTANCE` for input and `GlobalOnlyPayloadReducer.INSTANCE` for output by default.
 
 [[error-handling]]
 == Error handling
@@ -297,11 +297,12 @@ With `execute` and `waitForEvent`, steps run asynchronously. Check the result to
 [source,java]
 ----
 var paymentConfirmation = ctx.waitForEvent("awaitPayment",
-        PaymentConfirmed.class, Duration.ofMinutes(15));
+        EventConditions.fromQualifiedName(ctx.resolve(PaymentConfirmed.class)),
+        step -> step.timeout(Duration.ofMinutes(15)));
 
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 if (paymentConfirmation.timeout()) { // blocks until terminal state
     ctx.fail(new RuntimeException("Payment confirmation timed out"));
@@ -369,7 +370,8 @@ You can cancel a running step in two ways:
 [source,java]
 ----
 var approval = ctx.waitForEvent("awaitApproval",
-        ManagerApproved.class, Duration.ofMinutes(30));
+        EventConditions.fromQualifiedName(ctx.resolve(ManagerApproved.class)),
+        step -> step.timeout(Duration.ofMinutes(30)));
 
 // later — manager rejected, no longer need approval
 approval.cancel("Manager rejected the request"); // <1>
@@ -380,8 +382,10 @@ approval.cancel("Manager rejected the request"); // <1>
 [source,java]
 ----
 ctx.cancelStep("awaitApproval");                            // default message: "Step cancelled"
-ctx.cancelStep("awaitApproval", "Manager rejected");        // custom reason
-ctx.cancelStep("awaitApproval", someException);              // wrap an existing exception
+ctx.cancelStep("awaitApproval",
+        step -> step.cause(new StepCancellationException("Manager rejected"))); // custom reason
+ctx.cancelStep("awaitApproval",
+        step -> step.cause(someException));                  // wrap an existing exception
 ----
 
 Both approaches produce a CANCELLED event in the event store:
@@ -542,8 +546,9 @@ The simplest way is via the `@Workflow` annotation:
           startOnEventClass = OrderPlacedEvent.class,
           workflowNamespace = "io.myapp.orders")  // <1>
 public void execute(SimpleWorkflowContext ctx) {
-    ctx.awaitExecute("reserveStock", Boolean.class,
-                      InventoryService::reserveStock); // <2>
+    ctx.awaitExecute("reserveStock",
+            Map.of(),
+            (pc, input) -> Map.of("reserved", InventoryService.reserveStock())); // <2>
 }
 ----
 <.> Sets the namespace for all events in this workflow.
@@ -675,8 +680,9 @@ When a step also has its own customizer, the two are merged—**step-level wins*
 [source,java]
 ----
 // Step 1: inherits workflow customizer — no override needed
-ctx.awaitExecute("reserveStock", Boolean.class,
-                  InventoryService::reserveStock);
+ctx.awaitExecute("reserveStock",
+                 Map.of(),
+                 (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
 
 // Step 2: overrides namespace for this step only
 ctx.awaitExecute("initiatePayment",
@@ -771,29 +777,27 @@ This would produce `PriorityPaymentCompleted` or `NormalPaymentCompleted` depend
 [[kotlin-dsl-equivalents]]
 == Kotlin DSL equivalents
 
-The Kotlin DSL exposes the same options as named parameters:
+The Kotlin DSL exposes the same options as concise overloads, while still allowing direct definition objects when needed:
 
 [source,kotlin]
 ----
-// Non-blocking execute with all options
-execute(
-    "shipOrder",
-    action = { pc, p -> ShippingService.shipOrder(pc, p) },
-    local = mapOf("address" to address),
-    parameterMapping = PayloadReducer.LOCAL_ONLY,
-    resultMapping = PayloadReducer.GLOBAL_ONLY,
+val result = execute(
+    stepName = "shipOrder",
+    inputPayload = mapOf("address" to address),
     timeout = 5.minutes,
-    eventNameCustomizer = namespace("io.shipping")
-)
+    retryPolicy = RetryPolicy.NONE
+) { pc, p ->
+    ShippingService.shipOrder(pc, p)
+}
 
-// Blocking awaitExecute with all options
-val result = awaitExecute(
-    "reserveStock",
-    action = { InventoryService.reserveStock() },
-    local = mapOf("customerId" to customerId),
-    timeout = 10.seconds,
-    eventNameCustomizer = baseName("ReservingStock")
-)
+val reservation = awaitExecute(
+    stepName = "reserveStock",
+    timeout = 10.seconds
+) { _, _ ->
+    mapOf("reserved" to InventoryService.reserveStock())
+}
 ----
 
-Kotlin's named parameters and default values mean you only specify what you need—everything else falls back to sensible defaults.
+For advanced cases, you can still pass `ExecuteStepDefinition`, `WaitForStepDefinition`, and `PayloadStepDefinition` directly to `Kontext`.
+The convenience overloads simply build those same definitions with Kotlin defaults applied up front.
+When you want to pass step-local data as a named argument in Kotlin, use `inputPayload = ...` to match the Java DSL terminology.

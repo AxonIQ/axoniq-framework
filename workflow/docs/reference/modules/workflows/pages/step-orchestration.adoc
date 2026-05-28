@@ -15,11 +15,11 @@ The non-blocking variants—`execute` and `waitForEvent`—start steps without w
 ----
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
         NotificationService::sendConfirmation,
-        Duration.ofSeconds(30), defaults());
+        step -> step.timeout(Duration.ofSeconds(30)));
 ----
 
 Both steps run concurrently. You can also mix `execute` with `waitForEvent`:
@@ -27,11 +27,12 @@ Both steps run concurrently. You can also mix `execute` with `waitForEvent`:
 [source,java]
 ----
 var approval = ctx.waitForEvent("awaitApproval",
-        ManagerApproved.class, Duration.ofMinutes(30));
+        EventConditions.fromQualifiedName(ctx.resolve(ManagerApproved.class)),
+        step -> step.timeout(Duration.ofMinutes(30)));
 
 var backgroundCheck = ctx.execute("runBackgroundCheck", ctx.workflowPayload(),
         ComplianceService::check,
-        Duration.ofMinutes(10), defaults());
+        step -> step.timeout(Duration.ofMinutes(10)));
 ----
 
 == `anyMatch`—first match wins
@@ -52,10 +53,12 @@ Wait for the first of two possible outcomes—whichever event arrives first wins
 [source,java]
 ----
 var accepted = ctx.waitForEvent("paymentAccepted",
-        CardPaymentAccepted.class, Duration.ofMinutes(10));
+        EventConditions.fromQualifiedName(ctx.resolve(CardPaymentAccepted.class)),
+        step -> step.timeout(Duration.ofMinutes(10)));
 
 var declined = ctx.waitForEvent("paymentDeclined",
-        CardPaymentDeclined.class, Duration.ofMinutes(10));
+        EventConditions.fromQualifiedName(ctx.resolve(CardPaymentDeclined.class)),
+        step -> step.timeout(Duration.ofMinutes(10)));
 
 var result = ctx.anyMatch(WorkflowStepResult::isCompleted,     // <1>
                           accepted, declined);
@@ -86,10 +89,10 @@ Same pattern works with `execute`—request shipping quotes from two carriers, t
 [source,java]
 ----
 var dhlQuote = ctx.execute("getDhlQuote", ctx.workflowPayload(),
-        DhlService::getQuote, Duration.ofSeconds(10), defaults());
+        DhlService::getQuote, step -> step.timeout(Duration.ofSeconds(10)));
 
 var fedexQuote = ctx.execute("getFedexQuote", ctx.workflowPayload(),
-        FedexService::getQuote, Duration.ofSeconds(10), defaults());
+        FedexService::getQuote, step -> step.timeout(Duration.ofSeconds(10)));
 
 var race = ctx.anyMatch(WorkflowStepResult::isCompleted,
                         dhlQuote, fedexQuote);
@@ -114,11 +117,11 @@ It short-circuits on the first non-match:
 // Ship and notify in parallel
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
         NotificationService::sendConfirmation,
-        Duration.ofSeconds(30), defaults());
+        step -> step.timeout(Duration.ofSeconds(30)));
 
 var guard = ctx.allMatch(WorkflowStepResult::success,           // <1>
                          shipping, notification);
@@ -153,13 +156,13 @@ They are *not* automatically cancelled—cancel them explicitly via `unmatched()
 [source,java]
 ----
 var stepA = ctx.execute("processA", Map.of(), ServiceA::process,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 var stepB = ctx.execute("processB", Map.of(), ServiceB::process,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 var stepC = ctx.execute("processC", Map.of(), ServiceC::process,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 
 var check = ctx.noneMatch(WorkflowStepResult::failure,          // <1>
                           stepA, stepB, stepC);
@@ -202,15 +205,15 @@ For a more robust pattern, cancel remaining steps *and* run a compensating actio
 ----
 var reserveStock = ctx.execute("reserveStock", ctx.workflowPayload(),
         InventoryService::reserveStock,
-        Duration.ofMinutes(1), defaults());
+        step -> step.timeout(Duration.ofMinutes(1)));
 
 var reserveShipping = ctx.execute("reserveShipping", ctx.workflowPayload(),
         ShippingService::reserveSlot,
-        Duration.ofMinutes(1), defaults());
+        step -> step.timeout(Duration.ofMinutes(1)));
 
 var chargePayment = ctx.execute("chargePayment", ctx.workflowPayload(),
         PaymentService::charge,
-        Duration.ofSeconds(30), defaults());
+        step -> step.timeout(Duration.ofSeconds(30)));
 
 var check = ctx.noneMatch(WorkflowStepResult::failure,
                           reserveStock, reserveShipping, chargePayment);
@@ -324,8 +327,9 @@ Workflow IDs must be unique across all running workflows. If two workflow defini
 ----
 @Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
 public void execute(SimpleWorkflowContext ctx) {
-    ctx.awaitExecute("reserveStock", Boolean.class,
-                      InventoryService::reserveStock);
+    ctx.awaitExecute("reserveStock",
+            Map.of(),
+            (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
     ctx.awaitExecute("shipOrder", ctx.workflowPayload(),
                       ShippingService::shipOrder);
 }

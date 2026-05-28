@@ -18,18 +18,19 @@
  */
 package io.axoniq.workflow.dsl.kotlin
 
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
 /**
- * Kotlin Workflow Context used for workflow definition via DSL.
+ * Kotlin DSL workflow context for a single workflow instance.
  *
- * @param workflowId unique identifier of the workflow instance.
- * @param initialPayload initial payload of the workflow.
- * @param processingContext processing context of the message.
- * @param workflowConfiguration workflow configuration.
+ * @param workflowId unique identifier of the workflow instance
+ * @param initialPayload initial payload of the workflow
+ * @param processingContext processing context of the current message
+ * @param workflowConfiguration runtime configuration for this workflow
  * @since 1.0.0
  * @author Simon Zambrovski
  */
@@ -38,7 +39,7 @@ class WorkflowKontext(
     initialPayload: Map<String, Any?>,
     processingContext: ProcessingContext,
     workflowConfiguration: WorkflowConfiguration<*>,
-) : AbstractDSLWorkflowContext(
+) : BaseWorkflowContext(
     workflowId,
     initialPayload,
     processingContext,
@@ -46,9 +47,9 @@ class WorkflowKontext(
 ) {
 
     /**
-     * Executes the block with the workflow context.
+     * Runs the workflow definition block against this context instance.
      *
-     * @param block block to be executed.
+     * @param block Kotlin DSL block that defines the workflow steps
      */
     fun runWorkflow(block: Kontext.() -> Unit) {
         Kontext(this).apply(block)
@@ -56,10 +57,10 @@ class WorkflowKontext(
 
     companion object {
         /**
-         * Creates a workflow definition from the block.
+         * Creates a reusable workflow definition from a Kotlin DSL block.
          *
-         * @param block block to be executed.
-         * @return workflow definition.
+         * @param block Kotlin DSL block that defines the workflow steps
+         * @return workflow definition that can be registered with the runtime
          */
         @JvmStatic
         fun from(block: Kontext.() -> Unit): WorkflowDefinition<WorkflowKontext> {

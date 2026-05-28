@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,8 +26,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Workflow that executes a step, then interrupts the current thread before executing the next step.
- * Used to verify that an {@link InterruptedException} does not put the workflow into a terminal state.
+ * Workflow that executes a step, then interrupts the current thread before executing the next step. Used to verify that
+ * an {@link InterruptedException} does not put the workflow into a terminal state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -36,7 +36,7 @@ public class InterruptedWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(InterruptedWorkflow.class);
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("Interrupted workflow started for {}", ctx.workflowPayload());
 
         ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));

@@ -42,9 +42,8 @@ import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.api.Payload.payload;
-import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Workflow that handles the payment process. This workflow is a port of the famous Bike Rental Saga taken from AF4
@@ -66,11 +65,15 @@ public class PaymentWorkflow {
     )
     public void execute(SimpleWorkflowContext ctx) {
 
-        ctx.setPayload("setAmountAndReference",
-                       Map.of(
-                               "amount", 10,
-                               "paymentReference", ctx.workflowPayload().get("rentalReference")
-                       ));
+        ctx.awaitModifyPayload(
+                "setAmountAndReference",
+                workflowPayload -> payload(workflowPayload)
+                        .with(payload(
+                                "amount", 10,
+                                "paymentReference", ctx.workflowPayload().get("rentalReference")
+                        ))
+                        .getValues()
+        );
 
         var paymentReference = ctx.workflowPayload().get("paymentReference");
 
@@ -79,11 +82,11 @@ public class PaymentWorkflow {
 
             logger.info("Preparing payment {}", paymentReference);
 
-            var paymentPrepared = ctx.waitFor("paymentPrepared",
-                                              PaymentPreparedEvent.class,
-                                              associate(payloadProperty("paymentReference"),
-                                                        equalsTo(paymentReference)),
-                                              DEFAULT_TIMEOUT
+            var paymentPrepared = ctx.waitForEvent(
+                    "paymentPrepared",
+                    PaymentPreparedEvent.class,
+                    associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
+                    step -> step.timeout(DEFAULT_TIMEOUT)
             );
 
             var preparePayment = sendCommand(ctx,
@@ -102,7 +105,10 @@ public class PaymentWorkflow {
                     paymentPending.set(false);
                     var paymentDetails = paymentPrepared.<Map<String, Object>>result()
                                                         .orElseThrow(() -> new IllegalStateException("No payload"));
-                    ctx.setPayload("setPaymentId", paymentDetails);
+                    ctx.awaitModifyPayload(
+                            "setPaymentId",
+                            workflowPayload -> payload(workflowPayload).with(payload(paymentDetails)).getValues()
+                    );
 
                     logger.info("Payment prepared successfully for reference {}, the payment details are {}",
                                 paymentReference,
@@ -110,13 +116,15 @@ public class PaymentWorkflow {
                 } else {
                     logger.info("Did not receive payment prepared event. Retrying in {} secs.",
                                 DEFAULT_TIMEOUT.toSeconds());
-                    ctx.sleep("retryPayment", DEFAULT_TIMEOUT);
+                    ctx.sleep("retryPayment",
+                              step -> step.timeout(DEFAULT_TIMEOUT));
                 }
             } else {
                 // NICE TO HAVE
                 logger.info("Prepare payment command failed. Retrying in {} secs.", DEFAULT_TIMEOUT.toSeconds());
                 paymentPrepared.cancel("Prepare payment command failed.");
-                ctx.sleep("retryPayment", DEFAULT_TIMEOUT);
+                ctx.sleep("retryPayment",
+                          step -> step.timeout(DEFAULT_TIMEOUT));
             }
         }
 
@@ -124,15 +132,17 @@ public class PaymentWorkflow {
         logger.info("Waiting for payment confirmation or rejection for the next {} seconds", timeout);
         var paymentStatus = ctx.anyMatch(
                 WorkflowStepResult::success,
-                ctx.waitFor("paymentConfirmed",
-                            PaymentConfirmedEvent.class,
-                            associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
-                            Duration.ofSeconds(timeout)
+                ctx.waitForEvent(
+                        "paymentConfirmed",
+                        PaymentConfirmedEvent.class,
+                        associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
+                        step -> step.timeout(Duration.ofSeconds(timeout))
                 ),
-                ctx.waitFor("paymentRejected",
-                            PaymentRejectedEvent.class,
-                            associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
-                            Duration.ofSeconds(timeout)
+                ctx.waitForEvent(
+                        "paymentRejected",
+                        PaymentRejectedEvent.class,
+                        associate(payloadProperty("paymentReference"), equalsTo(paymentReference)),
+                        step -> step.timeout(Duration.ofSeconds(timeout))
                 )
         );
         paymentStatus.await();
@@ -189,8 +199,7 @@ public class PaymentWorkflow {
                                      .join();
                     return Map.of();
                 },
-                DEFAULT_TIMEOUT,
-                defaults()
+                step -> step.timeout(DEFAULT_TIMEOUT)
         );
     }
 }

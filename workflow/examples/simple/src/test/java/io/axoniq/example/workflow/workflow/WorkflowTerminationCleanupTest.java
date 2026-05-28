@@ -19,6 +19,7 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.dsl.api.Payload;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
@@ -60,7 +61,12 @@ class WorkflowExecutionTerminationCleanupTest extends AbstractDeclarativeTestBas
     private void workflowDefinition(SimpleWorkflowContext ctx) {
         String action = (String) ctx.workflowPayload().get("action");
         if ("complete".equals(action)) {
-            ctx.setPayload("step1", Map.of("status", "done"));
+            ctx.awaitModifyPayload(
+                    "step1",
+                    workflowPayload -> Payload.payload(workflowPayload)
+                            .with(Payload.payload(Map.of("status", "done")))
+                            .getValues()
+            );
         } else if ("fail".equals(action)) {
             throw new WorkflowFailedException("Intentional workflow failure");
         } else if ("timeout".equals(action)) {

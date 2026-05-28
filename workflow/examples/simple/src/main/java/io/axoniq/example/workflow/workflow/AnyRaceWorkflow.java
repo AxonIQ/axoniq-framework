@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -29,11 +29,10 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
- * Demonstrates {@link WorkflowContext#anyMatch} semantics: two steps are launched in
- * parallel — a fast one (~500 ms) and a slow one (5 min). The first to complete wins.
+ * Demonstrates {@link WorkflowContext#anyMatch} semantics: two steps are launched in parallel — a fast one (~500 ms)
+ * and a slow one (5 min). The first to complete wins.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -42,18 +41,28 @@ public class AnyRaceWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(AnyRaceWorkflow.class);
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("anyMatch() workflow started for {}", ctx.workflowPayload());
 
-        var fast = ctx.execute("fastStep", Map.of(), (c, p) -> {
-            sleepQuietly(500);
-            return Map.of("winner", "fast");
-        }, Duration.ofSeconds(10), defaults());
+        var fast = ctx.execute(
+                "fastStep",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(500);
+                    return Map.of("winner", "fast");
+                },
+                step -> step.timeout(Duration.ofSeconds(10))
+        );
 
-        var slow = ctx.execute("slowStep", Map.of(), (c, p) -> {
-            sleepQuietly(Duration.ofMinutes(5));
-            return Map.of("winner", "slow");
-        }, Duration.ofMinutes(5), defaults());
+        var slow = ctx.execute(
+                "slowStep",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(Duration.ofMinutes(5));
+                    return Map.of("winner", "slow");
+                },
+                step -> step.timeout(Duration.ofMinutes(5))
+        );
 
         // anyMatch: first to reach a terminal state wins
         var winner = ctx.anyMatch(WorkflowStepResult::isCompleted, fast, slow);
@@ -61,6 +70,6 @@ public class AnyRaceWorkflow {
         winner.await();
         logger.info("Race won by: {}", winner.getStepName());
         logger.info("All finishers: {}",
-                winner.matched().stream().map(WorkflowStepResult::getStepName).toList());
+                    winner.matched().stream().map(WorkflowStepResult::getStepName).toList());
     }
 }

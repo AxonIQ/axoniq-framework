@@ -23,70 +23,72 @@ import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
-import java.util.Objects;
 
+/**
+ * Primitive that allows waiting for an event to occur.
+ *
+ * @author Allard Buijze
+ * @author Simon Zambrovski
+ * @author Stefan Dragisic
+ * @since 1.0.0
+ */
 public interface WaitForPrimitive {
 
     /**
      * Wait for event.
      *
-     * @param stepName             name of the workflow step.
-     * @param eventCondition       event condition of event to wait for.
-     * @param timeout              maximum wait duration until timeout.
-     * @param resultPayloadReducer payload reducer controlling how the result payload (message payload) is combined with
-     *                             the workflow payload.
-     * @param eventNameCustomizer  event name customizer.
-     * @return result.
+     * @param command command object
+     * @return result of command execution
      */
     @Nonnull
-    WorkflowStepResult waitFor(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    );
-
-    default <T> T waitFor(@Nonnull WaitForCommand<T> command) {
-        Objects.requireNonNull(command, "command must not be null");
-        return command.result(
-                waitFor(
-                        command.stepName(),
-                        command.eventCondition(),
-                        command.resultPayloadReducer(),
-                        command.timeout(),
-                        command.eventNameCustomizer()
-                )
-        );
-    }
+    WorkflowStepResult waitForEvent(@Nonnull WaitForCommand command);
 
     /**
      * Parameter object for the primitive.
      *
-     * @param <T> type of command result.
+     * @author Simon Zambrovski
+     * @since 1.0.0
      */
-    interface WaitForCommand<T> {
+    interface WaitForCommand {
 
+        /**
+         * Name of the step.
+         *
+         * @return step name
+         */
         @Nonnull
         String stepName();
 
+        /**
+         * Event condition to wait for.
+         *
+         * @return event condition
+         */
         @Nonnull
         EventCondition eventCondition();
 
+        /**
+         * Maximum wait timeout
+         *
+         * @return timeout duration
+         */
         @Nonnull
         Duration timeout();
 
         /**
-         * Returns the result reducer.
+         * Returns the result payload reducer.
          *
-         * @return result reducer.
+         * @return result reducer
          */
         @Nonnull
         PayloadReducer resultPayloadReducer();
 
+        /**
+         * Event name customizer
+         *
+         * @return event name customizer
+         */
         @Nonnull
         EventNameCustomizer eventNameCustomizer();
-
-        T result(@Nonnull WorkflowStepResult result);
     }
 }

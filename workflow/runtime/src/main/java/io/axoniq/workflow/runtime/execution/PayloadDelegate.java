@@ -22,13 +22,14 @@ import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Clock;
 import java.util.concurrent.Executor;
@@ -69,11 +70,11 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     }
 
     @Override
-    public void modifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification payloadModification,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
+    @Nonnull
+    public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
+        var stepName = command.stepName();
+        var payloadModification = command.payloadModification();
+        var eventNameCustomizer = command.eventNameCustomizer();
         workflowExecution.appendTask(e -> {
                                          // apply modification right away
                                          var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());
@@ -88,14 +89,18 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
                                                  executor,
                                                  workflowExecution.processingContext(),
                                                  ctx -> eventSink.publish(ctx, payloadEvent)
-                                         );
+                                         ).join();
                                      }
         );
         try {
             workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
                     && s.getStep(stepName).status() == StepStatus.COMPLETED);
+            return WorkflowStepResults.completed(stepName,
+                                                 workflowExecution.state().payload(),
+                                                 workflowExecution.processingContext().component(EventConverter.class));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return WorkflowStepResults.canceled(stepName);
         }
     }
 }

@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -29,8 +29,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Reproduction of AxonIQ/extension-workflow#122 — step-level timeout is not enforced.
@@ -66,17 +64,26 @@ public class StepTimeoutWorkflow {
         return stepResult;
     }
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("StepTimeoutWorkflow started for {}", ctx.workflowPayload());
 
         boolean useRetry = "retry".equals(ctx.workflowPayload().get("status"));
 
         if (useRetry) {
-            stepResult = ctx.execute("slowStep", Map.of(), this::slowAction,
-                                     STEP_TIMEOUT, defaults(), RetryPolicy.maxRetries(MAX_RETRIES));
+            stepResult = ctx.execute(
+                    "slowStep",
+                    Map.of(),
+                    this::slowAction,
+                    step -> step.timeout(STEP_TIMEOUT)
+                                .retryPolicy(RetryPolicy.maxRetries(MAX_RETRIES))
+            );
         } else {
-            stepResult = ctx.execute("slowStep", Map.of(), this::slowAction,
-                                     STEP_TIMEOUT, defaults());
+            stepResult = ctx.execute(
+                    "slowStep",
+                    Map.of(),
+                    this::slowAction,
+                    step -> step.timeout(STEP_TIMEOUT)
+            );
         }
 
         stepResult.await();

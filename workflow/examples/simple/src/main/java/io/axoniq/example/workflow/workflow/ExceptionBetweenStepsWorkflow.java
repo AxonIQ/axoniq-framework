@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,8 +26,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Workflow that executes a step, then throws a {@link RuntimeException} in user code between steps.
- * Used to verify that an exception thrown between steps does not put the workflow into a terminal state.
+ * Workflow that executes a step, then throws a {@link RuntimeException} in user code between steps. Used to verify that
+ * an exception thrown between steps does not put the workflow into a terminal state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -36,7 +36,7 @@ public class ExceptionBetweenStepsWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(ExceptionBetweenStepsWorkflow.class);
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("ExceptionBetweenSteps workflow started for {}", ctx.workflowPayload());
 
         ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));

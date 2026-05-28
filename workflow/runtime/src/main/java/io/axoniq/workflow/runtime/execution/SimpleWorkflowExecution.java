@@ -192,7 +192,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
         this.workflowConfiguration.workflowDefinition()
                                   .accept(this.contextDelegate.typepWorkflowContext());
-        logger.info("Workflow executed. Resulting workflow payload {}.", workflowPayload);
 
         if (!this.state().workflowStatus().isTerminal()) {
             // Cancel any async steps still running so their CANCELLED events land
@@ -206,6 +205,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                       eventNameCustomizer),
                     ctx).get(5, TimeUnit.SECONDS); // FIXME constant?
         }
+        logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
     }
 
     /**
@@ -362,14 +362,22 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         }
     }
 
-    @Override
+    /**
+     * Cancels the workflow.
+     * FIXME as part of https://github.com/AxonIQ/extension-workflow/issues/195
+     */
     public void cancel() {
         workflowContext().terminate(
-                TerminatePrimitive.TerminateCommand.cancel(DefaultEventNameCustomizer.Builder.defaults())
+                TerminatePrimitive.TerminateCommand.cancel(null, DefaultEventNameCustomizer.Builder.defaults())
         );
     }
 
-    @Override
+    /**
+     * Cancels the workflow with the given reason.
+     * FIXME as part of https://github.com/AxonIQ/extension-workflow/issues/195
+     *
+     * @param reason reason for cancellation
+     */
     public void cancel(@NonNull String reason) {
         workflowContext().terminate(
                 TerminatePrimitive.TerminateCommand.cancel(new WorkflowCancelledException(reason),
@@ -377,7 +385,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         );
     }
 
-    @Override
+    /**
+     * Cancels the workflow with the given cause.
+     * FIXME as part of https://github.com/AxonIQ/extension-workflow/issues/195
+     *
+     * @param cause reason for cancellation
+     */
     public void cancel(@NonNull Throwable cause) {
         workflowContext().terminate(
                 TerminatePrimitive.TerminateCommand.cancel(cause,

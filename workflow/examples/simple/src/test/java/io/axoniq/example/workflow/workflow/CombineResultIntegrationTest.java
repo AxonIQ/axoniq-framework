@@ -22,14 +22,10 @@ import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -42,9 +38,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
-import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -98,8 +93,15 @@ class CombineResultIntegrationTest
     public static class CombineWorkflow {
 
         public void execute(CombineWorkflowContext ctx) {
-            // This call uses the overridden execute method which uses COMBINE_LOCAL_AND_CONTEXT for result reducer
-            var result = ctx.execute("combineStep", Map.of(), (c, p) -> Map.of("stepResult", "combinedValue"));
+            var result = ctx.execute(
+                    "combineStep",
+                    Map.of(),
+                    (c, p) -> Map.of("stepResult", "combinedValue"),
+                    step -> step.resultPayloadReducer(
+                                        CombineGlobalAndLocalPayloadReducer.INSTANCE
+                            )
+                            .timeout(Duration.ofMinutes(5))
+            );
             result.await();
         }
     }
@@ -110,43 +112,6 @@ class CombineResultIntegrationTest
                                       ProcessingContext processingContext,
                                       WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
-        }
-
-        @Override
-        @Nonnull
-        public WorkflowStepResult execute(
-                @Nonnull String stepName,
-                @Nonnull Map<String, Object> payload,
-                @Nonnull PayloadProcessor action
-        ) {
-            return super.execute(stepName,
-                                 payload,
-                                 action,
-                                 registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
-                                 registry.get(CombineGlobalAndLocalPayloadReducer.NAME).orElseThrow(),
-                                 Duration.ofMinutes(5),
-                                 defaults()
-            );
-        }
-
-        @Override
-        @Nonnull
-        public WorkflowStepResult execute(
-                @Nonnull String stepName,
-                @Nonnull Map<String, Object> payload,
-                @Nonnull PayloadProcessor action,
-                @Nonnull Duration duration,
-                @Nonnull EventNameCustomizer eventNameCustomizer
-        ) {
-            // Force COMBINE_LOCAL_AND_CONTEXT as result reducer
-            // Note: SimpleWorkflowContext.execute delegates to the internal delegate which is a WorkflowContextDelegation
-            return super.execute(stepName,
-                                 payload,
-                                 action,
-                                 registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
-                                 registry.get(CombineGlobalAndLocalPayloadReducer.NAME).orElseThrow(),
-                                 duration,
-                                 eventNameCustomizer);
         }
     }
 

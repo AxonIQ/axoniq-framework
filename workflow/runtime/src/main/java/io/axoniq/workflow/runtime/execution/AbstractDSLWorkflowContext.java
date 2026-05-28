@@ -18,24 +18,29 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
+import io.axoniq.workflow.dsl.api.WorkflowDSL;
+import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.ExecuteStepDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.FailWorkflowDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PayloadStepDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadModification;
-import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,7 +56,7 @@ import java.util.function.Predicate;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
+public abstract class AbstractDSLWorkflowContext implements WorkflowContext, WorkflowDSL {
 
     private final WorkflowContext delegate;
     private final SimpleWorkflowExecution workflowExecution;
@@ -80,47 +85,109 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
         this.delegate = workflowExecution.workflowContext();
     }
 
-    @Nonnull
     @Override
-    public WorkflowStepResult waitFor(@Nonnull String stepName,
-                                      @Nonnull EventCondition eventCondition,
-                                      @Nonnull PayloadReducer resultPayloadReducer,
-                                      @Nonnull Duration timeout,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return delegate.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
+    @Nonnull
+    public WorkflowStepResult execute(@Nonnull ExecuteStepDefinition stepDefinition) {
+        return this.execute(
+                new PrimitiveCommands.WorkflowStepResultExecuteCommand(
+                        stepDefinition.primitiveMetadata().stepName(),
+                        stepDefinition.inputPayload(),
+                        stepDefinition.action(),
+                        stepDefinition.payloadMapping().parameterPayloadReducer(),
+                        stepDefinition.payloadMapping().resultPayloadReducer(),
+                        stepDefinition.timing().timeout(),
+                        stepDefinition.primitiveMetadata().eventNameCustomizer(),
+                        stepDefinition.retryPolicy()
+                )
+        );
+    }
+
+    @Override
+    @Nonnull
+    public Map<String, Object> awaitExecute(@Nonnull ExecuteStepDefinition stepDefinition) {
+        return resolveStepPayload(this.execute(stepDefinition));
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult waitForEvent(@Nonnull WaitForStepDefinition stepDefinition) {
+        return this.waitForEvent(
+                PrimitiveCommands.waitForEvent(
+                        stepDefinition.primitiveMetadata().stepName(),
+                        stepDefinition.eventCondition(),
+                        stepDefinition.payloadMapping().resultPayloadReducer(),
+                        stepDefinition.timing().timeout(),
+                        stepDefinition.primitiveMetadata().eventNameCustomizer()
+                )
+        );
+    }
+
+    @Override
+    @Nonnull
+    public Map<String, Object> awaitEvent(@Nonnull WaitForStepDefinition stepDefinition) {
+        return resolveStepPayload(this.waitForEvent(stepDefinition));
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult modifyPayload(@Nonnull PayloadStepDefinition stepDefinition) {
+        return this.modifyPayload(
+                PrimitiveCommands.modifyPayload(
+                        stepDefinition.primitiveMetadata().stepName(),
+                        stepDefinition.modification(),
+                        stepDefinition.primitiveMetadata().eventNameCustomizer()
+                )
+        );
+    }
+
+    @Override
+    public void awaitModifyPayload(@Nonnull PayloadStepDefinition stepDefinition) {
+        awaitStepCompletion(this.modifyPayload(stepDefinition));
+    }
+
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
+        return this.delegate.waitForEvent(command);
     }
 
     @Nonnull
     @Override
-    public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
-                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
-        return delegate.execute(stepName,
-                                local,
-                                action,
-                                parameterPayloadReducer,
-                                resultPayloadReducer,
-                                timeout,
-                                eventNameCustomizer);
+    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+        return delegate.execute(command);
     }
 
-    @Nonnull
     @Override
-    public WorkflowStepResult execute(@Nonnull String stepName, @Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterMapping,
-                                      @Nonnull PayloadReducer resultMapping, @Nonnull Duration timeout,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer,
-                                      @Nonnull RetryPolicy retryPolicy) {
-        return delegate.execute(stepName,
-                                local,
-                                action,
-                                parameterMapping,
-                                resultMapping,
-                                timeout,
-                                eventNameCustomizer,
-                                retryPolicy);
+    @Nonnull
+    public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
+        return delegate.modifyPayload(command);
     }
+
+    @Override
+    public void fail(@Nonnull FailWorkflowDefinition definition) {
+        delegate.terminate(
+                TerminateCommand.fail(
+                        definition.cause(),
+                        definition.primitiveMetadata().eventNameCustomizer()
+                )
+        );
+    }
+
+    @Override
+    public void cancel(@Nonnull CancelWorkflowDefinition definition) {
+        delegate.terminate(TerminateCommand.cancel(definition.cause(),
+                                                   definition.primitiveMetadata().eventNameCustomizer()));
+    }
+
+    @Override
+    public void cancelStep(@Nonnull CancelStepDefinition definition) {
+        delegate.terminate(TerminateCommand.cancelledStep(definition.primitiveMetadata().stepName(),
+                                                          definition.cause(),
+                                                          definition.primitiveMetadata().eventNameCustomizer())
+        );
+    }
+
 
     @Nonnull
     @Override
@@ -167,13 +234,6 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
         return workflowExecution.state().workflowStatus();
     }
 
-    @Override
-    public void modifyPayload(@Nonnull String stepName,
-                              @Nonnull PayloadModification payloadModification,
-                              @Nonnull EventNameCustomizer eventNameCustomizer) {
-        delegate.modifyPayload(stepName, payloadModification, eventNameCustomizer);
-    }
-
     @Nonnull
     @Override
     public List<String> workflowStepNames() {
@@ -194,5 +254,21 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext {
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         workflowExecution.describeTo(descriptor);
+    }
+
+    @Nonnull
+    private Map<String, Object> resolveStepPayload(@Nonnull WorkflowStepResult result) {
+        if (result.success()) {
+            return result.resultAs(new TypeReference<Map<String, Object>>() {
+            }, processingContext().component(EventConverter.class)).orElse(Map.of());
+        }
+        throw result.error().orElseThrow();
+    }
+
+    private void awaitStepCompletion(@Nonnull WorkflowStepResult result) {
+        result.await();
+        if (result.error().isPresent()) {
+            throw result.error().orElseThrow();
+        }
     }
 }

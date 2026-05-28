@@ -18,14 +18,12 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -80,13 +78,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
     @Override
     @Nonnull
-    public WorkflowStepResult waitFor(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
+    public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
+        var stepName = command.stepName();
+        var eventCondition = command.eventCondition();
+        var resultPayloadReducer = command.resultPayloadReducer();
+        var timeout = command.timeout();
+        var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
         acceptAllPendingTasksForStep(stepName);

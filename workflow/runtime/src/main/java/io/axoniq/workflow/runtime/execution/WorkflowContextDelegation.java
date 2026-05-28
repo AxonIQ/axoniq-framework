@@ -18,22 +18,18 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadModification;
-import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -42,7 +38,6 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -169,10 +164,10 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public void modifyPayload(@Nonnull String stepName,
-                              @Nonnull PayloadModification payloadModification,
-                              @Nonnull EventNameCustomizer eventNameCustomizer) {
-        payloadDelegate.modifyPayload(stepName, payloadModification, eventNameCustomizer);
+    @Nonnull
+    public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
+        workflowExecution.state().throwTerminalCause();
+        return payloadDelegate.modifyPayload(command);
     }
 
     @Nonnull
@@ -196,49 +191,16 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // delegation
     @Override
     @Nonnull
-    public WorkflowStepResult execute(@Nonnull String stepName,
-                                      @Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
-                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
+    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return retryableExecuteDelegate.execute(stepName,
-                                                local,
-                                                action,
-                                                parameterPayloadReducer,
-                                                resultPayloadReducer,
-                                                timeout,
-                                                eventNameCustomizer);
+        return retryableExecuteDelegate.execute(command);
     }
 
     @Override
     @Nonnull
-    public WorkflowStepResult execute(@Nonnull String stepName,
-                                      @Nullable Map<String, Object> local,
-                                      @Nonnull PayloadProcessor action, @Nonnull PayloadReducer parameterPayloadReducer,
-                                      @Nonnull PayloadReducer resultPayloadReducer, @Nonnull Duration timeout,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer,
-                                      @Nonnull RetryPolicy retryPolicy) {
+    public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
         workflowExecution.state().throwTerminalCause();
-        return retryableExecuteDelegate.execute(stepName,
-                                                local,
-                                                action,
-                                                parameterPayloadReducer,
-                                                resultPayloadReducer,
-                                                timeout,
-                                                eventNameCustomizer,
-                                                retryPolicy);
-    }
-
-    @Override
-    @Nonnull
-    public WorkflowStepResult waitFor(@Nonnull String stepName,
-                                      @Nonnull EventCondition eventCondition,
-                                      @Nonnull PayloadReducer resultPayloadReducer,
-                                      @Nonnull Duration timeout,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
-        workflowExecution.state().throwTerminalCause();
-        return waitForDelegate.waitFor(stepName, eventCondition, resultPayloadReducer, timeout, eventNameCustomizer);
+        return waitForDelegate.waitForEvent(command);
     }
 
     @Override

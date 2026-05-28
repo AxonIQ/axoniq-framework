@@ -26,15 +26,23 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import java.util.Map;
 
 /**
- * A context factory is responsible for creation of the {@link SimpleWorkflowContext} instance passed into the worfkflow
- * method as a callback for all interaction with the workflow engine. The methods of the {@link SimpleWorkflowContext}
- * build a workflow DSL.
+ * Factory that creates {@link SimpleWorkflowContext} instances for the
+ * convenience Java DSL.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 public class SimpleWorkflowContextFactory implements WorkflowContextFactory<SimpleWorkflowContext> {
 
+    /**
+     * Creates a workflow context for the current workflow invocation.
+     *
+     * @param initialPayload initial workflow payload
+     * @param workflowId unique identifier of the workflow instance
+     * @param processingContext processing context for the current message
+     * @param workflowConfiguration runtime configuration for this workflow
+     * @return workflow context passed to the simple Java DSL definition
+     */
     @Nonnull
     @Override
     public SimpleWorkflowContext createContext(

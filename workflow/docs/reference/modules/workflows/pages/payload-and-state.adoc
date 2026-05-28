@@ -28,7 +28,7 @@ var confirmation = ctx.awaitEvent("awaitPayment",
         PaymentConfirmed.class,
         associate(payloadProperty("orderId"),
                   equalsTo(ctx.workflowPayload().get("orderId"))),
-        Duration.ofMinutes(15));
+        step -> step.timeout(Duration.ofMinutes(15)));
 
 ctx.setPayload("storePaymentDetails", confirmation); // <1>
 ----
@@ -48,8 +48,7 @@ You can pass the workflow payload as input to any step:
 ctx.awaitExecute("shipOrder",
                  ctx.workflowPayload(), // <1>
                  ShippingService::shipOrder,
-                 Duration.ofMinutes(5),
-                 defaults());
+                 step -> step.timeout(Duration.ofMinutes(5)));
 ----
 
 <.> The shipping service receives the full payload—including the `transactionId` we stored in the previous step.
@@ -76,9 +75,9 @@ Under the hood, each step has two _payload reducers_ that control how data flows
 |===
 |Reducer |Behavior |Default
 
-|`GLOBAL_ONLY` |Step receives the workflow payload, ignoring local input |Default for `awaitEvent`
-|`LOCAL_ONLY` |Step receives only its own local input, ignoring workflow payload |Default parameter reducer for `execute`
-|`COMBINE_GLOBAL_AND_LOCAL` |Merges both—local values overwrite duplicates |Used by `setPayload`
+|`GlobalOnlyPayloadReducer.INSTANCE` |Step receives the workflow payload, ignoring local input |Default result reducer for `execute` and `waitForEvent`
+|`LocalOnlyPayloadReducer.INSTANCE` |Step receives only its own local input, ignoring workflow payload |Default parameter reducer for `execute`
+|`CombineGlobalAndLocalPayloadReducer.INSTANCE` |Merges both—local values overwrite duplicates |Typical choice when a step should both see and update shared workflow state
 |===
 
 [NOTE]

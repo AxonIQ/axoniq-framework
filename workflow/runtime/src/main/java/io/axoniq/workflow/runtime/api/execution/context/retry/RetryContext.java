@@ -35,6 +35,14 @@ import jakarta.annotation.Nonnull;
 public record RetryContext(@Nonnull String stepName, int attempt, int maxRetries, @Nonnull Throwable error,
                            @Nonnull java.time.Duration delay) {
 
+    /**
+     * Creates a retry context with no backoff delay.
+     *
+     * @param stepName name of the step being retried
+     * @param attempt current retry attempt number (1-based)
+     * @param maxRetries maximum number of configured retries
+     * @param error error that triggered the retry
+     */
     public RetryContext(@Nonnull String stepName, int attempt, int maxRetries, @Nonnull Throwable error) {
         this(stepName, attempt, maxRetries, error, java.time.Duration.ZERO);
     }

@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
-import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -188,8 +188,10 @@ class UserSignupTest {
             );
 
             var payload = workflowHistory.state().payload();
-            assertThat(payload.containsKey("magic"));
-            assertThat(payload.containsKey("__createUser"));
+            assertThat(payload).containsEntry("magician", "Merlin");
+            assertThat(payload).containsEntry("email", "piggy@muppets.biz");
+            assertThat(payload).containsEntry("status", "vip");
+            assertThat(payload).containsEntry("id", "2");
         }
     }
 }

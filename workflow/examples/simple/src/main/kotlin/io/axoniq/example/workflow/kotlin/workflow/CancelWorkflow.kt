@@ -19,6 +19,7 @@
 package io.axoniq.example.workflow.kotlin.workflow
 
 import io.axoniq.workflow.dsl.kotlin.Kontext
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.time.Duration.Companion.minutes
 
@@ -35,9 +36,21 @@ class CancelWorkflow {
 
         // Launch 3 long-running steps (non-blocking, each simulates 5 min work)
         val fiveMinMs = 5.minutes.inWholeMilliseconds
-        val r1 = execute("stepA", { _, _ -> Thread.sleep(fiveMinMs); mapOf() }, timeout = 5.minutes)
-        val r2 = execute("stepB", { _, _ -> Thread.sleep(fiveMinMs); mapOf() }, timeout = 5.minutes)
-        val r3 = execute("stepC", { _, _ -> Thread.sleep(fiveMinMs); mapOf() }, timeout = 5.minutes)
+        val r1 = execute(
+            stepName = "stepA",
+            timeout = 5.minutes,
+            retryPolicy = RetryPolicy.NONE
+        ) { _, _ -> Thread.sleep(fiveMinMs); mapOf() }
+        val r2 = execute(
+            stepName = "stepB",
+            timeout = 5.minutes,
+            retryPolicy = RetryPolicy.NONE
+        ) { _, _ -> Thread.sleep(fiveMinMs); mapOf() }
+        val r3 = execute(
+            stepName = "stepC",
+            timeout = 5.minutes,
+            retryPolicy = RetryPolicy.NONE
+        ) { _, _ -> Thread.sleep(fiveMinMs); mapOf() }
 
         // Combine results but don't block on them
         val all = allMatch({ it.isCompleted }, r1, r2, r3)

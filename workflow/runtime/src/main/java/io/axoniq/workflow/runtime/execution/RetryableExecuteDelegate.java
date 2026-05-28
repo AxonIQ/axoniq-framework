@@ -28,8 +28,6 @@ import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -39,7 +37,6 @@ import org.axonframework.messaging.eventhandling.EventSink;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -86,103 +83,52 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
         this.delegate = delegate;
     }
 
-    // ---- No-retry path: straight delegation ----
-
     @Nonnull
     @Override
-    public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
-        return delegate.execute(stepName,
-                                local,
-                                action,
-                                parameterPayloadReducer,
-                                resultPayloadReducer,
-                                timeout,
-                                eventNameCustomizer);
-    }
-
-    // ---- Retry path ----
-
-    @Nonnull
-    @Override
-    public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy
-    ) {
+    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+        var retryPolicy = command.retryPolicy();
         if (retryPolicy == RetryPolicy.NONE || retryPolicy.maxRetries() <= 0) {
-            return delegate.execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout,
-                                    eventNameCustomizer);
+            return delegate.execute(command);
         }
+
+        var stepName = command.stepName();
 
         // Crash recovery: resume from persisted RETRYING state
         if (workflowExecution.state().containsStep(stepName)) {
             var step = workflowExecution.state().getStep(stepName);
             if (step.status() == StepStatus.RETRYING && step.result() instanceof StepRetryInfo info) {
                 Instant retryReadyAt = computeRetryReadyAt(retryPolicy, info.attempt(), step.timestamp());
-                scheduleRetryAttempt(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
-                                     timeout, eventNameCustomizer, retryPolicy,
-                                     info.attempt() + 1, retryReadyAt);
+                scheduleRetryAttempt(command, info.attempt() + 1, retryReadyAt);
                 return stateBased(stepName, workflowExecution);
             }
         }
 
         // Normal path: first attempt
-        return launchWithRetry(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
-                               timeout, eventNameCustomizer, retryPolicy, 1);
+        return launchWithRetry(command, 1);
     }
 
     // ---- Core retry logic ----
 
-    private WorkflowStepResult launchWithRetry(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy,
-            int attempt
-    ) {
+    private WorkflowStepResult launchWithRetry(@Nonnull ExecutePrimitive.ExecuteCommand command, int attempt) {
         FailureHandler failureHandler = (name, error, enc) ->
-                handleAttemptFailure(name, error, false, local, action, parameterPayloadReducer,
-                                     resultPayloadReducer, timeout, enc, retryPolicy, attempt);
+                handleAttemptFailure(command, name, error, false, enc, attempt);
 
         TimeoutHandler timeoutHandler = (name, enc) ->
-                handleAttemptFailure(name, null, true, local, action, parameterPayloadReducer,
-                                     resultPayloadReducer, timeout, enc, retryPolicy, attempt);
+                handleAttemptFailure(command, name, null, true, enc, attempt);
 
-        return delegate.execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
-                                timeout, eventNameCustomizer, failureHandler, timeoutHandler);
+        return delegate.execute(command, failureHandler, timeoutHandler);
     }
 
 
     private void handleAttemptFailure(
+            @Nonnull ExecutePrimitive.ExecuteCommand command,
             @Nonnull String stepName,
             @Nullable Throwable error,
             boolean isTimeout,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy,
             int attempt
     ) {
+        var retryPolicy = command.retryPolicy();
         Duration backoffDelay = retryPolicy.backoffStrategy().delay(attempt);
         var retryContext = new RetryContext(stepName, attempt, retryPolicy.maxRetries(), error, backoffDelay);
 
@@ -210,9 +156,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             }
 
             Instant retryReadyAt = computeRetryReadyAt(retryPolicy, attempt, clock.instant());
-            scheduleRetryAttempt(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
-                                 timeout, eventNameCustomizer, retryPolicy,
-                                 attempt + 1, retryReadyAt);
+            scheduleRetryAttempt(command, attempt + 1, retryReadyAt);
         } else {
             if (isTimeout) {
                 workflowExecution.appendTask(i -> timedOut(stepName, clock.instant(), eventNameCustomizer));
@@ -236,17 +180,11 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     // ---- Delayed retry scheduling ----
 
     private void scheduleRetryAttempt(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy,
+            @Nonnull ExecutePrimitive.ExecuteCommand command,
             int nextAttempt,
             @Nullable Instant retryReadyAt
     ) {
+        var stepName = command.stepName();
         Duration delay = retryReadyAt == null ? Duration.ZERO
                 : Duration.between(Instant.now(clock), retryReadyAt);
 
@@ -254,8 +192,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // No backoff or already elapsed (crash recovery) — launch on next task cycle
             workflowExecution.appendTask(i -> {
                 if (!i.state().getStep(stepName).status().isTerminal()) {
-                    launchWithRetry(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
-                                      timeout, eventNameCustomizer, retryPolicy, nextAttempt);
+                    launchWithRetry(command, nextAttempt);
                 }
             });
         } else {
@@ -263,8 +200,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             var backoffFuture = CompletableFuture.runAsync(
                     () -> workflowExecution.appendTask(i -> {
                         if (!i.state().getStep(stepName).status().isTerminal()) {
-                            launchWithRetry(stepName, local, action, parameterPayloadReducer, resultPayloadReducer,
-                                              timeout, eventNameCustomizer, retryPolicy, nextAttempt);
+                            launchWithRetry(command, nextAttempt);
                         }
                     }),
                     CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS)

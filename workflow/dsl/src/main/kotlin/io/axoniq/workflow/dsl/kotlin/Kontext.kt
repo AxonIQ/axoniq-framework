@@ -18,19 +18,19 @@
  */
 package io.axoniq.workflow.dsl.kotlin
 
+import io.axoniq.workflow.dsl.api.AssociationsUtils
+import io.axoniq.workflow.dsl.api.Payload
 import io.axoniq.workflow.runtime.api.execution.context.*
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult
+import io.axoniq.workflow.runtime.api.payload.PayloadModification
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer
-import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer
-import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME
-import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
 import org.axonframework.messaging.eventhandling.conversion.EventConverter
@@ -41,7 +41,11 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
 /**
- * Kotlin Workflow Context extension object.
+ * Kotlin-friendly wrapper around [WorkflowKontext].
+ * <p>
+ * This type exposes the workflow primitives that Kotlin DSL authors use inside
+ * a workflow definition block.
+ *
  * @since 1.0.0
  * @author Simon Zambrovski
  */
@@ -49,152 +53,362 @@ class Kontext(
     private val workflowKontext: WorkflowKontext
 ) {
 
+    private companion object {
+        const val DEFAULT_FAIL_STEP_NAME = "__FailWorkflow"
+        const val DEFAULT_CANCEL_STEP_NAME = "__CancelWorkflow"
+    }
+
+    var defaultTimeout: Duration = 5.seconds
+    var defaultRetryPolicy: RetryPolicy = RetryPolicy.NONE
+
     /**
-     * Current workflow payload.
+     * Current workflow payload as visible to the running workflow.
      */
     val payload: Map<String, Any?> get() = workflowKontext.workflowPayload()
 
     /**
-     * Current workflow id.
+     * Unique identifier of the current workflow instance.
      */
     val workflowId: String get() = workflowKontext.workflowId()
 
     /**
-     * A command that extracts a property from the result map of a workflow step.
-     *
-     * @param resultPropertyName the name of the property to extract.
-     * @param command the original execute command.
+     * Processing context for the current message.
      */
-    class MapPropertyExtractingExecuteCommand<T>(
-        val resultPropertyName: String,
-        command: PrimitiveCommands.WorkflowStepResultExecuteCommand
-    ) :
-        PrimitiveCommands.DelegatingExecuteCommand<T>(command) {
-        override fun result(result: WorkflowStepResult): T {
-            if (result.success() && result.result().isPresent) {
-                val map = result.result().get()
-                @Suppress("UNCHECKED_CAST")
-                return map[resultPropertyName] as T
-            } else {
-                throw result.error().get()
-            }
-        }
-    }
+    val processingContext get() = workflowKontext.processingContext()
 
     /**
-     * A command that converts the result map of a workflow step to a specific type.
+     * Resolves the Axon qualified message name for the given message type.
      *
-     * @param command the original wait for command.
-     * @param type the target type.
-     * @param converter the converter to use.
+     * @param messageType event or command class to resolve
+     * @return qualified name for the provided class
      */
-    class TypeConvertingWaitForCommand<T : Any>(
-        command: PrimitiveCommands.WorkflowStepResultWaitForCommand,
-        val type: Class<T>,
-        val converter: EventConverter
-    ) :
-        PrimitiveCommands.DelegatingWaitForCommand<T>(command) {
-        override fun result(result: WorkflowStepResult): T {
-            if (result.success() && result.result().isPresent) {
-                val map = result.result().get()
-                return converter.convert(map, type)!!
-            } else {
-                throw result.error().get()
-            }
-        }
-    }
+    private fun resolve(messageType: KClass<*>): QualifiedName =
+        processingContext.component(MessageTypeResolver::class.java).resolveOrThrow(messageType.java).qualifiedName
 
     /**
-     * Executes a step synchronously and returns the result.
+     * Starts an execute step using the Kotlin convenience API.
      *
-     * @param stepName name of the step.
-     * @param action action to be executed, receiving the payload and returning the result.
-     * @param local local payload to be passed to the step.
-     * @param parameterMapping mapping for the input payload.
-     * @param resultMapping mapping for the output payload.
-     * @param timeout maximum time to wait for the result.
-     * @param eventNameCustomizer customizer for event names.
-     * @param retryPolicy policy for retrying the step on failure.
-     * @return result of the step execution.
+     * @param stepName logical step name
+     * @param inputPayload step-local payload passed to the action
+     * @param timeout step timeout, defaults to [defaultTimeout]
+     * @param eventNameCustomizer customizer for published event names
+     * @param parameterPayloadReducer reducer controlling the action input
+     * @param resultPayloadReducer reducer controlling the workflow payload update
+     * @param retryPolicy retry policy applied to the action
+     * @param action action to execute
+     * @return handle for the running step
      */
-    fun <T> awaitExecute(
+    fun execute(
         stepName: String,
-        action: (payload: Map<String, Any?>) -> T,
-        local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = workflowKontext.processingContext()
-            .component(PayloadReducerRegistry::class.java).get(
-                LocalOnlyPayloadReducer.NAME
-            ).orElseThrow(),
-        resultMapping: PayloadReducer = workflowKontext.processingContext()
-            .component(PayloadReducerRegistry::class.java).get(
-                GlobalOnlyPayloadReducer.NAME
-            ).orElseThrow(),
-        timeout: Duration = 5.seconds,
+        inputPayload: Map<String, Any?> = emptyMap(),
+        timeout: Duration = defaultTimeout,
         eventNameCustomizer: EventNameCustomizer = defaults(),
-        retryPolicy: RetryPolicy = RetryPolicy.NONE
-    ): T {
-        val stepSpecificName = "__$stepName"
-        @Suppress("UNCHECKED_CAST")
-        return workflowKontext.execute(
-            MapPropertyExtractingExecuteCommand<T>(
-                stepSpecificName,
-                PrimitiveCommands.WorkflowStepResultExecuteCommand(
-                    stepName,
-                    local as Map<String, Any>?,
-                    { pc, payload ->
-                        mapOf(stepSpecificName to action.invoke(payload))
-                    },
-                    parameterMapping,
-                    resultMapping,
-                    timeout.toJavaDuration(),
-                    eventNameCustomizer,
-                    retryPolicy
-                )
-            )
+        parameterPayloadReducer: PayloadReducer = LocalOnlyPayloadReducer.INSTANCE,
+        resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE,
+        retryPolicy: RetryPolicy = defaultRetryPolicy,
+        action: PayloadProcessor
+    ): WorkflowStepResult =
+        execute(
+            workflowKontext.defaultExecuteStepDefinition(stepName, inputPayload, action)
+                .timeout(timeout.toJavaDuration())
+                .eventNameCustomizer(eventNameCustomizer)
+                .parameterPayloadReducer(parameterPayloadReducer)
+                .resultPayloadReducer(resultPayloadReducer)
+                .retryPolicy(retryPolicy)
         )
-    }
 
     /**
-     * Waits for an event of a specific type.
+     * Starts an execute step and blocks until it completes.
      *
-     * @param stepName name of the step.
-     * @param type class of the event to wait for.
-     * @param resultMapping mapping for the output payload.
-     * @param timeout maximum time to wait for the event.
-     * @param eventNameCustomizer customizer for event names.
-     * @return the event payload converted to the specified type.
+     * @param stepName logical step name
+     * @param inputPayload step-local payload passed to the action
+     * @param timeout step timeout, defaults to [defaultTimeout]
+     * @param eventNameCustomizer customizer for published event names
+     * @param parameterPayloadReducer reducer controlling the action input
+     * @param resultPayloadReducer reducer controlling the workflow payload update
+     * @param retryPolicy retry policy applied to the action
+     * @param action action to execute
+     * @return payload produced by the completed step
+     */
+    fun awaitExecute(
+        stepName: String,
+        inputPayload: Map<String, Any?> = emptyMap(),
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        parameterPayloadReducer: PayloadReducer = LocalOnlyPayloadReducer.INSTANCE,
+        resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE,
+        retryPolicy: RetryPolicy = defaultRetryPolicy,
+        action: PayloadProcessor
+    ): Map<String, Any?> =
+        awaitExecute(
+            workflowKontext.defaultExecuteStepDefinition(stepName, inputPayload, action)
+                .timeout(timeout.toJavaDuration())
+                .eventNameCustomizer(eventNameCustomizer)
+                .parameterPayloadReducer(parameterPayloadReducer)
+                .resultPayloadReducer(resultPayloadReducer)
+                .retryPolicy(retryPolicy)
+        )
+
+    /**
+     * Runs a typed synchronous action as a workflow step.
+     *
+     * The action result is stored under the internal key
+     * `"__" + stepName + "Result"` in the step payload and then unwrapped
+     * back to `T`.
+     *
+     * @param stepName logical step name
+     * @param resultType expected return type
+     * @param timeout step timeout, defaults to [defaultTimeout]
+     * @param eventNameCustomizer customizer for published event names
+     * @param retryPolicy retry policy applied to the action
+     * @param action action to execute
+     * @return typed result produced by the action
+     */
+    fun <T : Any> awaitExecute(
+        stepName: String,
+        resultType: KClass<T>,
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        retryPolicy: RetryPolicy = defaultRetryPolicy,
+        action: () -> T
+    ): T =
+        syntheticStepResultKey(stepName).let { resultKey ->
+            resultType.java.cast(
+                awaitExecute(
+                    stepName = stepName,
+                    timeout = timeout,
+                    eventNameCustomizer = eventNameCustomizer,
+                    retryPolicy = retryPolicy
+                ) { _, _ -> mapOf(resultKey to action()) }[resultKey]
+            )
+        }
+
+    inline fun <reified T : Any> awaitExecute(
+        stepName: String,
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        retryPolicy: RetryPolicy = defaultRetryPolicy,
+        noinline action: () -> T
+    ): T = awaitExecute(stepName, T::class, timeout, eventNameCustomizer, retryPolicy, action)
+
+    private fun syntheticStepResultKey(stepName: String): String = "__${stepName}Result"
+
+    /**
+     * Starts a wait-for step using the Kotlin convenience API.
+     *
+     * @param stepName logical step name
+     * @param eventCondition event condition to satisfy
+     * @param timeout step timeout, defaults to [defaultTimeout]
+     * @param eventNameCustomizer customizer for published event names
+     * @param resultPayloadReducer reducer controlling the workflow payload update
+     * @return handle for the waiting step
+     */
+    fun waitForEvent(
+        stepName: String,
+        eventCondition: EventCondition,
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE
+    ): WorkflowStepResult =
+        waitForEvent(
+            workflowKontext.defaultWaitForStepDefinition(stepName, eventCondition)
+                .timeout(timeout.toJavaDuration())
+                .eventNameCustomizer(eventNameCustomizer)
+                .resultPayloadReducer(resultPayloadReducer)
+        )
+
+    /**
+     * Starts a wait-for step and blocks until it completes.
+     *
+     * @param stepName logical step name
+     * @param eventCondition event condition to satisfy
+     * @param timeout step timeout, defaults to [defaultTimeout]
+     * @param eventNameCustomizer customizer for published event names
+     * @param resultPayloadReducer reducer controlling the workflow payload update
+     * @return payload extracted from the matching event
+     */
+    fun awaitEvent(
+        stepName: String,
+        eventCondition: EventCondition,
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE
+    ): Map<String, Any?> =
+        awaitEvent(
+            workflowKontext.defaultWaitForStepDefinition(stepName, eventCondition)
+                .timeout(timeout.toJavaDuration())
+                .eventNameCustomizer(eventNameCustomizer)
+                .resultPayloadReducer(resultPayloadReducer)
+        )
+
+    /**
+     * Waits for an event of the given type and returns the converted event
+     * payload.
+     *
+     * @param stepName logical step name
+     * @param eventType expected event payload type
+     * @param conditions optional association constraints for event matching
+     * @param timeout step timeout, defaults to [defaultTimeout]
+     * @param eventNameCustomizer customizer for published event names
+     * @param resultPayloadReducer reducer controlling the workflow payload update
+     * @return converted event payload
      */
     fun <T : Any> awaitEvent(
         stepName: String,
-        type: KClass<T>,
-        resultMapping: PayloadReducer = workflowKontext.processingContext()
-            .component(PayloadReducerRegistry::class.java)
-            .get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
-        timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = defaults()
+        eventType: KClass<T>,
+        conditions: AssociationsUtils? = null,
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE
     ): T {
-        val converter = workflowKontext.processingContext().component(EventConverter::class.java)
-        return workflowKontext.waitFor(
-            TypeConvertingWaitForCommand(
-                PrimitiveCommands.WorkflowStepResultWaitForCommand(
-                    stepName,
-                    EventConditions.fromQualifiedName(
-                        workflowKontext.processingContext().component(MessageTypeResolver::class.java)
-                            .resolve(type.java)
-                            .orElseThrow().qualifiedName
-                    ),
-                    resultMapping,
-                    timeout.toJavaDuration(),
-                    eventNameCustomizer
-                ),
-                type.java,
-                converter
-            )
+        val result = waitForEvent(
+            stepName,
+            eventCondition(eventType, conditions),
+            timeout,
+            eventNameCustomizer,
+            resultPayloadReducer
+        )
+        result.await()
+        if (result.failure() && result.error().isPresent) {
+            throw result.error().get()
+        }
+        return result.resultAs(eventType.java, processingContext.component(EventConverter::class.java))
+            .orElseThrow { IllegalStateException("No event payload for step '$stepName'") }
+    }
+
+    inline fun <reified T : Any> awaitEvent(
+        stepName: String,
+        conditions: AssociationsUtils? = null,
+        timeout: Duration = defaultTimeout,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE
+    ): T = awaitEvent(stepName, T::class, conditions, timeout, eventNameCustomizer, resultPayloadReducer)
+
+    /**
+     * Starts a durable sleep step and blocks until the timeout expires.
+     *
+     * @param stepName logical step name
+     * @param timeout sleep duration
+     * @param eventNameCustomizer customizer for published event names
+     */
+    fun sleep(
+        stepName: String,
+        timeout: Duration,
+        eventNameCustomizer: EventNameCustomizer = defaults()
+    ) {
+        val result = waitForEvent(stepName, EventConditions.never(), timeout, eventNameCustomizer)
+        if (result.failure() && result.error().isPresent) {
+            throw result.error().get()
+        }
+    }
+
+    /**
+     * Starts a payload update step using the Kotlin convenience API.
+     *
+     * @param stepName logical step name
+     * @param modification payload modification to apply
+     * @param eventNameCustomizer customizer for published event names
+     * @return handle for the payload update step
+     */
+    fun modifyPayload(
+        stepName: String,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        modification: PayloadModification
+    ): WorkflowStepResult =
+        modifyPayload(
+            workflowKontext.defaultPayloadStepDefinition(stepName, modification)
+                .eventNameCustomizer(eventNameCustomizer)
+        )
+
+    /**
+     * Applies a payload update and blocks until it has been committed.
+     *
+     * @param stepName logical step name
+     * @param eventNameCustomizer customizer for published event names
+     * @param modification payload modification to apply
+     */
+    fun awaitModifyPayload(
+        stepName: String,
+        eventNameCustomizer: EventNameCustomizer = defaults(),
+        modification: PayloadModification
+    ) {
+        awaitModifyPayload(
+            workflowKontext.defaultPayloadStepDefinition(stepName, modification)
+                .eventNameCustomizer(eventNameCustomizer)
         )
     }
 
     /**
-     * Creates a combinator result that succeeds if all given results match the predicate.
+     * Replaces the workflow payload with the fields extracted from the given
+     * value.
+     *
+     * @param stepName logical step name
+     * @param value object whose properties become part of the workflow payload
+     */
+    fun setPayload(stepName: String, value: Any) {
+        awaitModifyPayload(stepName) { workflowPayload ->
+            Payload.payload(workflowPayload)
+                .with(Payload.payload(workflowKontext, value))
+                .values
+        }
+    }
+
+    /**
+     * Starts an execute step using a fully configured step definition.
+     *
+     * @param stepDefinition execute step definition to schedule
+     * @return handle for the running step
+     */
+    fun execute(stepDefinition: ExecuteStepDefinition): WorkflowStepResult =
+        workflowKontext.execute(stepDefinition)
+
+    /**
+     * Starts an execute step and blocks until it completes.
+     *
+     * @param stepDefinition execute step definition to schedule
+     * @return payload produced by the completed step
+     */
+    fun awaitExecute(stepDefinition: ExecuteStepDefinition): Map<String, Any?> =
+        workflowKontext.awaitExecute(stepDefinition)
+
+    /**
+     * Starts a wait-for step using a fully configured step definition.
+     *
+     * @param stepDefinition wait-for step definition to schedule
+     * @return handle for the waiting step
+     */
+    fun waitForEvent(stepDefinition: WaitForStepDefinition): WorkflowStepResult =
+        workflowKontext.waitForEvent(stepDefinition)
+
+    /**
+     * Starts a wait-for step and blocks until a matching event is observed.
+     *
+     * @param stepDefinition wait-for step definition to schedule
+     * @return payload extracted from the matching event
+     */
+    fun awaitEvent(stepDefinition: WaitForStepDefinition): Map<String, Any?> =
+        workflowKontext.awaitEvent(stepDefinition)
+
+    /**
+     * Starts a payload update step using a fully configured step definition.
+     *
+     * @param stepDefinition payload update definition to schedule
+     * @return handle for the payload update step
+     */
+    fun modifyPayload(stepDefinition: PayloadStepDefinition): WorkflowStepResult =
+        workflowKontext.modifyPayload(stepDefinition)
+
+    /**
+     * Applies a payload update and blocks until it has been committed.
+     *
+     * @param stepDefinition payload update definition to schedule
+     */
+    fun awaitModifyPayload(stepDefinition: PayloadStepDefinition) =
+        workflowKontext.awaitModifyPayload(stepDefinition)
+
+    /**
+     * Creates a combined result that succeeds when all given step results match
+     * the predicate.
      *
      * @param predicate the predicate to check.
      * @param results the results to combine.
@@ -204,7 +418,8 @@ class Kontext(
             : CombinatorWorkflowStepResult = workflowKontext.allMatch(predicate, *results)
 
     /**
-     * Creates a combinator result that succeeds if none of the given results match the predicate.
+     * Creates a combined result that succeeds when none of the given step
+     * results match the predicate.
      *
      * @param predicate the predicate to check.
      * @param results the results to combine.
@@ -214,7 +429,8 @@ class Kontext(
             : CombinatorWorkflowStepResult = workflowKontext.noneMatch(predicate, *results)
 
     /**
-     * Creates a combinator result that succeeds if any of the given results match the predicate.
+     * Creates a combined result that succeeds when any of the given step
+     * results match the predicate.
      *
      * @param predicate the predicate to check.
      * @param results the results to combine.
@@ -222,117 +438,6 @@ class Kontext(
      */
     fun anyMatch(predicate: Predicate<WorkflowStepResult>, vararg results: WorkflowStepResult)
             : CombinatorWorkflowStepResult = workflowKontext.anyMatch(predicate, *results)
-
-    /**
-     * Executes a step asynchronously.
-     *
-     * @param stepName name of the step.
-     * @param action action to be executed.
-     * @param local local payload to be passed to the step.
-     * @param parameterMapping mapping for the input payload.
-     * @param resultMapping mapping for the output payload.
-     * @param timeout maximum time for the step to complete.
-     * @param eventNameCustomizer customizer for event names.
-     * @param retryPolicy policy for retrying the step on failure.
-     * @return workflow step result.
-     */
-    fun execute(
-        stepName: String,
-        action: PayloadProcessor,
-        local: Map<String, Any?> = mapOf(),
-        parameterMapping: PayloadReducer = workflowKontext.processingContext()
-            .component(PayloadReducerRegistry::class.java).get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
-        resultMapping: PayloadReducer = workflowKontext.processingContext()
-            .component(PayloadReducerRegistry::class.java).get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
-        timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = defaults(),
-        retryPolicy: RetryPolicy = RetryPolicy.NONE
-    ): WorkflowStepResult = workflowKontext.execute(
-        PrimitiveCommands.WorkflowStepResultExecuteCommand(
-            stepName,
-            local as Map<String, Any>?,
-            action,
-            parameterMapping,
-            resultMapping,
-            timeout.toJavaDuration(),
-            eventNameCustomizer,
-            retryPolicy
-        )
-    )
-
-    /**
-     * Waits for an event with a specific name.
-     *
-     * @param stepName name of the step.
-     * @param qualifiedName the qualified name of the event.
-     * @param resultMapping mapping for the output payload.
-     * @param timeout maximum time to wait for the event.
-     * @param eventNameCustomizer customizer for event names.
-     * @return workflow step result.
-     */
-    fun waitFor(
-        stepName: String,
-        qualifiedName: QualifiedName,
-        resultMapping: PayloadReducer = workflowKontext.processingContext()
-            .component(PayloadReducerRegistry::class.java).get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
-        timeout: Duration = 5.seconds,
-        eventNameCustomizer: EventNameCustomizer = defaults()
-    ): WorkflowStepResult = workflowKontext.waitFor(
-        PrimitiveCommands.WorkflowStepResultWaitForCommand(
-            stepName,
-            EventConditions.fromQualifiedName(qualifiedName),
-            resultMapping,
-            timeout.toJavaDuration(),
-            eventNameCustomizer
-        )
-    )
-
-
-    /**
-     * Non-blocking sleep that returns immediately with a [WorkflowStepResult].
-     * The result completes when the timeout expires.
-     *
-     * @param stepName name of the step.
-     * @param timeout duration to sleep.
-     * @param eventNameCustomizer customizer for event names.
-     * @return workflow step result that completes when the timeout expires.
-     */
-    fun sleep(
-        stepName: String,
-        timeout: Duration,
-        eventNameCustomizer: EventNameCustomizer = defaults()
-    ): WorkflowStepResult {
-        return waitFor(
-            stepName = stepName,
-            qualifiedName = QualifiedName(Void::class.java),
-            timeout = timeout,
-            eventNameCustomizer = eventNameCustomizer
-        )
-    }
-
-
-    /**
-     * Blocks until a step is completed or times out.
-     *
-     * @param stepName name of the step.
-     * @param timeout maximum time to wait.
-     * @param eventNameCustomizer customizer for event names.
-     */
-    fun block(
-        stepName: String,
-        timeout: Duration,
-        eventNameCustomizer: EventNameCustomizer = defaults()
-    ) {
-        val result = waitFor(
-            stepName = stepName,
-            qualifiedName = QualifiedName(Void::class.java),
-            timeout = timeout,
-            eventNameCustomizer = eventNameCustomizer
-        )
-        if (result.failure() && result.error().isPresent) {
-            throw result.error().get()
-        }
-    }
 
     /**
      * Terminates the entire workflow with an error, publishing a failure event and
@@ -343,7 +448,12 @@ class Kontext(
      * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException always, after the failure event is published
      */
     fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.fail(cause, eventNameCustomizer))
+        workflowKontext.fail(
+            FailWorkflowDefinition(
+                PrimitiveMetadata(DEFAULT_FAIL_STEP_NAME, eventNameCustomizer),
+                cause
+            )
+        )
     }
 
     /**
@@ -354,7 +464,12 @@ class Kontext(
      * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException always, after the cancellation event is published
      */
     fun cancel(eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(eventNameCustomizer))
+        workflowKontext.cancel(
+            CancelWorkflowDefinition(
+                PrimitiveMetadata(DEFAULT_CANCEL_STEP_NAME, eventNameCustomizer),
+                null
+            )
+        )
     }
 
     /**
@@ -366,11 +481,10 @@ class Kontext(
      * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException always, after the cancellation event is published
      */
     fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(
-            TerminatePrimitive.TerminateCommand.cancel(
-                WorkflowCancelledException(
-                    reason
-                ), eventNameCustomizer
+        workflowKontext.cancel(
+            CancelWorkflowDefinition(
+                PrimitiveMetadata(DEFAULT_CANCEL_STEP_NAME, eventNameCustomizer),
+                WorkflowCancelledException(reason)
             )
         )
     }
@@ -384,7 +498,12 @@ class Kontext(
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(TerminatePrimitive.TerminateCommand.cancel(cause, eventNameCustomizer))
+        workflowKontext.cancel(
+            CancelWorkflowDefinition(
+                PrimitiveMetadata(DEFAULT_CANCEL_STEP_NAME, eventNameCustomizer),
+                cause
+            )
+        )
     }
 
     /**
@@ -395,11 +514,10 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published event name
      */
     fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(
-            TerminatePrimitive.TerminateCommand.cancelledStep(
-                stepName,
-                null,
-                eventNameCustomizer
+        workflowKontext.cancelStep(
+            CancelStepDefinition(
+                PrimitiveMetadata(stepName, eventNameCustomizer),
+                null
             )
         )
     }
@@ -414,11 +532,10 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published event name
      */
     fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(
-            TerminatePrimitive.TerminateCommand.cancelledStep(
-                stepName,
-                cause,
-                eventNameCustomizer
+        workflowKontext.cancelStep(
+            CancelStepDefinition(
+                PrimitiveMetadata(stepName, eventNameCustomizer),
+                cause
             )
         )
     }
@@ -433,19 +550,19 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published event name
      */
     fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.terminate(
-            TerminatePrimitive.TerminateCommand.cancelledStep(
-                stepName,
-                StepCancellationException(reason),
-                eventNameCustomizer
+        workflowKontext.cancelStep(
+            CancelStepDefinition(
+                PrimitiveMetadata(stepName, eventNameCustomizer),
+                StepCancellationException(reason)
             )
         )
     }
 
     /**
-     * Executes a block and blocks until its result is available. Throws an exception if the result is a failure.
+     * Waits for the result produced by the block and rethrows step failures as
+     * exceptions.
      *
-     * @param result block returning a [WorkflowStepResult].
+     * @param result block returning a [WorkflowStepResult]
      */
     fun block(result: Kontext.() -> WorkflowStepResult) {
         val r = result()
@@ -458,4 +575,19 @@ class Kontext(
         }
     }
 
+    private fun eventCondition(
+        eventType: KClass<*>,
+        conditions: AssociationsUtils?
+    ): EventCondition {
+        val qualifiedName = resolve(eventType)
+        return if (conditions == null) {
+            EventConditions.fromQualifiedName(qualifiedName)
+        } else {
+            EventConditions.fromQualifiedName(qualifiedName, conditions.build())
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun asObjectMap(values: Map<String, Any?>): Map<String, Any> =
+        values as Map<String, Any>
 }

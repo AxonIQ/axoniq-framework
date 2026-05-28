@@ -57,11 +57,7 @@ class ParallelWorkflowsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
     @Override
     protected Function<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>, WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         return d -> d
-                .declarative(c -> ctx -> ctx.awaitExecute(
-                        "reserveStock",
-                        Map.of(),
-                        p -> Map.of("reserved", true)
-                ))
+                .declarative(c -> ctx -> ctx.awaitExecute("reserveStock", Map.of(), (pc, p) -> Map.of("reserved", true)))
                 .workflowName("OrderFulfillmentWorkflow")
                 .on(EventConditions.fromType(OrderPlacedEvent.class))
                 .customized((c, w) -> w
@@ -78,10 +74,10 @@ class ParallelWorkflowsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
                                                         .workflowContextFactory(conf -> new SimpleWorkflowContextFactory())
                                                         .definition(
                                                                 d -> d.declarative(c0 -> ctx -> ctx.awaitExecute(
-                                                                              "sendConfirmationEmail",
-                                                                              Map.of(),
-                                                                              p -> Map.of("sent", true)
-                                                                      ))
+                                                                                "sendConfirmationEmail",
+                                                                                Map.of(),
+                                                                                (pc, p) -> Map.of("sent", true)
+                                                                        ))
                                                                       .workflowName("CustomerNotificationWorkflow")
                                                                       .on(EventConditions.fromType(OrderPlacedEvent.class))
                                                                       .customized((c1, w) -> w

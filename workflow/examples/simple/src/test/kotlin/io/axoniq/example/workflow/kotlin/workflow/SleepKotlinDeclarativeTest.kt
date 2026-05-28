@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit
 import java.util.function.Function
 import java.util.function.Predicate
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class SleepKotlinDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,
@@ -45,8 +46,8 @@ class SleepKotlinDeclarativeTest : AbstractDeclarativeTestBase<WorkflowKontext>(
         return Function { d ->
             d.declarative {
                 WorkflowKontext.from {
-                    val cooldown = sleep("cooldown", 500.milliseconds)
-                    val work = execute("work", action = { _, _ -> mapOf("done" to true) })
+                    val cooldown = waitForEvent("cooldown", EventConditions.never(), timeout = 500.milliseconds)
+                    val work = execute("work", timeout = 5.seconds) { _, _ -> mapOf("done" to true) }
 
                     anyMatch({ it.isCompleted }, cooldown, work).await()
                 }

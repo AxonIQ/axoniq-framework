@@ -58,7 +58,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private WorkflowStatus status = WorkflowStatus.NONE;
-    private Map<String, Object> payload = Map.of();
+    private Map<String, Object> payload;
     private volatile Throwable terminationCause;
 
     private final WorkflowStateListenerSupport listenerSupport;
@@ -99,7 +99,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
-    @Nonnull
     public WorkflowStep getStep(@Nonnull String stepName) {
         return steps.get(stepName);
     }
@@ -345,5 +344,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 }
             }
         }
+    }
+
+    public String toString() {
+        return "WorkflowState{" +
+                "status=" + status +
+                ", steps=" + steps +
+                ", payload=" + payload +
+                '}';
     }
 }

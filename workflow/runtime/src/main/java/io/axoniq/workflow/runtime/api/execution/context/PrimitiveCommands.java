@@ -19,17 +19,11 @@
 package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
-import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
-import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
 import java.util.Map;
@@ -47,235 +41,43 @@ public class PrimitiveCommands {
     }
 
     /**
-     * Constructs new blocking execute command.
+     * Factory method to create a {@link WorkflowStepResultWaitForCommand}.
      *
-     * @param stepName            step name.
-     * @param payload             step payload.
-     * @param action              action to perform.
-     * @param duration            maximum duration of execution.
-     * @param type                type of return object.
-     * @param processingContext   processing context.
-     * @param eventNameCustomizer event name customizer.
-     * @param <T>                 Java type of return object.
-     * @return object mapped of result of the step execution.
+     * @param stepName             step name
+     * @param eventCondition       event condition
+     * @param resultPayloadReducer result payload reducer
+     * @param duration             timeout duration
+     * @param eventNameCustomizer  event name customizer
+     * @return command object
      */
-    public static <T> BlockingExecuteWithResultCommand<T> blockingLocalExecute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull PayloadProcessor action,
-            @Nonnull Duration duration,
-            @Nonnull TypeReference<T> type,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull ProcessingContext processingContext) {
-        return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
-                                                                   payload,
-                                                                   action,
-                                                                   duration,
-                                                                   eventNameCustomizer,
-                                                                   processingContext),
-                                                      processingContext.component(EventConverter.class),
-                                                      type);
-    }
-
-    public static <T> BlockingExecuteWithResultCommand<T> blockingLocalExecute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull PayloadProcessor action,
-            @Nonnull Duration duration,
-            @Nonnull TypeReference<T> type,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy,
-            @Nonnull ProcessingContext processingContext) {
-        return new BlockingExecuteWithResultCommand<>(localExecute(stepName,
-                                                                   payload,
-                                                                   action,
-                                                                   duration,
-                                                                   eventNameCustomizer,
-                                                                   retryPolicy,
-                                                                   processingContext),
-                                                      processingContext.component(EventConverter.class),
-                                                      type
-        );
-    }
-
-    /**
-     * Constructs a blocking wait for command.
-     *
-     * @param stepName            step name.
-     * @param eventCondition      condition on waiting event.
-     * @param duration            maximum duration of the wait.
-     * @param type                type of return object.
-     * @param converter           type converter.
-     * @param eventNameCustomizer event name customizer.
-     * @param <T>                 Java return type.
-     * @return object mapped from received event.
-     */
-    public static <T> BlockingWaitForCommand<T> blockingWait(
+    public static WorkflowStepResultWaitForCommand waitForEvent(
             @Nonnull String stepName,
             @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultReducer,
-            @Nonnull Duration duration,
-            @Nonnull TypeReference<T> type,
-            @Nonnull EventConverter converter,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
-        return new BlockingWaitForCommand<>(
-                PrimitiveCommands.wait(stepName, eventCondition, resultReducer, duration, eventNameCustomizer),
-                type,
-                converter
-        );
-    }
-
-
-    public static WorkflowStepResultExecuteCommand localExecute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull Duration duration,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull ProcessingContext processingContext
-    ) {
-        var registry = processingContext.component(PayloadReducerRegistry.class);
-        return new WorkflowStepResultExecuteCommand(stepName,
-                                                    local,
-                                                    action,
-                                                    registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
-                                                    registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
-                                                    duration,
-                                                    eventNameCustomizer,
-                                                    RetryPolicy.NONE);
-    }
-
-    public static WorkflowStepResultExecuteCommand localExecute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull Duration duration,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy,
-            @Nonnull ProcessingContext processingContext
-    ) {
-        var registry = processingContext.component(PayloadReducerRegistry.class);
-        return new WorkflowStepResultExecuteCommand(stepName,
-                                                    local,
-                                                    action,
-                                                    registry.get(LocalOnlyPayloadReducer.NAME).orElseThrow(),
-                                                    registry.get(GlobalOnlyPayloadReducer.NAME).orElseThrow(),
-                                                    duration,
-                                                    eventNameCustomizer,
-                                                    retryPolicy);
-    }
-
-    public static WorkflowStepResultWaitForCommand wait(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultReducer,
+            @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration duration,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
         return new WorkflowStepResultWaitForCommand(stepName,
                                                     eventCondition,
-                                                    resultReducer,
+                                                    resultPayloadReducer,
                                                     duration,
                                                     eventNameCustomizer);
     }
 
-    @Internal
-    public abstract static class DelegatingExecuteCommand<T> implements ExecutePrimitive.ExecuteCommand<T> {
-
-        private final WorkflowStepResultExecuteCommand delegate;
-
-        public DelegatingExecuteCommand(WorkflowStepResultExecuteCommand delegate) {
-            this.delegate = delegate;
-        }
-
-        @Nonnull
-        @Override
-        public String stepName() {
-            return delegate.stepName();
-        }
-
-        @Nonnull
-        @Override
-        public Map<String, Object> local() {
-            return delegate.local();
-        }
-
-        @Nonnull
-        @Override
-        public PayloadProcessor action() {
-            return delegate.action();
-        }
-
-        @Nonnull
-        @Override
-        public PayloadReducer parameterPayloadReducer() {
-            return delegate.parameterPayloadReducer();
-        }
-
-        @Nonnull
-        @Override
-        public PayloadReducer resultPayloadReducer() {
-            return delegate.resultPayloadReducer();
-        }
-
-        @Nonnull
-        @Override
-        public Duration timeout() {
-            return delegate.timeout();
-        }
-
-        @Nonnull
-        @Override
-        public EventNameCustomizer eventNameCustomizer() {
-            return delegate.eventNameCustomizer();
-        }
-
-        @Nonnull
-        @Override
-        public RetryPolicy retryPolicy() {
-            return delegate.retryPolicy();
-        }
-    }
-
-    @Internal
-    public abstract static class DelegatingWaitForCommand<T> implements WaitForPrimitive.WaitForCommand<T> {
-
-        private final WorkflowStepResultWaitForCommand delegate;
-
-        public DelegatingWaitForCommand(WorkflowStepResultWaitForCommand delegate) {
-            this.delegate = delegate;
-        }
-
-        @Nonnull
-        @Override
-        public String stepName() {
-            return delegate.stepName();
-        }
-
-        @Nonnull
-        @Override
-        public Duration timeout() {
-            return delegate.timeout();
-        }
-
-        @Nonnull
-        @Override
-        public EventCondition eventCondition() {
-            return delegate.eventCondition();
-        }
-
-        @Nonnull
-        @Override
-        public EventNameCustomizer eventNameCustomizer() {
-            return delegate.eventNameCustomizer();
-        }
-
-        @Nonnull
-        @Override
-        public PayloadReducer resultPayloadReducer() {
-            return delegate.resultPayloadReducer();
-        }
+    /**
+     * Factory method to create a {@link WorkflowStepResultModifyPayloadCommand}.
+     *
+     * @param stepName            step name
+     * @param payloadModification payload modification
+     * @param eventNameCustomizer event name customizer
+     * @return command object
+     */
+    public static WorkflowStepResultModifyPayloadCommand modifyPayload(
+            @Nonnull String stepName,
+            @Nonnull PayloadModification payloadModification,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+        return new WorkflowStepResultModifyPayloadCommand(stepName, payloadModification, eventNameCustomizer);
     }
 
     /**
@@ -291,7 +93,7 @@ public class PrimitiveCommands {
             Duration timeout,
             EventNameCustomizer eventNameCustomizer,
             RetryPolicy retryPolicy
-    ) implements ExecutePrimitive.ExecuteCommand<WorkflowStepResult> {
+    ) implements ExecutePrimitive.ExecuteCommand {
 
         public WorkflowStepResultExecuteCommand(
                 @Nonnull String stepName,
@@ -360,13 +162,18 @@ public class PrimitiveCommands {
         public RetryPolicy retryPolicy() {
             return retryPolicy;
         }
-
-        @Override
-        public WorkflowStepResult result(@Nonnull WorkflowStepResult result) {
-            return result;
-        }
     }
 
+    /**
+     * Default wait-for-event command implementation allowing asynchronous execution and returning the
+     * {@link WorkflowStepResult}.
+     *
+     * @param stepName             step name
+     * @param eventCondition       event condition
+     * @param resultPayloadReducer result payload reducer
+     * @param timeout              timeout duration
+     * @param eventNameCustomizer  event name customizer
+     */
     @Internal
     public record WorkflowStepResultWaitForCommand(
             @Nonnull String stepName,
@@ -374,103 +181,22 @@ public class PrimitiveCommands {
             @Nonnull PayloadReducer resultPayloadReducer,
             @Nonnull Duration timeout,
             @Nonnull EventNameCustomizer eventNameCustomizer
-    ) implements WaitForPrimitive.WaitForCommand<WorkflowStepResult> {
-
-        @Nonnull
-        @Override
-        public String stepName() {
-            return stepName;
-        }
-
-        @Nonnull
-        @Override
-        public EventCondition eventCondition() {
-            return eventCondition;
-        }
-
-        @Nonnull
-        @Override
-        public Duration timeout() {
-            return timeout;
-        }
-
-        @Nonnull
-        @Override
-        public EventNameCustomizer eventNameCustomizer() {
-            return eventNameCustomizer;
-        }
-
-        @Override
-        public WorkflowStepResult result(@Nonnull WorkflowStepResult result) {
-            return result;
-        }
+    ) implements WaitForPrimitive.WaitForCommand {
     }
 
     /**
-     * Blocking execute with result command.
+     * Default payload modification command implementation allowing asynchronous execution and returning the
+     * {@link WorkflowStepResult}.
      *
-     * @param <T> type of result.
-     * @author Simon Zambrovski
-     * @since 1.0.0
+     * @param stepName            step name
+     * @param payloadModification payload modification
+     * @param eventNameCustomizer event name customizer
      */
     @Internal
-    public static class BlockingExecuteWithResultCommand<T> extends PrimitiveCommands.DelegatingExecuteCommand<T> {
-
-        private final EventConverter converter;
-        private final TypeReference<T> type;
-
-
-        @Internal
-        BlockingExecuteWithResultCommand(
-                @Nonnull PrimitiveCommands.WorkflowStepResultExecuteCommand command,
-                @Nonnull EventConverter converter,
-                @Nonnull TypeReference<T> type) {
-            super(command);
-            this.converter = converter;
-            this.type = type;
-        }
-
-        @Override
-        public T result(@Nonnull WorkflowStepResult result) {
-            if (result.success() && result.result().isPresent()) {
-                return result.resultAs(type, converter).orElseThrow();
-            } else {
-                throw result.error().orElseThrow();
-            }
-        }
-    }
-
-    /**
-     * Blocking wait for command.
-     *
-     * @param <T> type of event.
-     * @author Simon Zambrovski
-     * @since 1.0.0
-     */
-    @Internal
-    public static class BlockingWaitForCommand<T> extends PrimitiveCommands.DelegatingWaitForCommand<T> {
-
-        private final EventConverter converter;
-        private final TypeReference<T> type;
-
-        @Internal
-        BlockingWaitForCommand(
-                @Nonnull PrimitiveCommands.WorkflowStepResultWaitForCommand command,
-                @Nonnull TypeReference<T> type,
-                @Nonnull EventConverter converter
-        ) {
-            super(command);
-            this.converter = converter;
-            this.type = type;
-        }
-
-        @Override
-        public T result(@Nonnull WorkflowStepResult result) {
-            if (result.success() && result.result().isPresent()) {
-                return result.resultAs(type, converter).orElseThrow();
-            } else {
-                throw result.error().orElseThrow();
-            }
-        }
+    public record WorkflowStepResultModifyPayloadCommand(
+            @Nonnull String stepName,
+            @Nonnull PayloadModification payloadModification,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) implements PayloadPrimitive.ModifyPayloadCommand {
     }
 }

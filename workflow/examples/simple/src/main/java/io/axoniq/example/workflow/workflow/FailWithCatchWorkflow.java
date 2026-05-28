@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
@@ -27,8 +27,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Workflow that calls {@code ctx.fail()}, catches the exception, and attempts to execute another step.
- * The guard should prevent the second step from executing.
+ * Workflow that calls {@code ctx.fail()}, catches the exception, and attempts to execute another step. The guard should
+ * prevent the second step from executing.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -37,7 +37,7 @@ public class FailWithCatchWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(FailWithCatchWorkflow.class);
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("FailWithCatch workflow started for {}", ctx.workflowPayload());
 
         ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));

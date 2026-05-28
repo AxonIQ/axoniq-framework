@@ -18,6 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -28,7 +29,6 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * @author Stefan Dragisic
@@ -44,18 +44,33 @@ public class CancelWorkflow {
         // Launch 3 long-running steps (non-blocking, each simulates 5 min work)
         Duration fiveMin = Duration.ofMinutes(5);
         long fiveMinMs = fiveMin.toMillis();
-        var r1 = ctx.execute("stepA", Map.of(), (c, p) -> {
-            sleepQuietly(fiveMinMs);
-            return Map.of();
-        }, fiveMin, defaults());
-        var r2 = ctx.execute("stepB", Map.of(), (c, p) -> {
-            sleepQuietly(fiveMinMs);
-            return Map.of();
-        }, fiveMin, defaults());
-        var r3 = ctx.execute("stepC", Map.of(), (c, p) -> {
-            sleepQuietly(fiveMinMs);
-            return Map.of();
-        }, fiveMin, defaults());
+        var r1 = ctx.execute(
+                "stepA",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(fiveMinMs);
+                    return Map.of();
+                },
+                step -> step.timeout(fiveMin)
+        );
+        var r2 = ctx.execute(
+                "stepB",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(fiveMinMs);
+                    return Map.of();
+                },
+                step -> step.timeout(fiveMin)
+        );
+        var r3 = ctx.execute(
+                "stepC",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(fiveMinMs);
+                    return Map.of();
+                },
+                step -> step.timeout(fiveMin)
+        );
 
         // Combine results but don't block on them
         ctx.allMatch(WorkflowStepResult::isCompleted, r1, r2, r3);

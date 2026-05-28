@@ -101,7 +101,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelCancelsAllRunningSteps() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowCancelledException.class));
@@ -119,7 +119,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelPublishesCancelledWorkflowEvent() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
@@ -127,7 +127,7 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelWithNullCauseThrowsWorkflowCancelledExceptionWithMessage() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class)
                 .hasMessage("Workflow cancelled");
     }
@@ -145,7 +145,7 @@ class TerminateDelegateCancelTest {
     void terminateCancelExecutesStepsInOrder() {
         var order = inOrder(workflowExecution, eventSink);
 
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.cancel(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         order.verify(workflowExecution).cancelAllRunningSteps(any());

@@ -23,8 +23,8 @@ import io.axoniq.example.workflow.fixture.NotificationService;
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.example.workflow.fixture.UserService;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
@@ -32,12 +32,12 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
 import static io.axoniq.workflow.dsl.api.Payload.payload;
-import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Sample user registration.
@@ -55,7 +55,6 @@ public class UserSignupWorkflow {
             @Nonnull SimpleWorkflowContext ctx
     ) {
 
-
         logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.workflowPayload());
 
         // -> start
@@ -67,24 +66,26 @@ public class UserSignupWorkflow {
         ctx.awaitExecute("activateUser",
                          ctx.workflowPayload(),
                          UserService::activateUser,
-                         Duration.ofSeconds(10),
-                         defaults());
+                         step -> step.timeout(Duration.ofSeconds(10))
+        );
 
         ctx.awaitExecute("sendWelcomeEmail",
                          ctx.workflowPayload(),
-                         p -> NotificationService.sendEmail(payload(p).get("email")));
+                         (pc, input) -> {
+                            NotificationService.sendEmail(payload(input).get("email"));
+                            return Map.of();
+                         });
         ctx.sleep("waitASecond", Duration.ofSeconds(1L));
 
         var magic = ctx.awaitEvent("waitForMagicToHappen",
-                                   MagicHappenedEvent.class,
-                                   associate(payloadProperty("magician"), equalsTo("Merlin")),
-                                   Duration.ofSeconds(5));
+                                     MagicHappenedEvent.class,
+                                     associate(payloadProperty("magician"), equalsTo("Merlin")),
+                                   step -> step.timeout(Duration.ofSeconds(5))
+        );
         ctx.setPayload("modifyPayload", magic);
 
         logger.info("Magic happened because of the magician {}", magic.magician());
         // -> end
-
-
     }
 
     @WorkflowCompletedHandler

@@ -38,6 +38,11 @@ public class LocalOnlyPayloadReducer implements PayloadReducer {
      */
     public static final String NAME = "local_only";
 
+    /**
+     * Singleton instance of {@link LocalOnlyPayloadReducer}.
+     */
+    public static final LocalOnlyPayloadReducer INSTANCE = new LocalOnlyPayloadReducer();
+
     @Override
     public Map<String, Object> apply(@NonNull Map<String, Object> global,
                                      @Nonnull Map<String, Object> local) {

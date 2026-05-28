@@ -19,10 +19,12 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -88,6 +90,7 @@ class PayloadDelegateTest {
 
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowContext()).thenReturn(workflowContext);
+        when(workflowExecution.state()).thenReturn(mock(WorkflowState.class));
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -104,7 +107,7 @@ class PayloadDelegateTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void modifyPayloadAppendsTaskAndPublishesEvent() throws InterruptedException {
+    void modifyPayloadAppendsTaskAndPublishesEvent() {
         String stepName = "testStep";
         Map<String, Object> currentPayload = new HashMap<>();
         currentPayload.put("key1", "value1");
@@ -119,14 +122,13 @@ class PayloadDelegateTest {
 
         // Capture the task appended to workflow execution
         ArgumentCaptor<Consumer<WorkflowExecution>> taskCaptor = ArgumentCaptor.forClass(Consumer.class);
-
-        // We need to simulate that awaitStateChange eventually succeeds or returns
-        doNothing().when(workflowExecution).awaitStateChange(any(Predicate.class));
-
-        delegate.modifyPayload(stepName, modification, customizer);
+        WorkflowStepResult result = delegate.modifyPayload(
+                PrimitiveCommands.modifyPayload(stepName, modification, customizer)
+        );
 
         verify(workflowExecution).appendTask(taskCaptor.capture());
         Consumer<WorkflowExecution> task = taskCaptor.getValue();
+        assertThat(result.getStepName()).isEqualTo(stepName);
 
         // Execute the task
         task.accept(workflowExecution);
@@ -142,16 +144,14 @@ class PayloadDelegateTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void modifyPayloadWaitsForStepCompletion() throws InterruptedException {
         String stepName = "testStep";
         PayloadModification modification = p -> p;
         EventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
+        delegate.modifyPayload(PrimitiveCommands.modifyPayload(stepName, modification, customizer));
+
         ArgumentCaptor<Predicate<WorkflowState>> predicateCaptor = ArgumentCaptor.forClass(Predicate.class);
-
-        delegate.modifyPayload(stepName, modification, customizer);
-
         verify(workflowExecution).awaitStateChange(predicateCaptor.capture());
         Predicate<WorkflowState> predicate = predicateCaptor.getValue();
 

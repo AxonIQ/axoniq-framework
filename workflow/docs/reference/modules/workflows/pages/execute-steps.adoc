@@ -4,25 +4,45 @@
 Execute steps are the type of execution primitives that allow calling services, performing computations and triggering side effects in workflows.
 The engine records each execution as durable events, giving you crash recovery and audit trails automatically.
 
+[NOTE]
+====
+The Java DSL now has two layers:
+
+- `BaseWorkflowContext` is the canonical primitive API. Its blocking `awaitExecute(...)` methods return a payload map, and customization happens through `UnaryOperator<ExecuteStepDefinition>`.
+- `SimpleWorkflowContext` adds convenience helpers on top, such as execute overloads without extra input payload, typed `awaitExecute(...)` for single-value actions, typed `awaitEvent(...)`, `sleep(...)`, and `setPayload(...)`.
+====
+
 There are two variants:
 
-* *`awaitExecute`*—blocks until the action finishes and returns a typed result
+* *`awaitExecute`*—blocks until the action finishes and returns either the resulting payload map or, via the convenience overload, a single typed value
 * *`execute`*—starts the action without waiting and returns a `WorkflowStepResult`
 
 [[awaitexecute]]
 == `awaitExecute` (blocking)
 
-`awaitExecute` calls an action, waits for it to finish, and returns the typed result.
+`awaitExecute` calls an action, waits for it to finish, and returns the resulting payload map.
 The engine records a STARTED and COMPLETED event for this step automatically.
 
 === Basic usage
 
-The simplest form takes a step name, return type, and a supplier:
+For a single-value action, `SimpleWorkflowContext` offers a typed convenience overload:
 
 [source,java]
 ----
 var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
                                  InventoryService::reserveStock);
+----
+
+Internally this convenience stores the value under the synthetic payload key `"__" + stepName + "Result"`, then unwraps it for the caller.
+For `reserveStock`, that key becomes `__reserveStockResult`.
+
+The canonical form takes a step name, a local payload map, and a processor:
+
+[source,java]
+----
+var reservation = ctx.awaitExecute("reserveStock",
+        Map.of(),
+        (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
 ----
 
 That's it—one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
@@ -36,17 +56,16 @@ Pass data into the step and use the result for control flow:
 var customerId = ctx.workflowPayload().get("customerId");
 var amount = ctx.workflowPayload().get("amount");
 
-var reserved = ctx.awaitExecute("reserveStock",
+var reservation = ctx.awaitExecute("reserveStock",
         payload("customerId", customerId, "amount", amount).getValues(),
-        Boolean.class,
-        InventoryService::reserveStock); // <1>
-if (!reserved) {
+        (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input))); // <1>
+if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
     ctx.fail(new RuntimeException("Stock unavailable")); // <2>
     return;
 }
 ----
 
-<.> The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event.
+<.> The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event, and the returned payload map is recorded in the COMPLETED event.
 <.> If stock reservation fails, we fail the workflow.
 Standard Java control flow—`if`, loops, try/catch—all work exactly as you'd expect.
 
@@ -56,7 +75,7 @@ Here's the event store after a successful run:
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="awaitExecute — reserveStock">
 1 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
-2 completed ReserveStockCompleted {"__reserveStock": true}
+2 completed ReserveStockCompleted {"reserved": true}
   </div>
 </div>
 ++++
@@ -72,8 +91,8 @@ The full form adds an explicit timeout and event name customizer:
 ctx.awaitExecute("initiatePayment",
                  payload("customerId", customerId, "amount", amount).getValues(),
                  PaymentService::initiatePayment,
-                 Duration.ofSeconds(30),
-                 baseName("InitiatingPaymentForCustomer")); // <1>
+                 step -> step.timeout(Duration.ofSeconds(30))
+                             .eventNameCustomizer(baseName("InitiatingPaymentForCustomer"))); // <1>
 ----
 
 <.> `baseName(...)` replaces the step name in the event name—its events will appear as `InitiatingPaymentForCustomerStarted` instead of `InitiatePaymentStarted`.
@@ -84,29 +103,23 @@ The step name's first letter is automatically uppercased in event names (for exa
 For full details on naming rules, see xref:understanding-steps.adoc#event-name-customization[Event name customization].
 ====
 
-=== All overloads
+=== Java entry points
 
 [cols="1,3"]
 |===
-|Overload |Description
+|API |Description
 
 |`awaitExecute(stepName, returnType, supplier)`
-|Simplest form. No input payload, no timeout override, no customizer. Calls a `Supplier<T>` and returns the result.
+|`SimpleWorkflowContext` convenience for single-value actions. Internally stores the result under the payload key `"__" + stepName + "Result"` and returns it as the requested type.
 
-|`awaitExecute(stepName, returnType, function)`
-|Like above, but the action receives the (empty) payload map as input.
+|`awaitExecute(stepName, payload, processor)`
+|`BaseWorkflowContext` blocking form. Passes a local payload map to a `PayloadProcessor` and returns the resulting payload map.
 
-|`awaitExecute(stepName, payload, returnType, function)`
-|Passes a payload map to the action. The payload is recorded in the STARTED event.
+|`awaitExecute(stepName, payload, processor, customizer)`
+|Same as above, with fluent customization through `ExecuteStepDefinition` methods such as `timeout(...)`, `eventNameCustomizer(...)`, `parameterPayloadReducer(...)`, `resultPayloadReducer(...)`, and `retryPolicy(...)`.
 
-|`awaitExecute(stepName, payload, returnType, function, eventNameCustomizer)`
-|Adds an event name customizer to control how events are named.
-
-|`awaitExecute(stepName, payload, consumer)`
-|The action receives payload but returns nothing.
-
-|`awaitExecute(stepName, payload, action, duration, eventNameCustomizer)`
-|Full form. The `action` is a `PayloadProcessor` (receives `ProcessingContext` + payload, returns a payload map). Explicit timeout and customizer.
+|`execute(stepName, payload, processor)` / `execute(stepName, payload, processor, customizer)`
+|Non-blocking counterparts that return a `WorkflowStepResult`.
 |===
 
 [[execute]]
@@ -122,15 +135,15 @@ Use this when you want to run multiple steps concurrently, or when you need to c
 |`execute(stepName, payload, action)`
 |Starts the step with default timeout and default event names.
 
-|`execute(stepName, payload, action, duration, eventNameCustomizer)`
-|Full form with explicit timeout and event name customizer.
+|`execute(stepName, payload, action, customizer)`
+|Full form with explicit timeout, event name customization, reducer overrides, and retry policy.
 |===
 
 [source,java]
 ----
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
         ShippingService::shipOrder,
-        Duration.ofMinutes(5), defaults());
+        step -> step.timeout(Duration.ofMinutes(5)));
 ----
 
 See xref:step-orchestration.adoc[] for combining multiple `execute` and `waitForEvent` results with `allMatch`, `anyMatch`, and `noneMatch`.
@@ -144,46 +157,24 @@ See xref:workflow-lifecycle.adoc#complete-with-running-steps[Normal completion w
 
 == Kotlin DSL
 
-The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support:
+`WorkflowKontext` is the runtime-facing context, while `Kontext` is the Kotlin authoring wrapper.
+`Kontext` supports concise Kotlin-first overloads with defaults for the common case:
 
 [source,kotlin]
 ----
 fun Kontext.fulfillOrder() {
-    // Blocking awaitExecute
-    val reserved = awaitExecute(
-        "reserveStock",
-        { InventoryService.reserveStock() },
-        local = mapOf("customerId" to customerId, "amount" to amount)
-    )
-    if (!reserved) {
-        fail(RuntimeException("Stock unavailable"))
-        return
+    val reserved = awaitExecute<Boolean>(
+        stepName = "reserveStock",
+        timeout = 10.seconds
+    ) {
+        InventoryService.reserveStock()
     }
-
-    // Blocking awaitExecute with all options
-    val result = awaitExecute(
-        "reserveStock",
-        action = { InventoryService.reserveStock() },
-        local = mapOf("customerId" to customerId),
-        timeout = 10.seconds,
-        eventNameCustomizer = baseName("ReservingStock")
-    )
-
-    // Non-blocking execute with all options
-    execute(
-        "shipOrder",
-        action = { pc, p -> ShippingService.shipOrder(pc, p) },
-        local = mapOf("address" to address),
-        parameterMapping = PayloadReducer.LOCAL_ONLY,
-        resultMapping = PayloadReducer.GLOBAL_ONLY,
-        timeout = 5.minutes,
-        eventNameCustomizer = namespace("io.shipping")
-    )
-
 }
 ----
 
-Kotlin's named parameters and default values mean you only specify what you need—everything else falls back to sensible defaults.
+If you want to pass step-local data with a named Kotlin argument, use `inputPayload = ...`.
+
+The typed Kotlin convenience uses the same synthetic payload key pattern `"__" + stepName + "Result"` internally. The low-level definition API is still available when you want to construct `ExecuteStepDefinition` explicitly, but most workflows can stay on the overloads with Kotlin default parameters.
 
 == What's next
 

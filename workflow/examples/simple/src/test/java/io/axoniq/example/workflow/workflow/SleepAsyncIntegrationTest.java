@@ -26,7 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
@@ -54,8 +54,12 @@ class SleepAsyncIntegrationTest extends AbstractDeclarativeTestBase<SimpleWorkfl
     }
 
     public void execute(SimpleWorkflowContext ctx) {
-        var sleep = ctx.sleepAsync("cooldown", Duration.ofMillis(500));
-        var approval = ctx.execute("approval", Map.of(), (c, p) -> Map.of("approved", true));
+        var sleep = ctx.waitForEvent("cooldown", EventConditions.never(), step -> step.timeout(Duration.ofMillis(500)));
+        var approval = ctx.execute(
+                "approval",
+                Map.of(),
+                (c, p) -> Map.of("approved", true)
+        );
 
         // Wait for both
         ctx.allMatch(WorkflowStepResult::isCompleted, sleep, approval).await();

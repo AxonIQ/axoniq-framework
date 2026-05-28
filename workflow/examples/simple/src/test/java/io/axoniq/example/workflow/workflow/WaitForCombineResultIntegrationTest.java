@@ -20,16 +20,14 @@ package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
 import io.axoniq.workflow.configuration.WorkflowModule;
-import io.axoniq.workflow.dsl.api.AssociationsUtils;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -44,10 +42,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
-import static io.axoniq.workflow.dsl.simple.SimpleWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -103,11 +99,24 @@ class WaitForCombineResultIntegrationTest
         static final Logger logger = LoggerFactory.getLogger(WaitForCombineWorkflow.class);
 
         public void execute(WaitForCombineWorkflowContext ctx) {
-            // Using the new overload of awaitEvent with COMBINE
-            var event = ctx.awaitEvent("waitStep",
-                                       RegistrationReceivedEvent.class,
-                                       associate(payloadProperty("status"), equalsTo("arrived")),
-                                       Duration.ofSeconds(5)
+            var event = ctx.processingContext().component(EventConverter.class).convert(
+                    ctx.awaitEvent(
+                            "waitStep",
+                            EventConditions.fromQualifiedName(
+                                    ctx.processingContext()
+                                       .component(MessageTypeResolver.class)
+                                       .resolve(RegistrationReceivedEvent.class)
+                                       .orElseThrow()
+                                       .qualifiedName(),
+                                    (e, pc) -> associate(payloadProperty("status"),
+                                                         equalsTo("arrived")).build().test(e, pc)
+                            ),
+                            step -> step.resultPayloadReducer(
+                                                CombineGlobalAndLocalPayloadReducer.INSTANCE
+                                    )
+                                    .timeout(Duration.ofSeconds(5))
+                    ),
+                    RegistrationReceivedEvent.class
             );
         }
     }
@@ -120,24 +129,6 @@ class WaitForCombineResultIntegrationTest
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
 
-        @Override
-        public <T> T awaitEvent(String stepName, Class<T> eventType, AssociationsUtils associationsUtils,
-                                Duration timeout) {
-            return waitFor(PrimitiveCommands.blockingWait(
-                    stepName,
-                    EventConditions.fromQualifiedName(
-                            super.processingContext()
-                                 .component(MessageTypeResolver.class).resolve(eventType)
-                                 .orElseThrow().qualifiedName(),
-                            (e, pc) -> associationsUtils.build().test(e, pc)
-                    ),
-                    registry.get(NAME).orElseThrow(),
-                    timeout,
-                    TypeReference.fromType(eventType),
-                    super.processingContext().component(EventConverter.class),
-                    defaults()
-            ));
-        }
     }
 
     public static class WaitForCombineWorkflowContextFactory

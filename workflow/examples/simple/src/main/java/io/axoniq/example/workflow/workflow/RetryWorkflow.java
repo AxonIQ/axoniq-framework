@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.BackoffStrategy;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
@@ -36,7 +36,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
  * Workflow exercising all retry scenarios:
@@ -76,81 +75,125 @@ public class RetryWorkflow {
         return backoffTimestamps;
     }
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("Retry workflow started for {}", ctx.workflowPayload());
 
         // Step 1: Normal step — succeeds immediately, no retry policy
-        ctx.awaitExecute("normalStep", Map.of(), (c, p) -> {
-            logger.info("normalStep: executing");
-            return Map.of("normalStep", "done");
-        });
+        ctx.awaitExecute(
+                "normalStep",
+                Map.of(),
+                (c, p) -> {
+                    logger.info("normalStep: executing");
+                    return Map.of("normalStep", "done");
+                }
+        );
 
         // Step 2: Retry then succeed — fails 2 times, succeeds on attempt 3
-        ctx.awaitExecute("retryThenSucceed", Map.of(), (c, p) -> {
-            int attempt = retryThenSucceedAttempts.incrementAndGet();
-            logger.info("retryThenSucceed: attempt {}", attempt);
-            if (attempt <= 2) {
-                throw new RuntimeException("retryThenSucceed failure on attempt " + attempt);
-            }
-            return Map.of("retryThenSucceed", "done");
-        }, RetryPolicy.maxRetries(3));
+        ctx.awaitExecute(
+                "retryThenSucceed",
+                Map.of(),
+                (c, p) -> {
+                    int attempt = retryThenSucceedAttempts.incrementAndGet();
+                    logger.info("retryThenSucceed: attempt {}", attempt);
+                    if (attempt <= 2) {
+                        throw new RuntimeException("retryThenSucceed failure on attempt " + attempt);
+                    }
+                    return Map.of("retryThenSucceed", "done");
+                },
+                step -> step.retryPolicy(RetryPolicy.maxRetries(3))
+        );
 
         //ctx.execute(...).retry(RetryPolicy.maxRetries(3)) -> make it composable, execution properties
 
         // Step 3: Retry with handler — fails 1 time, handler is called, succeeds on attempt 2
-        ctx.awaitExecute("retryWithHandler", Map.of(), (c, p) -> {
-            int attempt = retryWithHandlerAttempts.incrementAndGet();
-            logger.info("retryWithHandler: attempt {}", attempt);
-            if (attempt <= 1) {
-                throw new RuntimeException("retryWithHandler failure on attempt " + attempt);
-            }
-            return Map.of("retryWithHandler", "done");
-        }, RetryPolicy.maxRetries(2).onRetry(handlerCalls::add));
+        ctx.awaitExecute(
+                "retryWithHandler",
+                Map.of(),
+                (c, p) -> {
+                    int attempt = retryWithHandlerAttempts.incrementAndGet();
+                    logger.info("retryWithHandler: attempt {}", attempt);
+                    if (attempt <= 1) {
+                        throw new RuntimeException("retryWithHandler failure on attempt " + attempt);
+                    }
+                    return Map.of("retryWithHandler", "done");
+                },
+                step -> step.retryPolicy(RetryPolicy.maxRetries(2).onRetry(handlerCalls::add))
+        );
 
         // Step 4: Cancel during retry — fails attempt 1 (triggers retry), throws StepCancellationException on attempt 2
-        WorkflowStepResult r4 = ctx.execute("cancelDuringRetry", Map.of(), (c, p) -> {
-            int attempt = cancelDuringRetryAttempts.incrementAndGet();
-            logger.info("cancelDuringRetry: attempt {}", attempt);
-            if (attempt == 1) {
-                throw new RuntimeException("cancelDuringRetry failure on attempt 1");
-            }
-            throw new StepCancellationException("cancelDuringRetry cancelled on attempt " + attempt);
-        }, RetryPolicy.maxRetries(3));
+        WorkflowStepResult r4 = ctx.execute(
+                "cancelDuringRetry",
+                Map.of(),
+                (c, p) -> {
+                    int attempt = cancelDuringRetryAttempts.incrementAndGet();
+                    logger.info("cancelDuringRetry: attempt {}", attempt);
+                    if (attempt == 1) {
+                        throw new RuntimeException("cancelDuringRetry failure on attempt 1");
+                    }
+                    throw new StepCancellationException("cancelDuringRetry cancelled on attempt " + attempt);
+                },
+                step -> step.retryPolicy(RetryPolicy.maxRetries(3))
+        );
         r4.await();
 
         // Step 5: Timeout during retry — each attempt sleeps 500ms; per-attempt timeout 300ms → TIMED_OUT
-        WorkflowStepResult r5 = ctx.execute("timeoutDuringRetry", Map.of(), (c, p) -> {
-            int attempt = timeoutDuringRetryAttempts.incrementAndGet();
-            logger.info("timeoutDuringRetry: attempt {}", attempt);
-            sleepQuietly(500);
-            throw new RuntimeException("timeoutDuringRetry failure on attempt " + attempt);
-        }, Duration.ofMillis(300), defaults(), RetryPolicy.maxRetries(5));
+        WorkflowStepResult r5 = ctx.execute(
+                "timeoutDuringRetry",
+                Map.of(),
+                (c, p) -> {
+                    int attempt = timeoutDuringRetryAttempts.incrementAndGet();
+                    logger.info("timeoutDuringRetry: attempt {}", attempt);
+                    sleepQuietly(500);
+                    throw new RuntimeException("timeoutDuringRetry failure on attempt " + attempt);
+                },
+                step -> step.retryPolicy(RetryPolicy.maxRetries(5)).timeout(Duration.ofMillis(300))
+        );
         r5.await();
 
         // Step 6: Retry exhaustion — always throws, retries exhausted after 3 retries
-        WorkflowStepResult r6 = ctx.execute("retryExhaustion", Map.of(), (c, p) -> {
-            int attempt = retryExhaustionAttempts.incrementAndGet();
-            logger.info("retryExhaustion: attempt {}", attempt);
-            throw new RuntimeException("retryExhaustion failure on attempt " + attempt);
-        }, RetryPolicy.maxRetries(3));
+        WorkflowStepResult r6 = ctx.execute(
+                "retryExhaustion",
+                Map.of(),
+                (c, p) -> {
+                    int attempt = retryExhaustionAttempts.incrementAndGet();
+                    logger.info("retryExhaustion: attempt {}", attempt);
+                    throw new RuntimeException("retryExhaustion failure on attempt " + attempt);
+                },
+                step -> step.retryPolicy(RetryPolicy.maxRetries(3))
+        );
         r6.await();
 
         // Step 7: Retry with backoff — fails 2 times, succeeds on attempt 3 with fixed 200ms backoff
-        ctx.awaitExecute("retryWithBackoff", Map.of(), (c, p) -> {
-            backoffTimestamps.add(Instant.now());
-            int attempt = retryWithBackoffAttempts.incrementAndGet();
-            logger.info("retryWithBackoff: attempt {}", attempt);
-            if (attempt <= 2) {
-                throw new RuntimeException("retryWithBackoff failure on attempt " + attempt);
-            }
-            return Map.of("retryWithBackoff", "done");
-        }, RetryPolicy.maxRetries(3).withBackoff(BackoffStrategy.fixed(Duration.ofMillis(200))));
+        ctx.awaitExecute(
+                "retryWithBackoff",
+                Map.of(),
+                (c, p) -> {
+                    backoffTimestamps.add(Instant.now());
+                    int attempt = retryWithBackoffAttempts.incrementAndGet();
+                    logger.info("retryWithBackoff: attempt {}", attempt);
+                    if (attempt <= 2) {
+                        throw new RuntimeException("retryWithBackoff failure on attempt " + attempt);
+                    }
+                    return Map.of("retryWithBackoff", "done");
+                },
+                step -> step.retryPolicy(
+                        RetryPolicy.maxRetries(3)
+                                   .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(200)))
+                )
+        );
 
         // Step 8: retryWhile — always fails, predicate stops retrying after attempt 2 → FAILED
-        WorkflowStepResult r8 = ctx.execute("retryWhileStop", Map.of(), (c, p) -> {
-            int attempt = retryWhileStopAttempts.incrementAndGet();
-            throw new RuntimeException("retryWhileStop failure on attempt " + attempt);
-        }, RetryPolicy.maxRetries(5).retryWhile(rc -> rc.attempt() < 2));
+        WorkflowStepResult r8 = ctx.execute(
+                "retryWhileStop",
+                Map.of(),
+                (c, p) -> {
+                    int attempt = retryWhileStopAttempts.incrementAndGet();
+                    throw new RuntimeException("retryWhileStop failure on attempt " + attempt);
+                },
+                step -> step.retryPolicy(RetryPolicy
+                                                 .maxRetries(5)
+                                                 .retryWhile(rc -> rc.attempt() < 2))
+        );
         r8.await();
 
         logger.info("Retry workflow completed");

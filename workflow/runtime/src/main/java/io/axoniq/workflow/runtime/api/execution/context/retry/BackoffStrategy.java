@@ -29,6 +29,9 @@ import java.time.Duration;
 @FunctionalInterface
 public interface BackoffStrategy {
 
+    /**
+     * Backoff strategy that applies no delay between retry attempts.
+     */
     BackoffStrategy NONE = attempt -> Duration.ZERO;
 
     /**

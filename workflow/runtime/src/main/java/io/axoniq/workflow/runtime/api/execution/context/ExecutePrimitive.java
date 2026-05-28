@@ -23,11 +23,9 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.Objects;
 
 import static io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy.NONE;
 
@@ -43,83 +41,16 @@ public interface ExecutePrimitive {
     /**
      * Execute primitive.
      *
-     * @param stepName                name of the step.
-     * @param local                   local context passed to the call.
-     * @param action                  action to execute.
-     * @param parameterPayloadReducer reducer for parameters (to reduce local and workflow payloads to effective
-     *                                parameters passed to the step execution).
-     * @param resultPayloadReducer    reducer for the result (to reduce result and workflow payload to the resulting
-     *                                workflow payload).
-     * @param timeout                 timeout of the action.
-     * @param eventNameCustomizer     event name customizer.
-     * @return result.
+     * @param command command object for the primitive.
+     * @return durable result handle.
      */
     @Nonnull
-    WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    );
+    WorkflowStepResult execute(@Nonnull ExecuteCommand command);
 
     /**
-     * Execute primitive with retry support.
-     *
-     * @param stepName            name of the step.
-     * @param local               local context passed to the call.
-     * @param action              action to execute.
-     * @param parameterPayloadReducer reducer for parameters.
-     * @param resultPayloadReducer    reducer for result.
-     * @param timeout             timeout of the action.
-     * @param eventNameCustomizer event name customizer.
-     * @param retryPolicy         retry policy for the step.
-     * @return result.
+     * Parameter object for the primitive.
      */
-    @Nonnull
-    default WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nonnull RetryPolicy retryPolicy
-    ) {
-        return execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout, eventNameCustomizer);
-    }
-
-    /**
-     * Execute primitive.
-     *
-     * @param command parameters object for the primitive.
-     * @param <T>     type of result.
-     * @return result of the action.
-     */
-    @Nonnull
-    default <T> T execute(@Nonnull ExecuteCommand<T> command) {
-        Objects.requireNonNull(command, "Command is required");
-        return
-                command.result(
-                        execute(command.stepName(),
-                                command.local(),
-                                command.action(),
-                                command.parameterPayloadReducer(),
-                                command.resultPayloadReducer(),
-                                command.timeout(),
-                                command.eventNameCustomizer(),
-                                command.retryPolicy()));
-    }
-
-    /**
-     * PArameter object for the primitive.
-     *
-     * @param <T> type of result.
-     */
-    interface ExecuteCommand<T> {
+    interface ExecuteCommand {
 
         /**
          * Name of the step.
@@ -186,13 +117,6 @@ public interface ExecutePrimitive {
         default RetryPolicy retryPolicy() {
             return NONE;
         }
-
-        /**
-         * Returns result of the action.
-         *
-         * @param result result of the action.
-         * @return result.
-         */
-        T result(@Nonnull WorkflowStepResult result);
     }
+
 }

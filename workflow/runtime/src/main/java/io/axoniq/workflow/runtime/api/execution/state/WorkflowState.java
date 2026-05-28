@@ -53,7 +53,6 @@ public interface WorkflowState extends DescribableComponent {
      * @param stepName name of the step.
      * @return workflow step.
      */
-    @Nonnull
     WorkflowStep getStep(@Nonnull String stepName);
 
     /**

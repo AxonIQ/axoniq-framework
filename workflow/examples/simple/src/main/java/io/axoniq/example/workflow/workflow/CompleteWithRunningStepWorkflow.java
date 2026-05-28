@@ -26,7 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.dsl.api.Payload.payload;
 
 /**
  * Fires an async step that runs longer than the workflow body, exercising the
@@ -45,12 +45,17 @@ public class CompleteWithRunningStepWorkflow {
     public void execute(@Nonnull SimpleWorkflowContext ctx) {
         logger.info("completeWithRunningStep workflow started for {}", ctx.workflowPayload());
 
-        ctx.execute("background", Map.of(), (c, p) -> {
-            sleepQuietly(Duration.ofMinutes(5));
-            return Map.of("done", true);
-        }, Duration.ofMinutes(5), defaults());
+        ctx.execute(
+                "background",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(Duration.ofMinutes(5));
+                    return Map.of("done", true);
+                },
+                step -> step.timeout(Duration.ofMinutes(5))
+        );
 
-        var status = String.valueOf(ctx.workflowPayload().get("status"));
+        var status = payload(ctx).<String>get("status");
         switch (status) {
             case "FAIL" -> ctx.fail(new RuntimeException("boom"));
             case "CANCEL" -> ctx.cancel("user-initiated");

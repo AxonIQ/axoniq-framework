@@ -149,7 +149,7 @@
     <bpmn:association id="Association_1iwlns2" associationDirection="None" sourceRef="Group_1cqrnjx" targetRef="TextAnnotation_1x3uq45" />
     <bpmn:group id="Group_0s8j9lm" />
     <bpmn:textAnnotation id="TextAnnotation_0uh64u3">
-      <bpmn:text>waitFor</bpmn:text>
+      <bpmn:text>waitForEvent</bpmn:text>
     </bpmn:textAnnotation>
     <bpmn:association id="Association_0uch73k" associationDirection="None" sourceRef="Group_0s8j9lm" targetRef="TextAnnotation_0uh64u3" />
     <bpmn:group id="Group_0gjywgm" />

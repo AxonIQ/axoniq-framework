@@ -41,6 +41,10 @@ public class CombineGlobalAndLocalPayloadReducer implements PayloadReducer {
      */
     public static final String NAME = "combine_local_and_global";
 
+    /**
+     * Singleton instance of {@link CombineGlobalAndLocalPayloadReducer}.
+     */
+    public static final CombineGlobalAndLocalPayloadReducer INSTANCE = new CombineGlobalAndLocalPayloadReducer();
 
     @Override
     public Map<String, Object> apply(@Nonnull Map<String, Object> global,

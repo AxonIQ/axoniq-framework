@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -29,12 +29,10 @@ import java.time.Duration;
 import java.util.Map;
 
 import static io.axoniq.example.workflow.fixture.SleepUtils.sleepQuietly;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 
 /**
- * Demonstrates {@link WorkflowContext#allMatch} semantics:
- * two steps are launched in parallel — one succeeds (~500 ms) and one fails (~500 ms).
- * The guard verifies that all of them succeed; the failure short-circuits.
+ * Demonstrates {@link WorkflowContext#allMatch} semantics: two steps are launched in parallel — one succeeds (~500 ms)
+ * and one fails (~500 ms). The guard verifies that all of them succeed; the failure short-circuits.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -43,20 +41,28 @@ public class AllMatchGuardWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(AllMatchGuardWorkflow.class);
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("allMatch() workflow started for {}", ctx.workflowPayload());
 
-        var successStep = ctx.execute("successStep", Map.of(), (c, p) -> {
-            sleepQuietly(500);
-            return Map.of("result", "ok");
-        }, Duration.ofSeconds(10), defaults());
+        var successStep = ctx.execute(
+                "successStep",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(500);
+                    return Map.of("result", "ok");
+                },
+                step -> step.timeout(Duration.ofSeconds(10))
+        );
 
-        var failingStep = ctx.execute("failingStep", Map.of(), (c, p) -> {
-            sleepQuietly(500);
-            throw new RuntimeException("step failed");
-        }, Duration.ofSeconds(10), defaults());
-
-
+        var failingStep = ctx.execute(
+                "failingStep",
+                Map.of(),
+                (c, p) -> {
+                    sleepQuietly(500);
+                    throw new RuntimeException("step failed");
+                },
+                step -> step.timeout(Duration.ofSeconds(10))
+        );
 
         // allMatch: guard that all steps match the success predicate — short-circuits on first non-match
         var guard = ctx.allMatch(WorkflowStepResult::success, successStep, failingStep);
@@ -64,11 +70,9 @@ public class AllMatchGuardWorkflow {
         if (guard.failure()) {
             logger.info("Guard violated — not all steps succeeded: {}", guard.getStepName());
             logger.info("Successful steps (matched): {}",
-                    guard.matched().stream().map(WorkflowStepResult::getStepName).toList());
+                        guard.matched().stream().map(WorkflowStepResult::getStepName).toList());
             logger.info("Violators (unmatched): {}",
-                    guard.unmatched().stream().map(WorkflowStepResult::getStepName).toList());
-
-
+                        guard.unmatched().stream().map(WorkflowStepResult::getStepName).toList());
         }
     }
 }

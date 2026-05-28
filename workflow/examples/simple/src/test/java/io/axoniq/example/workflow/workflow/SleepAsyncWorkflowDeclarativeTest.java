@@ -19,7 +19,8 @@
 package io.axoniq.example.workflow.workflow;
 
 import io.axoniq.example.workflow.fixture.RegistrationReceivedEvent;
-import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
@@ -30,20 +31,17 @@ import org.junit.jupiter.api.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 
 
 /**
- * Integration test for {@link SleepAsyncWorkflow} — verifies that
- * {@link SimpleWorkflowContext#sleepAsync} returns a composable result.
+ * Integration test for {@link SleepAsyncWorkflow} — verifies that A wait step with {@link EventConditions#never()}
+ * returns a composable result.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -78,7 +76,7 @@ class SleepAsyncWorkflowDeclarativeTest extends AbstractDeclarativeTestBase<Simp
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
             assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
             assertThat(workflowHistoryRepository.findAll()).allMatch(h ->
-                    h.state().workflowStatus().isTerminal());
+                                                                             h.state().workflowStatus().isTerminal());
         });
 
         assertThat(workflowHistoryRepository.findAll()).hasSize(1);

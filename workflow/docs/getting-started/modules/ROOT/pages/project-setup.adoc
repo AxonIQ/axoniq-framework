@@ -36,7 +36,7 @@ To use the Axon Workflow Engine, add the following dependencies to your `pom.xml
 
 [NOTE]
 ====
-The `axon-workflow-dsl` module includes both the Java DSL (`SimpleWorkflowContext`) and the Kotlin DSL (`Kontext`).
+The `axon-workflow-dsl` module includes both Java DSL layers (`BaseWorkflowContext` and the convenience-focused `SimpleWorkflowContext`) plus the Kotlin DSL (`WorkflowKontext` with the author-facing `Kontext` wrapper).
 You don't need separate dependencies for Kotlin support.
 ====
 
@@ -49,7 +49,7 @@ The Axon Workflow Engine consists of four modules:
 |Module |Purpose
 
 |`runtime` |Core engine: primitives, combinators, execution, configuration
-|`dsl` |DSL layers for Java (`SimpleWorkflowContext`) and Kotlin (`Kontext`)
+|`dsl` |DSL layers for Java (`BaseWorkflowContext` and `SimpleWorkflowContext`) and Kotlin (`WorkflowKontext` and `Kontext`)
 |`test` |Testing utilities: `AbstractDeclarativeTestBase`, `DelayedPublisher`
 |`example` |Example workflows demonstrating all features
 |===

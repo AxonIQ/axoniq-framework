@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.springboot;
 
+import io.axoniq.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -40,6 +41,16 @@ public class WorkflowDefaultContextFactoryAutoConfiguration {
     @Bean
     public SimpleWorkflowContextFactory simpleWorkflowContextFactory() {
         return new SimpleWorkflowContextFactory();
+    }
+
+    /**
+     * Provides a context factory for the Base workflow DSL.
+     *
+     * @return context factory.
+     */
+    @Bean
+    public BaseWorkflowContextFactory baseWorkflowContextFactory() {
+        return new BaseWorkflowContextFactory();
     }
 
     /**

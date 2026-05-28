@@ -23,7 +23,7 @@ var reservations = lineItems.stream()
                 payload("sku", item.get("sku"),
                         "quantity", item.get("quantity")).getValues(),
                 InventoryService::reserveStock,
-                Duration.ofSeconds(30), defaults()))
+                step -> step.timeout(Duration.ofSeconds(30))))
         .toArray(WorkflowStepResult[]::new);
 ----
 <.> Each step gets a unique name based on the SKU—the engine tracks them independently.
@@ -76,8 +76,8 @@ for (var approver : approvers) {
 var approvals = approvers.stream()
         .map(approver -> ctx.waitForEvent(
                 "approval-" + approver,                                    // <1>
-                ApprovalDecisionEvent.class,
-                Duration.ofDays(5)))
+                EventConditions.fromQualifiedName(ctx.resolve(ApprovalDecisionEvent.class)),
+                step -> step.timeout(Duration.ofDays(5))))
         .toArray(WorkflowStepResult[]::new);
 
 // Fan-in: wait for all approvals
@@ -149,7 +149,7 @@ var quotes = suppliers.stream()
         .map(s -> ctx.execute("getQuote-" + s,
                 payload("supplier", s, "itemId", itemId).getValues(),
                 QuoteService::requestQuote,
-                Duration.ofSeconds(30), defaults()))
+                step -> step.timeout(Duration.ofSeconds(30))))
         .toList();
 
 var remaining = new ArrayList<>(quotes);
@@ -183,7 +183,8 @@ ctx.awaitExecute("requestApproval",
 
 // Wait for their response
 var decision = ctx.waitForEvent("awaitApproval",
-        ApprovalDecisionEvent.class, Duration.ofDays(3));
+        EventConditions.fromQualifiedName(ctx.resolve(ApprovalDecisionEvent.class)),
+        step -> step.timeout(Duration.ofDays(3)));
 
 if (decision.timeout()) {                                                // <1>
     // Team lead didn't respond — escalate to department head
@@ -192,7 +193,8 @@ if (decision.timeout()) {                                                // <1>
             ApprovalService::escalate);
 
     decision = ctx.waitForEvent("awaitEscalatedApproval",
-            ApprovalDecisionEvent.class, Duration.ofDays(1));
+            EventConditions.fromQualifiedName(ctx.resolve(ApprovalDecisionEvent.class)),
+            step -> step.timeout(Duration.ofDays(1)));
 
     if (decision.timeout()) {
         ctx.fail(new RuntimeException("No approval received after escalation"));
@@ -301,11 +303,11 @@ public void execute(SimpleWorkflowContext ctx) {
     // ... do other work in parallel while child runs ...
 
     // Wait for the child's explicit completion event (matched by orderId in payload)
-    ctx.awaitEvent("awaitPaymentProcess",                                  // <3>
+    ctx.awaitEvent("awaitPaymentProcess",                                // <3>
             PaymentProcessCompleted.class,
             associate(payloadProperty("orderId"),                           // <4>
                       equalsTo(ctx.workflowId())),
-            Duration.ofMinutes(30));
+            step -> step.timeout(Duration.ofMinutes(30)));
 
     logger.info("Child workflow completed for order {}", ctx.workflowId());
 }

@@ -40,7 +40,8 @@ Any async steps (started via `execute(...)` without a follow-up `await()`) that 
 
 == The workflow context
 
-The `SimpleWorkflowContext` passed to your workflow method is your single entry point to all engine capabilities:
+The workflow context passed to your workflow method is your single entry point to all engine capabilities.
+For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowContext` adds convenience methods on top:
 
 [cols="1,2"]
 |===
@@ -57,12 +58,13 @@ The `SimpleWorkflowContext` passed to your workflow method is your single entry 
 `execute(...)`—run an action without waiting (returns `WorkflowStepResult`)
 
 |*Wait for events*
-|`awaitEvent(...)`—block until an external event arrives +
-`waitForEvent(...)`—wait without blocking (returns `WorkflowStepResult`) +
-`sleep(...)`—pause the workflow for a duration
+|`awaitEvent(...)`—blocking event wait on `BaseWorkflowContext`, plus a typed convenience overload on `SimpleWorkflowContext` +
+`waitForEvent(...)`—non-blocking wait primitive on `BaseWorkflowContext` and `SimpleWorkflowContext` +
+`sleep(...)` / `awaitSleep(...)`—durable delay primitives
 
 |*Manage state*
-|`setPayload(...)`—durably update the workflow payload
+|`modifyPayload(...)` / `awaitModifyPayload(...)`—canonical payload mutation primitives +
+`setPayload(...)`—`SimpleWorkflowContext` convenience for replacing payload fields from an object
 
 |*Terminate*
 |`fail(...)`—terminate the workflow with a failure +
@@ -73,7 +75,8 @@ The `SimpleWorkflowContext` passed to your workflow method is your single entry 
 |`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)`—combine multiple non-blocking results
 |===
 
-In Kotlin, the equivalent is `Kontext`, which provides the same capabilities with idiomatic Kotlin syntax—`payload` as a property, named parameters with defaults, and `kotlin.time.Duration` support.
+In Kotlin, `WorkflowKontext` is the execution-facing context and `Kontext` is the author-facing wrapper.
+`Kontext` exposes the same primitives through concise overloads and still delegates to the same definition-based API when needed.
 
 [TIP]
 ====
@@ -94,10 +97,10 @@ Both terminate the workflow, but they signal different intent and are called fro
 |Inside the workflow
 |The workflow detected an error and cannot continue. Called from your workflow code.
 
-|`ctx.cancel("reason")`
+|`ctx.cancel()` / `ctx.cancel("reason")` / `execution.cancel("reason")`
 |`CANCELLED`
-|Outside the workflow
-|An external action (user, admin, API) wants to stop a running workflow.
+|Inside or outside the workflow
+|The workflow should stop gracefully, either by workflow logic or by an external action (user, admin, API).
 |===
 
 === `fail`—internal termination
@@ -111,16 +114,17 @@ If the workflow has running steps (for example, parallel steps started with `exe
 // Start two steps in parallel (non-blocking)
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
                             ShippingService::shipOrder,
-                            Duration.ofMinutes(5), defaults());
+                            step -> step.timeout(Duration.ofMinutes(5)));
 
 var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
                                 NotificationService::notifyCustomer,
-                                Duration.ofMinutes(1), defaults());
+                                step -> step.timeout(Duration.ofMinutes(1)));
 
-// Meanwhile, check stock — if unavailable, fail the workflow
-var reserved = ctx.awaitExecute("reserveStock", Boolean.class,
-                                 InventoryService::reserveStock);
-if (!reserved) {
+// Meanwhile, check stock - if unavailable, fail the workflow
+var reservation = ctx.awaitExecute("reserveStock",
+        Map.of(),
+        (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
+if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
     ctx.fail(new RuntimeException("Stock unavailable")); // <1>
 }
 ----
@@ -129,7 +133,7 @@ if (!reserved) {
 ++++
 <!-- vale off -->
 <div class="et-player" data-autoplay>
-  <div class="et-src" data-title="ctx.fail() — event store">
+  <div class="et-src" data-title="ctx.fail()">
 1 cancelled ShipOrderCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
 2 cancelled NotifyCustomerCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
 3 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
@@ -149,14 +153,14 @@ Given a workflow with parallel steps running:
 
 [source,java]
 ----
-// Inside the workflow — two long-running steps in parallel
+// Inside the workflow - two long-running steps in parallel
 var shipping = ctx.execute("shipOrder", ctx.workflowPayload(),
                             ShippingService::shipOrder,
-                            Duration.ofMinutes(5), defaults());
+                            step -> step.timeout(Duration.ofMinutes(5)));
 
 var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
                                 NotificationService::notifyCustomer,
-                                Duration.ofMinutes(1), defaults());
+                                step -> step.timeout(Duration.ofMinutes(1)));
 ----
 
 An external caller cancels the workflow while those steps are still running:
@@ -170,7 +174,7 @@ execution.cancel("Cancelled by user");
 ++++
 <!-- vale off -->
 <div class="et-player" data-autoplay>
-  <div class="et-src" data-title="execution.cancel() — event store">
+  <div class="et-src" data-title="execution.cancel()">
 1 cancelled ShipOrderCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
 2 cancelled NotifyCustomerCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
 3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
@@ -191,10 +195,10 @@ When your workflow body returns, the engine cancels any such step and waits for 
 [source,java]
 ----
 public void execute(SimpleWorkflowContext ctx) {
-    // fire-and-forget — notice there is no .await() on the returned result
+    // fire-and-forget - notice there is no .await() on the returned result
     ctx.execute("sendReceipt", ctx.workflowPayload(),
                 NotificationService::sendReceipt,
-                Duration.ofMinutes(1), defaults());
+                step -> step.timeout(Duration.ofMinutes(1)));
 
     // workflow body returns while sendReceipt is still running
 }
@@ -202,7 +206,7 @@ public void execute(SimpleWorkflowContext ctx) {
 
 ++++
 <div class="et-player" data-autoplay>
-  <div class="et-src" data-title="normal completion — event store">
+  <div class="et-src" data-title="normal completion">
 1 cancelled SendReceiptCancelled {"reason": "StepCancellationException: Workflow completed"}
 2 completed OrderFulfillmentWorkflow#ExecuteCompleted {}
   </div>

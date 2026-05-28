@@ -140,28 +140,6 @@ public interface WorkflowExecution extends DescribableComponent {
     void removeRunningStep(@Nonnull String stepName);
 
     /**
-     * Cancels the entire workflow — all running steps are cancelled first, then the workflow is terminated with
-     * {@link WorkflowStatus#CANCELLED}.
-     */
-    void cancel();
-
-    /**
-     * Cancels the entire workflow with a reason — all running steps are cancelled first, then the workflow is
-     * terminated with {@link WorkflowStatus#CANCELLED}.
-     *
-     * @param reason human-readable cancellation reason.
-     */
-    void cancel(@Nonnull String reason);
-
-    /**
-     * Cancels the entire workflow with a cause — all running steps are cancelled first, then the workflow is terminated
-     * with {@link WorkflowStatus#CANCELLED}.
-     *
-     * @param cause the exception that triggered the cancellation.
-     */
-    void cancel(@Nonnull Throwable cause);
-
-    /**
      * Cancel a running step.
      *
      * @param stepName name of the step.

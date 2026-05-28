@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import jakarta.annotation.Nonnull;
 
@@ -32,13 +33,38 @@ public interface PayloadPrimitive {
     /**
      * Applies payload modification.
      *
-     * @param stepName            name of the step.
-     * @param payloadModification payload modification function.
-     * @param eventNameCustomizer event name customizer.
+     * @param command command object for the primitive.
+     * @return durable result handle.
      */
-    void modifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification payloadModification,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    );
+    @Nonnull
+    WorkflowStepResult modifyPayload(@Nonnull ModifyPayloadCommand command);
+
+    /**
+     * Base payload modification command.
+     * @since 1.0.0
+     * @author Simon Zambrovski
+     */
+    interface ModifyPayloadCommand {
+
+        /**
+         * Retrieves the step name.
+         * @return step name
+         */
+        @Nonnull
+        String stepName();
+
+        /**
+         * Retrieves payload modification function.
+         * @return modification function
+         */
+        @Nonnull
+        PayloadModification payloadModification();
+
+        /**
+         * Retrieves event name customizer for the step.
+         * @return event name customizer
+         */
+        @Nonnull
+        EventNameCustomizer eventNameCustomizer();
+    }
 }

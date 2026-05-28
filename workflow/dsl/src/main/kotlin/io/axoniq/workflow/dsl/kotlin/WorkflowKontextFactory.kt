@@ -23,12 +23,22 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory
 import org.axonframework.messaging.core.unitofwork.ProcessingContext
 
 /**
- * Kotlin Kontext factory.
+ * Factory that creates [WorkflowKontext] instances for Kotlin DSL workflows.
+ *
  * @since 1.0.0
  * @author Simon Zambrovski
  */
 class WorkflowKontextFactory : WorkflowContextFactory<WorkflowKontext> {
 
+    /**
+     * Creates a workflow context for the current workflow invocation.
+     *
+     * @param initialPayload initial workflow payload
+     * @param workflowId unique identifier of the workflow instance
+     * @param processingContext processing context for the current message
+     * @param workflowConfiguration runtime configuration for this workflow
+     * @return workflow context passed to the Kotlin DSL definition
+     */
     override fun createContext(
         initialPayload: Map<String, Any?>,
         workflowId: String,

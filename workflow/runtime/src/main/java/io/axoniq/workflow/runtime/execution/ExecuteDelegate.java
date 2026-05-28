@@ -28,11 +28,8 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -42,7 +39,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
@@ -88,17 +84,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
     @Nonnull
     @Override
-    public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer
-    ) {
-        return execute(stepName, local, action, parameterPayloadReducer, resultPayloadReducer, timeout,
-                       eventNameCustomizer,
+    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+        return execute(command,
                        // default failure handler — publish FAILED
                        (name, error, enc) ->
                                workflowExecution.appendTask(i -> failed(name, error, enc)),
@@ -110,16 +97,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
     @Nonnull
     WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nullable Map<String, Object> local,
-            @Nonnull PayloadProcessor action,
-            @Nonnull PayloadReducer parameterPayloadReducer,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nonnull ExecutePrimitive.ExecuteCommand command,
             @Nonnull FailureHandler failureHandler,
             @Nonnull TimeoutHandler timeoutHandler
     ) {
+        var stepName = command.stepName();
+        var local = command.local();
+        var action = command.action();
+        var parameterPayloadReducer = command.parameterPayloadReducer();
+        var resultPayloadReducer = command.resultPayloadReducer();
+        var timeout = command.timeout();
+        var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
         acceptAllPendingTasksForStep(stepName);

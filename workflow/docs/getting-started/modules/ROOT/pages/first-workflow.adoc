@@ -16,14 +16,15 @@ public class OrderFulfillmentWorkflow {
 
     @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
     public void execute(SimpleWorkflowContext ctx) {
-
         ctx.awaitExecute("reserveStock", Boolean.class,
-                          InventoryService::reserveStock); // <1>
+                InventoryService::reserveStock); // <1>
     }
 }
 ----
 
-<.> `awaitExecute` calls the action, waits for it to finish, and returns the typed result.
+<.> `SimpleWorkflowContext.awaitExecute(stepName, resultType, supplier)` is a convenience for single-value actions.
+It stores the value under an internal payload key named `"__" + stepName + "Result"` and returns it as the requested type.
+For `reserveStock`, that key becomes `__reserveStockResult`.
 The engine records a STARTED and COMPLETED event for this step automatically.
 
 That's it—one line of business logic, and the engine gives you event sourcing, crash recovery, and an audit trail.
@@ -43,11 +44,10 @@ public class OrderFulfillmentWorkflow {
         var customerId = ctx.workflowPayload().get("customerId");
         var amount = ctx.workflowPayload().get("amount");
 
-        var reserved = ctx.awaitExecute("reserveStock",
+        var reservation = ctx.awaitExecute("reserveStock",
                 payload("customerId", customerId, "amount", amount).getValues(),
-                Boolean.class,
-                InventoryService::reserveStock); // <1>
-        if (!reserved) {
+                (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input))); // <1>
+        if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
             ctx.fail(new RuntimeException("Stock unavailable")); // <2>
             return;
         }
@@ -57,7 +57,7 @@ public class OrderFulfillmentWorkflow {
 }
 ----
 
-<.> `awaitExecute` runs the action synchronously and returns the typed result.
+<.> `awaitExecute` runs the action synchronously and returns the step's payload map.
 The params (payload) passed to the step (`customerId`, `amount`) are recorded in the STARTED event.
 <.> If stock reservation fails, we fail the workflow.
 Standard Java control flow—`if`, loops, try/catch—all work exactly as you'd expect.
@@ -70,7 +70,7 @@ When this workflow executes successfully, the engine records the following event
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
-4 completed ReserveStockCompleted {"__reserveStock": true}
+4 completed ReserveStockCompleted {"reserved": true}
 5 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
 </div>
@@ -78,7 +78,7 @@ When this workflow executes successfully, the engine records the following event
 
 The triggering `OrderPlaced` event's `orderId` becomes the workflow instance ID (from `idProperty`).
 Each `awaitExecute` produces a STARTED/COMPLETED pair—the STARTED event captures the input payload, the COMPLETED event captures the result.
-The `__reserveStock` key stores the typed return value (`true`).
+The `reserved` key stores the step result payload returned by the action.
 
 Every primitive call becomes a pair of durable events.
 This is what gives you audit trails, crash recovery, and replay—with zero extra code.
@@ -125,11 +125,10 @@ public void execute(SimpleWorkflowContext ctx) {
     var customerId = ctx.workflowPayload().get("customerId");
     var amount = ctx.workflowPayload().get("amount");
 
-    var reserved = ctx.awaitExecute("reserveStock",
+    var reservation = ctx.awaitExecute("reserveStock",
             payload("customerId", customerId, "amount", amount).getValues(),
-            Boolean.class,
-            InventoryService::reserveStock);
-    if (!reserved) {
+            (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input)));
+    if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
         ctx.fail(new RuntimeException("Stock unavailable"));
         return;
     }
@@ -138,8 +137,8 @@ public void execute(SimpleWorkflowContext ctx) {
                      payload("customerId", customerId,
                              "amount", amount).getValues(),
                      PaymentService::initiatePayment,
-                     Duration.ofSeconds(30),
-                     baseName("InitiatingPaymentForCustomer"));  // <2>
+                     step -> step.timeout(Duration.ofSeconds(30))
+                                 .eventNameCustomizer(baseName("InitiatingPaymentForCustomer")));  // <2>
 }
 ----
 
@@ -154,7 +153,7 @@ Here's the event store after a successful run:
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
-4 completed ReserveStockCompleted {"__reserveStock": true}
+4 completed ReserveStockCompleted {"reserved": true}
 5 started InitiatingPaymentForCustomerStarted {"customerId": 456, "amount": 99.95}
 6 completed InitiatingPaymentForCustomerCompleted
 7 completed OrderFulfillmentWorkflow#ExecuteCompleted
@@ -167,7 +166,7 @@ Notice how `baseName("InitiatingPaymentForCustomer")` changed the event name fro
 == Waiting for an event
 
 Our workflow initiates payment, but how do we know when it's confirmed?
-The `awaitEvent` primitive suspends the workflow until a matching external event arrives:
+The `awaitEvent` convenience suspends the workflow until a matching external event arrives:
 
 [source,java]
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
@@ -178,11 +177,10 @@ public void execute(SimpleWorkflowContext ctx) {
     var customerId = ctx.workflowPayload().get("customerId");
     var amount = ctx.workflowPayload().get("amount");
 
-    var reserved = ctx.awaitExecute("reserveStock",
+    var reservation = ctx.awaitExecute("reserveStock",
             payload("customerId", customerId, "amount", amount).getValues(),
-            Boolean.class,
-            InventoryService::reserveStock);
-    if (!reserved) {
+            (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input)));
+    if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
         ctx.fail(new RuntimeException("Stock unavailable"));
         return;
     }
@@ -191,20 +189,22 @@ public void execute(SimpleWorkflowContext ctx) {
                      payload("customerId", customerId,
                              "amount", amount).getValues(),
                      PaymentService::initiatePayment,
-                     Duration.ofSeconds(30),
-                     baseName("InitiatingPaymentForCustomer"));
+                     step -> step.timeout(Duration.ofSeconds(30))
+                                 .eventNameCustomizer(baseName("InitiatingPaymentForCustomer")));
 
-    var confirmation = ctx.awaitEvent("awaitPayment",       // <1>
-                                       PaymentConfirmed.class,
-                                       Duration.ofMinutes(15)); // <2>
+    var confirmation = ctx.awaitEvent("awaitPayment",     // <1>
+            PaymentConfirmed.class,
+            associate(payloadProperty("orderId"),
+                    equalsTo(ctx.workflowPayload().get("orderId"))),
+            step -> step.timeout(Duration.ofMinutes(15))); // <2>
 
     logger.info("Payment confirmed: {}", confirmation);
 }
 ----
 
-<.> `awaitEvent` blocks the workflow until a `PaymentConfirmed` event arrives.
+<.> `awaitEvent` blocks the workflow until a matching `PaymentConfirmed` event arrives.
 The engine subscribes to the event bus and watches for events of this type.
-<.> Maximum time to wait. After 15 minutes, the step completes with `StepStatus.TIMED_OUT`.
+<.> The association keeps the wait scoped to this workflow instance, and the customizer sets the maximum wait time to 15 minutes.
 
 When the `PaymentConfirmed` event arrives, the workflow resumes and `awaitEvent` returns the deserialized event object.
 Here's the full event store:
@@ -215,7 +215,7 @@ Here's the full event store:
 1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted {"customerId": 456, "amount": 99.95}
-4 completed ReserveStockCompleted {"__reserveStock": true}
+4 completed ReserveStockCompleted {"reserved": true}
 5 started InitiatingPaymentForCustomerStarted {"customerId": 456, "amount": 99.95}
 6 completed InitiatingPaymentForCustomerCompleted
 7 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z"}
@@ -237,7 +237,8 @@ They can be published from anywhere—a command handler, an `EventGateway`, a RE
 
 == Kotlin DSL
 
-If you prefer Kotlin, the same workflow looks like this:
+If you prefer Kotlin, `WorkflowKontext` is the runtime-facing context and `Kontext` is the author-facing DSL wrapper.
+`Kontext` offers the same kind of concise defaults as the Java DSL:
 
 [source,kotlin]
 .src/main/kt/io/axoniq/example/order/OrderFulfillmentWorkflow.kt
@@ -246,38 +247,18 @@ class OrderFulfillmentWorkflow {
 
     @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
     fun Kontext.onExecute() {
-        val customerId = payload["customerId"]
-        val amount = payload["amount"]
-
-        val reserved = awaitExecute(
-            "reserveStock",
-            { InventoryService.reserveStock() },
-            local = mapOf("customerId" to customerId, "amount" to amount)
-        )
-        if (!reserved) {
+        val reservation = awaitExecute("reserveStock") { _, _ ->
+            mapOf("reserved" to InventoryService.reserveStock())
+        }
+        if (reservation["reserved"] != true) {
             fail(RuntimeException("Stock unavailable"))
             return
         }
-
-        awaitExecute(
-            "initiatePayment",
-            { PaymentService.initiatePayment() },
-            local = mapOf("customerId" to customerId, "amount" to amount),
-            timeout = 30.seconds,
-            eventNameCustomizer = baseName("InitiatingPaymentForCustomer")
-        )
-
-        val confirmation = awaitEvent<PaymentConfirmed>(
-            "awaitPayment",
-            timeout = 15.minutes
-        )
-
-        logger.info("Payment confirmed: {}", confirmation)
     }
 }
 ----
 
-The Kotlin DSL uses extension functions on `Kontext`, giving you a clean, idiomatic API with named parameters and `kotlin.time.Duration` support (for example, `30.seconds`).
-
-That's a complete workflow—it executes actions and waits for external events.
+Under the hood, `Kontext` still builds the same `ExecuteStepDefinition` and `WaitForStepDefinition` objects as the runtime-facing API through `WorkflowKontext`.
+You can stay concise for common cases and drop down to explicit definitions only when you need full control.
+When you need to pass step-local data with a named Kotlin argument, use `inputPayload = ...`.
 To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:development@axon-framework-reference:workflows:index.adoc[Reference Guide].

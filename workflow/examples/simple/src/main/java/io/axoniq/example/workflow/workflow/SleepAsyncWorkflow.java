@@ -18,7 +18,7 @@
  */
 package io.axoniq.example.workflow.workflow;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -28,11 +28,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-
 /**
- * Demonstrates {@link SimpleWorkflowContext#sleepAsync} — a non-blocking sleep composed
- * with an execute step via {@link WorkflowContext#anyMatch}.
+ * Demonstrates a non-blocking wait step composed with an execute step via {@link WorkflowContext#anyMatch}.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -41,14 +38,17 @@ public class SleepAsyncWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(SleepAsyncWorkflow.class);
 
-    public void execute(@Nonnull SimpleWorkflowContext ctx) {
+    public void execute(@Nonnull BaseWorkflowContext ctx) {
         logger.info("sleepAsync workflow started for {}", ctx.workflowPayload());
 
-        var delay = ctx.sleepAsync("cooldown", Duration.ofMinutes(5));
+        var delay = ctx.sleep("cooldown", step -> step.timeout(Duration.ofSeconds(5)));
 
-        var work = ctx.execute("doWork", Map.of(), (c, p) -> {
-            return Map.of("done", true);
-        }, Duration.ofSeconds(10), defaults());
+        var work = ctx.execute(
+                "doWork",
+                Map.of(),
+                (c, p) -> Map.of("done", true),
+                step -> step.timeout(Duration.ofSeconds(10))
+        );
 
         // proceed when either finishes
         ctx.anyMatch(WorkflowStepResult::isCompleted, delay, work).await();

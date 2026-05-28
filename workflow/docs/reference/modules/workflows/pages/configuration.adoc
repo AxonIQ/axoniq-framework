@@ -316,7 +316,8 @@ If you need to attach metadata that doesn't come from the triggering event (for 
 [[custom-workflow-context]]
 == Custom workflow context
 
-You don't have to use `SimpleWorkflowContext`. You can extend it to build a domain-specific DSL that hides the engine primitives behind business language.
+You don't have to use `SimpleWorkflowContext`. `BaseWorkflowContext` is the canonical Java DSL layer, while `SimpleWorkflowContext` adds helpers such as typed `awaitEvent`, `sleep(Duration)`, `setPayload`, and `cancel(String)`.
+Extend whichever layer best fits the API you want to expose to workflow authors.
 
 For example, an approval workflow context:
 
@@ -336,7 +337,12 @@ public class ApprovalWorkflowContext extends SimpleWorkflowContext {
                 payload("approver", approver, "requestId", workflowId()).getValues(),
                 ApprovalService::sendRequest);
 
-        var decision = awaitEvent("awaitDecision", ApprovalDecisionEvent.class, deadline);
+        var decision = awaitEvent(
+                "awaitDecision",
+                ApprovalDecisionEvent.class,
+                associate(payloadProperty("requestId"), equalsTo(workflowId())),
+                step -> step.timeout(deadline)
+        );
         return "approved".equals(decision.outcome());
     }
 

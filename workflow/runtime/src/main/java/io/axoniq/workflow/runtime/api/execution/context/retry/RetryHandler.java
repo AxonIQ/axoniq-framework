@@ -28,7 +28,15 @@ package io.axoniq.workflow.runtime.api.execution.context.retry;
 @FunctionalInterface
 public interface RetryHandler {
 
+    /**
+     * Retry handler that performs no side effects.
+     */
     RetryHandler NOOP = context -> {};
 
+    /**
+     * Invoked when a retry attempt is about to be published and executed.
+     *
+     * @param context retry context describing the step, attempt, and triggering failure
+     */
     void onRetry(RetryContext context);
 }

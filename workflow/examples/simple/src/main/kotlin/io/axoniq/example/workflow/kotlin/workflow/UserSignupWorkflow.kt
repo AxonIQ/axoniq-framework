@@ -23,6 +23,8 @@ import io.axoniq.example.workflow.kotlin.fixture.NotificationService
 import io.axoniq.example.workflow.kotlin.fixture.UserService
 import io.axoniq.workflow.dsl.kotlin.Kontext
 import io.axoniq.workflow.runtime.api.annotation.Workflow
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
@@ -36,9 +38,11 @@ class UserSignupWorkflow {
     fun Kontext.onExecute() {
         logger.info { "User signup workflow started at ${Instant.now()} for $payload" }
 
-        val success = awaitExecute("createUser", {
-            UserService.createUser()
-        })
+        val success = awaitExecute<Boolean>(
+            "createUser",
+            timeout = 5.seconds,
+            retryPolicy = RetryPolicy.NONE
+        ) { UserService.createUser() }
 
         if (!success) {
             return
@@ -46,19 +50,36 @@ class UserSignupWorkflow {
 
         block {
             execute(
-                "activateUser",
-                { pc, p -> UserService.activateUser(pc, p) },
-                timeout = 10.seconds
+                stepName = "activateUser",
+                inputPayload = payload,
+                timeout = 10.seconds,
+                retryPolicy = RetryPolicy.NONE,
+                action = UserService::activateUser
             )
         }
 
-        block("waitASecond", 1.seconds)
-
-        block {
-            execute("sendWelcomeEmail", { pc, p -> NotificationService.sendEmail(); mapOf() })
+        val waitASecond = waitForEvent("waitASecond", EventConditions.never(), timeout = 1.seconds)
+        waitASecond.await()
+        if (waitASecond.failure() && waitASecond.error().isPresent) {
+            throw waitASecond.error().get()
         }
 
-        val magic = awaitEvent("waitForMagicToHappen", MagicHappenedEvent::class)
+        block {
+            execute(
+                stepName = "sendWelcomeEmail",
+                inputPayload = payload,
+                timeout = 5.seconds,
+                retryPolicy = RetryPolicy.NONE
+            ) { _, _ ->
+                NotificationService.sendEmail()
+                mapOf()
+            }
+        }
+
+        val magic = awaitEvent<MagicHappenedEvent>(
+            "waitForMagicToHappen",
+            timeout = 5.seconds
+        )
 
         logger.info { "Magic happened because of the magician ${magic.magician}" }
         logger.info { "User signup workflow ended at ${Instant.now()} for $payload" }

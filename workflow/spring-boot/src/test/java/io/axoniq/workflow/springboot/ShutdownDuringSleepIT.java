@@ -19,6 +19,7 @@ package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
@@ -154,7 +155,7 @@ class ShutdownDuringSleepIT {
                 idProperty = "id"
         )
         public void execute(SimpleWorkflowContext ctx) {
-            ctx.sleepAsync(SLEEP_STEP, SLEEP_DURATION).await();
+            ctx.waitForEvent(SLEEP_STEP, EventConditions.never(), step -> step.timeout(SLEEP_DURATION)).await();
         }
     }
 }
