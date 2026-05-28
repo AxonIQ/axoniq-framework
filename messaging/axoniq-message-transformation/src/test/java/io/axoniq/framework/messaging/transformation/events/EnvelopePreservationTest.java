@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -43,6 +45,7 @@ final class EnvelopePreservationTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     void outputMessageCarriesSameIdentifierAsInputAfterOneToOneTransformation() {
@@ -52,7 +55,7 @@ final class EnvelopePreservationTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().identifier()).isEqualTo(storedV1Event.identifier());
@@ -69,7 +72,7 @@ final class EnvelopePreservationTest {
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode())
                 .andMetadata(metadata);
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().metadata()).containsEntry("correlationId", "abc-123");

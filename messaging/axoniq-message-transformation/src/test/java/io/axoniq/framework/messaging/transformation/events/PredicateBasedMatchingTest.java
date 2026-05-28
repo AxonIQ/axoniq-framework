@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -44,6 +46,7 @@ final class PredicateBasedMatchingTest {
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
     private static final MessageType V3 = new MessageType("com.example.CourseCreated", "3.0.0");
     private static final MessageType UNRELATED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     void everyEventWhoseTypeSatisfiesThePredicateGetsTransformed() {
@@ -58,7 +61,7 @@ final class PredicateBasedMatchingTest {
         EventMessage unrelatedEvent = new GenericEventMessage(UNRELATED, JsonNodeFactory.instance.objectNode());
 
         List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(
-                List.of(v1Event, v1PatchEvent, v2Event, unrelatedEvent))));
+                List.of(v1Event, v1PatchEvent, v2Event, unrelatedEvent)), null, CONVERTER));
 
         assertThat(outputs).extracting(EventMessage::type)
                            .containsExactly(V3, V3, V2, UNRELATED);
@@ -73,7 +76,7 @@ final class PredicateBasedMatchingTest {
 
         EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event)), null, CONVERTER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst()).isSameAs(v1Event);

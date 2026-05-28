@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -49,6 +51,7 @@ final class OutputIdentityCheckTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Nested
     final class PojoOutput {
@@ -62,7 +65,7 @@ final class OutputIdentityCheckTest {
             EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            assertThatThrownBy(() -> collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)))))
+            assertThatThrownBy(() -> collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER)))
                     .isInstanceOf(ChainConfigurationException.class)
                     .hasMessageContaining(V2.toString())
                     .hasMessageContaining(WrongTypePojo.class.getName());
@@ -77,7 +80,7 @@ final class OutputIdentityCheckTest {
             EventTransformerChain chain = EventTransformerChain.builder().register(matchingPojoTransformer).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
             assertThat(outputs).hasSize(1);
         }
@@ -95,7 +98,7 @@ final class OutputIdentityCheckTest {
             EventTransformerChain chain = EventTransformerChain.builder().register(jsonNodeProducingTransformer).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
@@ -114,7 +117,7 @@ final class OutputIdentityCheckTest {
             EventTransformerChain chain = EventTransformerChain.builder().register(mapProducingTransformer).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+            List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);

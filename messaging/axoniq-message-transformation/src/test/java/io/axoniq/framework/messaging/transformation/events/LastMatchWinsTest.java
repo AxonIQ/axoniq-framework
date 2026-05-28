@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -44,6 +46,7 @@ final class LastMatchWinsTest {
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
     private static final MessageType V3 = new MessageType("com.example.CourseCreated", "3.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     void laterConcreteRegistrationOverridesEarlierPredicateRegistrationOnOverlappingMatch() {
@@ -68,7 +71,7 @@ final class LastMatchWinsTest {
 
         EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event)), null, CONVERTER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);

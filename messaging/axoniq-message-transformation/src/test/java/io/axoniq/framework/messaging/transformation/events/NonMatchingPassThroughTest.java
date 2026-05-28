@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -40,6 +42,7 @@ final class NonMatchingPassThroughTest {
 
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     void eventWhoseTypeMatchesNoRegisteredTransformerPassesThroughUnchanged() {
@@ -49,7 +52,7 @@ final class NonMatchingPassThroughTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst()).isSameAs(unregisteredEvent);
@@ -68,7 +71,7 @@ final class NonMatchingPassThroughTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent))));
+        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER));
 
         assertThat(mapperInvocations.get()).isZero();
     }

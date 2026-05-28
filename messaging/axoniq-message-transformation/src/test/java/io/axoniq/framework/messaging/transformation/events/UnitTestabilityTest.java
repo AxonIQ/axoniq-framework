@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Disabled;
@@ -31,39 +32,46 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A transformation produced by the factory is unit-testable from a plain JUnit test
- * with no event store, no processor, no framework bootstrap, and no
- * {@code ProcessingContext} -- the only dependency a user needs is the transformer itself.
+ * A transformation produced by the factory is unit-testable from a plain JUnit test by
+ * registering it with a single-transformer {@link EventTransformerChain} and invoking
+ * {@code chain.transform(...)} -- the same entry point the framework's
+ * {@code TransformingEventStore} decorator uses at production read time. No event store,
+ * processor, or framework bootstrap is required.
  */
 final class UnitTestabilityTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
-    void transformationIsInvocableWithoutChainOrEventStore() {
+    void transformationIsInvocableThroughASingleTransformerChain() {
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        MessageStream<? extends EventMessage> result = v1ToV2Transformer.transform(storedV1Event, null);
+        List<EventMessage> outputs = collectMessages(
+                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
-        List<EventMessage> outputs = collectMessages(result);
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
     }
 
     @Test
     @Disabled("Tests-first; impl lands in T038 (rename factory entry point)")
-    void renameTransformationIsInvocableWithoutPayloadMapper() {
+    void renameTransformationIsInvocableThroughASingleTransformerChain() {
         EventTransformer renameTransformer = EventTransformation.rename(V1, V2);
+        EventTransformerChain chain = EventTransformerChain.builder().register(renameTransformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, "payload");
 
-        List<EventMessage> outputs = collectMessages(renameTransformer.transform(storedV1Event, null));
+        List<EventMessage> outputs = collectMessages(
+                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);

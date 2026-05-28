@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -42,6 +44,7 @@ final class StructuralTransformationTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     void storedV1EventIsObservedAsV2AfterRegisteringV1ToV2Transformation() {
@@ -60,7 +63,7 @@ final class StructuralTransformationTest {
         v1Payload.put("capacity", 30);
         EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst().type()).isEqualTo(V2);
@@ -77,8 +80,8 @@ final class StructuralTransformationTest {
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> firstConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
-        List<EventMessage> secondConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event))));
+        List<EventMessage> firstConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
+        List<EventMessage> secondConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER));
 
         assertThat(firstConsumer).hasSize(1);
         assertThat(secondConsumer).hasSize(1);

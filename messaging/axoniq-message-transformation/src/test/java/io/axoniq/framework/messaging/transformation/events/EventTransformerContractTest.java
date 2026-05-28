@@ -97,17 +97,19 @@ final class EventTransformerContractTest {
     }
 
     @Test
-    void factoryBuiltTransformerForwardsNonNullProcessingContextToMapper() {
+    void chainForwardsTheActiveProcessingContextToTheUsersMapper() {
         AtomicReference<@Nullable ProcessingContext> seenContext = new AtomicReference<>();
         EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
                 .transform(JsonNode.class, (in, ctx) -> {
                     seenContext.set(ctx);
                     return in.deepCopy();
                 });
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
         var realContext = StubProcessingContext.forMessage(input);
 
-        collectMessages(v1ToV2Transformer.transform(input, realContext));
+        collectMessages(chain.transform(
+                MessageStream.fromIterable(List.of(input)), realContext, EventStreamTestUtils.neverInvokedConverter()));
 
         assertThat(seenContext.get()).isSameAs(realContext);
     }

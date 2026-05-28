@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -57,6 +59,7 @@ final class ChainConcurrencyTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
@@ -102,7 +105,7 @@ final class ChainConcurrencyTest {
                                       AtomicInteger firstFailedIteration) {
         for (int iteration = 0; iteration < ITERATIONS_PER_THREAD; iteration++) {
             List<EventMessage> outputs = collectMessages(
-                    chain.transform(MessageStream.fromIterable(List.of(input))));
+                    chain.transform(MessageStream.fromIterable(List.of(input)), null, CONVERTER));
             if (outputs.size() != 1
                     || !V2.equals(outputs.getFirst().type())
                     || !expectedPayload.equals(outputs.getFirst().payload())) {

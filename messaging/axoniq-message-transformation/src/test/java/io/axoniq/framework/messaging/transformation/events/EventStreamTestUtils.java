@@ -19,11 +19,17 @@
 
 package io.axoniq.framework.messaging.transformation.events;
 
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,5 +59,40 @@ abstract class EventStreamTestUtils {
      */
     static EventMessage eventOf(MessageType type, Object payload) {
         return new GenericEventMessage(type, payload);
+    }
+
+    /**
+     * A {@link MessageConverter} stand-in for tests whose payloads already match the
+     * transformer's declared input type. The chain's fast path returns the payload directly
+     * for already-typed inputs, so the converter is never invoked. Any actual call here
+     * fails the test loudly with an {@link AssertionError}, surfacing accidental reliance
+     * on conversion in tests that should not need it.
+     */
+    static MessageConverter neverInvokedConverter() {
+        return new NeverInvokedMessageConverter();
+    }
+
+    private static final class NeverInvokedMessageConverter implements MessageConverter {
+        @Override
+        public <M extends Message, T> @Nullable T convertPayload(M message, @NonNull Type targetType) {
+            throw new AssertionError(
+                    "MessageConverter.convertPayload was unexpectedly invoked in a test; "
+                            + "ensure payload type matches the transformer's declared input type.");
+        }
+
+        @Override
+        public <M extends Message> M convertMessage(M message, @NonNull Type targetType) {
+            throw new AssertionError("MessageConverter.convertMessage was unexpectedly invoked in a test.");
+        }
+
+        @Override
+        public <T> T convert(@Nullable Object input, @NonNull Type targetType) {
+            throw new AssertionError("MessageConverter.convert was unexpectedly invoked in a test.");
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeProperty("kind", "neverInvokedConverter");
+        }
     }
 }

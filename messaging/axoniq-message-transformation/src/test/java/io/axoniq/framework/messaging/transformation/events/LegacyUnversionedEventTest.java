@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -43,6 +45,7 @@ final class LegacyUnversionedEventTest {
     private static final QualifiedName NAME = new QualifiedName("com.example.LegacyEvent");
     private static final MessageType DEFAULT_VERSION = new MessageType(NAME, "0.0.1");
     private static final MessageType V2 = new MessageType(NAME, "2.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Test
     void unversionedEventMatchesTransformationRegisteredForDefaultVersion() {
@@ -54,7 +57,7 @@ final class LegacyUnversionedEventTest {
 
         assertThat(legacyUnversionedEvent.type().version()).isEqualTo("0.0.1");
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent))));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(legacyUnversionedEvent)), null, CONVERTER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
