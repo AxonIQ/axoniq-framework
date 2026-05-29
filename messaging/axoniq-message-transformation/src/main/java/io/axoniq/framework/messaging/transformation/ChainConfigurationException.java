@@ -19,13 +19,10 @@
 
 package io.axoniq.framework.messaging.transformation;
 
-import org.jspecify.annotations.Nullable;
-
 /**
- * Thrown by {@code EventTransformerChain.Builder} on chain misconfiguration. The
- * exception message identifies the specific cause. Exceptions thrown from inside a
- * transformer's mapper propagate to the caller directly; this type covers
- * configuration errors detected by the framework.
+ * Thrown by {@code EventTransformerChain.Builder} on chain misconfiguration. The exception message identifies the
+ * specific cause. Exceptions thrown from inside a transformer's mapper propagate to the caller directly; this type
+ * covers configuration errors detected by the framework.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -39,15 +36,5 @@ public final class ChainConfigurationException extends RuntimeException {
      */
     public ChainConfigurationException(String message) {
         super(message);
-    }
-
-    /**
-     * Constructs a new exception with the given detail message and underlying cause.
-     *
-     * @param message human-readable description of the problem
-     * @param cause   the underlying cause, may be {@code null}
-     */
-    public ChainConfigurationException(String message, @Nullable Throwable cause) {
-        super(message, cause);
     }
 }

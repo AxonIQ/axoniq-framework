@@ -68,8 +68,8 @@ final class ChainDescribableComponentTest {
         ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
         chain.describeTo(descriptor);
 
-        verify(descriptor).describeProperty(eq("transformationCount"), eq((Object) 3));
-        verify(descriptor).describeProperty(eq("maxIterationsPerEvent"), eq((Object) 42));
+        verify(descriptor).describeProperty("transformationCount", 3);
+        verify(descriptor).describeProperty("maxIterationsPerEvent", 42);
 
         ArgumentCaptor<Map<?, ?>> concreteCaptor = ArgumentCaptor.captor();
         verify(descriptor).describeProperty(eq("concreteFromIndex"), concreteCaptor.capture());
@@ -89,7 +89,7 @@ final class ChainDescribableComponentTest {
         ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
         chain.describeTo(descriptor);
 
-        verify(descriptor).describeProperty(eq("transformationCount"), eq((Object) 0));
+        verify(descriptor).describeProperty("transformationCount", 0);
 
         ArgumentCaptor<Map<?, ?>> concreteCaptor = ArgumentCaptor.captor();
         verify(descriptor).describeProperty(eq("concreteFromIndex"), concreteCaptor.capture());
