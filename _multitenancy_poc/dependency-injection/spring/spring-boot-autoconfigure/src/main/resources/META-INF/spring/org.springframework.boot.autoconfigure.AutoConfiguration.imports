@@ -18,6 +18,7 @@
 #
 io.axoniq.framework.springboot.autoconfig.AxonServerAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.AxonServerActuatorAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.PersistentStreamAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.DeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
