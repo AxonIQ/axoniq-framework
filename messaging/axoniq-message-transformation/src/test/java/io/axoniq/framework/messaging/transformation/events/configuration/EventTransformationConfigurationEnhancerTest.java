@@ -31,14 +31,17 @@ import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.util.ServiceLoader;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * End-to-end wiring: the {@link EventTransformationConfigurationEnhancer} is discovered via
- * {@link ServiceLoader} and installs the {@link TransformingEventStore} decorator only when
- * the application has registered an {@link EventTransformerChain}.
+ * the {@code java.util.ServiceLoader} mechanism and installs the
+ * {@link TransformingEventStore} decorator only when the application has registered an
+ * {@link EventTransformerChain}.
  */
 final class EventTransformationConfigurationEnhancerTest {
 
@@ -46,17 +49,18 @@ final class EventTransformationConfigurationEnhancerTest {
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
-    void enhancerIsDiscoveredByServiceLoader() {
-        boolean found = false;
-        for (ConfigurationEnhancer enhancer : ServiceLoader.load(ConfigurationEnhancer.class)) {
-            if (enhancer instanceof EventTransformationConfigurationEnhancer) {
-                found = true;
-                break;
-            }
+    void enhancerIsRegisteredAsAServiceLoaderProvider() throws Exception {
+        URL registration = getClass().getClassLoader()
+                .getResource("META-INF/services/" + ConfigurationEnhancer.class.getName());
+
+        assertThat(registration)
+                .as("META-INF/services entry must exist for the framework to auto-discover this enhancer")
+                .isNotNull();
+        try (InputStream stream = registration.openStream()) {
+            String contents = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(contents)
+                    .contains(EventTransformationConfigurationEnhancer.class.getName());
         }
-        assertThat(found)
-                .as("EventTransformationConfigurationEnhancer must be discoverable via ServiceLoader")
-                .isTrue();
     }
 
     @Test
@@ -68,7 +72,7 @@ final class EventTransformationConfigurationEnhancerTest {
                                                      .build()
                                                      .getComponent(EventStore.class);
 
-        // Other framework decorators (e.g. InterceptingEventStore) may still wrap; the
+        // Other framework decorators (e.g., InterceptingEventStore) may still wrap; the
         // contract is that OUR decorator is NOT installed when no chain is registered.
         assertThat(resolved)
                 .as("absence of a chain MUST NOT install the TransformingEventStore decorator")

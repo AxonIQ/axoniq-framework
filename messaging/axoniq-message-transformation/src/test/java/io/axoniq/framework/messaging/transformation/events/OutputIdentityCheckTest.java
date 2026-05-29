@@ -80,9 +80,10 @@ final class OutputIdentityCheckTest {
             // WrongTypePojo resolves to a MessageType other than the declared V2.
             MessageTypeResolver resolver = resolverFor(WrongTypePojo.class,
                                                        new MessageType(WrongTypePojo.class.getName(), "1.0.0"));
+            MessageStream<EventMessage> transformed = chain.transform(
+                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, resolver);
 
-            assertThatThrownBy(() -> collectMessages(
-                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, resolver)))
+            assertThatThrownBy(() -> collectMessages(transformed))
                     .isInstanceOf(CompletionException.class)
                     .cause()
                     .isInstanceOf(ChainConfigurationException.class)
@@ -119,7 +120,7 @@ final class OutputIdentityCheckTest {
             EventTransformerChain chain = EventTransformerChain.builder().register(jsonNodeProducingTransformer).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
             // Resolver returns Optional.empty for every class, mirroring the framework's
-            // behaviour for untyped representations whose runtime class carries no
+            // behavior for untyped representations whose runtime class carries no
             // identity annotation.
             MessageTypeResolver untypedResolver = alwaysEmptyMessageTypeResolver();
 
@@ -163,14 +164,15 @@ final class OutputIdentityCheckTest {
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
             MessageTypeResolver resolver = resolverFor(WrongTypePojo.class,
                                                        new MessageType(WrongTypePojo.class.getName(), "1.0.0"));
-            // Simulate the storage engine's behaviour: attach a TrackingToken to the stream
+            // Simulate the storage engine's behavior: attach a TrackingToken to the stream
             // entry's context. The chain MUST surface this position in identity-mismatch
             // diagnostics so operators can locate the failing event in their stream.
             TrackingToken positionToken = new GlobalSequenceTrackingToken(42L);
-            MessageStream<EventMessage> tokenedStream = MessageStream.fromIterable(
+            MessageStream<EventMessage> messageStream = MessageStream.fromIterable(
                     List.of(storedV1Event), event -> TrackingToken.addToContext(Context.empty(), positionToken));
+            MessageStream<EventMessage> transformed = chain.transform(messageStream, null, CONVERTER, resolver);
 
-            assertThatThrownBy(() -> collectMessages(chain.transform(tokenedStream, null, CONVERTER, resolver)))
+            assertThatThrownBy(() -> collectMessages(transformed))
                     .isInstanceOf(CompletionException.class)
                     .cause()
                     .isInstanceOf(ChainConfigurationException.class)
@@ -190,8 +192,10 @@ final class OutputIdentityCheckTest {
 
             // Plain fromIterable -> no TrackingToken on the entry context (entity-load / DCB
             // shape). The error still contains the event identity but no position.
-            assertThatThrownBy(() -> collectMessages(
-                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, resolver)))
+            MessageStream<EventMessage> transformed = chain.transform(
+                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, resolver);
+
+            assertThatThrownBy(() -> collectMessages(transformed))
                     .isInstanceOf(CompletionException.class)
                     .cause()
                     .isInstanceOf(ChainConfigurationException.class)
@@ -205,9 +209,9 @@ final class OutputIdentityCheckTest {
 
         @Test
         void transformerConstructedWithSkipIdentityCheckTrueDoesNotInvokeTheResolver() {
-            // Phase 4 rename builds a BuiltEventTransformer with skipIdentityCheck=true so the
+            // Phase 4 rename builds a BuiltEventTransformer with skipIdentityCheck=true, so the
             // framework-supplied output identity (the declared 'to') is not double-checked
-            // against a possibly-annotated source POJO's class. Wire the constructor here to
+            // against a possibly annotated source POJO's class. Wire the constructor here to
             // prove the flag actually bypasses the check.
             EventTransformer renameLikeTransformer = new BuiltEventTransformer<>(
                     new FromMatcher.Concrete(V1),
@@ -234,7 +238,7 @@ final class OutputIdentityCheckTest {
         }
     }
 
-    /** Helper POJO whose class differs from any registered MessageType. */
+    /** Helper POJO, whose class differs from any registered MessageType. */
     private static final class WrongTypePojo {
     }
 

@@ -54,8 +54,9 @@ final class ChainLockingTest {
     @Test
     void rawLambdaTransformerCannotBeRegisteredBecauseItCarriesNoRoutingMetadata() {
         EventTransformer rawLambda = (message, context) -> MessageStream.just(message);
+        EventTransformerChain.Builder builder = EventTransformerChain.builder();
 
-        assertThatThrownBy(() -> EventTransformerChain.builder().register(rawLambda))
+        assertThatThrownBy(() -> builder.register(rawLambda))
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining("EventTransformation factory");
     }

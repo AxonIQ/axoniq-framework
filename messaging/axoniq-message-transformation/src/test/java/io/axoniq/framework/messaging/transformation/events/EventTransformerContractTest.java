@@ -106,8 +106,9 @@ final class EventTransformerContractTest {
         // "standalone" override that bypassed the chain.
         EventTransformer factoryBuilt = EventTransformation.from(V1).to(V2)
                                                             .transform(JsonNode.class, (in, ctx) -> in);
+        EventMessage input = eventOf(V1, "payload");
 
-        assertThatThrownBy(() -> factoryBuilt.transform(eventOf(V1, "payload"), null))
+        assertThatThrownBy(() -> factoryBuilt.transform(input, null))
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("EventTransformerChain.transform")
                 .hasMessageContaining("messageTypeResolver");

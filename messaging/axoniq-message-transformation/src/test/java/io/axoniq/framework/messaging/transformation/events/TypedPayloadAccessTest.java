@@ -89,7 +89,7 @@ final class TypedPayloadAccessTest {
 
         @Test
         void slowPathInvokesConverterWithDeclaredInputClassWhenStoredPayloadIsADifferentType() {
-            // Stored payload is a raw JSON String; the transformer declares JsonNode.class.
+            // The stored payload is a raw JSON String; the transformer declares JsonNode.class.
             // The framework must invoke MessageConverter.convertPayload(message, JsonNode.class)
             // before invoking the mapper.
             EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
@@ -201,10 +201,10 @@ final class TypedPayloadAccessTest {
             EventMessage storedV1Event = new GenericEventMessage(V1, "{}");
             EventStreamTestUtils.RecordingMessageConverter<JsonNode> nullReturningConverter =
                     recordingConverter(message -> null);
+            MessageStream<EventMessage> transformed = chain.transform(
+                    MessageStream.fromIterable(List.of(storedV1Event)), null, nullReturningConverter, RESOLVER);
 
-            assertThatThrownBy(() -> collectMessages(
-                    chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null,
-                                    nullReturningConverter, RESOLVER)))
+            assertThatThrownBy(() -> collectMessages(transformed))
                     .hasRootCauseInstanceOf(IllegalStateException.class)
                     .rootCause()
                     .hasMessageContaining("resolved the stored payload to null")

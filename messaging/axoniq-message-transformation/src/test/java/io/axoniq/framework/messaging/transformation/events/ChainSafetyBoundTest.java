@@ -62,8 +62,10 @@ final class ChainSafetyBoundTest {
                                                                   .register(v2ToV1)
                                                                   .build();
         EventMessage event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+        MessageStream<EventMessage> outputStream = cyclingChain.transform(
+                MessageStream.fromIterable(List.of(event)), null, CONVERTER, RESOLVER);
 
-        assertThatThrownBy(() -> collectMessages(cyclingChain.transform(MessageStream.fromIterable(List.of(event)), null, CONVERTER, RESOLVER)))
+        assertThatThrownBy(() -> collectMessages(outputStream))
                 .isInstanceOf(CompletionException.class)
                 .cause()
                 .isInstanceOf(ChainConfigurationException.class)
@@ -73,11 +75,14 @@ final class ChainSafetyBoundTest {
 
     @Test
     void builderRejectsNonPositiveMaxIterations() {
-        assertThatThrownBy(() -> EventTransformerChain.builder().maxIterationsPerEvent(0))
+        EventTransformerChain.Builder zeroBoundBuilder = EventTransformerChain.builder();
+        EventTransformerChain.Builder negativeBoundBuilder = EventTransformerChain.builder();
+
+        assertThatThrownBy(() -> zeroBoundBuilder.maxIterationsPerEvent(0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxIterationsPerEvent must be >= 1");
 
-        assertThatThrownBy(() -> EventTransformerChain.builder().maxIterationsPerEvent(-5))
+        assertThatThrownBy(() -> negativeBoundBuilder.maxIterationsPerEvent(-5))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxIterationsPerEvent must be >= 1");
     }

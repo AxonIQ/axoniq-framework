@@ -36,8 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The framework emits exactly one DEBUG log entry when a chain is built, listing the
- * registered transformations. This is the only framework-emitted log in 5.2.0; the contents
- * pinned here are what operators see in their startup logs.
+ * registered transformations.
  */
 final class ChainBuildLogTest {
 

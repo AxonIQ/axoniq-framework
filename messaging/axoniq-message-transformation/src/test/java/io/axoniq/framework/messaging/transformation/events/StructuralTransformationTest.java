@@ -28,7 +28,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 
@@ -36,6 +36,7 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)}, the
@@ -71,6 +72,7 @@ final class StructuralTransformationTest {
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst().type()).isEqualTo(V2);
         JsonNode transformedPayload = (JsonNode) observed.getFirst().payload();
+        assertNotNull(transformedPayload);
         assertThat(transformedPayload.get("minCapacity").asInt()).isEqualTo(30);
         assertThat(transformedPayload.get("maxCapacity").asInt()).isEqualTo(30);
     }

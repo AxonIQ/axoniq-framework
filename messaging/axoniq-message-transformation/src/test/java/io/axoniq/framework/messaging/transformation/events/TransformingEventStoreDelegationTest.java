@@ -50,10 +50,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Read-side decoration adds transformation behaviour only to {@code source(...)} and
+ * Read-side decoration adds transformation behavior only to {@code source(...)} and
  * {@code open(...)}. Every other {@link EventStore} / {@link EventStoreTransaction} method
  * MUST delegate to the inner instance unchanged: the chain runs at read time only, so
- * append, token and subscription operations must not be decorated. This test pins each
+ * append, token, and subscription operations must not be decorated. This test pins each
  * delegation so a future refactor cannot silently introduce a side effect.
  */
 final class TransformingEventStoreDelegationTest {

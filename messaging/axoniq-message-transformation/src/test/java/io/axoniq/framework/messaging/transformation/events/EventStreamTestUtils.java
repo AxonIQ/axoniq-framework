@@ -79,7 +79,7 @@ final class EventStreamTestUtils {
 
     /**
      * Records each {@code convertPayload(...)} invocation and returns
-     * {@code converterFunction.apply(message)}; the test supplies the conversion behaviour.
+     * {@code converterFunction.apply(message)}; the test supplies the conversion behavior.
      * Use this when the test's subject-under-test IS the chain's slow-path conversion call
      * (stored payload class differs from the transformer's declared input type).
      */
@@ -180,7 +180,7 @@ final class EventStreamTestUtils {
 
     /**
      * A {@link MessageTypeResolver} stand-in for tests where the chain's identity check must
-     * NOT be reached (e.g. non-matching pass-through tests). Any invocation fails the test
+     * NOT be reached (e.g., non-matching pass-through tests). Any invocation fails the test
      * with an {@link AssertionError}.
      */
     static MessageTypeResolver neverInvokedMessageTypeResolver() {
