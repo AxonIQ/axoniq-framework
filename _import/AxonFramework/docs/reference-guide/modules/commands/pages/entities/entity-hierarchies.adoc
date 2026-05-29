@@ -105,7 +105,9 @@ import org.axonframework.modelling.entity.ConcreteEntityMetamodel;
 import org.axonframework.modelling.entity.EntityMetamodel;
 import org.axonframework.modelling.entity.child.ChildEntityFieldDefinition;
 import org.axonframework.modelling.entity.child.EntityChildMetamodel;
+public class AxonConfiguration {
 
+    EventSourcingConfigurer configureEntity(EventSourcingConfigurer configurer) {
 MessageTypeResolver resolver = config.getComponent(MessageTypeResolver.class);
 
 // Build the child metamodel: same shape as a parent metamodel, without children.
