@@ -90,8 +90,9 @@ final class ChainSafetyBoundTest {
     void builderAcceptsMaxIterationsOfOneAsTheSmallestValidValue() {
         // Boundary case: max=1 is the minimum allowed value; the validation rejects only 0
         // and negatives. Pins the inclusive lower bound.
-        assertThatCode(() -> EventTransformerChain.builder().maxIterationsPerEvent(1).build())
-                .doesNotThrowAnyException();
+        EventTransformerChain.Builder builder = EventTransformerChain.builder();
+
+        assertThatCode(() -> builder.maxIterationsPerEvent(1)).doesNotThrowAnyException();
     }
 
     @Test

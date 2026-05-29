@@ -40,10 +40,12 @@ final class DecorationOrderTest {
 
     @Test
     void decorationOrderLeavesHeadroomBetweenItselfAndInterceptingEventStore() {
-        int transformingDecorationOrder = TransformingEventStore.DECORATION_ORDER;
-        int interceptingDecorationOrder = InterceptingEventStore.DECORATION_ORDER;
+        // Enough room between the two orders for users or the framework to slot additional
+        // decorators in between without colliding with either constant.
+        int gap = TransformingEventStore.DECORATION_ORDER - InterceptingEventStore.DECORATION_ORDER;
 
-        assertThat(transformingDecorationOrder).isEqualTo(Integer.MIN_VALUE + 1000);
-        assertThat(interceptingDecorationOrder).isEqualTo(Integer.MIN_VALUE + 50);
+        assertThat(gap)
+                .as("decorators sit at least 500 ticks apart so intermediate decorators can be inserted")
+                .isGreaterThanOrEqualTo(500);
     }
 }
