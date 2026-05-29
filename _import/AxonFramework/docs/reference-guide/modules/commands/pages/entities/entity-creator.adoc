@@ -111,7 +111,7 @@ When this form is used, command handlers must be split into xref:commands:entiti
 }))
 ----
 
-=== Automated
+=== Autodetected
 
 [source,java]
 ----
