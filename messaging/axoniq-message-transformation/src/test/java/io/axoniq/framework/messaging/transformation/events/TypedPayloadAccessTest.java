@@ -89,8 +89,8 @@ final class TypedPayloadAccessTest {
 
         @Test
         void slowPathInvokesConverterWithDeclaredInputClassWhenStoredPayloadIsADifferentType() {
-            // Stored payload is a raw JSON String; the transformer declares JsonNode.class -- the
-            // framework must invoke MessageConverter.convertPayload(message, JsonNode.class)
+            // Stored payload is a raw JSON String; the transformer declares JsonNode.class.
+            // The framework must invoke MessageConverter.convertPayload(message, JsonNode.class)
             // before invoking the mapper.
             EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
                                                                     .to(V2)

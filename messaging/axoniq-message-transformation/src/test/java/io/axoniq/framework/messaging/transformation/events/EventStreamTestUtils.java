@@ -79,7 +79,7 @@ final class EventStreamTestUtils {
 
     /**
      * Records each {@code convertPayload(...)} invocation and returns
-     * {@code converterFunction.apply(message)} -- the test supplies the conversion behaviour.
+     * {@code converterFunction.apply(message)}; the test supplies the conversion behaviour.
      * Use this when the test's subject-under-test IS the chain's slow-path conversion call
      * (stored payload class differs from the transformer's declared input type).
      */

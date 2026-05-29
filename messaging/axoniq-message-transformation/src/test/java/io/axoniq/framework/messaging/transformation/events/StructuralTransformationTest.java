@@ -38,7 +38,7 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)} -- the
+ * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)}, the
  * 1:1 structural payload transformation. A stored v1 event is observed as v2 by handlers
  * consuming the chain's output stream.
  */

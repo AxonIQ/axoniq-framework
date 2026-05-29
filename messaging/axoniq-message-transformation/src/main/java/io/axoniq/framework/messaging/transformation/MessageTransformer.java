@@ -25,7 +25,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Base SPI for message transformations. The element type {@code M} is preserved -- a
+ * Base SPI for message transformations. The element type {@code M} is preserved: a
  * transformer does not turn one message subtype into another. Per call, it MAY change the
  * {@link org.axonframework.messaging.core.MessageType} identity, the payload's Java type
  * or structure, and the cardinality (zero outputs / one output / many outputs).
@@ -55,5 +55,5 @@ public interface MessageTransformer<M extends Message> {
      *                tolerate {@code null}.
      * @return the resulting output stream
      */
-    MessageStream<? extends M> transform(M message, @Nullable ProcessingContext context);
+    MessageStream<M> transform(M message, @Nullable ProcessingContext context);
 }

@@ -218,7 +218,7 @@ final class OutputIdentityCheckTest {
                     true);
             EventTransformerChain chain = EventTransformerChain.builder().register(renameLikeTransformer).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
-            // A resolver that WOULD flag a mismatch -- but the chain must not consult it.
+            // A resolver that WOULD flag a mismatch, but the chain must not consult it.
             MessageTypeResolver wouldMismatchResolver = cls -> {
                 throw new AssertionError("MessageTypeResolver.resolve was unexpectedly invoked despite skipIdentityCheck=true");
             };

@@ -81,19 +81,22 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * Full constructor allowing the output-identity check to be bypassed. Used by the rename
-     * factory: a pure rename's output identity is set by the framework, not derived from the
-     * mapper's return class, so the check would always reject an annotated source POJO even
-     * though the rename is correct by construction.
+     Full constructor exposing the skipIdentityCheck flag.
+     <p>
+     Set the flag to true only when the framework, not the mapper, owns the output
+     identity. Needed for a rename which keeps the input
+     payload unchanged. The default check would resolve that payload's class to the source
+     identity and reject the newly declared to as a mismatch, even though the rename is
+     intentional.
      *
      * @param matcher           the {@code from}-side matcher
      * @param toType            the {@code to} identity applied to the output message
      * @param inputType         the declared input {@link Type}
      * @param rawInputClass     the raw {@link Class} of the input type
      * @param mapper            the user-supplied payload mapping function
-     * @param skipIdentityCheck {@code true} only for transformers where the framework owns
-     *                          the output identity (currently: pure renames); {@code false}
-     *                          for all payload-mapping transformers
+     * @param skipIdentityCheck {@code true} only when the framework owns the output identity
+     *                          (currently: the rename factory); {@code false} for every
+     *                          payload-mapping transformer
      */
     BuiltEventTransformer(FromMatcher matcher,
                           MessageType toType,
@@ -114,12 +117,12 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
      * {@link EventTransformerChain} which supplies the framework's {@link MessageConverter}
      * and {@link MessageTypeResolver}, and threads the {@link ProcessingContext}. Tests
      * exercise the same chain path that production uses, ensuring there is no test-only
-     * behaviour divergence.
+     * behavior divergence.
      *
      * @throws UnsupportedOperationException always
      */
     @Override
-    public MessageStream<? extends EventMessage> transform(EventMessage message,
+    public MessageStream<EventMessage> transform(EventMessage message,
                                                            @Nullable ProcessingContext context) {
         throw new UnsupportedOperationException(
                 "Factory-built EventTransformer instances must be invoked through "
@@ -128,44 +131,27 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * Applies this transformer to {@code message} assuming the {@link #matcher} has already
-     * matched. The chain calls this directly to skip a redundant match check; the framework
-     * supplies the {@link MessageConverter} for input type / payload type mismatches, threads
-     * the active {@link ProcessingContext} to the user's mapper, and uses the supplied
-     * {@link MessageTypeResolver} to verify the mapper's output identity against the declared
-     * {@link #toType} (unless this transformer was constructed with
-     * {@code skipIdentityCheck = true}). The {@code entryContext} is the per-event
-     * {@link Context} that the storage engine attached to the stream entry; the chain reads
-     * the {@link TrackingToken} from it to enrich diagnostic exceptions with stream position.
+     * Framework-internal counterpart to the {@link EventTransformer#transform public SPI},
+     * called by {@link EventTransformerChain} once it has matched this transformer against
+     * the input. Extracts the typed payload via the runtime's {@link MessageConverter},
+     * invokes the user's mapper, verifies the mapper's output identity against the declared
+     * {@link #toType} unless {@code skipIdentityCheck} is set, and returns the result
+     * wrapped with the declared {@link MessageType} and the input's envelope preserved.
      *
-     * @param message              the matched input
-     * @param entryContext         per-entry context carrying the {@link TrackingToken}; used
-     *                             only for error diagnostics
-     * @param context              the active processing context, or {@code null} on the
-     *                             tracking processor read path
-     * @param converter            the framework's payload converter
-     * @param messageTypeResolver  the resolver used to verify the mapper's output identity
-     *                             against the declared {@link #toType}; skipped when the
-     *                             resolver returns {@link Optional#empty()} (typical for
-     *                             untyped representations such as {@code JsonNode} or
-     *                             {@code Map})
-     * @return the transformed output
+     * @param message the matched input message
+     * @param runtime per-event framework bundle (entry context, processing context,
+     *                converter, resolver)
+     * @return the transformed output message
      * @throws ChainConfigurationException if the resolver resolves the mapper's output to a
      *                                     {@link MessageType} other than the declared
      *                                     {@link #toType}
      */
-    EventMessage applyTo(EventMessage message,
-                         Context entryContext,
-                         @Nullable ProcessingContext context,
-                         MessageConverter converter,
-                         MessageTypeResolver messageTypeResolver) {
-        requireNonNull(entryContext, "entryContext");
-        requireNonNull(converter, "converter");
-        requireNonNull(messageTypeResolver, "messageTypeResolver");
-        T typedPayload = extractTypedPayload(message, entryContext, converter);
-        U mappedPayload = mapper.apply(typedPayload, context);
+    EventMessage applyTo(EventMessage message, ChainRuntime runtime) {
+        requireNonNull(runtime, "runtime");
+        T typedPayload = extractTypedPayload(message, runtime);
+        U mappedPayload = mapper.apply(typedPayload, runtime.processingContext());
         if (!skipIdentityCheck) {
-            verifyOutputIdentity(mappedPayload, message, entryContext, messageTypeResolver);
+            verifyOutputIdentity(mappedPayload, message, runtime);
         }
         return new GenericEventMessage(
                 message.identifier(),
@@ -178,27 +164,24 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
 
     /**
      * Verifies the mapper's output identity against the declared {@link #toType}. Skips
-     * silently when the resolver returns {@link Optional#empty()} -- the only feasible
-     * behaviour for untyped representations whose runtime class carries no identity
+     * silently when the resolver returns {@link Optional#empty()}. This is the only possible
+     * behavior for untyped representations whose runtime class carries no identity
      * annotation.
      * <p>
      * The thrown exception identifies the failing transformation (matcher + declared
      * {@code to}), the input event ({@link EventMessage#type()} + identifier + stream
-     * position read from {@code entryContext} when available), and the mismatching
-     * output (class + resolved {@link MessageType}).
+     * position from the runtime when available), and the mismatching output (class +
+     * resolved {@link MessageType}).
      */
-    private void verifyOutputIdentity(U mappedPayload,
-                                      EventMessage inputMessage,
-                                      Context entryContext,
-                                      MessageTypeResolver messageTypeResolver) {
-        Optional<MessageType> resolved = messageTypeResolver.resolve(mappedPayload.getClass());
+    private void verifyOutputIdentity(U mappedPayload, EventMessage inputMessage, ChainRuntime runtime) {
+        Optional<MessageType> resolved = runtime.messageTypeResolver().resolve(mappedPayload.getClass());
         if (resolved.isEmpty() || resolved.get().equals(toType)) {
             return;
         }
         throw new ChainConfigurationException(
                 "Mapper output identity does not match the declared 'to' type. "
                         + "Failing transformation: from=" + matcher + ", declared to=" + toType + ". "
-                        + "Input event: " + describeEvent(inputMessage, entryContext) + ". "
+                        + "Input event: " + describeEvent(inputMessage, runtime.entryContext()) + ". "
                         + "Mapper output class=" + mappedPayload.getClass().getName()
                         + " resolved to " + resolved.get() + ". "
                         + "Either align the mapper's output class with the declared 'to', "
@@ -208,7 +191,7 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
     /**
      * Returns the payload typed as {@link #rawInputClass}. Fast path: when the payload is
      * already an instance of the raw input class, hand it through via the checked
-     * {@code Class.cast}. Otherwise the framework's
+     * {@code Class.cast}. Otherwise, the framework's
      * {@link MessageConverter#convertPayload(org.axonframework.messaging.core.Message, Type)}
      * is invoked with the full message and the declared {@link #inputType}; the converter
      * preserves the generic parameters carried by {@code inputType} (relevant for
@@ -219,19 +202,17 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
      * {@link IllegalStateException} so the diagnostic lands at the chain layer with the
      * input event's identity rather than as a downstream {@code NullPointerException}.
      */
-    private T extractTypedPayload(EventMessage message,
-                                  Context entryContext,
-                                  MessageConverter converter) {
+    private T extractTypedPayload(EventMessage message, ChainRuntime runtime) {
         Object payload = message.payload();
         if (rawInputClass.isInstance(payload)) {
             return rawInputClass.cast(payload);
         }
-        T converted = converter.convertPayload(message, inputType);
+        T converted = runtime.converter().convertPayload(message, inputType);
         if (converted == null) {
             throw new IllegalStateException(
                     "MessageConverter resolved the stored payload to null for declared input type "
                             + inputType.getTypeName() + ". "
-                            + "Input event: " + describeEvent(message, entryContext)
+                            + "Input event: " + describeEvent(message, runtime.entryContext())
                             + ". The stored payload is missing or malformed.");
         }
         return converted;

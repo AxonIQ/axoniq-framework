@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * A transformation produced by the factory is unit-testable from a plain JUnit test by
  * registering it with a single-transformer {@link EventTransformerChain} and invoking
- * {@code chain.transform(...)} -- the same entry point the framework's
+ * {@code chain.transform(...)}, the same entry point the framework's
  * {@code TransformingEventStore} decorator uses at production read time. No event store,
  * processor, or framework bootstrap is required.
  */

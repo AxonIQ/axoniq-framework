@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.transformation.events;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -130,33 +129,29 @@ public final class EventTransformerChain implements DescribableComponent {
         // Entry-level map (not mapMessage) keeps the engine-attached Context in scope so the
         // chain can include the stream position in diagnostic exceptions.
         return stream.map(entry -> entry.map(event -> applyChainToOneEvent(
-                event, entry, context, converter, messageTypeResolver)));
+                event, new ChainRuntime(entry, context, converter, messageTypeResolver))));
     }
 
     /**
      * Applies the chain to a single event with fixed-point iteration: find the
      * latest-registered transformer that matches, apply it, repeat until no transformer
-     * matches. The {@code entryContext} (the stream entry's resource bag) is threaded
-     * through unchanged so diagnostic exceptions can read the stream position from it.
+     * matches. The {@link ChainRuntime} bundle is threaded through unchanged so each matched
+     * transformer sees the same per-entry context, converter, and resolver.
      */
-    private EventMessage applyChainToOneEvent(EventMessage event,
-                                              Context entryContext,
-                                              @Nullable ProcessingContext context,
-                                              MessageConverter converter,
-                                              MessageTypeResolver messageTypeResolver) {
+    private EventMessage applyChainToOneEvent(EventMessage event, ChainRuntime runtime) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
             var match = findLastMatch(current);
             if (match == null) {
                 return current;
             }
-            current = match.applyTo(current, entryContext, context, converter, messageTypeResolver);
+            current = match.applyTo(current, runtime);
         }
         throw new ChainConfigurationException(
                 "Chain exceeded " + maxIterationsPerEvent + " iterations on a single event; "
                         + "likely a cyclic or self-matching transformer (raise the bound via "
                         + "Builder.maxIterationsPerEvent(int) if your domain genuinely has more hops). "
-                        + "Last event: " + BuiltEventTransformer.describeEvent(current, entryContext));
+                        + "Last event: " + BuiltEventTransformer.describeEvent(current, runtime.entryContext()));
     }
 
     /**

@@ -30,13 +30,11 @@ import org.jspecify.annotations.Nullable;
  * rather than implementing directly. See {@link MessageTransformer} for the transformation
  * contract; this interface narrows the message type to {@link EventMessage}.
  * <p>
- * A transformer rewrites only the {@link EventMessage} itself -- its
- * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Properties
- * that live alongside the event in the read stream -- the tags resolved at append time
- * and any tracking-position or sequence information carried on the
- * {@link MessageStream.Entry} context -- are not part of the message and are not
- * modified by the chain. For 1:N splits, every output is delivered against the same
- * stream position as the input.
+ * A transformer rewrites only the {@link EventMessage} itself: its
+ * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Tags are
+ * fixed when the event is appended and are not changed by the chain. Tracking position and
+ * sequence information ride on the {@link MessageStream.Entry} context rather than on the
+ * message, and pass through unchanged.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -45,6 +43,5 @@ import org.jspecify.annotations.Nullable;
 public interface EventTransformer extends MessageTransformer<EventMessage> {
 
     @Override
-    MessageStream<? extends EventMessage> transform(EventMessage message,
-                                                    @Nullable ProcessingContext context);
+    MessageStream<EventMessage> transform(EventMessage message, @Nullable ProcessingContext context);
 }
