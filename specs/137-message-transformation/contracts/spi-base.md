@@ -32,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  * in 5.3+).
  *
  * @param <M> the {@link Message} subtype this transformer accepts and emits
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @FunctionalInterface
@@ -96,7 +96,7 @@ import org.jspecify.annotations.NullMarked;
  * a transformer's mapper propagate to the caller directly; this type is reserved for
  * configuration errors at registration or lock time.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked

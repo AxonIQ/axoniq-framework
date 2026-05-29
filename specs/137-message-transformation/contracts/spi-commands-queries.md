@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  * commands. Output is always a {@link MessageStream.Single}. Use the
  * {@code CommandTransformation} factory rather than implementing directly.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -73,7 +73,7 @@ import org.jspecify.annotations.Nullable;
  * Immutable chain of {@link CommandTransformer} instances. Built once at startup; register
  * with the Axon configuration as a {@code CommandTransformerChain.class}-typed component.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -122,7 +122,7 @@ import org.jspecify.annotations.Nullable;
  * always a {@link MessageStream.Single}. Use the {@code QueryTransformation} factory rather
  * than implementing directly.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -172,7 +172,7 @@ import org.jspecify.annotations.NullMarked;
  * Installed automatically by {@code CommandTransformationConfigurationEnhancer}; not
  * constructed by users. Outbound dispatch is not decorated.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -231,7 +231,7 @@ import org.jspecify.annotations.NullMarked;
  * each registered {@link QueryHandler} at subscription time. Installed automatically by
  * {@code QueryTransformationConfigurationEnhancer}; not constructed by users.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -284,7 +284,7 @@ import org.jspecify.annotations.NullMarked;
  * (same pattern as {@code EventTransformationConfigurationEnhancer}, see
  * [spi-events.md](spi-events.md)); a no-op if no chain is registered.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -308,7 +308,7 @@ import org.jspecify.annotations.NullMarked;
  * {@link io.axoniq.framework.messaging.transformation.queryhandling.TransformingQueryBus}
  * decorator. No-op if no chain is registered.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked

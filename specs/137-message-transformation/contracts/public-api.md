@@ -73,7 +73,7 @@ import java.util.function.Predicate;
  * {@link #drop(MessageType)}) and register the result with
  * {@code EventTransformerChain.builder().register(...)}.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.2.0
  */
 @NullMarked
@@ -250,7 +250,7 @@ import java.util.function.Predicate;
  * single-intent, so split / drop are not exposed. Mirrors the {@link EventTransformation}
  * shape for the patterns it does support.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
@@ -316,7 +316,7 @@ import java.util.function.Predicate;
  * Factory producing {@link QueryTransformer} instances. 1:1 only. Subscription-query update
  * streams flowing back to subscribers are NOT transformed -- only the incoming query is.
  *
- * @author AxonIQ
+ * @author Laura Devriendt
  * @since 5.3+
  */
 @NullMarked
