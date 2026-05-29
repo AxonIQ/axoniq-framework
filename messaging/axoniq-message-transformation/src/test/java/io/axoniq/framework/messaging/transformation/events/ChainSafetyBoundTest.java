@@ -32,10 +32,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -52,10 +55,17 @@ final class ChainSafetyBoundTest {
 
     @Test
     void exceedingTheConfiguredBoundRaisesChainConfigurationExceptionNamingTheOverride() {
+        AtomicInteger totalMapperInvocations = new AtomicInteger();
         EventTransformer v1ToV2 = EventTransformation.from(V1).to(V2)
-                                                     .transform(JsonNode.class, (in, ctx) -> in);
+                                                     .transform(JsonNode.class, (in, ctx) -> {
+                                                         totalMapperInvocations.incrementAndGet();
+                                                         return in;
+                                                     });
         EventTransformer v2ToV1 = EventTransformation.from(V2).to(V1)
-                                                     .transform(JsonNode.class, (in, ctx) -> in);
+                                                     .transform(JsonNode.class, (in, ctx) -> {
+                                                         totalMapperInvocations.incrementAndGet();
+                                                         return in;
+                                                     });
         EventTransformerChain cyclingChain = EventTransformerChain.builder()
                                                                   .maxIterationsPerEvent(3)
                                                                   .register(v1ToV2)
@@ -71,6 +81,17 @@ final class ChainSafetyBoundTest {
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining("exceeded 3 iterations")
                 .hasMessageContaining("maxIterationsPerEvent");
+        assertThat(totalMapperInvocations.get())
+                .as("the chain must apply exactly maxIterationsPerEvent transformations before bailing")
+                .isEqualTo(3);
+    }
+
+    @Test
+    void builderAcceptsMaxIterationsOfOneAsTheSmallestValidValue() {
+        // Boundary case: max=1 is the minimum allowed value; the validation rejects only 0
+        // and negatives. Pins the inclusive lower bound.
+        assertThatCode(() -> EventTransformerChain.builder().maxIterationsPerEvent(1).build())
+                .doesNotThrowAnyException();
     }
 
     @Test

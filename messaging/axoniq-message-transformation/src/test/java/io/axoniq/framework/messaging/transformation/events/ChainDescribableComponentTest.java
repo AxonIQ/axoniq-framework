@@ -76,10 +76,23 @@ final class ChainDescribableComponentTest {
         assertThat(concreteCaptor.getValue())
                 .asInstanceOf(MAP)
                 .containsKeys("com.example.CourseCreated", "com.example.StudentRegistered");
+        // Bucket entries must be the transformer's toString(), not empty strings or null:
+        // operators rely on these descriptions to know which transformer is in which bucket.
+        assertThat(concreteCaptor.getValue().get("com.example.CourseCreated"))
+                .asInstanceOf(LIST)
+                .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains(concreteCourse.toString());
+        assertThat(concreteCaptor.getValue().get("com.example.StudentRegistered"))
+                .asInstanceOf(LIST)
+                .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains(concreteStudent.toString());
 
         ArgumentCaptor<Collection<?>> predicateCaptor = ArgumentCaptor.captor();
         verify(descriptor).describeProperty(eq("predicateFromList"), predicateCaptor.capture());
-        assertThat(predicateCaptor.getValue()).hasSize(1);
+        assertThat(predicateCaptor.getValue())
+                .asInstanceOf(LIST)
+                .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains(predicateBased.toString());
     }
 
     @Test
