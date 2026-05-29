@@ -35,7 +35,7 @@ Axon creates the instance with the no-arg constructor and applies events through
 .entityFactory(c -> EventSourcedEntityFactory.fromNoArgument(CourseEntity::new))
 ----
 
-=== Automated
+=== Autodetected
 
 Annotate the no-arg constructor with `@EntityCreator`:
 
