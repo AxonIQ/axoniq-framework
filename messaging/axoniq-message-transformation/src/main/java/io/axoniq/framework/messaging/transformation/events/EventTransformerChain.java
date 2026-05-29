@@ -147,11 +147,13 @@ public final class EventTransformerChain implements DescribableComponent {
             }
             current = match.applyTo(current, runtime);
         }
-        throw new ChainConfigurationException(
-                "Chain exceeded " + maxIterationsPerEvent + " iterations on a single event; "
-                        + "likely a cyclic or self-matching transformer (raise the bound via "
-                        + "Builder.maxIterationsPerEvent(int) if your domain genuinely has more hops). "
-                        + "Last event: " + BuiltEventTransformer.describeEvent(current, runtime.entryContext()));
+        throw new ChainConfigurationException("""
+                Chain exceeded %d iterations on a single event; \
+                likely a cyclic or self-matching transformer (raise the bound via \
+                Builder.maxIterationsPerEvent(int) if your domain genuinely has more hops). \
+                Last event: %s""".formatted(
+                maxIterationsPerEvent,
+                BuiltEventTransformer.describeEvent(current, runtime.entryContext())));
     }
 
     /**
@@ -292,9 +294,9 @@ public final class EventTransformerChain implements DescribableComponent {
                         "Chain is locked after build(); further registration is rejected.");
             }
             if (!(transformer instanceof BuiltEventTransformer<?, ?> built)) {
-                throw new ChainConfigurationException(
-                        "Transformer must be produced by EventTransformation factory; "
-                                + "raw EventTransformer instances cannot be registered with the chain.");
+                throw new ChainConfigurationException("""
+                        Transformer must be produced by EventTransformation factory; \
+                        raw EventTransformer instances cannot be registered with the chain.""");
             }
             var entry = new RegisteredTransformer(nextSequence++, built);
             switch (built.matcher()) {

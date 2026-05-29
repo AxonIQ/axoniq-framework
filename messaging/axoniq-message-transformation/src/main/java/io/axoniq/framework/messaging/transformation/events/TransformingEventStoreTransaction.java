@@ -61,7 +61,7 @@ final class TransformingEventStoreTransaction implements EventStoreTransaction {
      *
      * @param delegate             the inner {@link EventStoreTransaction} to wrap
      * @param chain                the application's {@link EventTransformerChain}
-     * @param context              the active processing context the wrapped transaction was
+     * @param context              in the active processing context the wrapped transaction was
      *                             created for; threaded through to mappers via the chain
      * @param converter            the active {@link MessageConverter}
      * @param messageTypeResolver  the active {@link MessageTypeResolver} used to verify

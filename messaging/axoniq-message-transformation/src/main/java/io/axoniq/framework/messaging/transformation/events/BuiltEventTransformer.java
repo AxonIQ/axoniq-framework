@@ -122,12 +122,11 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
      * @throws UnsupportedOperationException always
      */
     @Override
-    public MessageStream<EventMessage> transform(EventMessage message,
-                                                           @Nullable ProcessingContext context) {
-        throw new UnsupportedOperationException(
-                "Factory-built EventTransformer instances must be invoked through "
-                        + "EventTransformerChain.transform(stream, context, converter, messageTypeResolver); "
-                        + "direct invocation is not supported.");
+    public MessageStream<EventMessage> transform(EventMessage message, @Nullable ProcessingContext context) {
+        throw new UnsupportedOperationException("""
+                Factory-built EventTransformer instances must be invoked through \
+                EventTransformerChain.transform(stream, context, converter, messageTypeResolver); \
+                direct invocation is not supported.""");
     }
 
     /**
@@ -178,14 +177,18 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
         if (resolved.isEmpty() || resolved.get().equals(toType)) {
             return;
         }
-        throw new ChainConfigurationException(
-                "Mapper output identity does not match the declared 'to' type. "
-                        + "Failing transformation: from=" + matcher + ", declared to=" + toType + ". "
-                        + "Input event: " + describeEvent(inputMessage, runtime.entryContext()) + ". "
-                        + "Mapper output class=" + mappedPayload.getClass().getName()
-                        + " resolved to " + resolved.get() + ". "
-                        + "Either align the mapper's output class with the declared 'to', "
-                        + "or change the declared 'to' to match.");
+        throw new ChainConfigurationException("""
+                Mapper output identity does not match the declared 'to' type. \
+                Failing transformation: from=%s, declared to=%s. \
+                Input event: %s. \
+                Mapper output class=%s resolved to %s. \
+                Either align the mapper's output class with the declared 'to', \
+                or change the declared 'to' to match.""".formatted(
+                matcher,
+                toType,
+                describeEvent(inputMessage, runtime.entryContext()),
+                mappedPayload.getClass().getName(),
+                resolved.get()));
     }
 
     /**
@@ -209,11 +212,12 @@ final class BuiltEventTransformer<T, U> implements EventTransformer {
         }
         T converted = runtime.converter().convertPayload(message, inputType);
         if (converted == null) {
-            throw new IllegalStateException(
-                    "MessageConverter resolved the stored payload to null for declared input type "
-                            + inputType.getTypeName() + ". "
-                            + "Input event: " + describeEvent(message, runtime.entryContext())
-                            + ". The stored payload is missing or malformed.");
+            throw new IllegalStateException("""
+                    MessageConverter resolved the stored payload to null for declared input type %s. \
+                    Input event: %s. \
+                    The stored payload is missing or malformed.""".formatted(
+                    inputType.getTypeName(),
+                    describeEvent(message, runtime.entryContext())));
         }
         return converted;
     }
