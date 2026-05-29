@@ -66,7 +66,7 @@ The identifier can be declared `final`, removing a piece of mutable state from t
 .entityFactory(c -> EventSourcedEntityFactory.fromIdentifier(courseId -> new CourseEntity(courseId)))
 ----
 
-=== Automated
+=== Autodetected
 
 Use `@InjectEntityId` to mark the identifier parameter:
 
