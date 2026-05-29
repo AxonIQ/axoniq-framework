@@ -1,48 +1,48 @@
 /*
  * Copyright (c) 2010-2026. AxonIQ B.V.
  *
- * Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
- * Version September 2025 (the "License");
- * The software is available under Non-Production Free License.
- * Production use requires a paid license. See the License for the
- * specific language governing permissions and limitations under
- * the License.
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
  *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
+ *
  * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
  *
- *    https://www.axoniq.io/legal/terms-of-service
- *
- *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
  */
 
-package org.axonframework.springboot.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import org.axonframework.axonserver.connector.AxonServerConfiguration;
-import org.axonframework.axonserver.connector.event.axon.PersistentStreamScheduledExecutorBuilder;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
+import io.axoniq.framework.springboot.util.GrpcServerStub;
+import io.axoniq.framework.springboot.util.TcpUtils;
 import org.axonframework.common.AxonThreadFactory;
-import org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy;
-import org.axonframework.springboot.util.GrpcServerStub;
-import org.axonframework.springboot.util.TcpUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
-import org.springframework.test.context.ContextConfiguration;
+import org.springframework.context.annotation.Configuration;
 
 import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Disabled("TODO #3520")
 class PersistentStreamAutoConfigurationTest {
 
-    public static final Class<SequentialPerAggregatePolicy> DEFAULT_SEQUENCING_POLICY_CLASS =
-            SequentialPerAggregatePolicy.class;
+    public static final Class<?> DEFAULT_SEQUENCING_POLICY_CLASS =
+            org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy.class;
 
     private ApplicationContextRunner testContext;
 
@@ -77,24 +77,19 @@ class PersistentStreamAutoConfigurationTest {
                                        "axon.axonserver.auto-persistent-streams-settings.initial-segment-count=10",
                                        "axon.axonserver.auto-persistent-streams-settings.batch-size=6")
                    .run(context -> {
-
 //                       EventProcessingModule eventProcessingModule = context.getBean(EventProcessingModule.class);
-
 //                       EventProcessingConfigurer.EventProcessorBuilder defaultEventProcessorBuilder = getField(
 //                               "defaultEventProcessorBuilder",
 //                               eventProcessingModule);
-
 //                       LegacyConfiguration config = getField("configuration", eventProcessingModule);
 //                       Object processor = defaultEventProcessorBuilder.build("processingGroupName",
 //                                                                             config,
 //                                                                             new MultiEventHandlerInvoker(
 //                                                                                     Collections.emptyList()));
-
 //                       Object messageSource = getField("messageSource", processor);
 //                       Object connection = getField("persistentStreamConnection", messageSource);
 //                       PersistentStreamProperties properties = getField("persistentStreamProperties", connection);
 //                       Integer batchSize = getField("batchSize", connection);
-
 //                       assertThat(messageSource).isInstanceOf(PersistentStreamMessageSource.class);
 //                       assertThat(properties.segments()).isEqualTo(10);
 //                       assertThat(properties.streamName()).isEqualTo("processingGroupName-stream");
@@ -108,14 +103,14 @@ class PersistentStreamAutoConfigurationTest {
                                        "axon.axonserver.persistent-streams[payments-stream].thread-count=4")
                    .run(context -> {
                        assertThat(context).hasSingleBean(AxonServerConfiguration.class);
-//                       Map<String, AxonServerConfiguration.PersistentStreamSettings> persistentStreams =
-//                               context.getBean(AxonServerConfiguration.class).getPersistentStreams();
+                       Map<String, AxonServerConfiguration.PersistentStreamSettings> persistentStreams =
+                               context.getBean(AxonServerConfiguration.class).getPersistentStreams();
 
-//                       assertThat(persistentStreams).hasSize(1);
-//                       AxonServerConfiguration.PersistentStreamSettings paymentsStreamSettings =
-//                               persistentStreams.get("payments-stream");
-//                       assertThat(paymentsStreamSettings).isNotNull();
-//                       assertThat(paymentsStreamSettings.getThreadCount()).isEqualTo(4);
+                       assertThat(persistentStreams).hasSize(1);
+                       AxonServerConfiguration.PersistentStreamSettings paymentsStreamSettings =
+                               persistentStreams.get("payments-stream");
+                       assertThat(paymentsStreamSettings).isNotNull();
+                       assertThat(paymentsStreamSettings.getThreadCount()).isEqualTo(4);
                    });
     }
 
@@ -160,7 +155,9 @@ class PersistentStreamAutoConfigurationTest {
     @Test
     void axonServerPersistentStreamBeansNotCreatedWhenAxonServerDisabled() {
         testContext.withPropertyValues("axon.axonserver.persistent-streams[payments].name=My Payments",
-                                       "axon.axonserver.enabled=false")
+                                       "axon.axonserver.enabled=false",
+                                       "axon.postgresql.enabled=false",
+                                       "axon.eventstorage.jpa.polling-interval=0")
                    .run(context -> assertThat(context).getBean("payments").isNull());
     }
 
@@ -193,9 +190,9 @@ class PersistentStreamAutoConfigurationTest {
                    });
     }
 
-    @ContextConfiguration
+    @Configuration
     @EnableAutoConfiguration
-    private static class TestContext {
+    public static class TestContext {
 
         @Bean(initMethod = "start", destroyMethod = "shutdown")
         public GrpcServerStub grpcServerStub(@Value("${axon.axonserver.servers}") String servers) {
