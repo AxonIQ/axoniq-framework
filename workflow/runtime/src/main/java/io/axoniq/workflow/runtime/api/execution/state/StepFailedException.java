@@ -19,14 +19,26 @@
 package io.axoniq.workflow.runtime.api.execution.state;
 
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 
+/**
+ * Base exception type for individual step failures surfaced by the DSL.
+ * <p>
+ * Catch {@code StepFailedException} to handle any abnormal step termination — failure,
+ * timeout, or cancellation. {@link StepTimedOutException} and {@link StepCancellationException}
+ * are subtypes for callers that need to distinguish those cases.
+ */
 public class StepFailedException extends RuntimeException {
+
+    public StepFailedException(@Nonnull String message) {
+        super(message);
+    }
 
     public StepFailedException(@Nonnull Throwable cause) {
         super(cause);
     }
 
-    public StepFailedException(@Nonnull String message, @Nonnull Throwable cause) {
+    public StepFailedException(@Nonnull String message, @Nullable Throwable cause) {
         super(message, cause);
     }
 }

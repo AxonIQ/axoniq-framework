@@ -23,15 +23,16 @@ import jakarta.annotation.Nonnull;
 /**
  * Exception thrown when an individual step reaches its configured timeout before completing.
  * <p>
- * Surfaced by DSL helpers (e.g. {@code awaitEvent}) when the awaited event does not arrive within
- * the timeout and the step ends in the {@code TIMED_OUT} state. Distinct from
- * {@link StepFailedException} (caller-supplied failure) and {@link StepCancellationException}
+ * Surfaced by DSL helpers (e.g. {@code awaitEvent}, {@code awaitExecute}) when the step ends
+ * in the {@code TIMED_OUT} state. A subtype of {@link StepFailedException}: callers that want
+ * to handle any step-level failure can catch the parent; callers that need to distinguish a
+ * timeout specifically can catch this type. Distinct from {@link StepCancellationException}
  * (explicit cancellation).
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public class StepTimedOutException extends RuntimeException {
+public class StepTimedOutException extends StepFailedException {
 
     /**
      * Constructs a {@code StepTimedOutException} with a descriptive message.
