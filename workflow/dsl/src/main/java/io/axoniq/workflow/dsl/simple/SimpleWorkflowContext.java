@@ -26,6 +26,8 @@ import io.axoniq.workflow.runtime.api.execution.context.ExecuteStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import jakarta.annotation.Nonnull;
@@ -168,11 +170,23 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
     ) {
         var result = waitForEvent(stepName, eventType, conditions, customizer);
         result.await();
+        if (result.success()) {
+            return result.resultAs(eventType, processingContext().component(EventConverter.class))
+                         .orElseThrow(() -> new IllegalStateException(
+                                 "No event payload for step '" + stepName + "'"));
+        }
+        if (result.timeout()) {
+            throw new StepTimedOutException(
+                    "Step '" + stepName + "' timed out waiting for event " + eventType.getName());
+        }
+        if (result.canceled()) {
+            throw new StepCancellationException(
+                    "Step '" + stepName + "' was cancelled while waiting for event " + eventType.getName());
+        }
         if (result.failure() && result.error().isPresent()) {
             throw result.error().orElseThrow();
         }
-        return result.resultAs(eventType, processingContext().component(EventConverter.class))
-                     .orElseThrow(() -> new IllegalStateException("No event payload for step '" + stepName + "'"));
+        throw new IllegalStateException("No event payload for step '" + stepName + "'");
     }
 
     /**
