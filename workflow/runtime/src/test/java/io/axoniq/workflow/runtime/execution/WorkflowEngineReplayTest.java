@@ -39,6 +39,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatus;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
@@ -352,6 +353,80 @@ class WorkflowEngineReplayTest {
 
         assertThat(restartTokensByWorkflowId.get("wf-1")).isEqualTo(Optional.empty());
         assertThat(restartTokensByWorkflowId.get("wf-2")).contains(firstEventToken);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void replaySpawnsAcrossEventsProduceConsistentRestartTokenTypes() {
+        // Reproduces the "Incompatible token type provided: ReplayToken" crash:
+        // when replay starts from a previously persisted safePoint and multiple workflows
+        // are spawned across replay events, earlier spawns used to receive a raw restart
+        // token while later spawns received a ReplayToken — making determineEngineSafePoint
+        // crash on GlobalSequenceTrackingToken.lowerBound(ReplayToken).
+        QualifiedName eventName = new QualifiedName("OrderPlaced");
+        TrackingToken safePoint = token(10);
+        TrackingToken tokenAtReset = token(20);
+        TrackingToken firstReplayToken = ReplayToken.createReplayToken(tokenAtReset, token(10));
+        TrackingToken secondReplayToken = ReplayToken.createReplayToken(tokenAtReset, token(15));
+
+        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
+        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
+        var executionFactory = mock(WorkflowExecutionFactory.class);
+
+        Map<String, TrackingToken> restartTokensByWorkflowId = new HashMap<>();
+        Map<WorkflowContext, String> workflowIdsByContext = new HashMap<>();
+        when(configuration.workflowIdProvider())
+                .thenReturn(event -> String.valueOf(event.payloadAs(new TypeReference<Map<String, Object>>() {
+                }).get("orderId")));
+        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
+        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
+        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
+
+        when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
+            String workflowId = invocation.getArgument(1);
+            ProcessingContext processingContext = invocation.getArgument(2);
+            Optional<TrackingToken> restartTokenResource = (Optional<TrackingToken>) processingContext.resources()
+                                                                                                     .get(RESTART_TOKEN_RESOURCE_KEY);
+            restartTokensByWorkflowId.put(workflowId, restartTokenResource.orElse(null));
+            var workflowContext = mock(WorkflowContext.class);
+            when(workflowContext.processingContext()).thenReturn(processingContext);
+            workflowIdsByContext.put(workflowContext, workflowId);
+            return workflowContext;
+        });
+        when(executionFactory.create(any())).thenAnswer(invocation -> {
+            WorkflowContext workflowContext = invocation.getArgument(0);
+            String workflowId = workflowIdsByContext.get(workflowContext);
+            var execution = mock(WorkflowExecution.class);
+            var state = mock(WorkflowState.class);
+            when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+            when(execution.workflowId()).thenReturn(workflowId);
+            when(execution.restartToken()).thenReturn(restartTokensByWorkflowId.get(workflowId));
+            when(execution.workflowContext()).thenReturn(workflowContext);
+            when(execution.state()).thenReturn(state);
+            ProcessingContext workflowProcessingContext = mock(ProcessingContext.class);
+            when(workflowContext.processingContext()).thenReturn(workflowProcessingContext);
+            when(workflowProcessingContext.whenComplete(any())).thenReturn(workflowProcessingContext);
+            return execution;
+        });
+
+        workflowEngine.initializeSafePoint(safePoint);
+
+        workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
+        workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
+
+        // Both restart tokens must be raw (i.e. not ReplayToken-wrapped) so that
+        // determineEngineSafePoint can combine them via lowerBound without crashing.
+        assertThat(restartTokensByWorkflowId.get("wf-1")).isNotInstanceOf(ReplayToken.class);
+        assertThat(restartTokensByWorkflowId.get("wf-2")).isNotInstanceOf(ReplayToken.class);
+
+        ReplayStatusChanged replayFinished = mock(ReplayStatusChanged.class);
+        ReplayStatus status = mock(ReplayStatus.class);
+        when(replayFinished.status()).thenReturn(status);
+        when(status.isReplay()).thenReturn(false);
+
+        // Without the fix, this throws IllegalArgumentException: Incompatible token type provided: ReplayToken.
+        workflowEngine.handle(replayFinished, processingContext(secondReplayToken));
     }
 
     @Test

@@ -31,6 +31,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.WrappedToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.slf4j.Logger;
@@ -287,9 +288,12 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private TrackingToken captureCurrentTrackingToken(@Nonnull ProcessingContext processingContext) {
         var token = (TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY);
         if (token != null) {
-            currentTrackingToken.set(token);
+            // Unwrap ReplayToken (and any other WrappedToken) to the raw underlying position before storing.
+            // Without this, restart tokens captured across replay events mix raw and wrapped types, which
+            // makes determineEngineSafePoint crash with "Incompatible token type provided: ReplayToken".
+            currentTrackingToken.set(WrappedToken.unwrapLowerBound(token));
         }
-        return token;
+        return currentTrackingToken.get();
     }
 
     private void persistEngineSafePoint() {
