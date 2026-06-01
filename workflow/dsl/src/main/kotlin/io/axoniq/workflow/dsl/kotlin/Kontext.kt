@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.*
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult
 import io.axoniq.workflow.runtime.api.payload.PayloadModification
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor
@@ -269,11 +270,24 @@ class Kontext(
             resultPayloadReducer
         )
         result.await()
+        if (result.success()) {
+            return result.resultAs(eventType.java, processingContext.component(EventConverter::class.java))
+                .orElseThrow { IllegalStateException("No event payload for step '$stepName'") }
+        }
+        if (result.timeout()) {
+            throw StepTimedOutException(
+                "Step '$stepName' timed out waiting for event ${eventType.java.name}"
+            )
+        }
+        if (result.canceled()) {
+            throw StepCancellationException(
+                "Step '$stepName' was cancelled while waiting for event ${eventType.java.name}"
+            )
+        }
         if (result.failure() && result.error().isPresent) {
             throw result.error().get()
         }
-        return result.resultAs(eventType.java, processingContext.component(EventConverter::class.java))
-            .orElseThrow { IllegalStateException("No event payload for step '$stepName'") }
+        throw IllegalStateException("No event payload for step '$stepName'")
     }
 
     inline fun <reified T : Any> awaitEvent(
