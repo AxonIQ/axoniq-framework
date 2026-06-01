@@ -1577,9 +1577,9 @@ public class AxonServerConfiguration {
          * <p>
          * Supported policy names:
          * <ul>
-         *     <li>{@code "SequentialPerAggregatePolicy"} (default) — events for the same aggregate are sequential</li>
+         *     <li>{@code "SequentialPerAggregatePolicy"} — events for the same aggregate are sequential</li>
          *     <li>{@code "FullConcurrencyPolicy"} — events are spread across all segments regardless of key</li>
-         *     <li>{@code "SequentialPolicy"} — all events are sequential (single segment effective)</li>
+         *     <li>{@code "SequentialPolicy"} (default) — all events are sequential (single segment effective)</li>
          *     <li>{@code "PropertySequencingPolicy"} — sequence key extracted from event payload</li>
          *     <li>{@code "MetadataSequencingPolicy"} — sequence key extracted from event metadata</li>
          * </ul>
@@ -1588,7 +1588,7 @@ public class AxonServerConfiguration {
          *
          * @see PersistentStreamSequencingPolicy
          */
-        private String sequencingPolicy = PersistentStreamSequencingPolicy.SEQUENTIAL_PER_AGGREGATE_POLICY;
+        private String sequencingPolicy = PersistentStreamSequencingPolicy.SEQUENTIAL_POLICY;
 
         /**
          * Parameters specified for the sequencing policy.
