@@ -1,0 +1,77 @@
+name: Publish API Docs
+
+# Builds the unified Javadoc site (AxonIQ Framework + Axon Framework, see the "apidocs" profile
+# in the root pom.xml) and publishes it to the public documentation bucket.
+#
+# The site is published under the major.minor of the project version (for example 5.1.1 -> 5.1),
+# and optionally mirrored to the "latest" folder.
+#
+# Required configuration (GitHub repository or organization level):
+#   secrets.GCP_SA_KEY  - JSON key of a Google service account that has object read/write/delete
+#                         on gs://axoniq-static-resources (for example roles/storage.objectAdmin in
+#                         project axoniq-platform).
+#
+# A keyless alternative is Workload Identity Federation: drop GCP_SA_KEY, add the
+# "id-token: write" permission, and configure google-github-actions/auth with
+# "workload_identity_provider" and "service_account" instead of "credentials_json".
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_latest:
+        description: "Also mirror the generated docs to apidocs/latest"
+        type: boolean
+        default: true
+  release:
+    types: [ published ]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish unified Javadoc
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOCS_BUCKET: gs://axoniq-static-resources/apidocs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5.2.0
+        with:
+          distribution: 'zulu'
+          java-version: 21
+          cache: "maven"
+
+      - name: Build unified Javadoc
+        run: ./mvnw -B -U -ntp -Dstyle.color=always -Papidocs -DskipTests clean javadoc:aggregate
+
+      - name: Resolve target version
+        id: version
+        run: |
+          VERSION=$(./mvnw -q -ntp -Dexpression=project.version -DforceStdout help:evaluate)
+          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$MAJOR_MINOR" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION to $DOCS_BUCKET/$MAJOR_MINOR"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Publish to versioned folder
+        run: |
+          gsutil -m rsync -d -r target/reports/apidocs \
+            "$DOCS_BUCKET/${{ steps.version.outputs.major_minor }}"
+
+      - name: Mirror to latest
+        if: ${{ github.event_name == 'release' || inputs.update_latest }}
+        run: |
+          gsutil -m rsync -d -r target/reports/apidocs "$DOCS_BUCKET/latest"
