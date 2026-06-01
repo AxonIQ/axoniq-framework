@@ -33,6 +33,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
@@ -262,11 +264,27 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
             return result.resultAs(new TypeReference<Map<String, Object>>() {
             }, processingContext().component(EventConverter.class)).orElse(Map.of());
         }
+        if (result.timeout()) {
+            throw new StepTimedOutException(
+                    "Step '" + result.getStepName() + "' timed out before completing");
+        }
+        if (result.canceled()) {
+            throw new StepCancellationException(
+                    "Step '" + result.getStepName() + "' was cancelled before completing");
+        }
         throw result.error().orElseThrow();
     }
 
     private void awaitStepCompletion(@Nonnull WorkflowStepResult result) {
         result.await();
+        if (result.timeout()) {
+            throw new StepTimedOutException(
+                    "Step '" + result.getStepName() + "' timed out before completing");
+        }
+        if (result.canceled()) {
+            throw new StepCancellationException(
+                    "Step '" + result.getStepName() + "' was cancelled before completing");
+        }
         if (result.error().isPresent()) {
             throw result.error().orElseThrow();
         }
