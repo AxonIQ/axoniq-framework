@@ -31,7 +31,6 @@ import io.axoniq.axonserver.grpc.streams.PersistentStreamEvent;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
-import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.MessageType;
@@ -272,16 +271,17 @@ public class PersistentStreamConnection {
             }
 
             private void retry() {
-                try {
-                    processBatch(batch);
-                    currentState.set(new ProcessingState());
-                    scheduler.submit(SegmentConnection.this::readMessagesFromSegment);
-                } catch (Exception ex) {
-                    int interval = retryInterval.updateAndGet(old -> Math.min(old * 2, MAX_RETRY_INTERVAL_SECONDS));
-                    logger.warn("{}: Exception while retrying events for segment {}, retrying after {} seconds",
-                                streamId, persistentStreamSegment.segment(), interval, ex);
-                    scheduler.schedule(this::retry, interval, TimeUnit.SECONDS);
-                }
+                processBatch(batch)
+                        .thenRun(() -> {
+                            currentState.set(new ProcessingState());
+                            scheduler.submit(SegmentConnection.this::readMessagesFromSegment);
+                        }).exceptionally(ex -> {
+                            int interval = retryInterval.updateAndGet(old -> Math.min(old * 2, MAX_RETRY_INTERVAL_SECONDS));
+                            logger.warn("{}: Exception while retrying events for segment {}, retrying after {} seconds",
+                                        streamId, persistentStreamSegment.segment(), interval, ex);
+                            scheduler.schedule(this::retry, interval, TimeUnit.SECONDS);
+                            return null;
+                        });
             }
 
             @Override
@@ -303,56 +303,70 @@ public class PersistentStreamConnection {
                                  streamId, persistentStreamSegment.segment(), persistentStreamSegment.isClosed());
                 }
 
-                try {
-                    if (!persistentStreamSegment.isClosed()) {
-                        List<PersistentStreamEvent> batch = readBatch(persistentStreamSegment);
-                        if (!batch.isEmpty()) {
-                            try {
-                                processBatch(batch);
-                            } catch (Exception ex) {
-                                logger.warn(
-                                        "{}: Exception while processing events for segment {}, retrying after {} second",
-                                        streamId,
-                                        persistentStreamSegment.segment(),
-                                        MIN_RETRY_INTERVAL_SECONDS,
-                                        ex);
-                                currentState.set(new RetryState(batch));
+                readBatch(persistentStreamSegment)
+                        .handle((batch, ex) -> {
+                            if (ex == null) {
+                                return processBatch(batch)
+                                        .exceptionally(fla -> {
+                                            logger.warn("{}: Exception while processing events for segment {}, retrying after {} second",
+                                                        streamId,
+                                                        persistentStreamSegment.segment(),
+                                                        MIN_RETRY_INTERVAL_SECONDS,
+                                                        fla);
+                                            currentState.set(new RetryState(batch));
+                                            return null;
+                                        });
+                            } else {
+                                switch (ex) {
+                                    case StreamClosedException sce:
+                                        logger.debug("{}: Stream closed for segment {}",
+                                                     streamId,
+                                                     persistentStreamSegment.segment());
+                                        break;
+                                    case InterruptedException ie:
+                                        Thread.currentThread().interrupt();
+                                    default:
+                                        persistentStreamSegment.error(ex.getMessage());
+                                        logger.warn("{}: Exception while processing events for segment {}",
+                                                    streamId, persistentStreamSegment.segment(), ex);
+                                        break;
+                                }
                             }
-                        }
-                    }
-
-                    acknowledgeDoneWhenClosed(persistentStreamSegment);
-                } catch (StreamClosedException e) {
-                    logger.debug("{}: Stream closed for segment {}", streamId, persistentStreamSegment.segment());
-                } catch (Exception e) {
-                    if (e instanceof InterruptedException) {
-                        Thread.currentThread().interrupt();
-                    }
-                    persistentStreamSegment.error(e.getMessage());
-                    logger.warn("{}: Exception while processing events for segment {}",
-                                streamId, persistentStreamSegment.segment(), e);
-                } finally {
-                    processGate.set(false);
-                    if (!persistentStreamSegment.isClosed() && persistentStreamSegment.peek() != null) {
-                        scheduler.submit(SegmentConnection.this::readMessagesFromSegment);
-                    }
-                }
+                            return CompletableFuture.<Void>completedFuture(null);
+                        }).thenCompose(f -> f)
+                        .whenComplete((ignored, ex) -> {
+                            if (ex == null) {
+                                acknowledgeDoneWhenClosed(persistentStreamSegment);
+                            }
+                            processGate.set(false);
+                            if (!persistentStreamSegment.isClosed() && persistentStreamSegment.peek() != null) {
+                                scheduler.submit(SegmentConnection.this::readMessagesFromSegment);
+                            }
+                        });
             }
 
-            private List<PersistentStreamEvent> readBatch(
+            private CompletableFuture<List<PersistentStreamEvent>> readBatch(
                     PersistentStreamSegment persistentStreamSegment
-            ) throws InterruptedException {
-                List<PersistentStreamEvent> batch = new LinkedList<>();
-                PersistentStreamEvent event = persistentStreamSegment.nextIfAvailable();
-                if (event == null) {
-                    return batch;
+            ) {
+                if (!persistentStreamSegment.isClosed()) {
+                    List<PersistentStreamEvent> batch = new LinkedList<>();
+                    try {
+                        PersistentStreamEvent event = persistentStreamSegment.nextIfAvailable();
+                        if (event == null) {
+                            return CompletableFuture.completedFuture(batch);
+                        }
+                        batch.add(event);
+                        while (batch.size() < batchSize && !persistentStreamSegment.isClosed()
+                                && (event = persistentStreamSegment.nextIfAvailable(1, TimeUnit.MILLISECONDS))
+                                != null) {
+                            batch.add(event);
+                        }
+                        return CompletableFuture.completedFuture(batch);
+                    } catch (Exception e) {
+                        return CompletableFuture.failedFuture(e);
+                    }
                 }
-                batch.add(event);
-                while (batch.size() < batchSize && !persistentStreamSegment.isClosed()
-                        && (event = persistentStreamSegment.nextIfAvailable(1, TimeUnit.MILLISECONDS)) != null) {
-                    batch.add(event);
-                }
-                return batch;
+                return CompletableFuture.completedFuture(List.of());
             }
 
             private void acknowledgeDoneWhenClosed(PersistentStreamSegment persistentStreamSegment) {
@@ -362,14 +376,13 @@ public class PersistentStreamConnection {
             }
         }
 
-        private void processBatch(List<PersistentStreamEvent> batch) {
-            if (!persistentStreamSegment.isClosed()) {
+        private CompletableFuture<Void> processBatch(List<PersistentStreamEvent> batch) {
+            if (!persistentStreamSegment.isClosed() && !batch.isEmpty()) {
                 PersistentStreamEvent batchLastEvent = batch.getLast();
                 long token = batchLastEvent.getEvent().getToken();
                 TrackingToken batchEndToken = createToken(batchLastEvent);
                 UnitOfWork unitOfWork = unitOfWorkFactory.create();
-                // TODO omit joinAndUnwrap here and use allOf instead
-                FutureUtils.joinAndUnwrap(unitOfWork.executeWithResult(processingContext -> {
+                return unitOfWork.executeWithResult(processingContext -> {
                     CompletableFuture<?> result = CompletableFuture.completedFuture(null);
                     processingContext.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
                     for (PersistentStreamEvent pse : batch) {
@@ -380,15 +393,18 @@ public class PersistentStreamConnection {
                                                                                                    processingContext)));
                     }
                     return result;
-                }));
-                if (logger.isTraceEnabled()) {
-                    logger.trace("{}/{} processed {} entries",
-                                 streamId,
-                                 persistentStreamSegment.segment(),
-                                 batch.size());
-                }
-                persistentStreamSegment.acknowledge(token);
+                }).thenRun(() -> {
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("{}/{} processed {} entries",
+                                     streamId,
+                                     persistentStreamSegment.segment(),
+                                     batch.size());
+                    }
+                    persistentStreamSegment.acknowledge(token);
+                });
+
             }
+            return CompletableFuture.completedFuture(null);
         }
 
         public void messageAvailable() {
