@@ -557,6 +557,11 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     /**
      * Attempts to fetch the next available {@link Entry} from the underlying source.
      * <p>
+     * This method is invoked exclusively by the enclosing AbstractMessageStream implementation. Calls are
+     * serialized under a single internal lock; the method is never executed concurrently with itself or
+     * other lifecycle methods of this instance. Implementations may assume single-threaded access and do
+     * not need to provide their own synchronization for correctness of this method.
+     * <p>
      * This method is invoked by {@link #next()} when no previously peeked entry is available. Implementations must
      * return a {@link FetchResult} describing the current state of the stream:
      * <ul>
@@ -593,6 +598,11 @@ public abstract class AbstractMessageStream<M extends Message> implements Messag
     /**
      * Callback invoked when the stream is about to transition to a completed state, either successfully or
      * exceptionally. Subclasses may override this method to perform custom actions on completion.
+     * <p>
+     * This method is invoked exclusively by the enclosing AbstractMessageStream implementation. Calls are
+     * serialized under a single internal lock; the method is never executed concurrently with itself or
+     * other lifecycle methods of this instance. Implementations may assume single-threaded access and do
+     * not need to provide their own synchronization for correctness of this method.
      * <p>
      * If the implementation throws an exception, the stream still completes, but it will complete with the thrown
      * exception. If the stream was about to complete with an error, and the callback fails as well, the exception is
