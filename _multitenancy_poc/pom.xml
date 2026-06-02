@@ -87,6 +87,7 @@
         <module>messaging/axoniq-dead-letter</module>
         <module>messaging/axoniq-distributed-messaging</module>
         <module>messaging/axoniq-event-streaming</module>
+        <module>messaging/axoniq-multi-tenancy</module>
 
         <module>testing/axoniq-testcontainer</module>
     </modules>
