@@ -90,6 +90,7 @@ public class PersistentStreamConnection {
     private final PersistentStreamProperties persistentStreamProperties;
 
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
+    private final AtomicBoolean closing = new AtomicBoolean(false);
 
     private static final BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>
             NO_OP_CONSUMER = (events, ctx) -> CompletableFuture.completedFuture(null);
@@ -225,7 +226,9 @@ public class PersistentStreamConnection {
 
     private void streamClosed(Throwable throwable) {
         persistentStreamHolder.set(null);
-        if (throwable != null) {
+        if (!closing.get()) {
+            // Only reschedule reconnection if the stream was NOT intentionally closed.
+            // When close() is called, closing flag is set to true, preventing reconnection attempts.
             logger.info("{}: Rescheduling persistent stream", streamId, throwable);
             scheduler.schedule(this::start,
                                retrySeconds.getAndUpdate(current -> Math.min(MAX_RETRY_INTERVAL_SECONDS, current * 2)),
@@ -237,6 +240,7 @@ public class PersistentStreamConnection {
      * Closes the persistent stream connection to Axon Server.
      */
     public void close() {
+        closing.set(true);
         PersistentStream persistentStream = persistentStreamHolder.getAndSet(null);
         if (persistentStream != null) {
             persistentStream.close();
@@ -408,7 +412,7 @@ public class PersistentStreamConnection {
         }
 
         public void messageAvailable() {
-            if (!processGate.get()) {
+            if (!processGate.get() && !closing.get()) {
                 scheduler.submit(this::readMessagesFromSegment);
             }
         }
