@@ -260,11 +260,37 @@ class PersistentStreamConnectionTest {
     @Test
     void givenAlreadyClosedStreamWhenOpenOneMoreTimeThenOpened() {
         // given
-        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        List<EventMessage> eventMessages = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            eventMessages.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+        mockPersistentStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
+        mockPersistentStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> eventMessages.size() == 2);
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> mockPersistentStream.lastAcknowledged(0) == 1);
         testSubject.close();
 
-        // when / then — should not throw
+        // when reopen and deliver
         testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+
+        mockPersistentStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
+        mockPersistentStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
+
+        // then should deliver again
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> eventMessages.size() == 2);
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> mockPersistentStream.lastAcknowledged(0) == 1);
+
+        mockPersistentStream.closeSegment(0);
     }
 
     @Test
@@ -884,6 +910,14 @@ class PersistentStreamConnectionTest {
             segment.entries.add(PersistentStreamEvent.newBuilder().setEvent(firstEvent).build());
             segment.throwInterruptedOnTimeoutNext.set(true);
             segment.onAvailable.run();
+        }
+
+        private void closeWithError(Throwable throwable) {
+            callbacks.onClosed().accept(throwable);
+        }
+
+        private void closeGracefully() {
+            callbacks.onClosed().accept(null);
         }
 
         public void closeSegment(int segmentNumber) {

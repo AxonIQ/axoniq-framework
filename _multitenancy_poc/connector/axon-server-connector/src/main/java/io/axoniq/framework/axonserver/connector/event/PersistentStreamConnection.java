@@ -95,6 +95,7 @@ public class PersistentStreamConnection {
     private final PersistentStreamProperties persistentStreamProperties;
 
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
+    private final AtomicBoolean closing = new AtomicBoolean(false);
 
     private final AtomicReference<BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>>
             consumer = new AtomicReference<>(NO_OP_CONSUMER);
@@ -179,7 +180,8 @@ public class PersistentStreamConnection {
     /**
      * Initiates the connection to Axon Server and starts delivering events to the given {@code consumer}.
      * <p>
-     * The stream can be opened with only a single consumer at a time.
+     * The stream can be opened with only a single consumer at a time. After a previous {@link #close()}, the stream
+     * may be reopened by calling this method again.
      *
      * @param consumer the consumer of batches of event messages; to allow providing tracking and replay information
      *                 per event, it receives each event in a single callback {@link ProcessingContext} enriched with
@@ -192,6 +194,7 @@ public class PersistentStreamConnection {
      * @throws IllegalStateException if the stream was already opened
      */
     public void open(BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer) {
+        closing.set(false);
         if (!this.consumer.compareAndSet(NO_OP_CONSUMER, consumer)) {
             throw new IllegalStateException(
                     String.format("%s: Persistent Stream has already been opened.", streamId));
@@ -237,9 +240,11 @@ public class PersistentStreamConnection {
         }
     }
 
-    private void streamClosed(Throwable throwable) {
+    private void streamClosed(@Nullable Throwable throwable) {
         persistentStreamHolder.set(null);
-        if (throwable != null) {
+        if (throwable != null && !closing.get()) {
+            // Only reschedule reconnection if the stream was NOT intentionally closed.
+            // When close() is called, closing flag is set to true, preventing reconnection attempts.
             logger.info("{}: Rescheduling persistent stream", streamId, throwable);
             scheduler.schedule(this::start,
                                retrySeconds.getAndUpdate(current -> Math.min(MAX_RETRY_INTERVAL_SECONDS, current * 2)),
@@ -251,6 +256,7 @@ public class PersistentStreamConnection {
      * Closes the persistent stream connection to Axon Server.
      */
     public void close() {
+        closing.set(true);
         this.consumer.set(NO_OP_CONSUMER);
         PersistentStream persistentStream = persistentStreamHolder.getAndSet(null);
         if (persistentStream != null) {
@@ -422,7 +428,7 @@ public class PersistentStreamConnection {
         }
 
         public void messageAvailable() {
-            if (!processGate.get()) {
+            if (!processGate.get() && !closing.get()) {
                 scheduler.submit(this::readMessagesFromSegment);
             }
         }
