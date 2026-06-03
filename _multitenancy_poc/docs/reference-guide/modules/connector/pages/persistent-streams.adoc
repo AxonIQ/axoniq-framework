@@ -1,6 +1,6 @@
 [.axoniq-feature]
 [#persistent_streams]
-== Persistent streams
+= Persistent Streams
 
 A Subscribing Processor can use a persistent stream as its event source.
 By using a persistent stream, a Subscribing Processor can process events in parallel and replay events.
@@ -58,7 +58,7 @@ The `PropertySequencingPolicy` requires 4 values in the `sequencingPolicyParamet
 4. A fallback policy name to use when the event payload type does not match; this may be another `PropertySequencingPolicy` to chain additional payload-type rules.
 
 [#declarative_config_persistent]
-==== Declarative configuration
+=== Declarative configuration
 
 When using Axon's Configuration API directly, retrieve the infrastructure components via the `Configuration` parameter and pass them to the `PersistentStreamMessageSource` constructor:
 
@@ -134,7 +134,7 @@ public class AxonConfig {
 ----
 
 [#autodetected_config_spring_properties_persistent]
-==== Properties-based configuration - Spring Boot properties file
+=== Properties-based configuration - Spring Boot properties file
 
 The simplest way to configure a persistent stream in Spring Boot is through the properties file.
 Each entry under `axon.axonserver.persistent-streams` registers a `PersistentStreamMessageSource` Spring bean named after the map key.
@@ -168,7 +168,7 @@ axon.axonserver.persistent-streams.orders-stream.initial-segment-count=2
 ----
 
 [#bean_based_config_persistent]
-==== Autodetected configuration - `EventProcessorDefinition` based configuration
+=== Autodetected configuration - `EventProcessorDefinition` based configuration
 
 When using Spring Boot, you can define a `PersistentStreamMessageSource` bean and wire it to an `EventProcessorDefinition`:
 
@@ -234,7 +234,7 @@ public class EventProcessorConfig {
 }
 ----
 
-=== Persistent streams and the dead letter queue
+== Persistent streams and the dead letter queue
 
 [NOTE]
 .Dead letter queues not supported for persistent streams in Axon Framework 5.2

@@ -1,0 +1,8 @@
+[.axoniq-feature]
+[#persistent_streams]
+== Persistent streams
+
+A Subscribing Processor can use a persistent stream as its event source.
+By using a persistent stream, a Subscribing Processor can process events in parallel and replay events.
+
+For details on how to use persistent streams, consult the xref:connector:persistent-streams.adoc[Persistent Streams] reference page.
