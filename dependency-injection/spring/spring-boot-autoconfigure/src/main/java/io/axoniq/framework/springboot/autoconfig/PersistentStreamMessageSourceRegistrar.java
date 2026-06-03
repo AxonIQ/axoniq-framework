@@ -27,6 +27,8 @@ import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledE
 import org.axonframework.common.ObjectUtils;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.RuntimeBeanReference;
@@ -38,7 +40,9 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Post-processor that reads {@code axon.axonserver.persistent-streams.*} properties from the application environment
@@ -52,6 +56,8 @@ import java.util.Map;
  * @since 5.2.0
  */
 public class PersistentStreamMessageSourceRegistrar implements BeanDefinitionRegistryPostProcessor {
+
+    private static final Logger logger = LoggerFactory.getLogger(PersistentStreamMessageSourceRegistrar.class);
 
     private final Map<String, AxonServerConfiguration.PersistentStreamSettings> persistentStreams;
     private final PersistentStreamScheduledExecutorBuilder executorBuilder;
@@ -82,8 +88,20 @@ public class PersistentStreamMessageSourceRegistrar implements BeanDefinitionReg
     public void postProcessBeanDefinitionRegistry(
             BeanDefinitionRegistry beanDefinitionRegistry
     ) throws BeansException {
+        Set<String> registeredStreamNames = new HashSet<>();
         persistentStreams.forEach((beanName, settings) -> {
+            if (beanDefinitionRegistry.containsBeanDefinition(beanName)) {
+                logger.info("Skipping registration of persistent stream '{}': a bean with that name already exists.",
+                            beanName);
+                return;
+            }
+
             String streamName = ObjectUtils.getOrDefault(settings.getName(), beanName);
+            if (!registeredStreamNames.add(streamName)) {
+                logger.warn("Duplicate persistent stream name '{}' detected (bean key '{}'). "
+                                    + "Multiple entries resolve to the same server-side stream name.",
+                            streamName, beanName);
+            }
 
             BeanDefinitionBuilder streamProperties =
                     BeanDefinitionBuilder.genericBeanDefinition(PersistentStreamProperties.class);
