@@ -328,7 +328,7 @@ if (shipping.failure()) { // blocks until shipping reaches a terminal state
 |`StepFailedException` wrapping the original cause
 
 |Step times out
-|`StepFailedException` (for `awaitExecute`), or check `result.timeout()` (for `execute`)
+|`StepTimedOutException` (a subtype of `StepFailedException`, thrown by `awaitExecute` / `awaitEvent`), or check `result.timeout()` (for `execute`)
 
 |Step is cancelled
 |`StepCancellationException`

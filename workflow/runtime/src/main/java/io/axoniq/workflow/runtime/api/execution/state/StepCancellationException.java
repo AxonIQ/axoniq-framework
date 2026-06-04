@@ -22,11 +22,15 @@ import jakarta.annotation.Nonnull;
 
 /**
  * Exception thrown when an individual step is cancelled.
+ * <p>
+ * A subtype of {@link StepFailedException}: callers that want to handle any step-level
+ * failure can catch the parent; callers that need to distinguish a cancellation specifically
+ * can catch this type. Distinct from {@link StepTimedOutException} (timeout).
  *
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public class StepCancellationException extends RuntimeException {
+public class StepCancellationException extends StepFailedException {
 
     /**
      * Constructs a {@code StepCancellationException} with a descriptive message.
