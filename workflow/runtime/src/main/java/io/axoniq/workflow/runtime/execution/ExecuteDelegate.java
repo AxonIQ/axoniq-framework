@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
@@ -110,7 +111,22 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
+        // AT-MOST-ONCE: snapshot the step state BEFORE this run publishes STARTED. A step already present-and-STARTED
+        // here can only be a prior incarnation's in-flight attempt rebuilt from the durable log (a fresh run has not
+        // published STARTED yet at this point), so its external effect may already have run. To keep effects
+        // at-most-once we must NOT re-run the action; instead route the interrupted attempt through the regular error
+        // flow via the passed-in failure handler (no retry policy -> step FAILED with StepIndeterminateException; retry
+        // policy -> RETRYING + next attempt). Live retry attempts reach this method with status RETRYING, never STARTED,
+        // so they are unaffected and still execute.
+        boolean resumedInFlight = workflowExecution.state().containsStep(stepName)
+                && workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED;
+
         acceptAllPendingTasksForStep(stepName);
+
+        if (resumedInFlight) {
+            failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
+            return stateBased(stepName, workflowExecution);
+        }
 
         if (!workflowExecution.state().containsStep(stepName)) {
             workflowExecution.appendTask(i ->

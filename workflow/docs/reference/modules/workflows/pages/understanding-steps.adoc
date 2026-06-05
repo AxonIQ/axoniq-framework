@@ -38,7 +38,7 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 * <<payload-reducers>>—controlling data flow in and out of steps
 * <<error-handling>>—try/catch, checking results, compensating actions
 * <<cancelling-a-step>>—cancelling individual steps
-* <<execution-semantics>>—at least once, exactly once (planned)
+* <<execution-semantics>>—at most once, crash-interrupted steps, how to handle and retry
 * <<retries>>—retry policies, backoff, crash recovery
 * <<event-name-customization>>—namespaces, suffixes, inheritance, builders
 * <<kotlin-dsl-equivalents>>—Kotlin syntax for all of the above
@@ -430,16 +430,38 @@ For workflow-level termination (`ctx.fail()`, `ctx.cancel()`), terminal states, 
 
 [IMPORTANT]
 ====
-Steps currently execute with **at least once** semantics.
-If the application crashes after a step's action completes but _before_ the COMPLETED event is persisted, the action may be re-executed on recovery.
+Steps execute with **at most once** semantics.
+A step's action runs **at most once** across the whole workflow lifetime, including across crashes and replays — it never runs twice.
 
-Design your step actions to be **idempotent**—safe to run more than once with the same input.
+The action runs *before* its COMPLETED event is persisted. If the application crashes in that window (action ran, COMPLETED not yet committed), the engine **does not** re-run the action on recovery: the durable STARTED record means an attempt was already opened and may have run, and re-running it would break the at-most-once guarantee.
+Because the outcome of the interrupted attempt is unknown, the engine resolves it through the **regular error flow** instead of re-executing it (see below).
+
+The trade-off of at-most-once is that an interrupted action may run **zero or one** times — it may not run at all. If a step's effect *must* eventually happen, make it **idempotent** and configure a `RetryPolicy` (a retry is a fresh attempt) and/or compensate when the step fails.
 ====
 
-[NOTE]
+[[crash-interrupted-steps]]
+=== Crash-interrupted steps: which error, and how to retry
+
+When a step's action is interrupted by a crash and not re-run, the engine resolves it exactly like any other failed attempt:
+
+* **No retry policy** → the step records a terminal **FAILED** status. The failure is surfaced to your workflow body as a `StepFailedException` whose cause is a `StepIndeterminateException` (the dedicated "in-flight at a crash, not re-run, outcome indeterminate" marker). `awaitExecute(...)` throws it; a non-blocking `execute(...)` handle reports it via `result.failure()` / `result.error()`.
+* **With a retry policy** → the interrupted attempt is treated as a failed attempt and the step goes to **RETRYING**; the engine schedules the next attempt per the policy (backoff included). This is identical to the normal retry-on-failure flow, so a step you *want* re-attempted after a crash should carry a `RetryPolicy` (and an idempotent action, since a retry runs the effect again).
+
+[IMPORTANT]
 ====
-**Exactly once semantics** are planned for a future version.
-The engine will use consistency markers to guarantee that each step action executes exactly once, even across crashes and replays.
+A step reaching FAILED does **not** by itself terminate the workflow — by design a workflow goes to a terminal FAILED status **only** when you call `ctx.fail(...)`. If a workflow should fail when a crash-interrupted (or otherwise failed) step surfaces, handle it explicitly:
+
+[source,java]
+----
+try {
+    ctx.awaitExecute("chargePayment", payload, (pc, p) -> charge(p));
+} catch (StepFailedException e) {
+    // crash-interrupted (StepIndeterminateException cause) or a genuine failure — compensate, then fail the workflow
+    ctx.fail(e);
+}
+----
+
+Otherwise the body decides what to do (compensate, branch, retry with a fresh step). See xref:workflow-lifecycle.adoc[Workflow Lifecycle] for the `ctx.fail` / `ctx.cancel` terminal primitives and unhandled-exception behavior.
 ====
 
 [[retries]]
