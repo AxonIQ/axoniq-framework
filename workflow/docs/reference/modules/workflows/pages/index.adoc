@@ -41,3 +41,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 == Testing
 
 * *xref:testing-workflows.adoc[Testing Workflows]*—Integration tests with AbstractDeclarativeTestBase
+
+== Code evolution
+
+* *xref:versioning.adoc[Workflow Versioning]*—`ctx.migrateVersion(changeId, n)` for safe evolution of in-flight workflows

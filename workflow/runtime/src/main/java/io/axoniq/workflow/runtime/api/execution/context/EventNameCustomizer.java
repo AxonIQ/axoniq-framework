@@ -59,6 +59,30 @@ public interface EventNameCustomizer {
                                @Nonnull WorkflowStatus stepStatus);
 
     /**
+     * Returns a customized event name for a migration step produced by
+     * {@code ctx.migrateVersion(changeId, newVersion)}. The {@code changeId} is the semantic anchor; the
+     * resulting wire-level name describes <em>what</em> changed (default suffix {@code .Versioned}, e.g.
+     * {@code Payment-redesign.Versioned}).
+     * <p>
+     * The interface default derives a name from {@link #getEventName(String, Map, StepStatus)} with
+     * {@link StepStatus#COMPLETED} and appends a {@code .Versioned} marker so a migration event stays
+     * distinguishable on the wire from an ordinary completed-step event (which matters in an
+     * event-sourced engine — colliding names risk replay drift). {@link DefaultEventNameCustomizer}
+     * overrides this with the canonical {@code <changeId>.Versioned} form; custom customizers that do not
+     * override it still get a distinct name from this default.
+     *
+     * @param changeId   developer-chosen identifier of the code change.
+     * @param parameters parameters associated with the event.
+     * @return the customized event name.
+     */
+    @Nonnull
+    default QualifiedName versionMigrationEventName(@Nonnull String changeId,
+                                             @Nonnull Map<String, Object> parameters) {
+        var completed = getEventName(changeId, parameters, StepStatus.COMPLETED);
+        return new QualifiedName(completed.namespace(), completed.localName() + ".Versioned");
+    }
+
+    /**
      * Returns a customized event name based on the provided step name, parameters, and workflow status.
      *
      * @return event name customizer that will use the namespace of the parent step.

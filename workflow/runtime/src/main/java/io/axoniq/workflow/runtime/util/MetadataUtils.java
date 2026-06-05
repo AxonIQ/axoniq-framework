@@ -40,6 +40,8 @@ public class MetadataUtils {
     public static final String METADATA_KEY_MODIFY_PAYLOAD = "modifyPayload";
     public static final String METADATA_KEY_STEP_NAME = "stepName";
     public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
+    public static final String METADATA_KEY_VERSION_CHANGE_ID = "versionChangeId";
+    public static final String METADATA_KEY_VERSION = "version";
 
     private MetadataUtils() {
         // avoid
@@ -61,6 +63,17 @@ public class MetadataUtils {
                 .and(METADATA_KEY_WORKFLOW_STATUS, workflowStatus.name());
     }
 
+    /**
+     * Metadata for a version-marker event: a COMPLETED step event with {@code stepName = changeId}
+     * plus marker keys ({@code versionChangeId}, {@code version}) whose presence flags this as a
+     * version marker.
+     */
+    public static Metadata createVersionMigrationStep(String workflowId, String changeId, String version) {
+        return create(workflowId, changeId, StepStatus.COMPLETED)
+                .and(METADATA_KEY_VERSION_CHANGE_ID, changeId)
+                .and(METADATA_KEY_VERSION, version);
+    }
+
     public static Optional<WorkflowStatus> getWorkflowStatus(Metadata metadata) {
         if (metadata.containsKey(METADATA_KEY_WORKFLOW_STATUS)) {
             return Optional.of(WorkflowStatus.valueOf(metadata.get(METADATA_KEY_WORKFLOW_STATUS)));
@@ -74,6 +87,19 @@ public class MetadataUtils {
         } else {
             return Optional.empty();
         }
+    }
+
+    public static Optional<String> getVersionChangeId(Metadata metadata) {
+        return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION_CHANGE_ID, null));
+    }
+
+    public static Optional<String> getVersion(Metadata metadata) {
+        return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION, null));
+    }
+
+    /** {@code true} iff the metadata carries a {@code versionChangeId} key — i.e. it's a version marker. */
+    public static boolean isVersionMigrationStep(Metadata metadata) {
+        return metadata.containsKey(METADATA_KEY_VERSION_CHANGE_ID);
     }
 
     public static Optional<String> payloadReducer(Metadata metadata) {

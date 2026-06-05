@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.context.PayloadMapping;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveMetadata;
 import io.axoniq.workflow.runtime.api.execution.context.Timing;
+import io.axoniq.workflow.runtime.api.execution.context.VersionStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
@@ -40,6 +41,7 @@ import io.axoniq.workflow.runtime.association.EqualsComparison;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
+import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -340,6 +342,60 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
+     * Migrates this workflow to {@code newVersion} for {@code changeId} and returns whether the new
+     * branch is in effect:
+     * <ul>
+     *   <li>Already recorded for this {@code changeId} → returns {@code true} iff the recorded
+     *       version is {@code >=} {@code newVersion}.</li>
+     *   <li>Not recorded but workflow already at {@code newVersion} → returns {@code true} without
+     *       publishing a redundant step.</li>
+     *   <li>Not recorded and {@code newVersion} strictly greater → publishes a migration step and
+     *       returns {@code true}; if the replay-drift guard fires (in-flight workflow ran past this
+     *       point under old code), returns {@code false}.</li>
+     * </ul>
+     * Downgrades (requested {@code <} current, no recorded step) raise
+     * {@link IllegalArgumentException}. Call at most once per {@code changeId} per workflow body.
+     * <p>
+     * Use it to fork workflow logic safely:
+     * <pre>{@code
+     * if (ctx.migrateVersion("payment-redesign", "0.0.2")) {
+     *     ctx.awaitExecute("processPayment", PaymentService::processV2);
+     * } else {
+     *     ctx.awaitExecute("chargePayment", PaymentService::chargeV1);
+     * }
+     * }</pre>
+     *
+     * @param changeId   developer-chosen identifier describing the change.
+     * @param newVersion new workflow version to record (semver string, e.g. {@code "0.0.2"}).
+     * @param customizer customizer for the version step definition (e.g. event name customizer).
+     * @return {@code true} if the workflow is at (or past) {@code newVersion} for this
+     * {@code changeId}; {@code false} if it stays on the legacy branch.
+     */
+    public boolean migrateVersion(@Nonnull String changeId,
+                                  @Nonnull String newVersion,
+                                  @Nonnull UnaryOperator<VersionStepDefinition> customizer) {
+        if (changeId == null || changeId.isBlank()) {
+            throw new IllegalArgumentException("changeId must not be blank");
+        }
+        Version.validate(newVersion);
+        return super.migrateVersion(apply(defaultMigrateVersionStepDefinition(changeId, newVersion), customizer));
+    }
+
+    /**
+     * Migrates this workflow to {@code newVersion} for {@code changeId} with default settings
+     * (default event-name customizer).
+     *
+     * @param changeId   developer-chosen identifier describing the change.
+     * @param newVersion new workflow version to record (semver string, e.g. {@code "0.0.2"}).
+     * @return {@code true} if the workflow is at (or past) {@code newVersion} for this
+     * {@code changeId}.
+     * @see #migrateVersion(String, String, UnaryOperator)
+     */
+    public boolean migrateVersion(@Nonnull String changeId, @Nonnull String newVersion) {
+        return migrateVersion(changeId, newVersion, UnaryOperator.identity());
+    }
+
+    /**
      * Updates the workflow payload and blocks until the change has been applied. Further customization is possible
      * using the provided {@code customizer} unary operator.
      *
@@ -500,6 +556,25 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
         return new PayloadStepDefinition(
                 new PrimitiveMetadata(stepName, defaults()),
                 modification
+        );
+    }
+
+    /**
+     * Creates the default version step definition used by the
+     * {@link #migrateVersion(String, String, UnaryOperator)} convenience overloads.
+     *
+     * @param changeId   developer-chosen identifier describing the change.
+     * @param newVersion new workflow version to record (semver string).
+     * @return default version step definition.
+     */
+    @Nonnull
+    protected VersionStepDefinition defaultMigrateVersionStepDefinition(
+            @Nonnull String changeId,
+            @Nonnull String newVersion
+    ) {
+        return new VersionStepDefinition(
+                new PrimitiveMetadata(changeId, defaults()),
+                newVersion
         );
     }
 

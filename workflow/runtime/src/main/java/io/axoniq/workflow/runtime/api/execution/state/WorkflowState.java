@@ -80,6 +80,44 @@ public interface WorkflowState extends DescribableComponent {
     Map<String, Object> payload();
 
     /**
+     * Returns the recorded version-migration string for the given {@code changeId}, or
+     * {@link #workflowDefinitionVersion()} if no version-migration step has been projected for it. The
+     * default value is implicit — workflows that have never executed a
+     * {@code ctx.migrateVersion(changeId, newVersion)} call carry no version-migration step in their
+     * event history and yet still observe the workflow version via this accessor.
+     *
+     * @param changeId the change identifier to query.
+     * @return recorded version, or the workflow definition version if none was projected for {@code changeId}.
+     */
+    @Nonnull
+    String currentWorkflowVersion(@Nonnull String changeId);
+
+    /**
+     * Returns the workflow's definition version — the version this instance was started under,
+     * possibly bumped by intervening {@code ctx.migrateVersion(...)} calls. Tracked from
+     * {@code eventMessage.type().version()} on the started event and updated by migration steps
+     * whenever the new version is strictly greater than the previous (semver). Defaults to
+     * {@link org.axonframework.messaging.core.MessageType#DEFAULT_VERSION} ({@code "0.0.1"}) for legacy event
+     * streams without a version on the started event.
+     *
+     * @return the workflow's definition version.
+     */
+    @Nonnull
+    String workflowDefinitionVersion();
+
+    /**
+     * Returns {@code true} iff a migration step has been projected into state for the given {@code changeId}.
+     * <p>
+     * Used by the migration primitive to distinguish "no recorded step, defaulting to current" from
+     * "an explicit migration step at the current version" — only the former permits a new step to be
+     * written for a different version number.
+     *
+     * @param changeId the change identifier to query.
+     * @return {@code true} iff a migration step was recorded for this {@code changeId}.
+     */
+    boolean hasVersionMigrationStep(@Nonnull String changeId);
+
+    /**
      * Guards against invoking any primitive when the workflow has already reached a terminal state. Rethrows the
      * original termination cause wrapped in the appropriate exception type.
      */

@@ -75,6 +75,12 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
         var stepName = command.stepName();
         var payloadModification = command.payloadModification();
         var eventNameCustomizer = command.eventNameCustomizer();
+        workflowExecution.recordStepReference(stepName);
+        // Drift guard: payload publishes COMPLETED directly, so guard only on first live publish.
+        if (!workflowExecution.state().containsStep(stepName)) {
+            workflowExecution.guardAgainstReplayDrift(stepName);
+        }
+
         workflowExecution.appendTask(e -> {
                                          // apply modification right away
                                          var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());

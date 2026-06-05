@@ -18,9 +18,9 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.dsl.api.WorkflowDSL;
 import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
-import io.axoniq.workflow.dsl.api.WorkflowDSL;
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.ExecuteStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.FailWorkflowDefinition;
@@ -28,6 +28,8 @@ import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.VersionStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -37,6 +39,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -147,6 +150,29 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
         awaitStepCompletion(this.modifyPayload(stepDefinition));
     }
 
+    @Override
+    public boolean migrateVersion(@Nonnull VersionStepDefinition stepDefinition) {
+        var stepName = stepDefinition.primitiveMetadata().stepName();
+        var newVersion = stepDefinition.newVersion();
+        var result = this.version(
+                PrimitiveCommands.version(
+                        stepName,
+                        newVersion,
+                        stepDefinition.primitiveMetadata().eventNameCustomizer()
+                )
+        );
+        awaitStepCompletion(result);
+
+        var state = workflowExecution.state();
+        var requested = Version.of(newVersion);
+        if (state.hasVersionMigrationStep(stepName)) {
+            return Version.of(state.currentWorkflowVersion(stepName)).isGreaterThanOrEqualTo(requested);
+        }
+        // No step recorded: either same-as-current path (true) or guard-blocked (false).
+        // Inspect current workflow version to distinguish.
+        return Version.of(state.workflowDefinitionVersion()).isGreaterThanOrEqualTo(requested);
+    }
+
 
     @Override
     @Nonnull
@@ -164,6 +190,12 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Nonnull
     public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
         return delegate.modifyPayload(command);
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult version(@Nonnull VersionPrimitive.VersionCommand command) {
+        return delegate.version(command);
     }
 
     @Override
@@ -222,6 +254,12 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Override
     public String workflowId() {
         return delegate.workflowId();
+    }
+
+    @Nonnull
+    @Override
+    public String workflowVersion() {
+        return delegate.workflowVersion();
     }
 
     @Nonnull

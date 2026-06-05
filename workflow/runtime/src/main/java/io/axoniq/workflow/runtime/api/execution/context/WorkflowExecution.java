@@ -29,6 +29,8 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -223,4 +225,68 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     @Nonnull
     WorkflowConfiguration<?> workflowConfiguration();
+
+    /**
+     * Records that the live execution has reached the step with the given name during the current
+     * invocation. Forms the runtime "book"; comparing it against the event-sourced book (state) detects
+     * when the code has drifted past what history accounts for.
+     *
+     * @param stepName step name encountered.
+     */
+    void recordStepReference(@Nonnull String stepName);
+
+    /**
+     * Returns the set of step names the current invocation of the workflow body has already referenced.
+     *
+     * @return live view of referenced step names for this invocation.
+     */
+    @Nonnull
+    Set<String> referencedStepNames();
+
+    /**
+     * Terminal steps in {@link #state()} (event-sourced book) that the current live run has not
+     * referenced (runtime book). A non-empty result means old code already ran past this position —
+     * the signal used by the version primitive's downstream-steps guard and by the drift safety net.
+     *
+     * @return ordered list of unreferenced terminal step names; empty when state is fully accounted for.
+     */
+    @Nonnull
+    default List<String> unreferencedTerminalSteps() {
+        Set<String> referenced = referencedStepNames();
+        WorkflowState state = state();
+        return state.workflowStepNames().stream()
+                    .filter(name -> !referenced.contains(name))
+                    .filter(name -> {
+                        var step = state.getStep(name);
+                        return step != null && step.status().isTerminal();
+                    })
+                    .toList();
+    }
+
+    /**
+     * Convenience boolean for {@link #unreferencedTerminalSteps()}.
+     *
+     * @return {@code true} iff at least one terminal step in history is not yet referenced.
+     */
+    default boolean hasUnreferencedTerminalStep() {
+        return !unreferencedTerminalSteps().isEmpty();
+    }
+
+    /**
+     * Throws {@link WorkflowReplayDriftException} when the event-sourced book contains terminal steps the
+     * current run has not referenced yet — i.e. the new code is about to publish past where the old code
+     * already ran.
+     * <p>
+     * <b>Invariant:</b> anything that publishes events or changes workflow state must call this guard
+     * before doing so. Per-step primitives gate on first live publish; workflow-level termination
+     * gates on the {@code "<terminate>"} marker.
+     *
+     * @param aboutToExecute step name about to publish.
+     */
+    default void guardAgainstReplayDrift(@Nonnull String aboutToExecute) {
+        List<String> unreferenced = unreferencedTerminalSteps();
+        if (!unreferenced.isEmpty()) {
+            throw new WorkflowReplayDriftException(workflowId(), aboutToExecute, unreferenced);
+        }
+    }
 }

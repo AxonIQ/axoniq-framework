@@ -58,6 +58,7 @@ class EventMessageUtilsTest {
 
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);
+        when(context.workflowVersion()).thenReturn(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
 
         when(customizer.getEventName(anyString(), anyMap(), any(WorkflowStatus.class)))
                 .thenAnswer(inv -> new QualifiedName(
@@ -65,6 +66,9 @@ class EventMessageUtilsTest {
         when(customizer.getEventName(anyString(), anyMap(), any(StepStatus.class)))
                 .thenAnswer(inv -> new QualifiedName(
                         inv.getArgument(0).toString() + "." + inv.getArgument(2).toString()));
+        when(customizer.versionMigrationEventName(anyString(), anyMap()))
+                .thenAnswer(inv -> new QualifiedName(
+                        inv.getArgument(0).toString() + ".Versioned"));
     }
 
     @Test
@@ -251,5 +255,21 @@ class EventMessageUtilsTest {
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
         assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.TIMED_OUT);
+    }
+
+    @Test
+    void testMigrationStep_eventNameDerivedFromChangeId() {
+        EventMessage message = EventMessageUtils.versionMigrationStep(context, "payment-redesign", "0.0.2", customizer);
+
+        // The wire-level event name is the changeId + .Versioned suffix — business-meaningful "what changed".
+        assertThat(message.type().toString()).startsWith("payment-redesign.Versioned");
+        // The marker's MessageType.version() carries the new workflow version directly.
+        assertThat(message.type().version()).isEqualTo("0.0.2");
+        assertThat(message.payload()).isEqualTo(Map.of("changeId", "payment-redesign", "version", "0.0.2"));
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        // The discriminator follows the modifyPayload pattern: presence of versionChangeId metadata.
+        assertThat(MetadataUtils.isVersionMigrationStep(message.metadata())).isTrue();
+        assertThat(MetadataUtils.getVersionChangeId(message.metadata())).contains("payment-redesign");
+        assertThat(MetadataUtils.getVersion(message.metadata())).contains("0.0.2");
     }
 }

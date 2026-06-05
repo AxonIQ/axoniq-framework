@@ -86,9 +86,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
+        workflowExecution.recordStepReference(stepName);
+
         acceptAllPendingTasksForStep(stepName);
 
         if (!workflowExecution.state().containsStep(stepName)) {
+            workflowExecution.guardAgainstReplayDrift(stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName,
                                                          Map.of("startTime", clock.instant()),

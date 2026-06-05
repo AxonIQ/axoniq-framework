@@ -38,6 +38,7 @@ import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
@@ -71,15 +72,7 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
         var configurer = WorkflowConfigurer.create();
 
         configurer
-                .componentRegistry(r -> r.registerModule(
-                                           WorkflowModule
-                                                   .defaults(getClass().getSimpleName(), dslType)
-                                                   .workflowContextFactory(builder)
-                                                   .definition(
-                                                           getDeclaredDefinition()
-                                                   )
-                                   )
-                );
+                .componentRegistry(r -> r.registerModule(buildModule()));
 
         configuration = configure().apply(configurer).start();
         workflowEngine = configuration.getComponent(WorkflowEngine.class);
@@ -98,6 +91,28 @@ public abstract class AbstractDeclarativeTestBase<T extends WorkflowContext> {
     }
 
     protected abstract Function<DetectionPhase<T>, FinalizedPhase<T>> getDeclaredDefinition();
+
+    /**
+     * Override to register additional workflow definitions alongside {@link #getDeclaredDefinition()} into
+     * the same module. Use for multi-version test scenarios where two or more versions of a workflow
+     * need to share one engine + registry (the production wiring for Spring Boot autoconfig).
+     *
+     * @return additional definitions, defaults to empty list.
+     */
+    protected List<Function<DetectionPhase<T>, FinalizedPhase<T>>> getAdditionalDefinitions() {
+        return List.of();
+    }
+
+    private WorkflowModule<T> buildModule() {
+        WorkflowModule<T> module = WorkflowModule
+                .defaults(getClass().getSimpleName(), dslType)
+                .workflowContextFactory(builder)
+                .definition(getDeclaredDefinition());
+        for (var extra : getAdditionalDefinitions()) {
+            module = module.definition(extra);
+        }
+        return module;
+    }
 
     @AfterEach
     void shutdown() {

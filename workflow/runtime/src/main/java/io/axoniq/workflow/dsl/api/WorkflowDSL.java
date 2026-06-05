@@ -125,6 +125,27 @@ public interface WorkflowDSL {
     void awaitModifyPayload(@Nonnull PayloadStepDefinition stepDefinition);
 
     /**
+     * Migrates the workflow to the version carried by {@code stepDefinition} for the given changeId
+     * and returns whether the new branch is in effect for this workflow:
+     * <ul>
+     *   <li>Migration step already recorded → returns {@code true} iff the recorded version is
+     *       {@code >=} the requested version.</li>
+     *   <li>No step recorded yet, workflow already at the requested version → returns {@code true}
+     *       without publishing a redundant step.</li>
+     *   <li>No step recorded yet, requested version strictly greater than current → publishes the
+     *       migration step and returns {@code true}; if the replay-drift guard fires (in-flight
+     *       workflow already ran past this point), returns {@code false} and emits nothing.</li>
+     *   <li>Downgrade attempt (requested {@code <} current, no step recorded) → throws
+     *       {@link IllegalArgumentException}.</li>
+     * </ul>
+     *
+     * @param stepDefinition author-facing version step definition.
+     * @return {@code true} iff the workflow has committed to (or is past) the requested version for
+     * this {@code changeId}; {@code false} if it stays on the legacy branch.
+     */
+    boolean migrateVersion(@Nonnull VersionStepDefinition stepDefinition);
+
+    /**
      * Terminates the workflow with failure from a DSL step definition.
      * <p>
      * The provided {@link FailWorkflowDefinition} is translated into the runtime termination command and delegated to

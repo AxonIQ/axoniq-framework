@@ -100,12 +100,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         );
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
-            // TODO: discussion regarding hibernating workflows ->
-            // TODO: is it safe to put an eventMessage in the queue?
-            var execution = workflowExecutionRepository
-                    .findById(workflowId)
-                    .orElseThrow(() -> new IllegalStateException("No workflow found for id: " + workflowId));
-            execution.onEvent(eventMessage, processingContext);
+            // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
+            var executionOpt = workflowExecutionRepository.findById(workflowId);
+            if (executionOpt.isEmpty()) {
+                logger.debug("Ignoring event {} for workflowId '{}' — no matching execution in this engine.",
+                             eventMessage.type(), workflowId);
+                return MessageStream.empty();
+            }
+            executionOpt.get().onEvent(eventMessage, processingContext);
         } else {
             // handle starting of new processes
             checkAndCreateNewWorkflow(eventMessage, processingContext);
@@ -150,6 +152,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     public void switchToLiveMode() {
         var running = isRunning.getAndSet(true);
         if (!running) {
+            workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
             logger.info("Workflow instance replay finished. Switching to live mode.");
             // get rid of finished executions
             workflowExecutionRepository
@@ -200,7 +203,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
                                            @Nonnull ProcessingContext processingContext) {
-        var configurations = workflowConfigurationRegistry.getWorkflowsConfigurations(
+        // For brand-new starts, only the highest-registered version spawns instances.
+        // Older registered versions stay available for replay routing (selected later in the execution path
+        // based on state.workflowDefinitionVersion(), itself sourced from the workflow's started event metadata).
+        // Same-version duplicates spawn in parallel only if their workflowIdProviders produce distinct ids;
+        // otherwise the second spawn is rejected as a same-version duplicate in resolveWorkflowIdForNewSpawn.
+        // The "multiple definitions at the same version" warning is emitted ONCE at engine startup (see
+        // checkForSameVersionDuplicates) rather than per event.
+        var configurations = workflowConfigurationRegistry.getHighestVersionConfigurations(
                 eventMessage.type().qualifiedName()
         );
         configurations
@@ -210,15 +220,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
                                  var workflowConfiguration = configuration.configuration();
 
-                                 var workflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
+                                 var baseWorkflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
+                                 var workflowId = WorkflowSpawnRouting.resolveWorkflowIdForNewSpawn(
+                                         workflowExecutionRepository,
+                                         baseWorkflowId,
+                                         workflowConfiguration.workflowVersion(),
+                                         eventMessage);
 
-                                 if (workflowExecutionRepository.findById(workflowId).isPresent()) {
-                                     logger.warn(
-                                             "A workflow with id '{}' is already running; ignoring new start request triggered by event '{}'. "
-                                                     + "If this was intentional, associate each parallel workflow with a different idProperty so every instance gets a unique id.",
-                                             workflowId,
-                                             eventMessage.type().qualifiedName()
-                                     );
+                                 if (workflowId == null) {
                                      return;
                                  }
 
@@ -232,7 +241,8 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                          .createContext(payload, workflowId, processingContext, workflowConfiguration);
 
                                  var execution = workflowExecutionRepository.save(workflowId, () -> {
-                                     logger.debug("Creating a new workflow with '{}'", eventMessage.payload());
+                                     logger.debug("Creating a new workflow '{}' with payload '{}'",
+                                                  workflowId, eventMessage.payload());
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                  });
                                  persistEngineSafePoint();

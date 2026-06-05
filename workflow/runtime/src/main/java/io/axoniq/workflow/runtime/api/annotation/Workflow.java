@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.api.annotation;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
+import org.axonframework.messaging.core.MessageType;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -46,6 +47,7 @@ public @interface Workflow {
     String ATTR_WORKFLOW_NAME = "workflowName";
     String ATTR_WORKFLOW_STATUS = "workflowStatus";
     String ATTR_WORKFLOW_NAMESPACE = "workflowNamespace";
+    String ATTR_WORKFLOW_VERSION = "workflowVersion";
 
     /**
      * Specifies the name of the workflow.
@@ -100,4 +102,14 @@ public @interface Workflow {
      * @return id property provider type.
      */
     Class<? extends WorkflowIdProvider> idPropertyProvider() default PayloadPropertyWorkflowIdProvider.class;
+
+    /**
+     * Workflow definition version (semver, e.g. {@code "0.0.2"}). New instances start on the highest
+     * registered version; in-flight instances replay on the version they were started under.
+     * <p>
+     * Defaults to {@link MessageType#DEFAULT_VERSION} ({@code "0.0.1"}).
+     *
+     * @return workflow definition version.
+     */
+    String workflowVersion() default MessageType.DEFAULT_VERSION;
 }

@@ -54,11 +54,6 @@ class Kontext(
     private val workflowKontext: WorkflowKontext
 ) {
 
-    private companion object {
-        const val DEFAULT_FAIL_STEP_NAME = "__FailWorkflow"
-        const val DEFAULT_CANCEL_STEP_NAME = "__CancelWorkflow"
-    }
-
     var defaultTimeout: Duration = 5.seconds
     var defaultRetryPolicy: RetryPolicy = RetryPolicy.NONE
 
@@ -71,6 +66,13 @@ class Kontext(
      * Unique identifier of the current workflow instance.
      */
     val workflowId: String get() = workflowKontext.workflowId()
+
+    /**
+     * Current workflow definition version (semver string) — driven by `@Workflow(version=...)` at startup
+     * and possibly bumped mid-flight via [version]. Every event the workflow emits carries this on its
+     * `MessageType.version()`.
+     */
+    val workflowVersion: String get() = workflowKontext.workflowVersion()
 
     /**
      * Processing context for the current message.
@@ -421,6 +423,49 @@ class Kontext(
         workflowKontext.awaitModifyPayload(stepDefinition)
 
     /**
+     * Migrates this workflow to [newVersion] for [changeId] and returns whether the new branch is
+     * in effect:
+     * - Already recorded for [changeId] → returns `true` iff the recorded version is `>=` [newVersion].
+     * - Not recorded but workflow already at [newVersion] → returns `true` without publishing.
+     * - Not recorded and [newVersion] strictly greater → publishes a migration step and returns `true`;
+     *   if the replay-drift guard fires, returns `false`.
+     *
+     * Downgrades raise [IllegalArgumentException]. Call at most once per [changeId] per workflow body.
+     *
+     * Use it to fork workflow logic safely:
+     * ```
+     * if (ctx.migrateVersion("payment-redesign", "0.0.2")) {
+     *     ctx.awaitExecute("processPayment") { PaymentService.processV2(it) }
+     * } else {
+     *     ctx.awaitExecute("chargePayment") { PaymentService.chargeV1(it) }
+     * }
+     * ```
+     *
+     * @param changeId            developer-chosen identifier describing the change.
+     * @param newVersion          new workflow version to record (semver string, e.g. `"0.0.2"`).
+     * @param eventNameCustomizer customizer for the wire-level event name of the migration step.
+     * @return `true` iff the workflow is at (or past) [newVersion] for [changeId].
+     */
+    fun migrateVersion(
+        changeId: String,
+        newVersion: String,
+        eventNameCustomizer: EventNameCustomizer = defaults()
+    ): Boolean = workflowKontext.migrateVersion(changeId, newVersion) { it.eventNameCustomizer(eventNameCustomizer) }
+
+    /**
+     * Advanced overload: migrates from a fully configured step definition.
+     * Mirrors [modifyPayload] / [execute] / [waitFor] StepDefinition-accepting forms.
+     *
+     * @param stepDefinition fully configured version step definition.
+     * @return `true` iff the workflow is at (or past) the definition's version.
+     */
+    fun migrateVersion(stepDefinition: VersionStepDefinition): Boolean =
+        workflowKontext.migrateVersion(
+            stepDefinition.primitiveMetadata().stepName(),
+            stepDefinition.newVersion()
+        ) { stepDefinition }
+
+    /**
      * Creates a combined result that succeeds when all given step results match
      * the predicate.
      *
@@ -461,14 +506,8 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published failure event name
      * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException always, after the failure event is published
      */
-    fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.fail(
-            FailWorkflowDefinition(
-                PrimitiveMetadata(DEFAULT_FAIL_STEP_NAME, eventNameCustomizer),
-                cause
-            )
-        )
-    }
+    fun fail(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.fail(cause) { it.eventNameCustomizer(eventNameCustomizer) }
 
     /**
      * Cancels the entire workflow gracefully, publishing a cancellation event and
@@ -477,14 +516,8 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.cancel(
-            CancelWorkflowDefinition(
-                PrimitiveMetadata(DEFAULT_CANCEL_STEP_NAME, eventNameCustomizer),
-                null
-            )
-        )
-    }
+    fun cancel(eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.cancel { it.eventNameCustomizer(eventNameCustomizer) }
 
     /**
      * Cancels the entire workflow gracefully with a human-readable reason, publishing a cancellation event and
@@ -494,14 +527,10 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.cancel(
-            CancelWorkflowDefinition(
-                PrimitiveMetadata(DEFAULT_CANCEL_STEP_NAME, eventNameCustomizer),
-                WorkflowCancelledException(reason)
-            )
-        )
-    }
+    fun cancel(reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.cancel {
+            it.eventNameCustomizer(eventNameCustomizer).cause(WorkflowCancelledException(reason))
+        }
 
     /**
      * Cancels the entire workflow gracefully, publishing a cancellation event and
@@ -511,14 +540,8 @@ class Kontext(
      * @param eventNameCustomizer customizer for the published cancellation event name
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.cancel(
-            CancelWorkflowDefinition(
-                PrimitiveMetadata(DEFAULT_CANCEL_STEP_NAME, eventNameCustomizer),
-                cause
-            )
-        )
-    }
+    fun cancel(cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.cancel { it.eventNameCustomizer(eventNameCustomizer).cause(cause) }
 
     /**
      * Cancels a single running step by name without terminating the workflow.
@@ -527,14 +550,8 @@ class Kontext(
      * @param stepName the name of the step to cancel
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.cancelStep(
-            CancelStepDefinition(
-                PrimitiveMetadata(stepName, eventNameCustomizer),
-                null
-            )
-        )
-    }
+    fun cancelStep(stepName: String, eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.cancelStep(stepName) { it.eventNameCustomizer(eventNameCustomizer) }
 
     /**
      * Cancels a single running step by name without terminating the workflow.
@@ -545,14 +562,8 @@ class Kontext(
      * @param cause the exception that caused the step cancellation
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.cancelStep(
-            CancelStepDefinition(
-                PrimitiveMetadata(stepName, eventNameCustomizer),
-                cause
-            )
-        )
-    }
+    fun cancelStep(stepName: String, cause: Throwable, eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.cancelStep(stepName) { it.eventNameCustomizer(eventNameCustomizer).cause(cause) }
 
     /**
      * Cancels a single running step by name without terminating the workflow.
@@ -563,14 +574,10 @@ class Kontext(
      * @param reason descriptive reason for the step cancellation
      * @param eventNameCustomizer customizer for the published event name
      */
-    fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) {
-        workflowKontext.cancelStep(
-            CancelStepDefinition(
-                PrimitiveMetadata(stepName, eventNameCustomizer),
-                StepCancellationException(reason)
-            )
-        )
-    }
+    fun cancelStep(stepName: String, reason: String, eventNameCustomizer: EventNameCustomizer = defaults()) =
+        workflowKontext.cancelStep(stepName) {
+            it.eventNameCustomizer(eventNameCustomizer).cause(StepCancellationException(reason))
+        }
 
     /**
      * Waits for the result produced by the block and rethrows step failures as

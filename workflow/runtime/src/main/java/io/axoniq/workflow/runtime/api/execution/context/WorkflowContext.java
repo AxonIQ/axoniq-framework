@@ -37,6 +37,7 @@ public interface WorkflowContext extends
         WaitForPrimitive,
         TerminatePrimitive,
         PayloadPrimitive,
+        VersionPrimitive,
         AllMatchCombinator,
         NoneMatchCombinator,
         AnyMatchCombinator,
@@ -49,6 +50,15 @@ public interface WorkflowContext extends
      */
     @Nonnull
     String workflowId();
+
+    /**
+     * Workflow's current definition version — the version this instance started under, possibly bumped
+     * by {@code ctx.migrateVersion(...)}. Stamped onto every emitted event's {@code MessageType.version()}.
+     *
+     * @return the workflow's current definition version (semver string).
+     */
+    @Nonnull
+    String workflowVersion();
 
     /**
      * Retrieves the workflow payload.

@@ -194,4 +194,93 @@ class EventSourcedWorkflowStateTest {
             assertThat(e.getStackTrace()).isEmpty();
         });
     }
+
+    @Test
+    void seededInitialWorkflowVersion_isReflectedByCurrentWorkflowVersion() {
+        // Seed state with the workflow definition's configured version so that, when SimpleWorkflowExecution
+        // constructs the STARTED event via startedWorkflow(...), the event's MessageType.version() reflects
+        // the configured version (not the implicit "0.0.1" default).
+        var seeded = new EventSourcedWorkflowState(Map.of(), "1.2.3",
+                                                   mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
+                                                   Map.of());
+        assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.2.3");
+    }
+
+    @Test
+    void startedEventOverridesSeededVersion_onReplayOfOlderInstance() {
+        // For replays, the workflow may have been spawned with the latest config (e.g. "2.0.0") but the
+        // started event in history carries the original version it was launched under (e.g. "1.0.0").
+        // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
+        // route to the matching sibling.
+        var seeded = new EventSourcedWorkflowState(Map.of(), "2.0.0",
+                                                   mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
+                                                   Map.of());
+
+        EventMessage started = mock(EventMessage.class);
+        when(started.metadata()).thenReturn(MetadataUtils.create("wf-1",
+                                                                 io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus.STARTED));
+        when(started.timestamp()).thenReturn(Instant.now());
+        when(started.payloadAs(Object.class)).thenReturn(Map.of());
+        when(started.type()).thenReturn(new org.axonframework.messaging.core.MessageType("OrderWorkflow.Started",
+                                                                                         "1.0.0"));
+
+        seeded.evolve(started, processingContext);
+
+        assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.0.0");
+    }
+
+    @Test
+    void version_returnsCurrentWorkflowVersion_whenNoMarkerRecorded() {
+        // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
+        assertThat(state.currentWorkflowVersion("payment-redesign"))
+                .isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+        assertThat(state.hasVersionMigrationStep("payment-redesign")).isFalse();
+    }
+
+    @Test
+    void evolve_migrationStep_populatesMap() {
+        Metadata metadata = MetadataUtils.createVersionMigrationStep("workflowId", "payment-redesign", "0.0.2");
+        EventMessage eventMessage = mockMigrationStepEvent(metadata);
+
+        state.evolve(eventMessage, processingContext);
+
+        assertThat(state.hasVersionMigrationStep("payment-redesign")).isTrue();
+        assertThat(state.currentWorkflowVersion("payment-redesign")).isEqualTo("0.0.2");
+        // Migration also bumps the workflow's current version (new > previous).
+        assertThat(state.workflowDefinitionVersion()).isEqualTo("0.0.2");
+        // Migration is registered as a real step under the changeId as stepName.
+        assertThat(state.containsStep("payment-redesign")).isTrue();
+    }
+
+    @Test
+    void evolve_secondMarkerForSameChangeId_isIgnored() {
+        Metadata first = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.3");
+        Metadata second = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.7");
+
+        state.evolve(mockMigrationStepEvent(first), processingContext);
+        state.evolve(mockMigrationStepEvent(second), processingContext);
+
+        // First-writer wins — replay must stay deterministic.
+        assertThat(state.currentWorkflowVersion("shipping-redesign")).isEqualTo("0.0.3");
+    }
+
+    @Test
+    void evolve_independentChangeIds_areTrackedSeparately() {
+        Metadata a = MetadataUtils.createVersionMigrationStep("workflowId", "change-a", "0.0.2");
+        Metadata b = MetadataUtils.createVersionMigrationStep("workflowId", "change-b", "0.0.5");
+
+        state.evolve(mockMigrationStepEvent(a), processingContext);
+        state.evolve(mockMigrationStepEvent(b), processingContext);
+
+        assertThat(state.currentWorkflowVersion("change-a")).isEqualTo("0.0.2");
+        assertThat(state.currentWorkflowVersion("change-b")).isEqualTo("0.0.5");
+    }
+
+    private EventMessage mockMigrationStepEvent(Metadata metadata) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
+        return eventMessage;
+    }
 }

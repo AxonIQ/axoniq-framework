@@ -29,10 +29,13 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
@@ -57,9 +60,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
+    private final Map<String, String> versions = new ConcurrentHashMap<>();
     private WorkflowStatus status = WorkflowStatus.NONE;
     private Map<String, Object> payload;
     private volatile Throwable terminationCause;
+    private volatile String workflowDefinitionVersion = MessageType.DEFAULT_VERSION;
 
     private final WorkflowStateListenerSupport listenerSupport;
 
@@ -91,7 +96,32 @@ public class EventSourcedWorkflowState implements WorkflowState {
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
+        this(payload, MessageType.DEFAULT_VERSION, context, listeners);
+    }
+
+    /**
+     * Creates a new workflow state seeded with the workflow definition's configured version. The seeded
+     * value is reflected by {@link #workflowDefinitionVersion()} until the workflow's {@code STARTED} event
+     * applies via {@link #evolve}, at which point the started event's {@code MessageType.version()} takes
+     * over. For live starts the two values match; for replays of older instances, the seeded value comes
+     * from the spawn-time definition (often the highest registered) and is then overwritten with the value
+     * actually recorded on the started event.
+     *
+     * @param payload                  initial workflow payload.
+     * @param workflowDefinitionVersion workflow definition's configured version to seed
+     *                                  {@link #workflowDefinitionVersion()} with.
+     * @param context                  workflow context to use.
+     * @param listeners                workflow status change listeners.
+     */
+    public EventSourcedWorkflowState(
+            @Nonnull Map<String, Object> payload,
+            @Nonnull String workflowDefinitionVersion,
+            @Nonnull WorkflowContext context,
+            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
+    ) {
         this.payload = Objects.requireNonNull(payload, "Payload must be set.");
+        this.workflowDefinitionVersion = Objects.requireNonNull(workflowDefinitionVersion,
+                                                                "Workflow definition version must be set.");
         this.listenerSupport = new WorkflowStateListenerSupport(
                 Objects.requireNonNull(listeners, "Workflow status listeners must be set."),
                 Objects.requireNonNull(context, "Workflow context must be set.")
@@ -106,6 +136,24 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     public boolean containsStep(@Nonnull String stepName) {
         return steps.containsKey(stepName);
+    }
+
+    @Override
+    @Nonnull
+    public String currentWorkflowVersion(@Nonnull String changeId) {
+        Objects.requireNonNull(changeId, "changeId must not be null");
+        return versions.getOrDefault(changeId, workflowDefinitionVersion);
+    }
+
+    @Override
+    public boolean hasVersionMigrationStep(@Nonnull String changeId) {
+        return versions.containsKey(changeId);
+    }
+
+    @Override
+    @Nonnull
+    public String workflowDefinitionVersion() {
+        return workflowDefinitionVersion;
     }
 
     @Override
@@ -136,6 +184,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
         logger.trace("Applying event {}", eventMessage.type());
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
+        // Migration events arrive as regular COMPLETED step events that additionally carry the
+        // versionChangeId + version metadata keys. They flow through the step-registration switch like
+        // any other step and ALSO update the version map as a side-effect.
+        if (MetadataUtils.isVersionMigrationStep(metadata)) {
+            applyVersionMigrationStep(metadata);
+        }
         // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
@@ -218,11 +272,37 @@ public class EventSourcedWorkflowState implements WorkflowState {
                          }
                          if (status == WorkflowStatus.STARTED) {
                              evolvePayload(eventMessage, processingContext);
+                             // Pin this instance to the version it was started under (from MessageType.version()).
+                             // Done under the same monitor as applyVersionMigrationStep so every mutation of
+                             // workflowDefinitionVersion is mutually exclusive. This is a plain assignment (not a
+                             // max-comparison): the started event is authoritative and may legitimately pin the
+                             // instance to a version lower than the seeded spawn-time value (see class javadoc).
+                             var startedVersion = eventMessage.type().version();
+                             if (startedVersion != null && !startedVersion.isBlank()) {
+                                 synchronized (this) {
+                                     this.workflowDefinitionVersion = startedVersion;
+                                 }
+                             }
                          }
                          setStatus(status, terminationCause);
                      });
         logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
+    }
+
+    /** Migration steps: first writer wins (replay-idempotent); bump workflow version if strictly greater. */
+    private void applyVersionMigrationStep(@Nonnull Metadata metadata) {
+        var changeId = MetadataUtils.getVersionChangeId(metadata).orElse(null);
+        var newVersion = MetadataUtils.getVersion(metadata).orElse(null);
+        if (changeId == null || newVersion == null) {
+            return;
+        }
+        versions.putIfAbsent(changeId, newVersion);
+        synchronized (this) {
+            if (Version.of(newVersion).isGreaterThan(Version.of(workflowDefinitionVersion))) {
+                workflowDefinitionVersion = newVersion;
+            }
+        }
     }
 
     /**
@@ -312,6 +392,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
         }
         descriptor.describeProperty("steps", List.copyOf(steps.keySet()));
         descriptor.describeProperty("payload", payload);
+        descriptor.describeProperty("versions", Map.copyOf(versions));
+        descriptor.describeProperty("workflowDefinitionVersion", workflowDefinitionVersion);
     }
 
     /**

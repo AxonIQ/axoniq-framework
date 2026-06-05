@@ -95,6 +95,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
 
         var eventConditionBuilder = eventConditionComponentBuilder(attributes);
         var workflowName = workflowName(instanceType, attributes, method);
+        var workflowVersion = workflowVersion(attributes);
         WorkflowDefinition<C> workflowDefinition = workflowContext -> {
             Class<?>[] parameterTypes = method.getParameterTypes();
             Object[] args = new Object[parameterTypes.length];
@@ -122,6 +123,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
                 new SimpleWorkflowConfiguration<>(
                         workflowContextType,
                         workflowName,
+                        workflowVersion,
                         workflowDefinition,
                         workflowContextFactoryBuilder.build(config),
                         workflowIdProviderComponentBuilder.build(config),

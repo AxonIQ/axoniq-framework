@@ -53,7 +53,7 @@ class CancelWorkflow {
         ) { _, _ -> Thread.sleep(fiveMinMs); mapOf() }
 
         // Combine results but don't block on them
-        val all = allMatch({ it.isCompleted }, r1, r2, r3)
+        allMatch({ it.isCompleted }, r1, r2, r3)
 
         // Wait 5 seconds then cancel
         Thread.sleep(5_000)

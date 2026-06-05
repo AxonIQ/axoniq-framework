@@ -85,6 +85,21 @@ import java.util.function.Function;
 public interface WorkflowModule<C extends WorkflowContext> extends Module {
 
     /**
+     * Adds an additional workflow definition to a module that has already had one or more definitions
+     * registered via the fluent {@link WorkflowDefinitionPhase#definition(Function)} entry point. Use this to
+     * register multiple workflow definitions of the same workflow context type into a SINGLE module so they
+     * share one {@link WorkflowConfigurationRegistry} and
+     * {@link io.axoniq.workflow.runtime.execution.WorkflowEngine WorkflowEngine}.
+     *
+     * @param definition function returning a {@link WorkflowDefinitionPhase.FinalizedPhase} for an additional
+     *                   workflow.
+     * @return this module, for chaining.
+     */
+    WorkflowModule<C> definition(
+            Function<WorkflowDefinitionPhase.DetectionPhase<C>, WorkflowDefinitionPhase.FinalizedPhase<C>> definition
+    );
+
+    /**
      * Creates a new workflow module using default infrastructure settings.
      * <p>
      * The returned builder starts at the {@link LanguagePhase.WorkflowContextFactoryPhase}, skipping the configuration

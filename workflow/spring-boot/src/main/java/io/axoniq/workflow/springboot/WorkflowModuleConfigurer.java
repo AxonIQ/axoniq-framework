@@ -79,26 +79,31 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
             @Nonnull Class<C> workflowContextType,
             @Nonnull List<String> workflowBeanNames) {
         var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
-        if (factoryName != null) {
-            var workflowContextFactory = (WorkflowContextFactory<C>) applicationContext.getBean(factoryName);
-            for (var beanName : workflowBeanNames) {
-                ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanName);
-                registry.registerModule(
-                        WorkflowModule
-                                .defaults(beanName, workflowContextType)
-                                .workflowContextFactory(c -> workflowContextFactory)
-                                .definition(d -> d
-                                        .autodetected(builder)
-                                )
-                );
-            }
-        } else {
+        if (factoryName == null) {
             throw new BadWorkflowConfigurationException(String.format(
                     "Detected workflow definition in '%s' without a WorkflowContextFactory for the workflow type %s.",
                     String.join(",", workflowBeanNames.stream().toList()),
                     workflowContextType.getSimpleName()
             ));
         }
+        var workflowContextFactory = (WorkflowContextFactory<C>) applicationContext.getBean(factoryName);
+        // All @Workflow beans of the same context type share one module (engine + registry + repository)
+        // so version siblings can see each other for multi-version routing.
+        var moduleName = workflowContextType.getSimpleName();
+        if (workflowBeanNames.isEmpty()) {
+            return;
+        }
+        var withFactory = WorkflowModule
+                .defaults(moduleName, workflowContextType)
+                .workflowContextFactory(c -> workflowContextFactory);
+        var firstBean = workflowBeanNames.get(0);
+        ComponentBuilder<Object> firstBuilder = c -> applicationContext.getBean(firstBean);
+        WorkflowModule<C> module = withFactory.definition(d -> d.autodetected(firstBuilder));
+        for (var beanName : workflowBeanNames.subList(1, workflowBeanNames.size())) {
+            ComponentBuilder<Object> builder = c -> applicationContext.getBean(beanName);
+            module = module.definition(d -> d.autodetected(builder));
+        }
+        registry.registerModule(module);
     }
 
     @Override

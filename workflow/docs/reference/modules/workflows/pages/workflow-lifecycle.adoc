@@ -49,6 +49,7 @@ For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowCo
 
 |*Workflow data*
 |`workflowId()`—the unique workflow instance ID +
+`workflowVersion()`—the workflow's current definition version (semver string; see xref:versioning.adoc[Workflow Versioning]) +
 `workflowPayload()`—the current workflow payload +
 `workflowStatus()`—the current status (STARTED, COMPLETED, FAILED, ...) +
 `workflowStepNames()`—names of all steps executed so far
@@ -314,3 +315,16 @@ w.unregisterWorkflowStatusChangeListener(WorkflowStatus.COMPLETED, myListener);
 Lifecycle listeners are called *after* the terminal event is published.
 They run in the context of the workflow execution and have access to the full workflow payload.
 ====
+
+== Event versioning
+
+Every event a workflow emits — started, step started/completed/failed/cancelled/retrying/timed-out,
+completed/failed/cancelled/timed-out workflow, and version markers — carries the workflow's current
+definition version on its `MessageType.version()`.
+This is Axon Framework 5's native event-versioning channel, *not* a separate metadata key.
+
+For a workflow declared with `@Workflow(version = "0.0.2")`, the runtime writes every emitted event
+as `new MessageType(name, "0.0.2")`.
+At replay time, the engine reads `event.type().version()` from the workflow's started event and
+routes the instance to the registered workflow definition matching that version.
+See xref:versioning.adoc[Workflow Versioning] for the full routing model.

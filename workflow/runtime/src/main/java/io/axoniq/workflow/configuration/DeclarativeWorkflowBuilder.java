@@ -122,6 +122,7 @@ class DeclarativeWorkflowBuilder<C extends WorkflowContext> implements
                 new SimpleWorkflowConfiguration<>(
                         workflowContextType,
                         workflowName,
+                        workflowModuleConfiguration.workflowVersion(),
                         definitionBuilder.build(config),
                         workflowContextFactoryBuilder.build(config),
                         workflowModuleConfiguration.workflowIdProvider,

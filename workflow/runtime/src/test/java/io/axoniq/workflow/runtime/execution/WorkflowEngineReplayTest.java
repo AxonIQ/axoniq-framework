@@ -152,6 +152,7 @@ class WorkflowEngineReplayTest {
         ProcessingContext pc = mock(ProcessingContext.class);
         WorkflowConfiguration<?> config = mock(WorkflowConfiguration.class);
         when(config.workflowName()).thenReturn("test-workflow");
+        when(config.workflowVersion()).thenReturn(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
         when(config.eventNameCustomizer()).thenReturn(defaults());
 
         when(pc.resources()).thenReturn(Map.of(
@@ -191,21 +192,103 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void duplicateWorkflowIdStartRequestIsIgnored() {
-        String workflowId = "dup-id";
+    void crossVersionStart_disambiguatesWorkflowIdWithVersionSuffix() {
+        String baseId = "order-1";
 
-        // Pre-register a running workflow under "dup-id"
+        // Pre-register a running v1.0.0 workflow under the base id.
         WorkflowExecution existing = mock(WorkflowExecution.class);
+        WorkflowState existingState = mock(WorkflowState.class);
+        when(existing.state()).thenReturn(existingState);
+        when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        workflowExecutionRepository.save(baseId, () -> existing);
+        clearInvocations(workflowExecutionRepository);
+
+        // A v2.0.0 configuration that would resolve to the same base id.
+        WorkflowConfiguration<?> v2 = mock(WorkflowConfiguration.class);
+        WorkflowIdProvider idProvider = event -> baseId;
+        when(v2.workflowIdProvider()).thenReturn(idProvider);
+        when(v2.workflowVersion()).thenReturn("2.0.0");
+        // Other lookups are exercised after disambiguation — return safe stubs.
+        var contextFactory = mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory.class);
+        var workflowContext = mock(WorkflowContext.class);
+        when(contextFactory.createContext(anyMap(), anyString(), any(), any())).thenReturn(workflowContext);
+        when(v2.workflowContextFactory()).thenReturn(contextFactory);
+        var executionFactory = mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory.class);
+        when(executionFactory.create(any())).thenReturn(mock(WorkflowExecution.class));
+        when(v2.workflowExecutionFactory()).thenReturn(executionFactory);
+
+        QualifiedName eventName = new QualifiedName("OrderPlaced");
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
+
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(eventName));
+        when(eventMessage.payloadAs(any(org.axonframework.common.TypeReference.class))).thenReturn(Map.of());
+
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+
+        workflowEngine.handle(eventMessage, processingContext);
+
+        // A v2 spawn was saved under the disambiguated id.
+        verify(workflowExecutionRepository).save(eq(baseId + "#2.0.0"), any());
+        // The base id was NOT reused — the v1 instance is untouched.
+        verify(workflowExecutionRepository, never()).save(eq(baseId), any());
+    }
+
+    @Test
+    void sameVersionDuplicateStart_isRejected() {
+        String workflowId = "order-1";
+
+        // Pre-register a running v2.0.0 workflow under "order-1".
+        WorkflowExecution existing = mock(WorkflowExecution.class);
+        WorkflowState existingState = mock(WorkflowState.class);
+        when(existing.state()).thenReturn(existingState);
+        when(existingState.workflowDefinitionVersion()).thenReturn("2.0.0");
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
 
-        // A configuration that matches the incoming event and resolves to the same id
+        // A second v2.0.0 configuration arriving for the same base id.
+        WorkflowConfiguration<?> v2 = mock(WorkflowConfiguration.class);
+        when(v2.workflowIdProvider()).thenReturn(event -> workflowId);
+        when(v2.workflowVersion()).thenReturn("2.0.0");
+
+        QualifiedName eventName = new QualifiedName("OrderPlaced");
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
+
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(eventName));
+
+        workflowEngine.handle(eventMessage, mock(ProcessingContext.class));
+
+        // Same-version duplicate: nothing is spawned. The v1 (and this case v2) instance stays untouched.
+        verify(workflowExecutionRepository, never()).save(anyString(), any());
+    }
+
+    @Test
+    void duplicateWorkflowIdStartRequestIsIgnored() {
+        String workflowId = "dup-id";
+
+        // Pre-register a running workflow under "dup-id" at version "1.0.0".
+        WorkflowExecution existing = mock(WorkflowExecution.class);
+        WorkflowState existingState = mock(WorkflowState.class);
+        when(existing.state()).thenReturn(existingState);
+        when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        workflowExecutionRepository.save(workflowId, () -> existing);
+        clearInvocations(workflowExecutionRepository);
+
+        // A configuration that matches the incoming event and resolves to the same id AT THE SAME VERSION.
+        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewSpawn — should be rejected.
         WorkflowConfiguration<?> configuration = mock(WorkflowConfiguration.class);
         WorkflowIdProvider idProvider = event -> workflowId;
         when(configuration.workflowIdProvider()).thenReturn(idProvider);
+        when(configuration.workflowVersion()).thenReturn("1.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+        // Stub the version-aware helper that checkAndCreateNewWorkflow actually invokes.
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -217,8 +300,9 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext);
 
-        // No new workflow is created for the duplicate id
-        verify(workflowExecutionRepository, never()).save(eq(workflowId), any());
+        // No new workflow is created for the same-version duplicate. The dedup path actually executed
+        // because the version-aware lookup was stubbed correctly.
+        verify(workflowExecutionRepository, never()).save(anyString(), any());
         verify(configuration, never()).workflowExecutionFactory();
         verify(configuration, never()).workflowContextFactory();
 
@@ -248,7 +332,7 @@ class WorkflowEngineReplayTest {
         when(execution.restartToken()).thenReturn(restartToken);
         when(execution.workflowId()).thenReturn(workflowId);
 
-        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -290,7 +374,7 @@ class WorkflowEngineReplayTest {
         when(execution.restartToken()).thenReturn(null);
         when(execution.workflowId()).thenReturn(workflowId);
 
-        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -322,7 +406,7 @@ class WorkflowEngineReplayTest {
                 }).get("orderId")));
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
@@ -380,7 +464,7 @@ class WorkflowEngineReplayTest {
                 }).get("orderId")));
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(workflowConfigurationRegistry.getWorkflowsConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
@@ -495,6 +579,43 @@ class WorkflowEngineReplayTest {
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", workflowId));
         return eventMessage;
+    }
+
+    @Test
+    void crossVersionStart_disambiguatedIdAlsoTaken_isRejected() {
+        // Both the base id and the disambiguated id are already occupied.
+        String baseId = "order-1";
+        String disambiguatedId = baseId + "#2.0.0";
+
+        WorkflowExecution v1Existing = mock(WorkflowExecution.class);
+        WorkflowState v1State = mock(WorkflowState.class);
+        when(v1Existing.state()).thenReturn(v1State);
+        when(v1State.workflowDefinitionVersion()).thenReturn("1.0.0");
+        workflowExecutionRepository.save(baseId, () -> v1Existing);
+
+        WorkflowExecution v2Existing = mock(WorkflowExecution.class);
+        WorkflowState v2State = mock(WorkflowState.class);
+        when(v2Existing.state()).thenReturn(v2State);
+        when(v2State.workflowDefinitionVersion()).thenReturn("2.0.0");
+        workflowExecutionRepository.save(disambiguatedId, () -> v2Existing);
+        clearInvocations(workflowExecutionRepository);
+
+        WorkflowConfiguration<?> v2 = mock(WorkflowConfiguration.class);
+        when(v2.workflowIdProvider()).thenReturn(event -> baseId);
+        when(v2.workflowVersion()).thenReturn("2.0.0");
+
+        QualifiedName eventName = new QualifiedName("OrderPlaced");
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
+
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
+        when(eventMessage.type()).thenReturn(new MessageType(eventName));
+
+        workflowEngine.handle(eventMessage, mock(ProcessingContext.class));
+
+        // Even the disambiguated id is taken — nothing new is spawned.
+        verify(workflowExecutionRepository, never()).save(anyString(), any());
     }
 
     private static void assertSameToken(@Nullable TrackingToken actual, @Nullable TrackingToken expected) {

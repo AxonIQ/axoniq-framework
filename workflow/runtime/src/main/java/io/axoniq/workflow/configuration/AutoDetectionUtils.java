@@ -31,11 +31,13 @@ import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
+import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 
@@ -273,6 +275,21 @@ public class AutoDetectionUtils {
         return getIfNotDefault(attributes, ATTR_WORKFLOW_NAME, "").orElse(
                 type.getSimpleName() + "#" + StringUtils.capitalize(method.getName())
         );
+    }
+
+    /**
+     * Extract workflow version. Falls back to {@link org.axonframework.messaging.core.MessageType#DEFAULT_VERSION}
+     * ({@code "0.0.1"}) when the annotation does not specify one.
+     *
+     * @param attributes attributes parsed from method annotation.
+     * @return workflow version, validated as a semver string.
+     */
+    static String workflowVersion(Map<String, Object> attributes) {
+        var version = AutoDetectionUtils.<String>getIfNotDefault(attributes, ATTR_WORKFLOW_VERSION,
+                                                                 MessageType.DEFAULT_VERSION)
+                                        .orElse(MessageType.DEFAULT_VERSION);
+        Version.validate(version);
+        return version;
     }
 
     /**

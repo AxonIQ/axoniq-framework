@@ -42,6 +42,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
 
     private final Map<StepStatus, String> stepStatusToName = new HashMap<>();
     private final Map<WorkflowStatus, String> workflowStatusToName = new HashMap<>();
+    private String versionedSuffix = ".Versioned";
     private String namespace = "io.axoniq.workflow";
     private String baseName = null;
     private String workflowBaseName = null;
@@ -245,6 +246,19 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     }
 
     /**
+     * Sets the suffix appended to the {@code changeId} for version-marker events produced by
+     * {@code ctx.migrateVersion(changeId, newVersion)}. Defaults to {@code ".Versioned"} so the wire-level
+     * event name is e.g. {@code Payment-redesign.Versioned}.
+     *
+     * @param versioned non-null suffix appended to the {@code changeId} for version-marker events.
+     * @return current instance for fluent API.
+     */
+    public DefaultEventNameCustomizer workflowVersioned(String versioned) {
+        this.versionedSuffix = Objects.requireNonNull(versioned, "versioned suffix must not be null");
+        return this;
+    }
+
+    /**
      * Sets the function to customize step based on the payload.
      *
      * @param payloadCustomization function to customize step based on the payload.
@@ -309,6 +323,23 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                                          workflowStatus.name(),
                                          namespaceTemplate,
                                          eventNameTemplate.toString())
+        );
+    }
+
+    @Override
+    @Nonnull
+    public QualifiedName versionMigrationEventName(
+            @Nonnull String changeId,
+            @Nonnull Map<String, Object> parameters
+    ) {
+        String namespaceTemplate = namespace != null ? namespace : "";
+        // Version markers anchor on the developer-chosen changeId — never on the workflow baseName.
+        // The local name is "<Capitalized changeId><versionedSuffix>", e.g. "Payment-redesign.Versioned".
+        final String localName = capitalize(changeId) + Objects.requireNonNull(versionedSuffix);
+        // The status slot carries the synthetic "VERSION_MARKER" tag (not a real StepStatus/WorkflowStatus)
+        // so a custom payloadCustomization can recognise and shape version-marker event names distinctly.
+        return payloadCustomization.apply(
+                new PayloadCustomization(parameters, "VERSION_MARKER", namespaceTemplate, localName)
         );
     }
 
@@ -513,6 +544,32 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
                     var childName = child.getEventName(stepName, parameters, stepStatus);
+
+                    String resultingNamespace = defaultName.namespace();
+                    if (childName.namespace() != null && !childName.namespace().equals(defaultName.namespace())) {
+                        resultingNamespace = childName.namespace();
+                    } else if (parentName.namespace() != null && !parentName.namespace()
+                                                                            .equals(defaultName.namespace())) {
+                        resultingNamespace = parentName.namespace();
+                    }
+
+                    String resultingName = defaultName.localName();
+                    if (!childName.localName().equals(defaultName.localName())) {
+                        resultingName = childName.localName();
+                    } else if (!parentName.localName().equals(defaultName.localName())) {
+                        resultingName = parentName.localName();
+                    }
+
+                    return new QualifiedName(resultingNamespace, resultingName);
+                }
+
+                @Nonnull
+                @Override
+                public QualifiedName versionMigrationEventName(@Nonnull String changeId,
+                                                            @Nonnull Map<String, Object> parameters) {
+                    var defaultName = defaultCustomizer.versionMigrationEventName(changeId, parameters);
+                    var parentName = parent.versionMigrationEventName(changeId, parameters);
+                    var childName = child.versionMigrationEventName(changeId, parameters);
 
                     String resultingNamespace = defaultName.namespace();
                     if (childName.namespace() != null && !childName.namespace().equals(defaultName.namespace())) {

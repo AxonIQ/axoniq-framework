@@ -81,6 +81,22 @@ public class PrimitiveCommands {
     }
 
     /**
+     * Factory method to create a {@link SimpleVersionCommand}.
+     *
+     * @param stepName            logical step name (developer-chosen identifier describing the change).
+     * @param newVersion          new workflow version to record (semver string).
+     * @param eventNameCustomizer event name customizer.
+     * @return command object.
+     */
+    public static SimpleVersionCommand version(
+            @Nonnull String stepName,
+            @Nonnull String newVersion,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+        return new SimpleVersionCommand(stepName, newVersion, eventNameCustomizer);
+    }
+
+    /**
      * Default execute command implementation.
      */
     @Internal
@@ -198,5 +214,16 @@ public class PrimitiveCommands {
             @Nonnull PayloadModification payloadModification,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) implements PayloadPrimitive.ModifyPayloadCommand {
+    }
+
+    /**
+     * Default version command implementation.
+     */
+    @Internal
+    public record SimpleVersionCommand(
+            @Nonnull String stepName,
+            @Nonnull String newVersion,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) implements VersionPrimitive.VersionCommand {
     }
 }

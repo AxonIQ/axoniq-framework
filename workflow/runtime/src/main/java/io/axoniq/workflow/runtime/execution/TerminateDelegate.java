@@ -41,6 +41,13 @@ import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
 
 /**
  * Delegate that owns the full workflow termination flow: cancel futures, send event, apply state, throw.
+ * <p>
+ * <b>Replay-drift invariant:</b> any path that publishes a workflow- or step-level event or mutates
+ * recorded state must call {@link WorkflowExecution#guardAgainstReplayDrift(String)} first. This applies
+ * to both step-level cancellation ({@code cancelledStep} → {@code StepStatus.CANCELLED}) and
+ * workflow-level termination ({@code ctx.fail()} / {@code ctx.cancel()} → terminal workflow event),
+ * because in-flight workflows replaying older code through removed steps would otherwise have a terminal
+ * event forced onto a history the new body no longer reaches.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -89,6 +96,10 @@ public class TerminateDelegate implements TerminatePrimitive {
             return;
         }
 
+        // Drift guard: adding ctx.fail()/ctx.cancel() mid-body would force a terminal event onto a
+        // workflow whose old code already ran past this point. Throws non-terminally.
+        workflowExecution.guardAgainstReplayDrift("<terminate>");
+
         var effectiveName = command.workflowNameOverride() != null
                 ? command.workflowNameOverride()
                 : workflowName;
@@ -113,6 +124,9 @@ public class TerminateDelegate implements TerminatePrimitive {
     }
 
     private void cancelledStep(@Nonnull TerminateCommand command) {
+        workflowExecution.recordStepReference(command.stepName());
+        workflowExecution.guardAgainstReplayDrift(command.stepName());
+
         var cause = command.cause();
         Throwable stepCause;
         if (cause instanceof StepCancellationException) {

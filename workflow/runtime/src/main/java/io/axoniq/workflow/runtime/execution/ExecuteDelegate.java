@@ -121,6 +121,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         boolean resumedInFlight = workflowExecution.state().containsStep(stepName)
                 && workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED;
 
+        workflowExecution.recordStepReference(stepName);
+
         acceptAllPendingTasksForStep(stepName);
 
         if (resumedInFlight) {
@@ -129,6 +131,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         if (!workflowExecution.state().containsStep(stepName)) {
+            workflowExecution.guardAgainstReplayDrift(stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName, sanitize(local), eventNameCustomizer)
             );

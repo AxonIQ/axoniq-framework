@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.MessageType;
 
 import java.util.Map;
 
@@ -80,6 +81,17 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     @Nonnull
     default String workflowName() {
         return this.getClass().getSimpleName();
+    }
+
+    /**
+     * Workflow definition version (semver, e.g. {@code "0.0.2"}). Defaults to
+     * {@link MessageType#DEFAULT_VERSION} ({@code "0.0.1"}).
+     *
+     * @return workflow definition version.
+     */
+    @Nonnull
+    default String workflowVersion() {
+        return MessageType.DEFAULT_VERSION;
     }
 
     /**

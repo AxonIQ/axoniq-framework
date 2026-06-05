@@ -37,6 +37,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -71,7 +72,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepositoryBuilder;
     private boolean useHistory = true;
     private ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjectorBuilder;
-    private ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>> workflowConfigurationBuilder;
+    /** Workflow-definition builders appended during configuration; concatenated at build time. */
+    private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurationBuilders = new ArrayList<>();
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
 
     /**
@@ -176,7 +178,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     protected void registerWorkflowDefinitions(Configuration configuration) {
         WorkflowConfigurationRegistry<?> registry = configuration.getComponent(WorkflowConfigurationRegistry.class);
-        List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilder.build(configuration);
+        List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilders.stream()
+                                                                                                 .flatMap(b -> b.build(configuration).stream())
+                                                                                                 .toList();
         workflowConfigs.forEach(workflowConfig -> registry.register(
                 workflowConfig.eventCondition(),
                 workflowConfig.workflowConfiguration()
@@ -265,9 +269,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     public void workflowConfigurationBuilder(
             ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>> workflowConfigurationBuilder
     ) {
-        this.workflowConfigurationBuilder = Objects.requireNonNull(
-                workflowConfigurationBuilder, "Workflow configuration builder must not be null"
-        );
+        Objects.requireNonNull(workflowConfigurationBuilder, "Workflow configuration builder must not be null");
+        // Append rather than replace: a single module can host multiple workflow definitions (e.g. several
+        // @Workflow beans of the same context type, including multiple version variants of one workflow).
+        this.workflowConfigurationBuilders.add(workflowConfigurationBuilder);
     }
 
     record ConditionedWorkflowConfiguration<C extends WorkflowContext>(

@@ -52,6 +52,18 @@ public class WorkflowStepResults {
     }
 
     /**
+     * Constructs a completed result that carries no payload — for primitives whose recorded value is read
+     * from {@link io.axoniq.workflow.runtime.api.execution.state.WorkflowState} rather than from the result
+     * handle (e.g. the migration primitive).
+     *
+     * @return completed step result.
+     */
+    @Nonnull
+    public static WorkflowStepResult completed(@Nonnull String stepName) {
+        return new CompletedWorkflowStepResult(stepName, null, null, null, false, null);
+    }
+
+    /**
      * Constructs failed result.
      *
      * @param error failure causing error.

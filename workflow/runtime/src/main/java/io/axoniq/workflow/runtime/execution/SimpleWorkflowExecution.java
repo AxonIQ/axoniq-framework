@@ -26,11 +26,13 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -42,12 +44,15 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -88,6 +93,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
+    private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
 
     private boolean executable = false;
 
@@ -122,7 +128,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         );
         this.workflowState = new EventSourcedWorkflowState(
                 initial,
-                this.contextDelegate.typepWorkflowContext(),
+                workflowConfiguration.workflowVersion(),
+                this.contextDelegate.typedWorkflowContext(),
                 workflowConfiguration.workflowStatusChangeListeners()
         );
     }
@@ -195,8 +202,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     workflowPayload,
                     currentThread());
 
-        this.workflowConfiguration.workflowDefinition()
-                                  .accept(this.contextDelegate.typepWorkflowContext());
+        // Reset the runtime "book" — step-reference tracker for the drift guard.
+        this.referencedStepNames.clear();
+
+        // Dispatch to the definition matching state.workflowDefinitionVersion().
+        var definition = WorkflowConfigurationRegistry.resolveOrFallback(
+                ctx, workflowName, workflowId, this.state().workflowDefinitionVersion(), this.workflowConfiguration
+        ).workflowDefinition();
+        definition.accept(this.contextDelegate.typedWorkflowContext());
 
         if (!this.state().workflowStatus().isTerminal()) {
             // Cancel any async steps still running so their CANCELLED events land
@@ -274,6 +287,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
                     }
                 }
+            }
+            case WorkflowReplayDriftException drift -> {
+                logger.warn("Workflow {} paused due to replay drift: {}. "
+                                    + "Revert the code change or wrap it in ctx.migrateVersion() and replay.",
+                            workflowId, drift.getMessage());
+                // Intentionally do NOT publish failedWorkflow / cancelledWorkflow events.
+                // The workflow stays in its current (non-terminal) state; the next replay will try
+                // again. If the developer reverts the offending code or adds ctx.migrateVersion(...), the
+                // replay will run cleanly and the workflow continues normally.
             }
             case InterruptedException ie -> {
                 Thread.currentThread().interrupt();
@@ -538,6 +560,18 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public WorkflowConfiguration<?> workflowConfiguration() {
         return this.workflowConfiguration;
+    }
+
+    @Override
+    public void recordStepReference(@Nonnull String stepName) {
+        this.referencedStepNames.add(stepName);
+    }
+
+    @Override
+    @Nonnull
+    public Set<String> referencedStepNames() {
+        // Live read-only view: reflects ongoing recordStepReference() calls but cannot be mutated by callers.
+        return Collections.unmodifiableSet(this.referencedStepNames);
     }
 
     @Override

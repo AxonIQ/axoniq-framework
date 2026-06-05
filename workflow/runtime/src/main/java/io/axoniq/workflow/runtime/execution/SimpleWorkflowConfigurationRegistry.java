@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -50,6 +51,9 @@ public class SimpleWorkflowConfigurationRegistry
     ) {
         Objects.requireNonNull(workflowConfiguration, "The given workflow configuration cannot be null.");
         Objects.requireNonNull(eventCondition, "The given event condition cannot be null.");
+
+        // Fail fast: reject unparseable semver at registration rather than at spawn time.
+        Version.validate(workflowConfiguration.workflowVersion());
 
         workflowsConfigurations.compute(eventCondition.qualifiedName(), (q, workflowConfigurations) -> {
             if (workflowConfigurations == null) {

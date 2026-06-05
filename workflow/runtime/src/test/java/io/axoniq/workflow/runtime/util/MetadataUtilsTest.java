@@ -132,4 +132,31 @@ class MetadataUtilsTest {
         assertThat(MetadataUtils.hasWorkflowId().test(metadata)).isTrue();
         assertThat(MetadataUtils.hasWorkflowId().test(empty)).isFalse();
     }
+
+    @Test
+    void testCreateMigrationStep() {
+        Metadata metadata = MetadataUtils.createVersionMigrationStep("wf123", "payment-redesign", "0.0.2");
+
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_WORKFLOW_ID)).isEqualTo("wf123");
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_VERSION_CHANGE_ID)).isEqualTo("payment-redesign");
+        assertThat(metadata.get(MetadataUtils.METADATA_KEY_VERSION)).isEqualTo("0.0.2");
+    }
+
+    @Test
+    void testIsMigrationStep() {
+        Metadata withMarker = MetadataUtils.createVersionMigrationStep("wf123", "change-a", "0.0.3");
+        assertThat(MetadataUtils.isVersionMigrationStep(withMarker)).isTrue();
+
+        assertThat(MetadataUtils.isVersionMigrationStep(Metadata.emptyInstance())).isFalse();
+    }
+
+    @Test
+    void testGetVersionChangeIdAndVersion() {
+        Metadata metadata = MetadataUtils.createVersionMigrationStep("wf123", "change-a", "0.0.5");
+        assertThat(MetadataUtils.getVersionChangeId(metadata)).contains("change-a");
+        assertThat(MetadataUtils.getVersion(metadata)).contains("0.0.5");
+
+        assertThat(MetadataUtils.getVersionChangeId(Metadata.emptyInstance())).isEmpty();
+        assertThat(MetadataUtils.getVersion(Metadata.emptyInstance())).isEmpty();
+    }
 }

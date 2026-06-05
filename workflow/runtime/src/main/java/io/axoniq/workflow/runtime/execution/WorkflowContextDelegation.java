@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -62,6 +63,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     private final WaitForDelegate waitForDelegate;
     private final TerminateDelegate terminateDelegate;
     private final PayloadDelegate payloadDelegate;
+    private final VersionDelegate versionDelegate;
 
     // Combinators
     private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
@@ -145,6 +147,13 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    unitOfWorkFactory,
                                                    eventSink,
                                                    executorService);
+        this.versionDelegate = new VersionDelegate(workflowContext,
+                                                   workflowExecution,
+                                                   stepParent,
+                                                   clock,
+                                                   unitOfWorkFactory,
+                                                   eventSink,
+                                                   executorService);
 
         this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(workflowExecution);
         this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(workflowExecution);
@@ -155,6 +164,12 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Override
     public String workflowId() {
         return workflowExecution.workflowId();
+    }
+
+    @Nonnull
+    @Override
+    public String workflowVersion() {
+        return workflowExecution.state().workflowDefinitionVersion();
     }
 
     @Nonnull
@@ -201,6 +216,13 @@ public class WorkflowContextDelegation implements WorkflowContext {
     public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
         workflowExecution.state().throwTerminalCause();
         return waitForDelegate.waitForEvent(command);
+    }
+
+    @Override
+    @Nonnull
+    public WorkflowStepResult version(@Nonnull VersionPrimitive.VersionCommand command) {
+        workflowExecution.state().throwTerminalCause();
+        return versionDelegate.version(command);
     }
 
     @Override
@@ -280,7 +302,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
      * @param <T> workflow context type.
      * @return typed workflow context created by the factory.
      */
-    public <T extends WorkflowContext> T typepWorkflowContext() {
+    public <T extends WorkflowContext> T typedWorkflowContext() {
         try {
             //noinspection unchecked
             return (T) this.workflowContext;
