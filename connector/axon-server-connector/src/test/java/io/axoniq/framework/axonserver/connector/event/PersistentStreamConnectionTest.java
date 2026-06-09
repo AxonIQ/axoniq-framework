@@ -213,11 +213,37 @@ class PersistentStreamConnectionTest {
     @Test
     void givenAlreadyClosedStreamWhenOpenOneMoreTimeThenOpened() {
         // given
-        testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+        List<EventMessage> eventMessages = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            eventMessages.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+        mockPersistentStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
+        mockPersistentStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> eventMessages.size() == 2);
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> mockPersistentStream.lastAcknowledged(0) == 1);
         testSubject.close();
 
-        // when / then — should not throw
+        // when reopen and deliver
         testSubject.open((events, ctx) -> CompletableFuture.completedFuture(null));
+
+        mockPersistentStream.publish(0, eventWithToken(0, "AggregateId-1", 0, "TestAggregate"));
+        mockPersistentStream.publish(0, eventWithToken(1, "AggregateId-1", 1, "TestAggregate"));
+
+        // then should deliver again
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> eventMessages.size() == 2);
+        await().atMost(Duration.ofSeconds(1))
+               .pollDelay(Duration.ofMillis(100))
+               .until(() -> mockPersistentStream.lastAcknowledged(0) == 1);
+
+        mockPersistentStream.closeSegment(0);
     }
 
 
@@ -469,7 +495,7 @@ class PersistentStreamConnectionTest {
         AtomicLong acknowledgedTokenAtAfterCommit = new AtomicLong(-2); // -2 signals "hook not yet fired"
         testSubject.open((events, ctx) -> {
             ctx.runOnAfterCommit(c ->
-                                         // the ack must not have been sent yet — acknowledge() is called after joinAndUnwrap(executeWithResult(...)) returns
+                                         // the ack must not have been sent yet — acknowledge() is called after the batch consumer future completes
                                          acknowledgedTokenAtAfterCommit.compareAndSet(-2,
                                                                                       mockPersistentStreams.get(
                                                                                                                    STREAM_ID)

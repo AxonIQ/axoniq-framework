@@ -43,7 +43,7 @@ import java.util.function.BiFunction;
  * {@link PersistentStreamConnection} and may have at most one active subscriber at a time.
  *
  * @author Marc Gathier
- * @since 4.10.0
+ * @since 5.2.0
  */
 public class PersistentStreamMessageSource implements SubscribableEventSource {
 

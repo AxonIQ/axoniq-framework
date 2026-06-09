@@ -74,7 +74,7 @@ import static io.axoniq.axonserver.connector.event.PersistentStreamSegment.PENDI
  *
  * @author Marc Gathier
  * @author Jakob Hatzl
- * @since 4.10.0
+ * @since 5.2.0
  */
 @Internal
 public class PersistentStreamConnection {
@@ -114,6 +114,7 @@ public class PersistentStreamConnection {
      * @param converter                  the event converter used to deserialize event payloads
      * @param persistentStreamProperties the properties for the persistent stream
      * @param scheduler                  the scheduler thread pool to schedule tasks
+     * @param unitOfWorkFactory          the unit of work factory
      * @param batchSize                  the maximum number of events to collect per batch
      */
     public PersistentStreamConnection(String streamId,
@@ -144,6 +145,7 @@ public class PersistentStreamConnection {
      * @param converter                  the event converter used to deserialize event payloads
      * @param persistentStreamProperties the properties for the persistent stream
      * @param scheduler                  the scheduler thread pool to schedule tasks
+     * @param unitOfWorkFactory          the unit of work factory
      * @param batchSize                  the maximum number of events to collect per batch
      * @param defaultContext             the Axon Server context to connect to, or {@code null} to use
      *                                   {@link AxonServerConfiguration#getContext()}
@@ -171,7 +173,16 @@ public class PersistentStreamConnection {
     /**
      * Initiates the connection to Axon Server and starts delivering events to the given {@code consumer}.
      * <p>
-     * The stream can be opened with only a single consumer at a time.
+     * The stream can be opened with only a single consumer at a time. After a previous {@link #close()}, the stream
+     * may be reopened by calling this method again.
+     *
+     * @param consumer the consumer of batches of event messages; to allow providing tracking and replay information
+     *                 per event, it receives each event in a single callback {@link ProcessingContext} enriched with
+     *                 the current {@link TrackingToken} and, when available, aggregate identity information, and must
+     *                 return a {@link CompletableFuture} that completes when the event has been processed; events are
+     *                 still processed in batches as {@link PersistentStreamConnection#batchSize configured for the
+     *                 stream}, the persistent stream connection takes care of creating and spanning a unit of work
+     *                 over all events belonging to a single batch.
      *
      * @param consumer the consumer of batches of event messages; receives each batch and a {@code null}
      *                 {@link ProcessingContext}, and must return a {@link CompletableFuture} that completes when the
@@ -179,6 +190,7 @@ public class PersistentStreamConnection {
      * @throws IllegalStateException if the stream was already opened
      */
     public void open(BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer) {
+        closing.set(false);
         if (!this.consumer.compareAndSet(NO_OP_CONSUMER, consumer)) {
             throw new IllegalStateException(
                     String.format("%s: Persistent Stream has already been opened.", streamId));
@@ -224,9 +236,9 @@ public class PersistentStreamConnection {
         }
     }
 
-    private void streamClosed(Throwable throwable) {
+    private void streamClosed(@Nullable Throwable throwable) {
         persistentStreamHolder.set(null);
-        if (!closing.get()) {
+        if (throwable != null && !closing.get()) {
             // Only reschedule reconnection if the stream was NOT intentionally closed.
             // When close() is called, closing flag is set to true, preventing reconnection attempts.
             logger.info("{}: Rescheduling persistent stream", streamId, throwable);
