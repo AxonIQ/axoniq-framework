@@ -16,21 +16,11 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.messaging.multitenancy.api.command;
-
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import org.axonframework.messaging.commandhandling.CommandBus;
-
-import java.util.function.Function;
 
 /**
- * Factory for creating {@link CommandBus} segments for a given {@link TenantDescriptor}. After a segment is created, it
- * may be started automatically by the factory.
- *
- * @author Stefan Dragisic
- * @since 4.6.0
+ * Part of the Axoniq Multi-Tenancy folder.
  */
-@FunctionalInterface
-public interface TenantCommandSegmentFactory extends Function<TenantDescriptor, CommandBus> {
-    // empty
-}
+@NullMarked
+package io.axoniq.framework.messaging.multitenancy.query;
+
+import org.jspecify.annotations.NullMarked;
