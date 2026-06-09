@@ -13,7 +13,7 @@ This repository contains an event-sourced workflow engine built on Axon Framewor
 - `examples/bike-rental/`: Spring Boot integration-style tests for the example application
 - `examples/`: example aggregator; included in the root reactor by the default-active `examples` profile
 - `test/`: shared testing utilities and support code
-- `docs/`: ADRs, reference docs, playbook, and getting-started material
+- `docs/`: ADRs, reference docs, playbook, and getting-started material (see [AGENTS.md](docs/AGENTS.md) for writing instructions)
 
 ## Core Behaviors & Patterns
 
