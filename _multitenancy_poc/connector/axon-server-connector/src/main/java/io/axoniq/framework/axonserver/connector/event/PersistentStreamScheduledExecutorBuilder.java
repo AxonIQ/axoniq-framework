@@ -29,7 +29,7 @@ import java.util.function.BiFunction;
  * Functional interface towards constructing a {@link ScheduledExecutorService} for a {@link PersistentStreamMessageSource}.
  *
  * @author Steven van Beelen
- * @since 4.10.1
+ * @since 5.2.0
  */
 @FunctionalInterface
 public interface PersistentStreamScheduledExecutorBuilder

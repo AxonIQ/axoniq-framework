@@ -60,7 +60,7 @@ import static org.awaitility.Awaitility.await;
  * ./mvnw -Pintegration-test verify -pl integrationtests -Dit.test=PersistentStreamAxonServerIT
  * }</pre>
  *
- * @author Marc Gathier
+ * @author Jakob Hatzl
  * @since 5.2.0
  */
 class PersistentStreamAxonServerIT {

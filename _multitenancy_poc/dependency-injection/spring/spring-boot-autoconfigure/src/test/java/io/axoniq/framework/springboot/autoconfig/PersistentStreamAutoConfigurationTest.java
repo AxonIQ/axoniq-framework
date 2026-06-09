@@ -41,9 +41,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PersistentStreamAutoConfigurationTest {
 
-    public static final Class<?> DEFAULT_SEQUENCING_POLICY_CLASS =
-            org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy.class;
-
     private ApplicationContextRunner testContext;
 
     @BeforeEach
@@ -111,44 +108,6 @@ class PersistentStreamAutoConfigurationTest {
                                persistentStreams.get("payments-stream");
                        assertThat(paymentsStreamSettings).isNotNull();
                        assertThat(paymentsStreamSettings.getThreadCount()).isEqualTo(4);
-                   });
-    }
-
-    @Test
-    void persistentStreamProcessorsConfigurerModuleAddsSequencingPolicy() {
-        testContext.withPropertyValues("axon.axonserver.persistent-streams[payments-stream].name=My Payments",
-                                       "axon.eventhandling.processing.payments.source=payments-stream",
-                                       "axon.eventhandling.processing.payments.dlq.enabled=true",
-                                       "axon.eventhandling.processing.payments.mode=SUBSCRIBING")
-                   .run(context -> {
-//                       assertThat(context).getBean("persistentStreamProcessorsConfigurerModule").isNotNull();
-//                       ConfigurerModule configurerModule =
-//                               context.getBean("persistentStreamProcessorsConfigurerModule", ConfigurerModule.class);
-//                       LegacyConfigurer defaultConfigurer = LegacyDefaultConfigurer.defaultConfiguration();
-//                       configurerModule.configureModule(defaultConfigurer);
-//                       LegacyConfiguration configuration = defaultConfigurer.buildConfiguration();
-//                       SequencingPolicy sequencingPolicy =
-//                               configuration.eventProcessingConfiguration().sequencingPolicy("payments");
-//                       assertThat(sequencingPolicy).isNotNull();
-//                       assertThat(sequencingPolicy).isNotInstanceOf(DEFAULT_SEQUENCING_POLICY_CLASS);
-                   });
-    }
-
-    @Test
-    void persistentStreamProcessorsConfigurerModuleAddsNoSequencingPolicyWithoutDlq() {
-        testContext.withPropertyValues("axon.axonserver.persistent-streams[payments-stream].name=My Payments",
-                                       "axon.eventhandling.processing.payments.source=payments-stream",
-                                       "axon.eventhandling.processing.payments.mode=SUBSCRIBING")
-                   .run(context -> {
-//                       assertThat(context).getBean("persistentStreamProcessorsConfigurerModule").isNotNull();
-//                       ConfigurerModule configurerModule =
-//                               context.getBean("persistentStreamProcessorsConfigurerModule", ConfigurerModule.class);
-//                       LegacyConfigurer defaultConfigurer = LegacyDefaultConfigurer.defaultConfiguration();
-//                       configurerModule.configureModule(defaultConfigurer);
-//                       LegacyConfiguration configuration = defaultConfigurer.buildConfiguration();
-//                       assertThat(
-//                               configuration.eventProcessingConfiguration().sequencingPolicy("payments")
-//                       ).isInstanceOf(DEFAULT_SEQUENCING_POLICY_CLASS);
                    });
     }
 
