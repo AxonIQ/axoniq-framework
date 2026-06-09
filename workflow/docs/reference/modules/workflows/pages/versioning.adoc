@@ -9,11 +9,11 @@ different service, or a branching change in workflow logic.
 Two complementary mechanisms address this:
 
 * *Definition-level versions* (`@Workflow(workflowVersion = "...")` or the programmatic
-  `WorkflowCustomization.workflowVersion(...)` setter) — for whole-body rewrites. Register a new
+  `WorkflowCustomization.workflowVersion(...)` setter) for whole-body rewrites. Register a new
   definition with a bumped semver string and the runtime spawns new instances on the highest
   registered version while replaying in-flight instances on the version they were started under
   (read from the started event's `MessageType.version()`).
-* *`ctx.migrateVersion(changeId, newVersion)` primitive* — for additive changes within a single definition.
+* *`ctx.migrateVersion(changeId, newVersion)` primitive* for additive changes within a single definition.
   Bumps the workflow's running version mid-flight; in-flight executions that have already passed the
   call's position stay on the legacy branch via the downstream-steps guard.
 
@@ -38,7 +38,7 @@ public void execute(SimpleWorkflowContext ctx) { /* ... */ }
   5's native event-versioning convention.
 * The value must be a parseable semver string (`MAJOR.MINOR.PATCH` with an optional pre-release
   suffix). Invalid strings are rejected at configuration time via `Version.validate(...)`.
-* Every event the workflow emits carries this version on its `MessageType.version()` — i.e. AF5's
+* Every event the workflow emits carries this version on its `MessageType.version()`, which is AF5's
   built-in event-version field, *not* a separate metadata key.
 * The same value is reachable from inside the workflow body via `ctx.workflowVersion()` (Java) /
   `ctx.workflowVersion` (Kotlin).
@@ -62,23 +62,23 @@ differ by `version`, new starts route as follows:
 `SimpleWorkflowExecution.resolveVersionedDefinition` decides which workflow body to invoke on
 every `execute(...)` of an existing instance. The lookup runs in this order:
 
-1. **`exact-match-spawn-config`** — `state.workflowVersion()` equals the spawn-time
+1. **`exact-match-spawn-config`**: `state.workflowVersion()` equals the spawn-time
    configuration's `workflowVersion()`. The spawn-time definition is used directly.
-2. **`exact-match-sibling`** — the registry has a sibling definition with the same workflow name
+2. **`exact-match-sibling`**: the registry has a sibling definition with the same workflow name
    *and* the same version as recorded state. The sibling's definition is used.
-3. **`closest-sibling`** — no exact-version sibling exists (typical after a mid-flight
+3. **`closest-sibling`**: no exact-version sibling exists (typical after a mid-flight
    `ctx.migrateVersion(...)` bump to a value that was not statically registered). The runtime picks the
    registered definition whose `workflowVersion()` is the *highest version less than or equal to*
    recorded state, and dispatches to it.
-4. **`closest-higher-sibling`** — no registered version is `<=` recorded state. The runtime picks
+4. **`closest-higher-sibling`**: no registered version is `<=` recorded state. The runtime picks
    the registered definition whose `workflowVersion()` is the *lowest version strictly greater
    than* recorded state. Covers the "annotation bumped past the in-flight version" case: a workflow
    started with `@Workflow(workflowVersion = "0.0.1")` keeps replaying after the developer bumps
    the annotation to `"0.0.2"` and the older definition is no longer registered.
 
 For example, with `[v1.0.0, v2.0.0]` registered and an instance whose state is `"1.0.1"` (after a
-`ctx.migrateVersion("foo", "1.0.1")` bump inside the v1 body), step 3 picks `v1.0.0` — *never*
-jumping across the major boundary to `v2.0.0`. Symmetric for a v2 instance bumped to `"2.0.1"`: it
+`ctx.migrateVersion("foo", "1.0.1")` bump inside the v1 body), step 3 picks `v1.0.0`. It *never*
+jumps across the major boundary to `v2.0.0`. Symmetric for a v2 instance bumped to `"2.0.1"`: it
 stays on `v2.0.0`. With `[v0.0.2]` registered and state `"0.0.1"`, step 4 picks `v0.0.2`.
 
 When all four passes fail (no definition is registered for this workflow name at all), routing
@@ -102,26 +102,26 @@ The decision tag is one of `exact-match-spawn-config`, `exact-match-sibling`, `c
 
 What each column means:
 
-- *state* — the version recorded on this workflow's event history (the started event's
+- *state*: the version recorded on this workflow's event history (the started event's
   `MessageType.version()`, possibly bumped by `migrateVersion` calls inside the body).
-- *registered* — all workflow definitions currently registered for this workflow name.
-- *spawn* — the engine's default pick before routing thinks about it (typically the highest
+- *registered*: all workflow definitions currently registered for this workflow name.
+- *spawn*: the engine's default pick before routing thinks about it (typically the highest
   registered version for this workflow name).
-- *target* — what routing actually chose after looking at `state`. This is the body the
+- *target*: what routing actually chose after looking at `state`. This is the body the
   workflow will run.
-- *tier* — the routing rule that fired, matching the decision tag in INFO/WARN logs.
+- *tier*: the routing rule that fired, matching the decision tag in INFO/WARN logs.
 
 |===
 | state | registered | spawn | → target | tier
 
-| `1.0.0` | `[1.0.0]` | `1.0.0` | `1.0.0` | *exact-match-spawn-config* — state == spawn, use it.
-| `1.0.0` | `[1.0.0, 2.0.0]` | `2.0.0` | `1.0.0` | *exact-match-sibling* — registry has a sibling exactly at state, use it.
-| `1.0.1` | `[1.0.0, 2.0.0]` | `2.0.0` | `1.0.0` | *closest-sibling* — no exact match; pick the closest registered version *below* state.
-| `0.0.1` | `[0.0.2]` | `0.0.2` | `0.0.2` | *closest-higher-sibling* — nothing registered ≤ state; pick the closest *above*.
-| `0.0.1` | `[0.0.2, 0.0.5]` | `0.0.5` | `0.0.2` | *closest-higher-sibling* — pick the *lowest* above state, not the highest.
-| `1.5.0` | `[2.0.0]` | `2.0.0` | `2.0.0` | *closest-higher-sibling* — closest above wins even across a major boundary.
-| `0.0.5` | `[0.0.1]` | `0.0.1` | `0.0.1` | *closest-sibling* — one definition registered, state drifted past it via `migrateVersion`; route to it anyway.
-| `not-a-semver` | `[1.0.0]` | `1.0.0` | `1.0.0` | *legacy-fallback* — state isn't parseable semver; fall back to spawn.
+| `1.0.0` | `[1.0.0]` | `1.0.0` | `1.0.0` | *exact-match-spawn-config*: state == spawn, use it.
+| `1.0.0` | `[1.0.0, 2.0.0]` | `2.0.0` | `1.0.0` | *exact-match-sibling*: registry has a sibling exactly at state, use it.
+| `1.0.1` | `[1.0.0, 2.0.0]` | `2.0.0` | `1.0.0` | *closest-sibling*: no exact match; pick the closest registered version *below* state.
+| `0.0.1` | `[0.0.2]` | `0.0.2` | `0.0.2` | *closest-higher-sibling*: nothing registered ≤ state; pick the closest *above*.
+| `0.0.1` | `[0.0.2, 0.0.5]` | `0.0.5` | `0.0.2` | *closest-higher-sibling*: pick the *lowest* above state, not the highest.
+| `1.5.0` | `[2.0.0]` | `2.0.0` | `2.0.0` | *closest-higher-sibling*: closest above wins even across a major boundary.
+| `0.0.5` | `[0.0.1]` | `0.0.1` | `0.0.1` | *closest-sibling*: one definition registered, state drifted past it via `migrateVersion`; route to it anyway.
+| `not-a-semver` | `[1.0.0]` | `1.0.0` | `1.0.0` | *legacy-fallback*: state isn't parseable semver; fall back to spawn.
 |===
 
 === Programmatic registration (no annotation)
@@ -183,7 +183,7 @@ public void execute(SimpleWorkflowContext ctx) {
 ----
 
 *Returns a boolean.* `true` iff the workflow has committed to (or is past) `newVersion` for this
-`changeId`; `false` if it stays on the legacy branch. The boolean is read from state — sourced from
+`changeId`; `false` if it stays on the legacy branch. The boolean is read from state which is sourced from
 the recorded migration step when one exists, otherwise from `state.workflowDefinitionVersion()` (driven by the
 started event's `MessageType.version()`).
 
