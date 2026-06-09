@@ -47,24 +47,19 @@
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
-            <artifactId>axon-conversion</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>tools.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <optional>true</optional>
+            <artifactId>axon-eventsourcing</artifactId>
         </dependency>
 
-        <!-- Persistence (optional) -->
         <dependency>
-            <groupId>jakarta.persistence</groupId>
-            <artifactId>jakarta.persistence-api</artifactId>
-            <optional>true</optional>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-distributed-messaging</artifactId>
+            <version>${project.version}</version>
         </dependency>
+
         <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-core</artifactId>
-            <optional>true</optional>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axon-server-connector</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <!-- Other -->
