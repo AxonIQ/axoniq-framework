@@ -132,3 +132,107 @@ sequenceDiagram
 * The tenant segment uses the tenant context connection.
 * The system keeps one shared Axon Server configuration and one shared infrastructure setup.
 * The only tenant-specific variation is the connection target, not a copied configuration graph.
+
+### Why Handlers Still Work With New Tenant Segments
+
+This is the key detail in the current design:
+
+* command handlers are not registered on one global shared `SimpleCommandBus`
+* instead, every tenant gets its own local `SimpleCommandBus`
+* the multi-tenant bus keeps the handler definitions centrally
+* when a new tenant segment is created, the existing handlers are replayed onto that new segment
+
+So the factory can create a brand new tenant segment at tenant registration time without losing handler registrations.
+The new segment starts empty, and `MultiTenantCommandBus` repopulates it from its own handler registry.
+
+That means the registration path is:
+
+1. A handler is registered once on `MultiTenantCommandBus`.
+2. `MultiTenantCommandBus` stores the handler in its internal handler map.
+3. The handler is propagated to all already existing tenant segments.
+4. Each tenant segment registers the handler on its own local `SimpleCommandBus`.
+5. The `DistributedCommandBus` then subscribes the command name on the tenant-specific Axon Server connector.
+
+And the tenant startup path is:
+
+1. A tenant is discovered or registered.
+2. `MultiTenantCommandBus` asks the tenant segment factory for a bus for that tenant.
+3. The factory creates a fresh tenant-local command bus stack.
+4. `MultiTenantCommandBus` replays all already known handlers onto that new tenant segment.
+5. The tenant segment becomes ready to receive commands for that tenant context.
+
+### Handler Replay Diagram
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant MT as MultiTenantCommandBus
+    participant HS as Handler Registry
+    participant TS as New Tenant Segment
+    participant DCB as DistributedCommandBus
+    participant LCB as Local SimpleCommandBus
+    participant CON as Axon Server Connector
+
+    App->>MT: subscribe(commandName, handler)
+    MT->>HS: store handler
+    MT->>TS: subscribe handler on existing tenant segments
+    TS->>DCB: subscribe(commandName, handler)
+    DCB->>LCB: register handler locally
+    DCB->>CON: subscribe command name in tenant context
+
+    App->>MT: registerAndStartTenant(tenant)
+    MT->>TS: create new tenant segment
+    MT->>TS: replay all stored handlers
+    TS->>DCB: subscribe(commandName, handler)
+    DCB->>LCB: register handler locally
+    DCB->>CON: subscribe command name in tenant context
+```
+
+### What This Means Operationally
+
+If you have tenants `tenant-a` and `tenant-b`:
+
+* `tenant-a` gets its own local `SimpleCommandBus`
+* `tenant-b` gets its own local `SimpleCommandBus`
+* both tenant segments receive the same handler registrations
+* the handler instance is reused
+* the bus segment state is not reused
+* each tenant segment points at its own Axon Server context connection
+
+This is why a new tenant segment is not a problem:
+
+* the tenant segment is the runtime container for that tenant
+* the `MultiTenantCommandBus` is the source of truth for registered command handlers
+* tenant segments can be created later and still receive the full handler set
+
+### Short Recap
+
+* handler registration is central
+* handler execution is tenant-specific
+* tenant segments are created on demand
+* new tenant segments are rehydrated with the existing handler set
+* the Axon Server connection differs per tenant context
+* the configuration remains shared
+
+### Query Bus Parity
+
+The query side follows the same multi-tenant shape as the command side:
+
+* one shared Axon Server configuration
+* one shared connection manager
+* one tenant-specific connection per Axon Server context
+* one tenant-local `SimpleQueryBus`
+* one tenant-local `DistributedQueryBus`
+* one `MultiTenantQueryBus` that resolves the tenant and delegates to the matching tenant segment
+
+The only meaningful difference is the tenant lookup source for update-style operations:
+
+* `query(...)`, `subscriptionQuery(...)`, and `subscribeToUpdates(...)` resolve the tenant directly from the `QueryMessage`
+* `emitUpdate(...)`, `completeSubscriptions(...)`, and `completeSubscriptionsExceptionally(...)` resolve the tenant from the current `ProcessingContext`
+* the `ProcessingContext` carries the current `Message` via `Message.fromContext(processingContext)`
+
+That preserves the README rule set:
+
+* no N+1 infrastructure graph
+* one shared framework setup
+* only tenant-specific connections and segments
