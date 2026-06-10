@@ -330,31 +330,37 @@ class Coordinator {
     }
 
     private CompletableFuture<Boolean> initializeTokenStore() {
-        return unitOfWorkFactory.create().executeWithResult(
-                context -> tokenStore.fetchSegments(name, context)
-                                     .thenCompose(segments -> {
-                                         if (!segments.isEmpty()) {
-                                             return CompletableFuture.completedFuture(true);
-                                         }
-                                         logger.info("Processor [{}]. Initializing ({}) segments",
-                                                     name, initialSegmentCount);
-                                         return initialToken.apply(eventSource)
-                                                            .thenCompose(token -> tokenStore.initializeTokenSegments(
-                                                                    name, initialSegmentCount, token, context
-                                                            ))
-                                                            .thenApply(ignored -> true);
-                                     })
-        ).exceptionally(e -> {
-            Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            logger.warn(
-                    "Error while initializing the Token Store. This may simply indicate concurrent attempts to initialize.",
-                    cause
-            );
-            return false;
-        });
+        // The initial TrackingToken can resolve on a foreign thread: the Axon Server connector completes its future on
+        // a gRPC callback thread. Persisting on that thread fails, because the unit of work's transaction is bound to
+        // the thread that began it (issue #4632). So we resolve the token first, then dispatch the persist to this
+        // coordinator's executor in its own unit of work, keeping begin-transaction, persist, and commit on one thread.
+        return unitOfWorkFactory.create()
+                                .executeWithResult(context -> tokenStore.fetchSegments(name, context))
+                                .thenCompose(segments -> {
+                                    if (!segments.isEmpty()) {
+                                        return CompletableFuture.completedFuture(true);
+                                    }
+                                    logger.info("Processor [{}]. Initializing ({}) segments",
+                                                name, initialSegmentCount);
+                                    return initialToken.apply(eventSource)
+                                                       .thenComposeAsync(
+                                                               token -> unitOfWorkFactory.create().executeWithResult(
+                                                                       context -> tokenStore.initializeTokenSegments(
+                                                                               name, initialSegmentCount, token, context
+                                                                       ).thenApply(ignored -> true)),
+                                                               executorService);
+                                })
+                                .exceptionally(e -> {
+                                    Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
+                                    if (cause instanceof Error error) {
+                                        throw error;
+                                    }
+                                    logger.warn(
+                                            "Error while initializing the Token Store. This may simply indicate concurrent attempts to initialize.",
+                                            cause
+                                    );
+                                    return false;
+                                });
     }
 
     /**
