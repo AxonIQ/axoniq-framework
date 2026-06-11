@@ -343,12 +343,8 @@ class Coordinator {
                                     logger.info("Processor [{}]. Initializing ({}) segments",
                                                 name, initialSegmentCount);
                                     return initialToken.apply(eventSource)
-                                                       .thenComposeAsync(
-                                                               token -> unitOfWorkFactory.create().executeWithResult(
-                                                                       context -> tokenStore.initializeTokenSegments(
-                                                                               name, initialSegmentCount, token, context
-                                                                       ).thenApply(ignored -> true)),
-                                                               executorService);
+                                                       .thenComposeAsync(this::persistInitialSegments,
+                                                                         executorService);
                                 })
                                 .exceptionally(e -> {
                                     Throwable cause = e instanceof CompletionException ce ? ce.getCause() : e;
@@ -361,6 +357,21 @@ class Coordinator {
                                     );
                                     return false;
                                 });
+    }
+
+    /**
+     * Persists the initial token segments in their own unit of work. Invoked on this coordinator's executor (see
+     * {@link #initializeTokenStore()}) so that begin-transaction, persist, and commit all run on the same thread, even
+     * when the initial token resolved on a foreign thread.
+     *
+     * @param token the resolved initial {@link TrackingToken} to store for every initial segment
+     * @return a {@link CompletableFuture} completing with {@code true} once the segments are persisted
+     */
+    private CompletableFuture<Boolean> persistInitialSegments(TrackingToken token) {
+        return unitOfWorkFactory.create()
+                                .executeWithResult(context -> tokenStore.initializeTokenSegments(
+                                        name, initialSegmentCount, token, context
+                                ).thenApply(ignored -> true));
     }
 
     /**

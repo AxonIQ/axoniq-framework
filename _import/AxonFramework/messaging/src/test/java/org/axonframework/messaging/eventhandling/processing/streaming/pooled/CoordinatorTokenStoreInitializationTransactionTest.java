@@ -73,13 +73,13 @@ class CoordinatorTokenStoreInitializationTransactionTest {
     private final AtomicBoolean transactionBoundDuringInitialize = new AtomicBoolean(false);
     private final AtomicReference<String> initializeThread = new AtomicReference<>();
 
-    private ExecutorService grpcCallbackThread;
+    private ExecutorService grpcCallbackExecutor;
     private ScheduledExecutorService executorService;
     private Coordinator coordinator;
 
     @BeforeEach
     void setUp() {
-        grpcCallbackThread = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, GRPC_THREAD_NAME));
+        grpcCallbackExecutor = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, GRPC_THREAD_NAME));
 
         // Faithful double of SpringTransactionManager: thread-bound transaction + same-thread-invocation requirement.
         UnitOfWorkFactory unitOfWorkFactory = getUnitOfWorkFactory();
@@ -106,7 +106,7 @@ class CoordinatorTokenStoreInitializationTransactionTest {
         Function<TrackingTokenSource, CompletableFuture<TrackingToken>> initialToken = source ->
                 CompletableFuture.supplyAsync(
                         () -> new GlobalSequenceTrackingToken(0),
-                        CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS, grpcCallbackThread));
+                        CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS, grpcCallbackExecutor));
 
         // Real scheduler for the token-store-init retry loop, but the asynchronous CoordinationTask is suppressed:
         // this test only exercises token-store initialization, not event coordination. Its worker thread carries a
@@ -170,16 +170,11 @@ class CoordinatorTokenStoreInitializationTransactionTest {
         if (executorService != null) {
             executorService.shutdownNow();
         }
-        if (grpcCallbackThread != null) {
-            grpcCallbackThread.shutdownNow();
+        if (grpcCallbackExecutor != null) {
+            grpcCallbackExecutor.shutdownNow();
         }
     }
 
-    /**
-     * Starting a fresh processor must initialize its token segments even though the initial token resolves on the
-     * Axon Server gRPC callback thread. This currently fails (issue #4632) because the persist is run on that foreign
-     * thread, where no transaction is bound; it will pass once the token is resolved on the transaction-owning thread.
-     */
     @Test
     void startInitializesTokenStoreWhenInitialTokenResolvesOnForeignThread() {
         // given a fresh token store and an initial-token source completing on the gRPC callback thread (see setUp)

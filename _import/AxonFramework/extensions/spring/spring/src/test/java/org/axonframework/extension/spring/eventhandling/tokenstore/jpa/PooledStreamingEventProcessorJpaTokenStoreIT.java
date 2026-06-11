@@ -83,7 +83,7 @@ class PooledStreamingEventProcessorJpaTokenStoreIT {
     private static final String GRPC_THREAD_NAME = "axon-server-grpc-callback";
 
     private EntityManagerFactory entityManagerFactory;
-    private ExecutorService grpcCallbackThread;
+    private ExecutorService grpcCallbackExecutor;
     private ScheduledExecutorService coordinatorExecutor;
     private ScheduledExecutorService workerExecutor;
     private PooledStreamingEventProcessor processor;
@@ -110,14 +110,14 @@ class PooledStreamingEventProcessorJpaTokenStoreIT {
                                                      TestConverter.JACKSON.getConverter(),
                                                      JpaTokenStoreConfiguration.DEFAULT.nodeId("local"));
 
-        grpcCallbackThread = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, GRPC_THREAD_NAME));
+        grpcCallbackExecutor = Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, GRPC_THREAD_NAME));
         coordinatorExecutor = Executors.newSingleThreadScheduledExecutor(
                 runnable -> new Thread(runnable, "coordinator-executor"));
         workerExecutor = Executors.newScheduledThreadPool(2, runnable -> new Thread(runnable, "worker-executor"));
 
         var configuration = new PooledStreamingEventProcessorConfiguration(
                 new EventProcessorConfiguration(PROCESSOR_NAME, null))
-                .eventSource(new ForeignThreadInitialTokenEventSource(grpcCallbackThread))
+                .eventSource(new ForeignThreadInitialTokenEventSource(grpcCallbackExecutor))
                 .unitOfWorkFactory(unitOfWorkFactory)
                 .tokenStore(tokenStore)
                 .coordinatorExecutor(coordinatorExecutor)
@@ -154,8 +154,8 @@ class PooledStreamingEventProcessorJpaTokenStoreIT {
         if (workerExecutor != null) {
             workerExecutor.shutdownNow();
         }
-        if (grpcCallbackThread != null) {
-            grpcCallbackThread.shutdownNow();
+        if (grpcCallbackExecutor != null) {
+            grpcCallbackExecutor.shutdownNow();
         }
         if (entityManagerFactory != null && entityManagerFactory.isOpen()) {
             entityManagerFactory.close();
@@ -193,12 +193,12 @@ class PooledStreamingEventProcessorJpaTokenStoreIT {
      * stream is empty; this test only exercises token-store initialization.
      */
     @NullMarked
-    private record ForeignThreadInitialTokenEventSource(Executor grpcCallbackThread) implements StreamableEventSource {
+    private record ForeignThreadInitialTokenEventSource(Executor grpcCallbackExecutor) implements StreamableEventSource {
 
         private CompletableFuture<TrackingToken> resolvedOnCallbackThread() {
             return CompletableFuture.supplyAsync(
                     () -> new GlobalSequenceTrackingToken(-1),
-                    CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS, grpcCallbackThread));
+                    CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS, grpcCallbackExecutor));
         }
 
         @Override
