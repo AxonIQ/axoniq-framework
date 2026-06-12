@@ -27,7 +27,6 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -53,7 +52,7 @@ final class UnitTestabilityTest {
 
     @Test
     void transformationIsInvocableThroughASingleTransformerChain() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
@@ -64,20 +63,5 @@ final class UnitTestabilityTest {
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
-    }
-
-    @Test
-    @Disabled("Tests-first; impl lands with the rename factory entry point.")
-    void renameTransformationIsInvocableThroughASingleTransformerChain() {
-        EventTransformer renameTransformer = EventTransformation.rename(V1, V2);
-        EventTransformerChain chain = EventTransformerChain.builder().register(renameTransformer).build();
-        EventMessage storedV1Event = new GenericEventMessage(V1, "payload");
-
-        List<EventMessage> outputs = collectMessages(
-                chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
-
-        assertThat(outputs).hasSize(1);
-        assertThat(outputs.getFirst().type()).isEqualTo(V2);
-        assertThat(outputs.getFirst().payload()).isEqualTo("payload");
     }
 }

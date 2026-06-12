@@ -53,7 +53,7 @@ final class LazyDeserializationTest {
     @Test
     void converterIsNeverInvokedWhenNoTransformerMatches() {
         AtomicInteger mapperInvocations = new AtomicInteger();
-        EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)
+        EventTransformer registeredTransformer = EventTransformer.from(REGISTERED)
                                                                     .to(new MessageType("com.example.CourseCreated", "2.0.0"))
                                                                     .transform(JsonNode.class, (in, ctx) -> {
                                                                         mapperInvocations.incrementAndGet();
@@ -77,7 +77,7 @@ final class LazyDeserializationTest {
         for (int index = 0; index < 100; index++) {
             MessageType fromType = new MessageType("com.example.Type" + index, "1.0.0");
             MessageType toType = new MessageType("com.example.Type" + index, "2.0.0");
-            builder.register(EventTransformation.from(fromType).to(toType).transform(JsonNode.class, (in, ctx) -> in));
+            builder.register(EventTransformer.from(fromType).to(toType).transform(JsonNode.class, (in, ctx) -> in));
         }
         EventTransformerChain chain = builder.build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat");

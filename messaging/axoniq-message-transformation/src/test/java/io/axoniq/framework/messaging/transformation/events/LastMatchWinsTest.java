@@ -54,14 +54,14 @@ final class LastMatchWinsTest {
 
     @Test
     void laterConcreteRegistrationOverridesEarlierPredicateRegistrationOnOverlappingMatch() {
-        EventTransformer earlierPredicateToV3 = EventTransformation.from(mt -> mt.version().startsWith("1."))
+        EventTransformer earlierPredicateToV3 = EventTransformer.from(mt -> mt.version().startsWith("1."))
                                                                     .to(V3)
                                                                     .transform(JsonNode.class, (in, ctx) -> {
                                                                         ObjectNode out = JsonNodeFactory.instance.objectNode();
                                                                         out.put("via", "predicate");
                                                                         return out;
                                                                     });
-        EventTransformer laterConcreteToV2 = EventTransformation.from(V1)
+        EventTransformer laterConcreteToV2 = EventTransformer.from(V1)
                                                                  .to(V2)
                                                                  .transform(JsonNode.class, (in, ctx) -> {
                                                                      ObjectNode out = JsonNodeFactory.instance.objectNode();
@@ -86,14 +86,14 @@ final class LastMatchWinsTest {
 
     @Test
     void laterPredicateRegistrationOverridesEarlierConcreteRegistrationOnOverlappingMatch() {
-        EventTransformer earlierConcreteToV2 = EventTransformation.from(V1)
+        EventTransformer earlierConcreteToV2 = EventTransformer.from(V1)
                                                                   .to(V2)
                                                                   .transform(JsonNode.class, (in, ctx) -> {
                                                                       ObjectNode out = JsonNodeFactory.instance.objectNode();
                                                                       out.put("via", "concrete");
                                                                       return out;
                                                                   });
-        EventTransformer laterPredicateToV3 = EventTransformation.from(mt -> mt.version().startsWith("1."))
+        EventTransformer laterPredicateToV3 = EventTransformer.from(mt -> mt.version().startsWith("1."))
                                                                   .to(V3)
                                                                   .transform(JsonNode.class, (in, ctx) -> {
                                                                       ObjectNode out = JsonNodeFactory.instance.objectNode();

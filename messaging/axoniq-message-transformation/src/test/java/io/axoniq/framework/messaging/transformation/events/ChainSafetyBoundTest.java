@@ -56,12 +56,12 @@ final class ChainSafetyBoundTest {
     @Test
     void exceedingTheConfiguredBoundRaisesChainConfigurationExceptionNamingTheOverride() {
         AtomicInteger totalMapperInvocations = new AtomicInteger();
-        EventTransformer v1ToV2 = EventTransformation.from(V1).to(V2)
+        EventTransformer v1ToV2 = EventTransformer.from(V1).to(V2)
                                                      .transform(JsonNode.class, (in, ctx) -> {
                                                          totalMapperInvocations.incrementAndGet();
                                                          return in;
                                                      });
-        EventTransformer v2ToV1 = EventTransformation.from(V2).to(V1)
+        EventTransformer v2ToV1 = EventTransformer.from(V2).to(V1)
                                                      .transform(JsonNode.class, (in, ctx) -> {
                                                          totalMapperInvocations.incrementAndGet();
                                                          return in;

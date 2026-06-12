@@ -97,7 +97,7 @@ specs/137-message-transformation/
 |-- spec.md                  # /speckit-specify + /speckit-clarify
 |-- spec-review-summary.md   # high-level review summary
 |-- plan.md                  # this file
-|-- _archive/
+|-- design-notes/
 |     |-- discussion-points.md     # pre-meeting two-phase exploration
 |     `-- plan-c-proposal.md       # pre-meeting single-pass proposal (won)
 |-- contracts/               # may be re-created post-plan; see follow-on

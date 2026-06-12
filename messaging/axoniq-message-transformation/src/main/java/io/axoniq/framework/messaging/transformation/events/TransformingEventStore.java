@@ -64,19 +64,12 @@ public final class TransformingEventStore implements EventStore {
     private final MessageTypeResolver messageTypeResolver;
 
     /**
-     * Constructs the decorator. Wired automatically by the framework via
-     * {@code EventTransformationConfigurationEnhancer}; applications do not call this
-     * constructor directly.
+     * Constructs the decorator.
      *
-     * @param delegate             the inner {@link EventStore} to wrap
-     * @param chain                the application's {@link EventTransformerChain} (passive
-     *                             registry)
-     * @param converter            the active {@link MessageConverter} used to convert
-     *                             payloads to each matched transformer's declared
-     *                             {@code inputType}
-     * @param messageTypeResolver  the active {@link MessageTypeResolver} used to verify
-     *                             each mapper's output identity against the declared
-     *                             {@code to}
+     * @param delegate            the inner {@link EventStore} to wrap
+     * @param chain               the {@link EventTransformerChain} to apply
+     * @param converter           the {@link MessageConverter} used to convert payloads to each transformer's input type
+     * @param messageTypeResolver the {@link MessageTypeResolver} used to verify each mapper's output identity
      */
     public TransformingEventStore(EventStore delegate,
                                    EventTransformerChain chain,

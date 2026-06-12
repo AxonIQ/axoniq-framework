@@ -38,7 +38,7 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)}, the
+ * Acceptance test for {@code EventTransformer.from(...).to(...).transform(...)}, the
  * 1:1 structural payload transformation. A stored v1 event is observed as v2 by handlers
  * consuming the chain's output stream.
  */
@@ -51,7 +51,7 @@ final class StructuralTransformationTest {
 
     @Test
     void storedV1EventIsObservedAsV2AfterRegisteringV1ToV2Transformation() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (v1, ctx) -> {
                                                                     int capacity = v1.get("capacity").asInt();
@@ -78,7 +78,7 @@ final class StructuralTransformationTest {
 
     @Test
     void singleTransformationIsObservedByEveryConsumerOfTheChain() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (v1, ctx) -> v1.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();

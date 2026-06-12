@@ -37,11 +37,8 @@ import java.util.function.BiFunction;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The sole {@link EventTransformer} implementation, produced by the {@link EventTransformation}
- * factory. {@code EventTransformer} is a sealed handle type; this class carries the matching and
- * payload-mapping behavior. {@link EventTransformerChain} invokes
- * {@link #transform(EventMessage, TransformationContext)} once it has matched a message against
- * this transformation.
+ * The {@link EventTransformer} implementation, carrying the matching and payload-mapping behavior for a single
+ * registered transformation.
  *
  * @param <T> the input payload type declared at registration
  * @param <U> the output payload type the mapper produces
@@ -59,17 +56,12 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
     private final boolean skipIdentityCheck;
 
     /**
-     * Constructs a 1:1 payload-mapping transformer with the output-identity check active. The
-     * check fires after every mapper invocation and verifies the mapper's output resolves to
-     * the declared {@code to}.
+     * Constructs a 1:1 payload-mapping transformer with the output-identity check active.
      *
      * @param matcher       the {@code from}-side matcher
      * @param toType        the {@code to} identity applied to the output message
-     * @param inputType     the declared input {@link Type}, preserved with any generic
-     *                      parameters for the framework's {@code MessageConverter}
-     * @param rawInputClass the raw {@link Class} of the input type, used for the same-class
-     *                      fast path (avoiding a no-op converter call when the payload
-     *                      already satisfies the input type)
+     * @param inputType     the declared input {@link Type}, preserving any generic parameters
+     * @param rawInputClass the raw {@link Class} of the input type
      * @param mapper        the user-supplied payload mapping function
      */
     DefaultEventTransformer(FromMatcher matcher,
@@ -82,20 +74,14 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
 
     /**
      * Full constructor exposing the {@code skipIdentityCheck} flag.
-     * <p>
-     * Set the flag to {@code true} only when the framework, not the mapper, owns the output
-     * identity. Needed for a rename which keeps the input payload unchanged: the default check
-     * would resolve that payload's class to the source identity and reject the newly declared
-     * {@code to} as a mismatch, even though the rename is intentional.
      *
      * @param matcher           the {@code from}-side matcher
      * @param toType            the {@code to} identity applied to the output message
      * @param inputType         the declared input {@link Type}
      * @param rawInputClass     the raw {@link Class} of the input type
      * @param mapper            the user-supplied payload mapping function
-     * @param skipIdentityCheck {@code true} only when the framework owns the output identity
-     *                          (currently: the rename factory); {@code false} for every
-     *                          payload-mapping transformer
+     * @param skipIdentityCheck {@code true} to skip the output-identity check, for transformers whose output
+     *                          identity is owned by the framework rather than the mapper
      */
     DefaultEventTransformer(FromMatcher matcher,
                           MessageType toType,
@@ -112,19 +98,13 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * Transforms the matched {@code message}, returning the result as a single-element
-     * {@link MessageStream}. Extracts the typed payload via the context's {@link MessageConverter},
-     * invokes the user's mapper, verifies the mapper's output identity against the declared
-     * {@link #toType} unless {@code skipIdentityCheck} is set, and emits the result wrapped with
-     * the declared {@link MessageType} and the input's envelope preserved.
+     * Transforms the matched message, returning the result as a single-element {@link MessageStream}.
      *
      * @param message the matched input message
-     * @param context the framework-supplied per-message {@link TransformationContext} (entry
-     *                context, processing context, converter, resolver)
+     * @param context the per-message {@link TransformationContext}
      * @return a single-element stream carrying the transformed output message
-     * @throws ChainConfigurationException if the resolver resolves the mapper's output to a
-     *                                     {@link MessageType} other than the declared
-     *                                     {@link #toType}
+     * @throws ChainConfigurationException if the mapper's output resolves to a {@link MessageType} other than the
+     *                                     declared {@code to}
      */
     @Override
     public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
@@ -145,15 +125,10 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * Verifies the mapper's output identity against the declared {@link #toType}. Skips
-     * silently when the resolver returns {@link Optional#empty()}. This is the only possible
-     * behavior for untyped representations whose runtime class carries no identity
-     * annotation.
-     * <p>
-     * The thrown exception identifies the failing transformation (matcher + declared
-     * {@code to}), the input event ({@link EventMessage#type()} + identifier + stream
-     * position from the transformation context when available), and the mismatching output
-     * (class + resolved {@link MessageType}).
+     * Verifies the mapper's output resolves to the declared {@link #toType}, skipping when the resolver returns
+     * {@link Optional#empty()}.
+     *
+     * @throws ChainConfigurationException if the resolved identity differs from {@link #toType}
      */
     private void verifyOutputIdentity(U mappedPayload, EventMessage inputMessage, TransformationContext context) {
         Optional<MessageType> resolved = context.messageTypeResolver().resolve(mappedPayload.getClass());
@@ -175,18 +150,10 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * Returns the payload typed as {@link #rawInputClass}. Fast path: when the payload is
-     * already an instance of the raw input class, hand it through via the checked
-     * {@code Class.cast}. Otherwise, the framework's
-     * {@link MessageConverter#convertPayload(org.axonframework.messaging.core.Message, Type)}
-     * is invoked with the full message and the declared {@link #inputType}; the converter
-     * preserves the generic parameters carried by {@code inputType} (relevant for
-     * {@code TypeReference<T>} registrations).
-     * <p>
-     * A converter that resolves to {@code null} for the declared input type indicates a
-     * malformed stored payload; we surface that immediately as an
-     * {@link IllegalStateException} so the diagnostic lands at the chain layer with the
-     * input event's identity rather than as a downstream {@code NullPointerException}.
+     * Returns the payload typed as {@link #rawInputClass}, converting via the {@link MessageConverter} when the
+     * payload is not already an instance of it.
+     *
+     * @throws IllegalStateException if the converter resolves the stored payload to {@code null}
      */
     private T extractTypedPayload(EventMessage message, TransformationContext context) {
         Object payload = message.payload();

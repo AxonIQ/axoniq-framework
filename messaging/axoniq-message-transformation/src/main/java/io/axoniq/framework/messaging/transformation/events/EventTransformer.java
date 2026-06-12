@@ -20,23 +20,22 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
-import io.axoniq.framework.messaging.transformation.TransformationContext;
-import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.common.TypeReference;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
+
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Predicate;
+
+import static java.util.Objects.requireNonNull;
 
 /**
- * Event-specific {@link MessageTransformer}: a sealed handle for a single registered event
- * transformation, produced exclusively by the {@code EventTransformation} factory and
- * registered with an {@code EventTransformerChain}. Sealing makes the factory the only source
- * of instances, so the chain always receives a routable transformer carrying its {@code from}
- * and {@code to} metadata; raw lambdas cannot be supplied.
+ * An event-specific {@link MessageTransformer}.
  * <p>
- * A transformation rewrites only the {@link EventMessage} itself: its
- * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Tags are fixed
- * when the event is appended and are not changed by the chain. Tracking position and sequence
- * information ride on the read-stream entry context rather than on the message, and pass
- * through unchanged.
+ * Construct instances with the static {@link #from(MessageType)} / {@link #from(Predicate)} entry points.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -44,7 +43,130 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 public sealed interface EventTransformer extends MessageTransformer<EventMessage>
         permits DefaultEventTransformer {
 
-    @Override
-    @Internal
-    MessageStream<? extends EventMessage> transform(EventMessage message, TransformationContext context);
+    /**
+     * Begin a 1:1 transformation matching the given concrete {@code from} identity by exact equality. Continue
+     * with {@code to(...)} then {@code transform(...)}.
+     *
+     * @param source the {@code from} identity
+     * @return a builder awaiting {@code to(...)}
+     */
+    static SingleEventTransformationBuilder from(MessageType source) {
+        requireNonNull(source, "source");
+        return new SingleEventTransformationBuilder(new FromMatcher.Concrete(source));
+    }
+
+    /**
+     * Begin a 1:1 transformation matching any {@link MessageType} for which the supplied predicate returns
+     * {@code true}.
+     *
+     * @param sourcePredicate the matcher
+     * @return a builder awaiting {@code to(...)}
+     */
+    static SingleEventTransformationBuilder from(Predicate<MessageType> sourcePredicate) {
+        requireNonNull(sourcePredicate, "sourcePredicate");
+        return new SingleEventTransformationBuilder(new FromMatcher.PredicateBased(sourcePredicate));
+    }
+
+    /** Continuation of {@link #from(MessageType)} / {@link #from(Predicate)}; supplies {@code to(...)}. */
+    final class SingleEventTransformationBuilder {
+
+        private final FromMatcher matcher;
+
+        private SingleEventTransformationBuilder(FromMatcher matcher) {
+            this.matcher = matcher;
+        }
+
+        /**
+         * Declare the {@code to} identity.
+         *
+         * @param target the {@code to} identity
+         * @return a builder awaiting {@code transform(...)}
+         */
+        public SingleEventTransformationWithTargetBuilder to(MessageType target) {
+            requireNonNull(target, "target");
+            return new SingleEventTransformationWithTargetBuilder(matcher, target);
+        }
+    }
+
+    /** Continuation of {@code from(...).to(...)}; supplies the payload mapper. */
+    final class SingleEventTransformationWithTargetBuilder {
+
+        private final FromMatcher matcher;
+        private final MessageType toType;
+
+        private SingleEventTransformationWithTargetBuilder(FromMatcher matcher, MessageType toType) {
+            this.matcher = matcher;
+            this.toType = toType;
+        }
+
+        /**
+         * Supply the payload mapping behavior for a non-generic input type.
+         *
+         * @param <T>           input payload type
+         * @param <U>           output payload type
+         * @param inputType     the type the stored payload is converted to before invocation
+         * @param payloadMapper maps the input payload and processing context to its transformed output
+         * @return the resulting {@link EventTransformer}
+         */
+        public <T, U> EventTransformer transform(Class<T> inputType,
+                                                 BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) {
+            requireNonNull(inputType, "inputType");
+            requireNonNull(payloadMapper, "payloadMapper");
+            return new DefaultEventTransformer<>(matcher, toType, inputType, inputType, payloadMapper);
+        }
+
+        /**
+         * Supply a context-free payload mapper for a non-generic input type. Convenience overload of
+         * {@link #transform(Class, BiFunction)} for transformations that derive their output purely from the
+         * input payload and have no use for the {@link ProcessingContext}.
+         *
+         * @param <T>           input payload type
+         * @param <U>           output payload type
+         * @param inputType     the type the stored payload is converted to before invocation
+         * @param payloadMapper maps the input payload to its transformed output
+         * @return the resulting {@link EventTransformer}
+         */
+        public <T, U> EventTransformer transform(Class<T> inputType,
+                                                 Function<T, U> payloadMapper) {
+            requireNonNull(inputType, "inputType");
+            requireNonNull(payloadMapper, "payloadMapper");
+            return transform(inputType, (payload, context) -> payloadMapper.apply(payload));
+        }
+
+        /**
+         * Generic-type overload. Use this when {@code inputType} carries type parameters (e.g.
+         * {@code Map<String, Object>}, {@code List<Foo>}).
+         *
+         * @param <T>           input payload type
+         * @param <U>           output payload type
+         * @param inputType     the {@link TypeReference} the stored payload is converted to
+         * @param payloadMapper maps the input payload and processing context to its transformed output
+         * @return the resulting {@link EventTransformer}
+         */
+        public <T, U> EventTransformer transform(TypeReference<T> inputType,
+                                                 BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) {
+            requireNonNull(inputType, "inputType");
+            requireNonNull(payloadMapper, "payloadMapper");
+            return new DefaultEventTransformer<>(
+                    matcher, toType, inputType.getType(), inputType.getTypeAsClass(), payloadMapper);
+        }
+
+        /**
+         * Context-free variant of {@link #transform(TypeReference, BiFunction)}. Use this when {@code inputType}
+         * carries type parameters (e.g. {@code Map<String, Object>}, {@code List<Foo>}) and the mapper has no use
+         * for the {@link ProcessingContext}.
+         *
+         * @param <T>           input payload type
+         * @param <U>           output payload type
+         * @param inputType     the {@link TypeReference} the stored payload is converted to
+         * @param payloadMapper maps the input payload to its transformed output
+         * @return the resulting {@link EventTransformer}
+         */
+        public <T, U> EventTransformer transform(TypeReference<T> inputType,
+                                                 Function<T, U> payloadMapper) {
+            requireNonNull(inputType, "inputType");
+            requireNonNull(payloadMapper, "payloadMapper");
+            return transform(inputType, (payload, context) -> payloadMapper.apply(payload));
+        }
+    }
 }
