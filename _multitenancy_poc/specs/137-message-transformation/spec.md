@@ -363,7 +363,7 @@ takes hours to diagnose.
 **Plain-English explanation**: a developer needs to confirm at deploy time that registered
 transformations were actually picked up by the framework, and during an incident needs
 detailed per-event logging to diagnose whether the chain caused incorrect projection state.
-DEBUG at startup confirms wiring, TRACE per-application traces execution. Observability is
+INFO at startup confirms wiring, TRACE per-application traces execution. Observability is
 opt-out: developers MAY disable all chain logging on performance-critical paths.
 
 **Why this priority**: registration is a startup-time concern. A developer cannot inspect the
@@ -374,7 +374,7 @@ confirm correct wiring in production.
 
 1. **Given** two transformations registered at startup,
    **When** the transformation chain is built,
-   **Then** a single DEBUG-level log entry is emitted listing the number of registered transformations
+   **Then** a single INFO-level log entry is emitted listing the number of registered transformations
    and their `from` identities.
 
 2. **Given** a stored event that matches a registered transformation,
@@ -389,7 +389,7 @@ confirm correct wiring in production.
 
 4. **Given** a chain built with observability disabled,
    **When** transformations are registered and applied,
-   **Then** no log entries are emitted by the chain at any level (neither startup DEBUG nor
+   **Then** no log entries are emitted by the chain at any level (neither startup INFO nor
    per-applied TRACE).
 
 ---
@@ -557,7 +557,22 @@ Wiring would attach to `TransformingQueryBus.query(...)` and pipe the returned
 transformation (deferred)").
 
 **When to revisit**: alongside US9 delivery, or once concrete query-versioning cases surface
-where receiver-side response transformation is the cleanest solution.
+where receiver-side response transformation is the cleanest solution. See also "Command
+result transformation `[Deferred]`" below for the parallel command-side rationale.
+
+---
+
+#### Command result transformation `[Deferred]`
+
+Parallel to the query response deferral above, for commands. Most command results are `Void`
+or a single identifier and need no transformation, but `CommandResultMessage` can carry an
+arbitrary payload through the `MessageConverter`, so the same versioning pressure can apply.
+US8 covers the *request* side of commands (5.3+); the result side is held to a later release
+to keep the first cut focused.
+
+SPI shape and decoration point are in
+[contracts/spi-commands-queries.md](contracts/spi-commands-queries.md) ("Command result
+transformation (deferred)").
 
 ---
 
@@ -691,16 +706,18 @@ a last resort if the old stream must be fully replaced.
   This subsumes both same-name version bumps (e.g. v1 -> v2 -> v3 of `CourseCreated`) and
   cross-name renames (e.g. `CourseOpened` -> `CourseCreated`) without special-casing.
   _Traces to: US1 scenario 4, US2, US3 scenario 4, US5._
-- **FR-008 (Conflict detection)**: The framework MUST detect:
+- **FR-008 (Conflict detection) [Deferred to US6 / 5.3+]**: The framework MUST detect (when US6 lands):
   - **Duplicate `from`** (two 1:1 transformations with the same concrete `(name, version)`):
     raised at registration time.
   - **Self-loop** (concrete `from == to`): raised at registration time.
   - **Multi-step cycle** in the graph of concrete `from -> to` edges (e.g. `X@1.0.0 -> X@2.0.0`
     then `X@2.0.0 -> X@1.0.0`): raised at chain lock time with the full edge list.
 
-  The framework includes a defensive runtime safety bound to prevent infinite loops from
-  pathological misconfiguration that cannot be detected statically (e.g. two overlapping
-  predicate `from`s producing each other's input); the exact bound is implementation-defined.
+  **5.2.0 status**: the static duplicate / self-loop / multi-step-cycle checks above are deferred
+  to US6 and NOT shipped in 5.2.0. What ships is the defensive runtime safety bound to prevent
+  infinite loops from pathological misconfiguration that cannot be detected statically (e.g. two
+  overlapping predicate `from`s producing each other's input) -- shipped as the user-tunable
+  `EventTransformerChain.Builder.maxIterationsPerEvent(int)` (default `DEFAULT_MAX_ITERATIONS_PER_EVENT`).
   _Traces to: US6._
 - **FR-009 (Typed payload access)**: Each transformation declares a target Java type at
   registration. The framework invokes `MessageConverter.convertPayload(message, targetType)`
@@ -747,7 +764,7 @@ a last resort if the old stream must be fully replaced.
   change. Any `EventStore` implementation -- engine-backed or not -- participates in
   transformation. Wiring details are in [plan.md](plan.md).
   _Traces to: US1 scenario 4._
-- **FR-013 (Observability)**: The framework MUST emit one DEBUG entry at chain build listing
+- **FR-013 (Observability)**: The framework MUST emit one INFO entry at chain build listing
   the transformation count and each transformer's `from` (+ `to` for 1:1). That is the only
   framework-emitted log in 5.2.0.
 
@@ -855,8 +872,9 @@ a last resort if the old stream must be fully replaced.
 ## Success Criteria
 - **SC-001 (Order)**: 100% of registered transformations are applied in registration order,
   verifiable across all in-scope use cases. Verifies FR-004.
-- **SC-002 (Conflicts)**: Every conflict class in FR-008 is detected and reported before any
-  event is processed.
+- **SC-002 (Conflicts) [Deferred with FR-008 / US6]**: When US6 lands, every conflict class in
+  FR-008 is detected and reported before any event is processed. 5.2.0 ships only the defensive
+  runtime safety bound (see FR-008), not the static checks.
 - **SC-003 (Examples)**: All in-scope use cases for the delivered slice are demonstrated in a
   new Maven sub-module under `AxonFramework/examples/` (case-sensitive directory; alongside `university-demo`,
   `university-java`, `university-java-springboot-3`, etc.). For 5.2.0 this covers the events
@@ -881,7 +899,7 @@ a last resort if the old stream must be fully replaced.
   sufficient iteration count to exercise real thread interleaving produces identical outputs
   across all invocations with no external synchronization. Specific thread and iteration counts
   are set in plan.md. Verifies FR-006.
-- **SC-009 (Observability)**: At chain build, one DEBUG entry lists every registered
+- **SC-009 (Observability)**: At chain build, one INFO entry lists every registered
   transformation. With no transformations registered for a given event, no per-event
   allocation occurs on the non-matching path. Verifies FR-013 (5.2.0 scope; per-transformer
   hooks deferred).

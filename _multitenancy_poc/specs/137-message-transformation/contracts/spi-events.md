@@ -15,16 +15,16 @@ Event-specific specialization of the [shared SPI base](spi-base.md). Ships with 
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
+import io.axoniq.framework.messaging.transformation.TransformationContext;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 /**
- * Event-specific {@link MessageTransformer}. Use the {@code EventTransformation} factory
- * rather than implementing directly. See {@link MessageTransformer} for the transformation
- * contract; this interface narrows the message type to {@link EventMessage}.
+ * Event-specific {@link MessageTransformer}: a sealed handle for a single registered event
+ * transformation, produced exclusively by the {@code EventTransformation} factory and
+ * registered with an {@code EventTransformerChain}. Sealing makes the factory the only source
+ * of instances; raw lambdas cannot be supplied.
  * <p>
  * A transformer rewrites only the {@link EventMessage} itself -- its
  * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Properties
@@ -37,13 +37,16 @@ import org.jspecify.annotations.Nullable;
  * @author Laura Devriendt
  * @since 5.2.0
  */
-@NullMarked
-public interface EventTransformer extends MessageTransformer<EventMessage> {
+public sealed interface EventTransformer extends MessageTransformer<EventMessage>
+        permits DefaultEventTransformer {
 
     @Override
-    MessageStream<? extends EventMessage> transform(EventMessage message, @Nullable ProcessingContext context);
+    @Internal
+    MessageStream<? extends EventMessage> transform(EventMessage message, TransformationContext context);
 }
 ```
+
+The sole permitted implementation is the package-private `@Internal` `DefaultEventTransformer`, produced by the `EventTransformation` factory. It carries the matching metadata (`from` / `to`) the chain reads for routing and owns the convert -> map -> identity-check -> rewrap pipeline cohesively.
 
 **Event-specific contract** (in addition to base contract in [spi-base.md](spi-base.md)):
 - **Envelope preservation** (FR-010): entity type, entity identifier, tracking token, and sequence number MUST be carried unchanged from input to output. Framework overrides any attempt to modify them. For 1:N splits, every replacement inherits the input's envelope (no renumbering -- all N share the input's tracking token + sequence number). Metadata MAY be modified via the message-level entry point.
@@ -53,9 +56,9 @@ public interface EventTransformer extends MessageTransformer<EventMessage> {
 
 ---
 
-## `TransformedEvent`
+## `TransformedEvent` (5.3+, US3 split -- not in 5.2.0)
 
-Output type for 1:N split mappers. The framework wraps each into an `EventMessage`, preserving the input event's envelope per FR-010.
+Output type for 1:N split mappers. **Not shipped in 5.2.0**: split/drop (US3/US4) are deferred, so this type lands with that work; the 1:1 slice has no use for it. The framework wraps each into an `EventMessage`, preserving the input event's envelope per FR-010.
 
 ```java
 package io.axoniq.framework.messaging.transformation.events;
@@ -102,44 +105,61 @@ Behaviour is shared across all typed chains (events / commands / queries) -- see
 ```java
 package io.axoniq.framework.messaging.transformation.events;
 
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Immutable chain of {@link EventTransformer} instances applied at event read time.
  * Built once at startup via {@link Builder} and locked on {@link Builder#build()}.
  * Register the chain with the Axon configuration as an
  * {@code EventTransformerChain.class}-typed component; the framework installs the
- * read-side decorators automatically.
+ * read-side decorators automatically. Implements {@link DescribableComponent} to expose
+ * its populated structure for framework diagnostics.
  *
  * @author Laura Devriendt
  * @since 5.2.0
  */
-@NullMarked
-public final class EventTransformerChain {
+public final class EventTransformerChain implements DescribableComponent {
+
+    /** Default safety bound on per-event iteration; override via {@link Builder#maxIterationsPerEvent(int)}. */
+    public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
 
     /**
-     * Apply the chain to the given stream. Fixed-point iteration, last match wins; see
-     * {@link io.axoniq.framework.messaging.transformation.MessageTransformer} for the
-     * per-element shape. Non-matching elements pass through unchanged in constant time.
+     * Apply the chain to the given stream. Fixed-point iteration, last match wins;
+     * non-matching elements pass through unchanged in constant time. The converter and
+     * resolver are supplied by {@code TransformingEventStore} (resolved by the
+     * configuration enhancer), not by the user.
      *
-     * @param stream the input stream of events
+     * @param stream              the input stream of events
+     * @param context             the active {@link ProcessingContext}, or {@code null} on the
+     *                            tracking-processor read path
+     * @param converter           the framework's payload converter, for input-type conversion
+     * @param messageTypeResolver the resolver used to verify each mapper output's identity
+     *                            against the declared {@code to}
      * @return the transformed stream
      */
-    public MessageStream<? extends EventMessage> transform(MessageStream<EventMessage> stream) { /* ... */ }
+    public MessageStream<EventMessage> transform(MessageStream<? extends EventMessage> stream,
+                                                 @Nullable ProcessingContext context,
+                                                 MessageConverter converter,
+                                                 MessageTypeResolver messageTypeResolver) { /* ... */ }
 
     public static Builder builder() { /* ... */ }
 
     /** Fluent builder; registration order = application order. */
     public static final class Builder {
         public Builder register(EventTransformer transformer) { /* ... */ }
+        public Builder maxIterationsPerEvent(int max) { /* ... */ }
         public EventTransformerChain build() { /* ... */ }
     }
 }
 ```
 
-**Future additive overload (5.3+, not in 5.2.0)**: a single-message entry point `MessageStream.Single<? extends EventMessage> transform(EventMessage message, @Nullable ProcessingContext context)` is reserved. Events wire via `EventStore.transaction().source(...)` and `EventStore.open(...)` -- both return `MessageStream`, so the stream-in / stream-out method above fits the decorator wiring exactly. Commands and queries (5.3+) wire at `CommandBus.subscribe(...)` / `QueryBus.subscribe(...)` time, which is single-message-in -- those chains will gain the single-message overload as a pure additive Java overload (no SPI break, forward-compat invariant #4 reserves the name).
+**Future additive overload (5.3+, not in 5.2.0)**: a single-message entry point `MessageStream.Single<? extends EventMessage> transform(EventMessage message, TransformationContext context)` is reserved. Events wire via `EventStore.transaction().source(...)` and `EventStore.open(...)` -- both return `MessageStream`, so the stream-in / stream-out method above fits the decorator wiring exactly. Commands and queries (5.3+) wire at `CommandBus.subscribe(...)` / `QueryBus.subscribe(...)` time, which is single-message-in -- those chains will gain the single-message overload as a pure additive Java overload (no SPI break, forward-compat invariant #4 reserves the name).
 
 **Cross-references**: FR-004, FR-005, FR-007, FR-008, FR-011, FR-013, US1, US5, US6, US7.
 
@@ -157,6 +177,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -184,21 +205,25 @@ public final class TransformingEventStore implements EventStore {
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     /**
-     * @param delegate  the inner {@link EventStore} to wrap
-     * @param chain     the application's {@link EventTransformerChain} (passive registry)
-     * @param converter the active {@link MessageConverter} used to convert payloads to each
-     *                  matched transformer's declared {@code inputType} before invoking the
-     *                  mapper. Resolved by {@code EventTransformationConfigurationEnhancer}
-     *                  from {@code Configuration.getComponent(MessageConverter.class)} at
-     *                  decorator-registration time; users do NOT construct this class.
+     * @param delegate            the inner {@link EventStore} to wrap
+     * @param chain               the application's {@link EventTransformerChain} (passive registry)
+     * @param converter           the active {@link MessageConverter} used to convert payloads to each
+     *                            matched transformer's declared {@code inputType} before invoking the
+     *                            mapper
+     * @param messageTypeResolver the active {@link MessageTypeResolver} used to verify each mapper
+     *                            output's resolved identity against the declared {@code to}. Both
+     *                            collaborators are resolved by {@code EventTransformationConfigurationEnhancer}
+     *                            from the {@code Configuration} at decorator-registration time; users
+     *                            do NOT construct this class.
      */
     public TransformingEventStore(EventStore delegate,
                                    EventTransformerChain chain,
-                                   MessageConverter converter) { /* ... */ }
+                                   MessageConverter converter,
+                                   MessageTypeResolver messageTypeResolver) { /* ... */ }
 
     /**
-     * Returns a {@link TransformingEventStoreTransaction} cached per
-     * {@link ProcessingContext}; {@code source(...)} pipes through the chain.
+     * Returns a fresh {@link TransformingEventStoreTransaction} wrapping the delegate's
+     * transaction; {@code source(...)} pipes through the chain.
      */
     @Override
     public EventStoreTransaction transaction(ProcessingContext processingContext) { /* ... */ }
@@ -214,8 +239,8 @@ public final class TransformingEventStore implements EventStore {
 ```
 
 **Behaviour**:
-- `open(...)`: returns the inner stream piped through `chain.transform(stream)`. Tracking-processor reads. **Deviation from `InterceptingEventStore`**: that precedent delegates `open(...)` unwrapped; here we MUST wrap to honour FR-012. No per-call caching: `open(...)` accepts a `@Nullable ProcessingContext`, so a `Context.ResourceKey` is not always available; each call rewraps the stream lazily.
-- `transaction(...)`: returns a `TransformingEventStoreTransaction` wrapping the delegate, cached per `ProcessingContext` via `Context.ResourceKey` (mirrors `InterceptingEventStore`). Entity loads + DCB reads.
+- `open(...)`: returns the inner stream piped through `chain.transform(delegate.open(condition, context), context, converter, messageTypeResolver)`. Tracking-processor reads. **Deviation from `InterceptingEventStore`**: that precedent delegates `open(...)` unwrapped; here we MUST wrap to honour FR-012. No per-call caching: `open(...)` accepts a `@Nullable ProcessingContext`, so a `Context.ResourceKey` is not always available; each call rewraps the stream lazily.
+- `transaction(...)`: returns a fresh `TransformingEventStoreTransaction` wrapping the delegate's transaction. Entity loads + DCB reads. No per-`ProcessingContext` caching: unlike `InterceptingEventStore` (whose appender reads the transaction back out of the context), nothing reads this wrapper from the context, so the thin wrapper carries no shareable state. Returning a fresh wrapper also avoids `ConcurrentHashMap` recursive-update detection when stacking on a per-context caching delegate.
 - Everything else (`publish`, tokens, `subscribe`): delegated unchanged. Chain runs at READ only (FR-021).
 - `SourcingCondition` / `StreamingCondition` filtering + `ConsistencyMarker` / `TerminalEventMessage` bookkeeping happen in the underlying engine BEFORE the chain receives the stream.
 - **Tracking-token progress through drops** (FR-014): when a transformation drops an event, the underlying stream's tracking-token progress MUST still surface to the consumer (the chain only removes the element from the emitted output; it does NOT discard the position). A restarting tracking processor therefore resumes AFTER the dropped event and does not reprocess it.
@@ -236,6 +261,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.NullMarked;
@@ -254,16 +280,21 @@ import org.jspecify.annotations.NullMarked;
 final class TransformingEventStoreTransaction implements EventStoreTransaction {
 
     /**
-     * @param delegate  the inner {@link EventStoreTransaction} to wrap
-     * @param chain     the application's {@link EventTransformerChain} (passive registry)
-     * @param converter the active {@link MessageConverter}; same instance the parent
-     *                  {@link TransformingEventStore} holds, used to convert payloads to each
-     *                  matched transformer's declared {@code inputType} before invoking the
-     *                  mapper. Resolved at decorator-registration time, NOT at user-build time.
+     * @param delegate            the inner {@link EventStoreTransaction} to wrap
+     * @param chain               the application's {@link EventTransformerChain} (passive registry)
+     * @param converter           the active {@link MessageConverter}; same instance the parent
+     *                            {@link TransformingEventStore} holds, used to convert payloads to each
+     *                            matched transformer's declared {@code inputType} before invoking the
+     *                            mapper
+     * @param messageTypeResolver the active {@link MessageTypeResolver}; same instance the parent
+     *                            {@link TransformingEventStore} holds, used to verify each mapper
+     *                            output's identity. Resolved at decorator-registration time, NOT at
+     *                            user-build time.
      */
     TransformingEventStoreTransaction(EventStoreTransaction delegate,
                                        EventTransformerChain chain,
-                                       MessageConverter converter) { /* ... */ }
+                                       MessageConverter converter,
+                                       MessageTypeResolver messageTypeResolver) { /* ... */ }
 
     /** Returns the delegate's stream piped through the chain. */
     @Override
@@ -284,7 +315,7 @@ final class TransformingEventStoreTransaction implements EventStoreTransaction {
 
 ## `EventTransformationConfigurationEnhancer`
 
-ServiceLoader-discovered enhancer that wires `TransformingEventStore` as a decorator on `EventStore` via `ComponentRegistry.registerDecorator(...)` (`ComponentRegistry.java:115-121`). At decorator-construction time the lambda receives a `Configuration` and resolves both the user-registered `EventTransformerChain` AND the active `MessageConverter` -- this is the established AF5 pattern (see `EventSourcingConfigurationDefaults.java:96-108` and `AnnotatedEventSourcedEntityModule.buildMetaModel(Configuration):113-131`).
+ServiceLoader-discovered enhancer that wires `TransformingEventStore` as a decorator on `EventStore` via `ComponentRegistry.registerDecorator(...)` (`ComponentRegistry.java:115-121`). At decorator-construction time the lambda receives a `Configuration` and resolves the user-registered `EventTransformerChain`, the active `MessageConverter`, AND the active `MessageTypeResolver` -- this is the established AF5 pattern (see `EventSourcingConfigurationDefaults.java:96-108` and `AnnotatedEventSourcedEntityModule.buildMetaModel(Configuration):113-131`).
 
 ```java
 package io.axoniq.framework.messaging.transformation.events.configuration;
@@ -294,14 +325,16 @@ import io.axoniq.framework.messaging.transformation.events.TransformingEventStor
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.NullMarked;
 
 /**
  * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs the
  * {@link TransformingEventStore} decorator. Reads the user-supplied
- * {@link EventTransformerChain} and the active {@link MessageConverter} from the
- * {@code Configuration} at decorator-registration time; a no-op if no chain is registered.
+ * {@link EventTransformerChain}, the active {@link MessageConverter}, and the active
+ * {@link MessageTypeResolver} from the {@code Configuration} at decorator-registration
+ * time; a no-op if no chain is registered.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -318,7 +351,8 @@ public final class EventTransformationConfigurationEnhancer implements Configura
                     return delegate; // no chain registered -> no-op
                 }
                 MessageConverter converter = config.getComponent(MessageConverter.class);
-                return new TransformingEventStore(delegate, chain, converter);
+                MessageTypeResolver messageTypeResolver = config.getComponent(MessageTypeResolver.class);
+                return new TransformingEventStore(delegate, chain, converter, messageTypeResolver);
             });
     }
 }

@@ -15,15 +15,15 @@ Two sub-packages mirroring the `axoniq-distributed-messaging` convention. Each m
 package io.axoniq.framework.messaging.transformation.commandhandling;
 
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
+import io.axoniq.framework.messaging.transformation.TransformationContext;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 /**
- * Command-specific {@link MessageTransformer}. 1:1 only -- split / drop do not apply to
- * commands. Output is always a {@link MessageStream.Single}. Use the
+ * Command-specific {@link MessageTransformer}: a sealed handle, 1:1 only -- split / drop do
+ * not apply to commands. Output is always a {@link MessageStream.Single}. Use the
  * {@code CommandTransformation} factory rather than implementing directly.
  *
  * @author Laura Devriendt
@@ -33,7 +33,8 @@ import org.jspecify.annotations.Nullable;
 public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 
     @Override
-    MessageStream.Single<? extends CommandMessage> transform(CommandMessage message, @Nullable ProcessingContext context);
+    @Internal
+    MessageStream.Single<? extends CommandMessage> transform(CommandMessage message, TransformationContext context);
 }
 ```
 
@@ -41,6 +42,18 @@ public interface CommandTransformer extends MessageTransformer<CommandMessage> {
 - **1:1 only** (FR-019): `CommandTransformation` does not expose `split(...)` or `drop(...)`. The chain Builder also rejects any multi-output / zero-output `MessageTransformer<CommandMessage>` at `.build()` lock time, in case one is constructed via the SPI directly.
 
 **Cross-references**: FR-018, FR-019, US8.
+
+### Command result transformation (deferred)
+
+Parallel to the query response case below, for commands. `CommandResultMessage extends
+ResultMessage extends Message` (verified at `messaging/commandhandling/CommandResultMessage.java`,
+`messaging/core/ResultMessage.java`), so a future
+`CommandResultTransformer extends MessageTransformer<CommandResultMessage>` slots into the
+generic base with no SPI change. Decoration point: `TransformingCommandBus.dispatch(...)`
+(verified at `messaging/commandhandling/CommandBus.java`) piping the returned
+`CompletableFuture<CommandResultMessage>` through a parallel chain lookup.
+
+See spec Part C "Command result transformation `[Deferred]`" for the deferral rationale.
 
 ---
 
@@ -51,8 +64,11 @@ Public, immutable chain of `CommandTransformer` instances. Same shape as `EventT
 ```java
 package io.axoniq.framework.messaging.transformation.commandhandling;
 
+import io.axoniq.framework.messaging.transformation.TransformationContext;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -67,15 +83,24 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class CommandTransformerChain {
 
-    /** Stream-in / stream-out; used in tests or if a future caller exposes commands as a stream. */
-    public MessageStream<? extends CommandMessage> transform(MessageStream<CommandMessage> stream) { /* ... */ }
+    /**
+     * Stream-in / stream-out; used in tests or if a future caller exposes commands as a stream.
+     * Mirrors the event chain's shape: the converter + resolver are supplied by
+     * {@code TransformingCommandBus} (resolved by the enhancer), not by the user.
+     */
+    public MessageStream<? extends CommandMessage> transform(MessageStream<CommandMessage> stream,
+                                                             @Nullable ProcessingContext context,
+                                                             MessageConverter converter,
+                                                             MessageTypeResolver messageTypeResolver) { /* ... */ }
 
     /**
      * Single-message entry point used by {@code TransformingCommandBus}'s subscribe-time
      * wrapping. Output is {@link MessageStream.Single} because commands are 1:1 only (FR-019).
+     * The {@link TransformationContext} carries the active processing context plus the converter
+     * and resolver.
      */
     public MessageStream.Single<? extends CommandMessage> transform(CommandMessage message,
-                                                                     @Nullable ProcessingContext context) { /* ... */ }
+                                                                     TransformationContext context) { /* ... */ }
 
     public static Builder builder() { /* ... */ }
 
@@ -98,17 +123,17 @@ Same shape as `CommandTransformer`, for queries. Subscription-query update strea
 package io.axoniq.framework.messaging.transformation.queryhandling;
 
 import io.axoniq.framework.messaging.transformation.MessageTransformer;
+import io.axoniq.framework.messaging.transformation.TransformationContext;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 /**
- * Query-specific {@link MessageTransformer}. 1:1 only. Subscription-query update streams
- * flowing back to subscribers are NOT transformed -- only the incoming query is. Output is
- * always a {@link MessageStream.Single}. Use the {@code QueryTransformation} factory rather
- * than implementing directly.
+ * Query-specific {@link MessageTransformer}: a sealed handle, 1:1 only. Subscription-query
+ * update streams flowing back to subscribers are NOT transformed -- only the incoming query is.
+ * Output is always a {@link MessageStream.Single}. Use the {@code QueryTransformation} factory
+ * rather than implementing directly.
  *
  * @author Laura Devriendt
  * @since 5.3+
@@ -117,7 +142,8 @@ import org.jspecify.annotations.Nullable;
 public interface QueryTransformer extends MessageTransformer<QueryMessage> {
 
     @Override
-    MessageStream.Single<? extends QueryMessage> transform(QueryMessage message, @Nullable ProcessingContext context);
+    @Internal
+    MessageStream.Single<? extends QueryMessage> transform(QueryMessage message, TransformationContext context);
 }
 ```
 
@@ -129,7 +155,8 @@ Queries are bidirectional: a `QueryMessage` request flows to a handler, and a `M
 
 **Why deferred**: receiver-side reading of an old-vs-new response IS read-time transformation (fits this work's read-only invariant, FR-021), distinct from sender-side new-to-old downcasting (out of scope per spec Part C). It is deferred from the first cut to keep the 5.3+ slice focused on request-side coverage; the decoration point would be `TransformingQueryBus.query(...)` piping the returned `MessageStream<QueryResponseMessage>` through a parallel chain lookup. No 5.2.0 wiring change is needed.
 
-See also spec Part C "Query response transformation `[Deferred]`".
+See also spec Part C "Query response transformation `[Deferred]`" and the parallel
+"Command result transformation (deferred)" under `CommandTransformer` above.
 
 ---
 
@@ -149,6 +176,7 @@ package io.axoniq.framework.messaging.transformation.commandhandling;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.CommandHandler;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.NullMarked;
@@ -174,14 +202,17 @@ public final class TransformingCommandBus implements CommandBus {
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     /**
-     * @param delegate  the inner {@link CommandBus} to wrap
-     * @param chain     the application's {@link CommandTransformerChain} (passive registry)
-     * @param converter the active {@link MessageConverter}; resolved from
-     *                  {@code Configuration} by the enhancer at decorator-registration time
+     * @param delegate            the inner {@link CommandBus} to wrap
+     * @param chain               the application's {@link CommandTransformerChain} (passive registry)
+     * @param converter           the active {@link MessageConverter}
+     * @param messageTypeResolver the active {@link MessageTypeResolver} for the FR-018 output-identity
+     *                            check; both resolved from {@code Configuration} by the enhancer at
+     *                            decorator-registration time
      */
     public TransformingCommandBus(CommandBus delegate,
                                    CommandTransformerChain chain,
-                                   MessageConverter converter) { /* ... */ }
+                                   MessageConverter converter,
+                                   MessageTypeResolver messageTypeResolver) { /* ... */ }
 
     /** Wraps {@code handler} so the chain runs before the delegate handler. */
     @Override
@@ -207,6 +238,7 @@ Mirror of `TransformingCommandBus` for queries -- decorates `QueryBus`, not the 
 package io.axoniq.framework.messaging.transformation.queryhandling;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.QueryBus;
@@ -229,14 +261,16 @@ public final class TransformingQueryBus implements QueryBus {
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     /**
-     * @param delegate  the inner {@link QueryBus} to wrap
-     * @param chain     the application's {@link QueryTransformerChain}
-     * @param converter the active {@link MessageConverter}; same resolution pattern as
-     *                  {@link TransformingCommandBus}
+     * @param delegate            the inner {@link QueryBus} to wrap
+     * @param chain               the application's {@link QueryTransformerChain}
+     * @param converter           the active {@link MessageConverter}
+     * @param messageTypeResolver the active {@link MessageTypeResolver}; same resolution pattern as
+     *                            {@link TransformingCommandBus}
      */
     public TransformingQueryBus(QueryBus delegate,
                                  QueryTransformerChain chain,
-                                 MessageConverter converter) { /* ... */ }
+                                 MessageConverter converter,
+                                 MessageTypeResolver messageTypeResolver) { /* ... */ }
 
     /** Wraps {@code handler} so the chain runs before the delegate handler. */
     @Override
@@ -266,10 +300,11 @@ import org.jspecify.annotations.NullMarked;
 /**
  * ServiceLoader-discovered {@link ConfigurationEnhancer} that installs the
  * {@link io.axoniq.framework.messaging.transformation.commandhandling.TransformingCommandBus}
- * decorator. Reads the user-supplied {@code CommandTransformerChain} AND the active
- * {@code MessageConverter} from the component registry at decorator-registration time
- * (same pattern as {@code EventTransformationConfigurationEnhancer}, see
- * [spi-events.md](spi-events.md)); a no-op if no chain is registered.
+ * decorator. Reads the user-supplied {@code CommandTransformerChain}, the active
+ * {@code MessageConverter}, and the active {@code MessageTypeResolver} from the component
+ * registry at decorator-registration time (same pattern as
+ * {@code EventTransformationConfigurationEnhancer}, see [spi-events.md](spi-events.md)); a
+ * no-op if no chain is registered.
  *
  * @author Laura Devriendt
  * @since 5.3+
@@ -291,7 +326,8 @@ import org.jspecify.annotations.NullMarked;
 
 /**
  * Mirror of {@code CommandTransformationConfigurationEnhancer} for queries: reads
- * {@code QueryTransformerChain} + {@code MessageConverter} and installs the
+ * {@code QueryTransformerChain} + {@code MessageConverter} + {@code MessageTypeResolver} and
+ * installs the
  * {@link io.axoniq.framework.messaging.transformation.queryhandling.TransformingQueryBus}
  * decorator. No-op if no chain is registered.
  *

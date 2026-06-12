@@ -1,10 +1,15 @@
-# Javadoc — No Spec / Plan / Task References in Published API Docs
+# Code Artifacts — No Spec / Plan / Task References
 
 ## Rule
 
-**Javadoc is the published API documentation. It must describe what the code does, how to use it, and what the user needs to know — never internal process artifacts.**
+**Public-facing code artifacts (Javadoc, test class names, file names) describe what the code does or what the test verifies — never internal process artifacts.**
 
-The following do NOT belong in Javadoc:
+Applies to:
+- Javadoc (class-level, method-level, field-level)
+- Test class names + test file names (e.g. `StructuralTransformationTest`, NOT `EventTransformationFr001Test`)
+- Body comments (slightly relaxed — see end of file)
+
+The following do NOT belong in any of the above:
 
 - **Requirement IDs** (e.g. `FR-001`, `FR-018`, `SC-005`). They're meaningless to a consumer reading the JAR's docs; they presume access to a spec the consumer doesn't have.
 - **User-story IDs** (e.g. `US1`, `US3`, `US8`).
@@ -26,6 +31,16 @@ Translate each internal reference into the implementation behaviour it represent
 | `(FR-011)` hybrid lookup | "Hybrid `QualifiedName`-keyed lookup with a parallel predicate-based list for non-matching pass-through in constant time." |
 | `Reserved for 5.3+` | (delete entirely — when the feature ships, add the prose then) |
 
+## Test class naming examples
+
+| Bad (encodes spec IDs) | Good (describes behavior) |
+|---|---|
+| `EventTransformationFr001Test` | `StructuralTransformationTest` |
+| `EventTransformerChainFr005Test` | `NonMatchingPassThroughTest` |
+| `TransformingEventStoreFr012Test` | `ReadContextConsistencyTest` |
+| `EventTransformerChainFr018Test` | `OutputIdentityCheckTest` |
+| `EventTransformerChainFr004LockTest` | `ChainLockingTest` |
+
 ## Body comments — same principle, slightly relaxed during scaffolding
 
 Body comments (inside method bodies, not Javadoc) MAY transiently reference task IDs while a feature is being phased in (e.g. `// Foundational shell: body lands with T026`). These references MUST be removed when the corresponding task lands.
@@ -41,7 +56,9 @@ Javadoc is included in published JARs (via `-sources` artifacts, IDE tooltips, g
 Before committing any new Javadoc or modifying existing Javadoc, grep the touched files for:
 
 ```
-FR-[0-9]\|US[0-9]\|^.*T0[0-9]\{2\}\|5\.3+\|future release\|reserved for a future\|deferred\|plan\.md\|spec\.md\|Forward-compat invariant
+FR-[0-9]\|Fr[0-9]\{2,\}\|US[0-9]\|Us[0-9]\{2,\}\|^.*T0[0-9]\{2\}\|5\.3+\|future release\|reserved for a future\|deferred\|plan\.md\|spec\.md\|Forward-compat invariant
 ```
+
+The `Fr[0-9]\{2,\}` and `Us[0-9]\{2,\}` patterns catch dropped-dash variants snuck into class / file names (e.g. `EventTransformationFr001Test`).
 
 Any hit is a candidate for removal or rephrasing. Body-comment task IDs are acceptable as transient scaffolding only.
