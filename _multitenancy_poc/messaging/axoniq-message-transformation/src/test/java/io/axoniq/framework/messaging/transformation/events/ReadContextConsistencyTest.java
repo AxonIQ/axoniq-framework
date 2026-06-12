@@ -74,7 +74,7 @@ final class ReadContextConsistencyTest {
 
     @Test
     void allThreeReadContextsObserveTheSameTransformedEventAndForwardTheConditionUnchanged() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
 

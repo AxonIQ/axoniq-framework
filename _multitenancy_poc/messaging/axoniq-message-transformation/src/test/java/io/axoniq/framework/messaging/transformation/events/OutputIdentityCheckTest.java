@@ -74,7 +74,7 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mismatchBetweenDeclaredToAndResolvedPojoMessageTypeRaises() {
-            EventTransformer wrongTypeProducingTransformer = EventTransformation.from(V1)
+            EventTransformer wrongTypeProducingTransformer = EventTransformer.from(V1)
                                                                                 .to(V2)
                                                                                 .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
             EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
@@ -95,7 +95,7 @@ final class OutputIdentityCheckTest {
 
         @Test
         void matchBetweenDeclaredToAndResolvedPojoMessageTypePassesSilently() {
-            EventTransformer matchingPojoTransformer = EventTransformation.from(V1)
+            EventTransformer matchingPojoTransformer = EventTransformer.from(V1)
                                                                           .to(V2)
                                                                           .transform(JsonNode.class, (in, ctx) -> new SamplePojoV2());
             EventTransformerChain chain = EventTransformerChain.builder().register(matchingPojoTransformer).build();
@@ -125,7 +125,7 @@ final class OutputIdentityCheckTest {
 
         @Test
         void jsonNodeOutputSkipsIdentityCheckSilently() {
-            EventTransformer jsonNodeProducingTransformer = EventTransformation.from(V1)
+            EventTransformer jsonNodeProducingTransformer = EventTransformer.from(V1)
                                                                                .to(V2)
                                                                                .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
             EventTransformerChain chain = EventTransformerChain.builder().register(jsonNodeProducingTransformer).build();
@@ -140,7 +140,7 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mapOutputSkipsIdentityCheckSilently() {
-            EventTransformer mapProducingTransformer = EventTransformation.from(V1)
+            EventTransformer mapProducingTransformer = EventTransformer.from(V1)
                                                                           .to(V2)
                                                                           .transform(JsonNode.class, (in, ctx) -> {
                                                                               Map<String, Object> result = new HashMap<>();
@@ -163,7 +163,7 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mismatchErrorIncludesStreamPositionWhenTrackingTokenIsOnTheEntryContext() {
-            EventTransformer wrongTypeProducingTransformer = EventTransformation.from(V1)
+            EventTransformer wrongTypeProducingTransformer = EventTransformer.from(V1)
                                                                                 .to(V2)
                                                                                 .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
             EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
@@ -188,7 +188,7 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mismatchErrorOmitsStreamPositionGracefullyWhenNoTrackingTokenIsAvailable() {
-            EventTransformer wrongTypeProducingTransformer = EventTransformation.from(V1)
+            EventTransformer wrongTypeProducingTransformer = EventTransformer.from(V1)
                                                                                 .to(V2)
                                                                                 .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
             EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();

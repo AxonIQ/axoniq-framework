@@ -49,7 +49,7 @@ final class ChainContextPropagationTest {
     @Test
     void chainForwardsTheActiveProcessingContextToTheUsersMapper() {
         AtomicReference<@Nullable ProcessingContext> seenContext = new AtomicReference<>();
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
                 .transform(JsonNode.class, (in, ctx) -> {
                     seenContext.set(ctx);
                     return in.deepCopy();

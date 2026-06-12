@@ -21,7 +21,6 @@ package io.axoniq.framework.messaging.transformation;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -30,34 +29,14 @@ import org.jspecify.annotations.Nullable;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Framework-supplied bundle of the per-invocation services a
- * {@link MessageTransformer#transform(org.axonframework.messaging.core.Message, TransformationContext)}
- * needs to do its work. The transformation chain builds one instance per source message and passes
- * it, unchanged, to every transformer applied to that message.
+ * Immutable per-invocation context provided to a {@link MessageTransformer}.
  * <p>
- * You receive a {@code TransformationContext}; you do not build one. It exposes:
- * <ul>
- *     <li>{@link #entryContext()}: the read-stream entry's {@link Context}, carrying the stream
- *     position when the storage engine attached a tracking token; useful for diagnostics.</li>
- *     <li>{@link #processingContext()}: the active {@link ProcessingContext}, or {@code null} on
- *     read paths (such as tracking-processor reads) where the caller supplies none. Forwarded to
- *     the transformer's payload mapper.</li>
- *     <li>{@link #converter()}: the {@link MessageConverter} used to convert a stored payload into
- *     the type a transformer declared as its input.</li>
- *     <li>{@link #messageTypeResolver()}: the {@link MessageTypeResolver} used to resolve a mapper
- *     output's class to a {@link MessageType} for the output-identity check.</li>
- * </ul>
- * <p>
- * Marked {@link Internal}: this is framework plumbing the chain assembles per source message.
- * Application code never constructs it and never invokes the {@code transform} method it is
- * passed to, so its component set may change between minor or patch releases.
+ * Contains the services required to interpret and convert the input message during transformation.
  *
- * @param entryContext        the read-stream entry's {@link Context}, carrying stream position when
- *                            available
- * @param processingContext   the active {@link ProcessingContext}, or {@code null} when the read
- *                            path supplies none
- * @param converter           the {@link MessageConverter} for stored-payload conversion
- * @param messageTypeResolver the {@link MessageTypeResolver} for the output-identity check
+ * @param entryContext        the read-stream entry context associated with the source message, never {@code null}
+ * @param processingContext   optional processing context, can be {@code null}
+ * @param converter           a message converter, never {@code null}
+ * @param messageTypeResolver resolves message types for transformed output validation, never {@code null}
  * @author Laura Devriendt
  * @since 5.2.0
  */
@@ -68,18 +47,6 @@ public record TransformationContext(
         MessageConverter converter,
         MessageTypeResolver messageTypeResolver) {
 
-    /**
-     * Validates that the framework-supplied non-null components are present. The
-     * {@link #processingContext()} is intentionally nullable: read paths such as
-     * tracking-processor reads supply none.
-     *
-     * @param entryContext        the read-stream entry's {@link Context}, carrying stream position when
-     *                            available
-     * @param processingContext   the active {@link ProcessingContext}, or {@code null} when the read
-     *                            path supplies none
-     * @param converter           the {@link MessageConverter} for stored-payload conversion
-     * @param messageTypeResolver the {@link MessageTypeResolver} for the output-identity check
-     */
     public TransformationContext {
         requireNonNull(entryContext, "entryContext");
         requireNonNull(converter, "converter");

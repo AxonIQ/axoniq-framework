@@ -51,7 +51,7 @@ final class EnvelopePreservationTest {
 
     @Test
     void outputMessageCarriesSameIdentifierAsInputAfterOneToOneTransformation() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
@@ -66,7 +66,7 @@ final class EnvelopePreservationTest {
 
     @Test
     void metadataFlowsForwardUnchanged() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
@@ -82,7 +82,7 @@ final class EnvelopePreservationTest {
 
     @Test
     void outputCarriesSameTimestampAsInputAfterOneToOneTransformation() {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();

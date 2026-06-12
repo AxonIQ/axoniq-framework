@@ -49,7 +49,7 @@ final class NonMatchingPassThroughTest {
 
     @Test
     void eventWhoseTypeMatchesNoRegisteredTransformerPassesThroughUnchanged() {
-        EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)
+        EventTransformer registeredTransformer = EventTransformer.from(REGISTERED)
                                                                     .to(new MessageType("com.example.CourseCreated", "2.0.0"))
                                                                     .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
@@ -65,7 +65,7 @@ final class NonMatchingPassThroughTest {
     @Test
     void noPayloadConversionHappensForNonMatchingEvents() {
         AtomicInteger mapperInvocations = new AtomicInteger();
-        EventTransformer registeredTransformer = EventTransformation.from(REGISTERED)
+        EventTransformer registeredTransformer = EventTransformer.from(REGISTERED)
                                                                     .to(new MessageType("com.example.CourseCreated", "2.0.0"))
                                                                     .transform(JsonNode.class, (in, ctx) -> {
                                                                         mapperInvocations.incrementAndGet();

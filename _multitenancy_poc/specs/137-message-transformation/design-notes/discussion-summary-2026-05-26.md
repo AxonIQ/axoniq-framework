@@ -80,7 +80,7 @@ The `transform(Class<T>, BiFunction)` step is the lambda form -- but there shoul
 
 ## 5. References
 
-- Pre-meeting cheat sheet: [discussion-26-05-26.md](discussion-26-05-26.md)
+- Pre-meeting cheat sheet: [discussion-26-05-26.md](general-design-discussion.md)
 - Spec: [spec.md](../spec.md)
 - Plan: [plan.md](../plan.md)
 - Contracts: [public-api.md](../contracts/public-api.md), [spi-base.md](../contracts/spi-base.md), [spi-events.md](../contracts/spi-events.md), [spi-commands-queries.md](../contracts/spi-commands-queries.md)

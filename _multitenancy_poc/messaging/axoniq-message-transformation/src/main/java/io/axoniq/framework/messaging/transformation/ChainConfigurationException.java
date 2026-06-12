@@ -20,9 +20,7 @@
 package io.axoniq.framework.messaging.transformation;
 
 /**
- * Thrown by {@code EventTransformerChain.Builder} on chain misconfiguration. The exception message identifies the
- * specific cause. Exceptions thrown from inside a transformer's mapper propagate to the caller directly; this type
- * covers configuration errors detected by the framework.
+ * Thrown when the framework detects an event transformer chain misconfiguration.
  *
  * @author Laura Devriendt
  * @since 5.2.0

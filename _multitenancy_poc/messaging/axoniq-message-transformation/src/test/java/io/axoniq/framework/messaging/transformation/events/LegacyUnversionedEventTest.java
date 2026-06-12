@@ -52,7 +52,7 @@ final class LegacyUnversionedEventTest {
 
     @Test
     void unversionedEventMatchesTransformationRegisteredForDefaultVersion() {
-        EventTransformer defaultVersionToV2Transformer = EventTransformation.from(DEFAULT_VERSION)
+        EventTransformer defaultVersionToV2Transformer = EventTransformer.from(DEFAULT_VERSION)
                                                                             .to(V2)
                                                                             .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(defaultVersionToV2Transformer).build();

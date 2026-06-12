@@ -81,7 +81,7 @@ final class ChainConcurrencyTest {
     }
 
     private static void runConcurrencyScenario(@Nullable ProcessingContext context) {
-        EventTransformer v1ToV2Transformer = EventTransformation.from(V1).to(V2)
+        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
         EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
         ObjectNode stablePayload = JsonNodeFactory.instance.objectNode().put("k", "v");

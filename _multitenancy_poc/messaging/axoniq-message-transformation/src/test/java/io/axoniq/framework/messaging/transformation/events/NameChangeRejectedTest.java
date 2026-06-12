@@ -58,7 +58,7 @@ final class NameChangeRejectedTest {
         @Test
         void differentQualifiedNameRejectedAtRegistration() {
             // given
-            EventTransformer renameTransformer = EventTransformation.from(SAMPLE_V1)
+            EventTransformer renameTransformer = EventTransformer.from(SAMPLE_V1)
                                                                     .to(RENAMED)
                                                                     .transform(String.class, (in, ctx) -> in);
             EventTransformerChain.Builder builder = EventTransformerChain.builder();
@@ -74,7 +74,7 @@ final class NameChangeRejectedTest {
         @Test
         void sameQualifiedNameVersionBumpApplied() {
             // given
-            EventTransformer structuralUpcast = EventTransformation.from(SAMPLE_V1)
+            EventTransformer structuralUpcast = EventTransformer.from(SAMPLE_V1)
                                                                    .to(SAMPLE_V2)
                                                                    .transform(String.class, (in, ctx) -> in + "-upcasted");
             EventTransformerChain chain = EventTransformerChain.builder()
@@ -100,7 +100,7 @@ final class NameChangeRejectedTest {
         void differentQualifiedNameRejectedAtReadTime() {
             // given: registration is allowed because a predicate's matched source name is
             // not known statically; the rename is only detectable once an event matches.
-            EventTransformer renameTransformer = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+            EventTransformer renameTransformer = EventTransformer.from(type -> type.equals(SAMPLE_V1))
                                                                     .to(RENAMED)
                                                                     .transform(String.class, (in, ctx) -> in);
             EventTransformerChain chain = EventTransformerChain.builder()
@@ -123,7 +123,7 @@ final class NameChangeRejectedTest {
         @Test
         void sameQualifiedNameVersionBumpApplied() {
             // given
-            EventTransformer structuralUpcast = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+            EventTransformer structuralUpcast = EventTransformer.from(type -> type.equals(SAMPLE_V1))
                                                                    .to(SAMPLE_V2)
                                                                    .transform(String.class, (in, ctx) -> in + "-upcasted");
             EventTransformerChain chain = EventTransformerChain.builder()

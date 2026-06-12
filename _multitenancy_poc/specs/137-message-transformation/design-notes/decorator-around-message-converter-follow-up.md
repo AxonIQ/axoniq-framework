@@ -1,6 +1,6 @@
 # Upcasting Integration: Plan C (Single-Pass)
 
-**Status**: For design meeting, 2026-05-21 -- alternative to the two-phase model in `discussion-points.md`.
+**Status**: For design meeting, 2026-05-21 -- alternative to the two-phase model in `decorator-around-message-converter.md`.
 
 ## The core problem (unchanged)
 

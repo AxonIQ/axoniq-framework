@@ -66,7 +66,7 @@ final class ChainBuildLogTest {
 
     @Test
     void buildEmitsExactlyOneInfoLineNamingEachRegisteredTransformer() {
-        EventTransformer v1ToV2 = EventTransformation.from(V1).to(V2)
+        EventTransformer v1ToV2 = EventTransformer.from(V1).to(V2)
                                                      .transform(JsonNode.class, (in, ctx) -> in);
 
         EventTransformerChain.builder().register(v1ToV2).build();
@@ -100,7 +100,7 @@ final class ChainBuildLogTest {
     @Test
     void buildEmitsNoLogWhenInfoIsDisabled() {
         chainLogger.setLevel(Level.WARN);
-        EventTransformer v1ToV2 = EventTransformation.from(V1).to(V2)
+        EventTransformer v1ToV2 = EventTransformer.from(V1).to(V2)
                                                      .transform(JsonNode.class, (in, ctx) -> in);
 
         EventTransformerChain.builder().register(v1ToV2).build();

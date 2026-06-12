@@ -53,7 +53,7 @@ final class PredicateBasedMatchingTest {
 
     @Test
     void everyEventWhoseTypeSatisfiesThePredicateGetsTransformed() {
-        EventTransformer oneToThreeRangeTransformer = EventTransformation.from(
+        EventTransformer oneToThreeRangeTransformer = EventTransformer.from(
                 mt -> "com.example.CourseCreated".equals(mt.qualifiedName().name()) && mt.version().startsWith("1.")
         ).to(V3).transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(oneToThreeRangeTransformer).build();
@@ -72,7 +72,7 @@ final class PredicateBasedMatchingTest {
 
     @Test
     void eventWhoseTypeFailsThePredicatePassesThroughUnchanged() {
-        EventTransformer onlyHeartbeatsTransformer = EventTransformation.from(mt -> mt.qualifiedName().name().equals(UNRELATED.qualifiedName().name()))
+        EventTransformer onlyHeartbeatsTransformer = EventTransformer.from(mt -> mt.qualifiedName().name().equals(UNRELATED.qualifiedName().name()))
                                                                          .to(V3)
                                                                          .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(onlyHeartbeatsTransformer).build();

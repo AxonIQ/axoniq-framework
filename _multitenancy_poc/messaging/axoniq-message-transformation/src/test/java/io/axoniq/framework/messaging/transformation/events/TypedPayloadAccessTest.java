@@ -64,7 +64,7 @@ final class TypedPayloadAccessTest {
 
         @Test
         void fastPathSkipsConverterWhenPayloadIsAlreadyOfDeclaredInputClass() {
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(JsonNode.class, (jsonNode, ctx) -> {
                                                                         ObjectNode v2 = JsonNodeFactory.instance.objectNode();
@@ -92,7 +92,7 @@ final class TypedPayloadAccessTest {
             // The stored payload is a raw JSON String; the transformer declares JsonNode.class.
             // The framework must invoke MessageConverter.convertPayload(message, JsonNode.class)
             // before invoking the mapper.
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(JsonNode.class, (jsonNode, ctx) -> {
                                                                         ObjectNode v2 = JsonNodeFactory.instance.objectNode();
@@ -126,7 +126,7 @@ final class TypedPayloadAccessTest {
         void fastPathSkipsConverterWhenPayloadIsAlreadyAMap() {
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(mapType, (payload, ctx) -> {
                                                                         Map<String, Object> result = new HashMap<>(payload);
@@ -157,7 +157,7 @@ final class TypedPayloadAccessTest {
             // the generic parameters survive (TypeReference preserves the parameterized type at runtime).
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(mapType, (payload, ctx) -> {
                                                                         Map<String, Object> result = new HashMap<>(payload);
@@ -193,7 +193,7 @@ final class TypedPayloadAccessTest {
         @Test
         void classOverloadMapsWithoutAProcessingContextAndStillInvokesTheConverter() {
             // given a transformation registered with a context-free Class<T> mapper
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(JsonNode.class, jsonNode -> {
                                                                         ObjectNode v2 = JsonNodeFactory.instance.objectNode();
@@ -226,7 +226,7 @@ final class TypedPayloadAccessTest {
             // given a transformation registered with a context-free TypeReference<T> mapper
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(mapType, payload -> {
                                                                         Map<String, Object> result = new HashMap<>(payload);
@@ -263,7 +263,7 @@ final class TypedPayloadAccessTest {
         void converterReturningNullSurfacesAsIllegalStateExceptionIdentifyingTheEvent() {
             // When the converter resolves the stored payload to null (malformed / missing
             // persisted bytes), the chain MUST raise a clear error pinpointing the event.
-            EventTransformer v1ToV2Transformer = EventTransformation.from(V1)
+            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
                                                                     .to(V2)
                                                                     .transform(JsonNode.class, (jsonNode, ctx) -> jsonNode);
             EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();

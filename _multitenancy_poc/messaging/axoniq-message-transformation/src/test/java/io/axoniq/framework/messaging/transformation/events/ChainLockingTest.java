@@ -27,9 +27,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Startup-only registration lifecycle: the {@code Builder} is locked once
- * {@code build()} is called; subsequent {@code register(...)} attempts throw
- * {@link ChainConfigurationException}.
+ * Registration is startup-only: once {@code build()} has been called, further {@code register(...)}
+ * calls are rejected with a {@link ChainConfigurationException}.
  */
 final class ChainLockingTest {
 
@@ -41,10 +40,11 @@ final class ChainLockingTest {
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
         builder.build();
 
-        EventTransformer additionalTransformer = EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformer additionalTransformer =
+                EventTransformer.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in);
 
         assertThatThrownBy(() -> builder.register(additionalTransformer))
                 .isInstanceOf(ChainConfigurationException.class)
-                .hasMessageContaining("locked");
+                .hasMessageContaining("build");
     }
 }

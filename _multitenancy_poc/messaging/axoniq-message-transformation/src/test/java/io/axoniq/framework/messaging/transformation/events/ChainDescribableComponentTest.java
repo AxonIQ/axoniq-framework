@@ -50,12 +50,12 @@ final class ChainDescribableComponentTest {
     private static final MessageType STUDENT_V2 = new MessageType("com.example.StudentRegistered", "2.0.0");
 
     @Test
-    void describeToExposesTransformationCountConcreteIndexPredicateListAndMaxIterations() {
-        EventTransformer concreteCourse = EventTransformation.from(COURSE_V1).to(COURSE_V2)
+    void describeToExposesTransformerCountConcreteAndPredicateTransformersAndMaxIterations() {
+        EventTransformer concreteCourse = EventTransformer.from(COURSE_V1).to(COURSE_V2)
                                                               .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformer concreteStudent = EventTransformation.from(STUDENT_V1).to(STUDENT_V2)
+        EventTransformer concreteStudent = EventTransformer.from(STUDENT_V1).to(STUDENT_V2)
                                                                .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformer predicateBased = EventTransformation.from(mt -> mt.version().startsWith("1."))
+        EventTransformer predicateBased = EventTransformer.from(mt -> mt.version().startsWith("1."))
                                                               .to(new MessageType("com.example.AnyV2", "2.0.0"))
                                                               .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder()
@@ -68,11 +68,11 @@ final class ChainDescribableComponentTest {
         ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
         chain.describeTo(descriptor);
 
-        verify(descriptor).describeProperty("transformationCount", 3);
+        verify(descriptor).describeProperty("transformerCount", 3);
         verify(descriptor).describeProperty("maxIterationsPerEvent", 42);
 
         ArgumentCaptor<Map<?, ?>> concreteCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("concreteFromIndex"), concreteCaptor.capture());
+        verify(descriptor).describeProperty(eq("concreteTransformers"), concreteCaptor.capture());
         assertThat(concreteCaptor.getValue())
                 .asInstanceOf(MAP)
                 .containsKeys("com.example.CourseCreated", "com.example.StudentRegistered");
@@ -88,7 +88,7 @@ final class ChainDescribableComponentTest {
                 .contains(concreteStudent.toString());
 
         ArgumentCaptor<Collection<?>> predicateCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("predicateFromList"), predicateCaptor.capture());
+        verify(descriptor).describeProperty(eq("predicateTransformers"), predicateCaptor.capture());
         assertThat(predicateCaptor.getValue())
                 .asInstanceOf(LIST)
                 .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
@@ -102,14 +102,14 @@ final class ChainDescribableComponentTest {
         ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
         chain.describeTo(descriptor);
 
-        verify(descriptor).describeProperty("transformationCount", 0);
+        verify(descriptor).describeProperty("transformerCount", 0);
 
         ArgumentCaptor<Map<?, ?>> concreteCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("concreteFromIndex"), concreteCaptor.capture());
+        verify(descriptor).describeProperty(eq("concreteTransformers"), concreteCaptor.capture());
         assertThat(concreteCaptor.getValue()).asInstanceOf(MAP).isEmpty();
 
         ArgumentCaptor<Collection<?>> predicateCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("predicateFromList"), predicateCaptor.capture());
+        verify(descriptor).describeProperty(eq("predicateTransformers"), predicateCaptor.capture());
         assertThat(predicateCaptor.getValue()).asInstanceOf(LIST).isEqualTo(List.of());
     }
 }

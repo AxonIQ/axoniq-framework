@@ -24,36 +24,26 @@ import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 
 /**
- * Base type for message transformations, generic over the {@link Message} subtype {@code M}
- * so events, commands, and queries share a single handle type. The element type {@code M} is
- * preserved: a transformation does not turn one message subtype into another.
+ * Transforms messages of type {@code M}.
  * <p>
- * This is a handle, not an entry point: users never implement it or invoke it directly. They
- * obtain instances from a transformation factory (for events, the
- * {@code io.axoniq.framework.messaging.transformation.events.EventTransformation} factory) and
- * register them with the matching chain, which calls {@link #transform(Message, TransformationContext)}
- * once it has matched a message against this transformation.
+ * A transformer accepts a {@link Message} of type {@code M} and produces zero or more transformed messages of the
+ * same type.
  *
- * @param <M> the {@link Message} subtype this transformation accepts and emits
+ * @param <M> the message type accepted as input and emitted as output
  * @author Laura Devriendt
  * @since 5.2.0
  */
 public interface MessageTransformer<M extends Message> {
 
     /**
-     * Transforms a matched {@code message} into its new form, returning the result as a
-     * {@link MessageStream}. The chain calls this only after the message matches this
-     * transformation's {@code from}; the returned stream's element type is preserved as {@code M},
-     * so a transformation never turns one message subtype into another. A 1:1 transformation emits
-     * exactly one element.
-     * <p>
-     * Marked {@link Internal}: this is the framework's execution hook, driven by the transformation
-     * chain. Application code holds and registers transformers but never invokes this method.
+     * Transforms a message into zero or more messages of the same type. If the transformation fails, the returned
+     * stream completes with the error.
      *
-     * @param message the matched input message
-     * @param context the framework-supplied {@link TransformationContext} carrying the active
-     *                processing context and the converter and resolver the transformation needs
-     * @return a stream of the transformed message(s)
+     * @param message the input message, cannot be {@code null}
+     * @param context the transformation context, cannot be {@code null}
+     * @return a stream of transformed messages, or a stream completed with an error if the transformation failed,
+     * never {@code null}
+     * @throws NullPointerException if {@code message} or {@code context} is {@code null}
      */
     @Internal
     MessageStream<? extends M> transform(M message, TransformationContext context);
