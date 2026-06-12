@@ -60,6 +60,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.function.BiFunction;
@@ -143,7 +144,7 @@ public final class EventTransformation {
          * @return the resulting {@link EventTransformer}
          */
         public <T, U> EventTransformer transform(Class<T> inputType,
-                                                  BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
+                                                  BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
 
         /**
          * Generic-type overload. Use this when {@code inputType} carries type parameters
@@ -163,7 +164,7 @@ public final class EventTransformation {
          * @return the resulting {@link EventTransformer}
          */
         public <T, U> EventTransformer transform(org.axonframework.common.TypeReference<T> inputType,
-                                                  BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
+                                                  BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 
     /* US2 -- pure rename (FR-002, SHOULD in 5.2.0) --------------------------------- */
@@ -207,7 +208,7 @@ public final class EventTransformation {
          * @return the resulting {@link EventTransformer}
          */
         public <T> EventTransformer transform(Class<T> inputType,
-                                              BiFunction<T, ProcessingContext, List<TransformedEvent>> replacementMapper) { /* ... */ }
+                                              BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> replacementMapper) { /* ... */ }
     }
 
     /* US4 -- drop (FR-003, FR-014; MAY in 5.2.0; method name reserved per
@@ -239,6 +240,7 @@ package io.axoniq.framework.messaging.transformation.commandhandling;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -294,7 +296,7 @@ public final class CommandTransformation {
          * @return the resulting {@link CommandTransformer}
          */
         public <T, U> CommandTransformer transform(Class<T> inputType,
-                                                    BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
+                                                    BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 }
 ```
@@ -305,6 +307,7 @@ package io.axoniq.framework.messaging.transformation.queryhandling;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -359,7 +362,7 @@ public final class QueryTransformation {
          * @return the resulting {@link QueryTransformer}
          */
         public <T, U> QueryTransformer transform(Class<T> inputType,
-                                                  BiFunction<T, ProcessingContext, U> payloadMapper) { /* ... */ }
+                                                  BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 }
 ```
