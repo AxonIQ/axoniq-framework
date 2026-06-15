@@ -1,0 +1,115 @@
+name: Publish API Docs
+
+# Builds the unified Javadoc site (AxonIQ Framework + Axon Framework, see the "apidocs" profile
+# in the root pom.xml) and publishes it to the public documentation bucket.
+#
+# The site is always built from a release tag, never from a branch, so it documents exactly the
+# released sources. It is published under the major.minor derived from the tag (for example
+# axoniq-5.1.1 -> 5.1). The "latest" folder is updated automatically when the built tag is the
+# highest release tag, so a patch release on an older line never moves "latest" backwards. A manual
+# run can also force the "latest" update via the update_latest input.
+#
+# Triggers:
+#   - push of a final release tag "axoniq-X.Y.Z" (release-candidate tags such as
+#     axoniq-5.1.0-RC1 are intentionally NOT matched);
+#   - manual run, supplying the tag to build.
+#
+# Note: a tag pushed by the maven-release-plugin triggers this workflow only when the release is
+# cut locally or with a PAT. Tags pushed from CI using the default GITHUB_TOKEN do not start new
+# workflow runs; in that case start this workflow manually with the tag.
+#
+# Required configuration (GitHub repository or organization level):
+#   secrets.GCP_SA_KEY  - JSON key of a Google service account that has object read/write/delete
+#                         on gs://axoniq-static-resources (for example roles/storage.objectAdmin in
+#                         project axoniq-platform).
+#
+# A keyless alternative is Workload Identity Federation: drop GCP_SA_KEY, add the
+# "id-token: write" permission, and configure google-github-actions/auth with
+# "workload_identity_provider" and "service_account" instead of "credentials_json".
+
+on:
+  push:
+    tags:
+      - 'axoniq-[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. axoniq-5.1.1)"
+        required: true
+      update_latest:
+        description: "Also mirror the generated docs to apidocs/latest"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish unified Javadoc
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOCS_BUCKET: gs://axoniq-static-resources/apidocs
+    steps:
+      - name: Resolve target tag
+        id: target
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          case "$TAG" in
+            axoniq-*) ;;
+            *) echo "Unexpected tag '$TAG'; expected axoniq-X.Y.Z" >&2; exit 1 ;;
+          esac
+          VERSION="${TAG#axoniq-}"
+          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$MAJOR_MINOR" >> "$GITHUB_OUTPUT"
+          echo "Building $TAG -> $DOCS_BUCKET/$MAJOR_MINOR"
+
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.target.outputs.tag }}
+          fetch-depth: 0   # fetch all tags so the highest release can be determined
+
+      - name: Determine whether this is the latest release
+        id: latest
+        run: |
+          HIGHEST=$(git tag --list 'axoniq-*' \
+            | sed -n 's/^axoniq-\([0-9]\+\.[0-9]\+\.[0-9]\+\)$/\1/p' \
+            | sort -V | tail -1)
+          if [ "${{ steps.target.outputs.version }}" = "$HIGHEST" ]; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Built ${{ steps.target.outputs.version }}; highest release is $HIGHEST"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5.2.0
+        with:
+          distribution: 'zulu'
+          java-version: 21
+          cache: "maven"
+
+      - name: Build unified Javadoc
+        run: ./mvnw -B -U -ntp -Dstyle.color=always -Papidocs -DskipTests clean javadoc:aggregate
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Publish to versioned folder
+        run: |
+          gsutil -m rsync -d -r target/reports/apidocs \
+            "$DOCS_BUCKET/${{ steps.target.outputs.major_minor }}"
+
+      - name: Mirror to latest
+        if: ${{ steps.latest.outputs.is_latest == 'true' || (github.event_name == 'workflow_dispatch' && inputs.update_latest) }}
+        run: |
+          gsutil -m rsync -d -r target/reports/apidocs "$DOCS_BUCKET/latest"
