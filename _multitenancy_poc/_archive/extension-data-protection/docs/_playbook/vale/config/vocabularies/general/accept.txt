@@ -1,9 +1,0 @@
-[Bb]ackpressure
-[Cc]reational
-[Ee]nqueued
-[Ii]dempotency
-[Ii]dempotent
-[Oo]nwards?
-[Ss]plitted
-[Ss]treamable
-[Vv]alidator
