@@ -1,2 +1,0 @@
-Add-Exports jdk.crypto.cryptoki/sun.security.pkcs11 jdk.crypto.cryptoki/sun.security.pkcs11.wrapper java.base/sun.security.action java.base/sun.security.rsa
-Add-Opens java.base/java.security java.base/sun.security.util
