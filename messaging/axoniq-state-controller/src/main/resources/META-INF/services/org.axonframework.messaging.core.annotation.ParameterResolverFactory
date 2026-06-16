@@ -1,1 +1,2 @@
 io.axoniq.framework.statecontroller.decisions.DecisionContextParameterResolverFactory
+io.axoniq.framework.statecontroller.history.HistoryParameterResolverFactory

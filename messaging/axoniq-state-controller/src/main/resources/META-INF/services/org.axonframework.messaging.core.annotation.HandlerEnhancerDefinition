@@ -1,1 +1,2 @@
 io.axoniq.framework.statecontroller.decisions.StateControllerHandlerEnhancer
+io.axoniq.framework.statecontroller.decisions.DecideHandlerEnhancer

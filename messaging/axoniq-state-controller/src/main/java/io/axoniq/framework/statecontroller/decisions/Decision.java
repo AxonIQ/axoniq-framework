@@ -128,6 +128,18 @@ public sealed interface Decision {
     }
 
     /**
+     * Returns an {@link Accept} decision carrying the given events, to be appended under the recorded DCB
+     * consistency boundary. Business-first alias for {@link #emit(Object...)}, reading as the intent does in a
+     * decision body; chain {@link Accept#returning(Object)} to attach a result for the command caller.
+     *
+     * @param events the events to append on success; the array and its elements must not be {@code null}
+     * @return an {@code Accept} decision over those events with no result
+     */
+    static Accept accept(Object... events) {
+        return emit(events);
+    }
+
+    /**
      * Returns a {@link Reject} decision with the given reason and no audit events. Chain
      * {@link Reject#recording(Object...)} on the result to attach an audit trail.
      *

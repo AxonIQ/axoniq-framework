@@ -21,6 +21,7 @@ package io.axoniq.framework.statecontroller.decisions;
 
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -71,4 +72,14 @@ public interface DecisionContext {
      * @return the lazily-loaded event stream for the composite tagged slice
      */
     EventStream scope(Map<String, ?> tags);
+
+    /**
+     * Returns the current time according to the framework-supplied clock.
+     * <p>
+     * Decision bodies should read the current time through this method rather than calling
+     * {@link Instant#now()} directly, so they stay deterministic under test.
+     *
+     * @return the current {@link Instant} as observed through the framework clock
+     */
+    Instant time();
 }
