@@ -25,12 +25,15 @@ import io.axoniq.framework.statecontroller.decisions.Decision;
 import io.axoniq.framework.statecontroller.history.History;
 import io.axoniq.framework.statecontroller.history.HistoryParameterResolverFactory;
 import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.eventsourcing.annotation.EventTag;
+import org.axonframework.eventsourcing.eventstore.AnnotationBasedTagResolver;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine.AppendTransaction;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.StorageEngineBackedEventStore;
+import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
@@ -95,7 +98,11 @@ class DecideAnnotationFlowTest {
     @BeforeEach
     void setUp() {
         engine = new InMemoryEventStorageEngine();
-        eventStore = new StorageEngineBackedEventStore(engine, new SimpleEventBus(), e -> Set.of());
+        // The event store tags appended events through the SAME TagResolver the coverage guard resolves from the
+        // processing context, mirroring the production wiring (EventSourcingConfigurationDefaults builds the store
+        // from the registered TagResolver). AnnotationBasedTagResolver reads @EventTag off each event's fields.
+        TagResolver tagResolver = new AnnotationBasedTagResolver();
+        eventStore = new StorageEngineBackedEventStore(engine, new SimpleEventBus(), tagResolver);
         MessageTypeResolver typeResolver = new ClassBasedMessageTypeResolver();
         processingContext = new StubProcessingContext(new ApplicationContext() {
             @SuppressWarnings("unchecked")
@@ -109,6 +116,9 @@ class DecideAnnotationFlowTest {
                 }
                 if (type == MessageTypeResolver.class) {
                     return (C) typeResolver;
+                }
+                if (type == TagResolver.class) {
+                    return (C) tagResolver;
                 }
                 throw new ComponentNotFoundException(type, name);
             }
@@ -297,7 +307,7 @@ class DecideAnnotationFlowTest {
 
     }
 
-    record AccountOpened(String accountId) {
+    record AccountOpened(@EventTag(key = "account") String accountId) {
 
     }
 

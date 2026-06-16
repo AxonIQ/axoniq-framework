@@ -333,7 +333,13 @@ public final class SourcedHistory implements History {
         if (loaded != null) {
             return loaded;
         }
-        SourcingCondition condition = SourcingCondition.conditionFor(buildCriteria());
+        EventCriteria criteria = buildCriteria();
+        // Record this scope's folded read surface so the decision-dispatch coverage guard can require every
+        // accepted event to be covered by at least one boundary the decision actually read. Recording happens
+        // once per scope (the early-return above guards re-materialization), and every materialized scope of a
+        // multi-scope decision contributes its own entry.
+        ReadBoundaries.record(processingContext, criteria);
+        SourcingCondition condition = SourcingCondition.conditionFor(criteria);
         loaded = FutureUtils.joinAndUnwrap(
                 eventStore.transaction(processingContext)
                           .source(condition)
