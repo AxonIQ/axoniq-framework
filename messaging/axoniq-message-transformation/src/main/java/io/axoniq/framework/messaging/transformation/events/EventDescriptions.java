@@ -26,7 +26,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 
 /**
  * Renders an {@link EventMessage} as a single-line description for diagnostic exception messages.
- * Shared by the transformation chain and its transformers so failure diagnostics identify an event
+ * Shared by the transformer chain and its transformations so failure diagnostics identify an event
  * identically wherever they are raised.
  *
  * @author Laura Devriendt

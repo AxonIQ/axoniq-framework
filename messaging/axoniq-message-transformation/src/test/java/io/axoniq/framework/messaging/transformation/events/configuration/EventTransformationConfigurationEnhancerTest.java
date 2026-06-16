@@ -20,8 +20,8 @@
 package io.axoniq.framework.messaging.transformation.events.configuration;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import io.axoniq.framework.messaging.transformation.events.TransformingEventStore;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -82,9 +82,9 @@ final class EventTransformationConfigurationEnhancerTest {
     @Test
     void transformingDecoratorWrapsEventStoreWhenChainIsRegistered() {
         EventStore delegate = Mockito.mock(EventStore.class);
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
         EventStore resolved = EventSourcingConfigurer.create()
                                                      .registerEventStore(config -> delegate)

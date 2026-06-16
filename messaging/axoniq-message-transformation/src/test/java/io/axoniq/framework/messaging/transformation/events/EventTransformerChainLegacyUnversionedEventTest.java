@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (AF5 default) and match transformations registered for that version. No special
  * API is required from the user.
  */
-final class LegacyUnversionedEventTest {
+final class EventTransformerChainLegacyUnversionedEventTest {
 
     private static final QualifiedName NAME = new QualifiedName("com.example.LegacyEvent");
     private static final MessageType DEFAULT_VERSION = new MessageType(NAME, "0.0.1");
@@ -52,10 +52,10 @@ final class LegacyUnversionedEventTest {
 
     @Test
     void unversionedEventMatchesTransformationRegisteredForDefaultVersion() {
-        EventTransformer defaultVersionToV2Transformer = EventTransformer.from(DEFAULT_VERSION)
+        EventTransformation defaultVersionToV2Transformation = EventTransformation.from(DEFAULT_VERSION)
                                                                             .to(V2)
                                                                             .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(defaultVersionToV2Transformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(defaultVersionToV2Transformation).build();
         EventMessage legacyUnversionedEvent = new GenericEventMessage(new MessageType(NAME), JsonNodeFactory.instance.objectNode());
 
         assertThat(legacyUnversionedEvent.type().version()).isEqualTo("0.0.1");

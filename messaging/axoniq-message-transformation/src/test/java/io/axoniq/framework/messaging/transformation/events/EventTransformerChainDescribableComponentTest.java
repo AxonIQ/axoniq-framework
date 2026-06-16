@@ -37,12 +37,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 /**
- * The chain exposes its populated structure (transformation count, concrete-from buckets,
+ * The chain exposes its populated structure (transformation count, exact-from buckets,
  * predicate-from list, max iterations) to framework diagnostics like
  * {@code AxonConfiguration.describe(...)} or Spring Boot Actuator endpoints. Operators rely
  * on these property names; the test pins them down.
  */
-final class ChainDescribableComponentTest {
+final class EventTransformerChainDescribableComponentTest {
 
     private static final MessageType COURSE_V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType COURSE_V2 = new MessageType("com.example.CourseCreated", "2.0.0");
@@ -50,45 +50,45 @@ final class ChainDescribableComponentTest {
     private static final MessageType STUDENT_V2 = new MessageType("com.example.StudentRegistered", "2.0.0");
 
     @Test
-    void describeToExposesTransformerCountConcreteAndPredicateTransformersAndMaxIterations() {
-        EventTransformer concreteCourse = EventTransformer.from(COURSE_V1).to(COURSE_V2)
+    void describeToExposesTransformationCountExactAndPredicateTransformationsAndMaxIterations() {
+        EventTransformation exactCourse = EventTransformation.from(COURSE_V1).to(COURSE_V2)
+                                                             .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformation exactStudent = EventTransformation.from(STUDENT_V1).to(STUDENT_V2)
                                                               .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformer concreteStudent = EventTransformer.from(STUDENT_V1).to(STUDENT_V2)
-                                                               .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformer predicateBased = EventTransformer.from(mt -> mt.version().startsWith("1."))
-                                                              .to(new MessageType("com.example.AnyV2", "2.0.0"))
-                                                              .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformation predicateBased = EventTransformation.from(mt -> mt.version().startsWith("1."))
+                                                                .to(new MessageType("com.example.AnyV2", "2.0.0"))
+                                                                .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder()
                                                            .maxIterationsPerEvent(42)
-                                                           .register(concreteCourse)
-                                                           .register(concreteStudent)
+                                                           .register(exactCourse)
+                                                           .register(exactStudent)
                                                            .register(predicateBased)
                                                            .build();
 
         ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
         chain.describeTo(descriptor);
 
-        verify(descriptor).describeProperty("transformerCount", 3);
+        verify(descriptor).describeProperty("transformationCount", 3);
         verify(descriptor).describeProperty("maxIterationsPerEvent", 42);
 
-        ArgumentCaptor<Map<?, ?>> concreteCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("concreteTransformers"), concreteCaptor.capture());
-        assertThat(concreteCaptor.getValue())
+        ArgumentCaptor<Map<?, ?>> exactCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("exactTransformations"), exactCaptor.capture());
+        assertThat(exactCaptor.getValue())
                 .asInstanceOf(MAP)
                 .containsKeys("com.example.CourseCreated", "com.example.StudentRegistered");
-        // Bucket entries must be the transformer's toString(), not empty strings or null:
-        // operators rely on these descriptions to know which transformer is in which bucket.
-        assertThat(concreteCaptor.getValue().get("com.example.CourseCreated"))
+        // Bucket entries must be the transformation's toString(), not empty strings or null:
+        // operators rely on these descriptions to know which transformation is in which bucket.
+        assertThat(exactCaptor.getValue().get("com.example.CourseCreated"))
                 .asInstanceOf(LIST)
                 .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
-                .contains(concreteCourse.toString());
-        assertThat(concreteCaptor.getValue().get("com.example.StudentRegistered"))
+                .contains(exactCourse.toString());
+        assertThat(exactCaptor.getValue().get("com.example.StudentRegistered"))
                 .asInstanceOf(LIST)
                 .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
-                .contains(concreteStudent.toString());
+                .contains(exactStudent.toString());
 
         ArgumentCaptor<Collection<?>> predicateCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("predicateTransformers"), predicateCaptor.capture());
+        verify(descriptor).describeProperty(eq("predicateTransformations"), predicateCaptor.capture());
         assertThat(predicateCaptor.getValue())
                 .asInstanceOf(LIST)
                 .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
@@ -102,14 +102,14 @@ final class ChainDescribableComponentTest {
         ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
         chain.describeTo(descriptor);
 
-        verify(descriptor).describeProperty("transformerCount", 0);
+        verify(descriptor).describeProperty("transformationCount", 0);
 
-        ArgumentCaptor<Map<?, ?>> concreteCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("concreteTransformers"), concreteCaptor.capture());
-        assertThat(concreteCaptor.getValue()).asInstanceOf(MAP).isEmpty();
+        ArgumentCaptor<Map<?, ?>> exactCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("exactTransformations"), exactCaptor.capture());
+        assertThat(exactCaptor.getValue()).asInstanceOf(MAP).isEmpty();
 
         ArgumentCaptor<Collection<?>> predicateCaptor = ArgumentCaptor.captor();
-        verify(descriptor).describeProperty(eq("predicateTransformers"), predicateCaptor.capture());
+        verify(descriptor).describeProperty(eq("predicateTransformations"), predicateCaptor.capture());
         assertThat(predicateCaptor.getValue()).asInstanceOf(LIST).isEqualTo(List.of());
     }
 }

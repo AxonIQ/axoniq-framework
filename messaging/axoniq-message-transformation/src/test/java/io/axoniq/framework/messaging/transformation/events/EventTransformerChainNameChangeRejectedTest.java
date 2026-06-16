@@ -38,33 +38,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Verifies the chain rejects a rename (a {@code QualifiedName} change) while still allowing
- * a same-name version bump. Renaming is unsupported because the transformation runs at read
- * time, after the storage engine has filtered the stream by the stored (old) name, so the
- * events a rename targets are never surfaced. A concrete {@code from} is rejected at
- * registration; a predicate {@code from} only at read time, as its matched name is known
- * per-event.
+ * Verifies the chain rejects a rename (a {@code QualifiedName} change) while still allowing a same-name version bump.
+ * Renaming is unsupported because the transformation runs at read time, after the storage engine has filtered the
+ * stream by the stored (old) name, so the events a rename targets are never surfaced. An exact {@code from} is rejected
+ * at registration; a predicate {@code from} only at read time, as its matched name is known per-event.
  */
-final class NameChangeRejectedTest {
+final class EventTransformerChainNameChangeRejectedTest {
 
     private static final MessageType SAMPLE_V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType SAMPLE_V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageType RENAMED = new MessageType("com.example.Renamed", "1.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
 
-    @Nested
-    final class ConcreteFrom {
+    @Nested final class ExactFrom {
 
         @Test
         void differentQualifiedNameRejectedAtRegistration() {
             // given
-            EventTransformer renameTransformer = EventTransformer.from(SAMPLE_V1)
-                                                                    .to(RENAMED)
-                                                                    .transform(String.class, (in, ctx) -> in);
+            EventTransformation renameTransformation = EventTransformation.from(SAMPLE_V1)
+                                                                          .to(RENAMED)
+                                                                          .transform(String.class, (in, ctx) -> in);
             EventTransformerChain.Builder builder = EventTransformerChain.builder();
 
             // when / then
-            assertThatThrownBy(() -> builder.register(renameTransformer))
+            assertThatThrownBy(() -> builder.register(renameTransformation))
                     .isInstanceOf(ChainConfigurationException.class)
                     .hasMessageContaining("renaming")
                     .hasMessageContaining(SAMPLE_V1.toString())
@@ -74,9 +71,10 @@ final class NameChangeRejectedTest {
         @Test
         void sameQualifiedNameVersionBumpApplied() {
             // given
-            EventTransformer structuralUpcast = EventTransformer.from(SAMPLE_V1)
-                                                                   .to(SAMPLE_V2)
-                                                                   .transform(String.class, (in, ctx) -> in + "-upcasted");
+            EventTransformation structuralUpcast = EventTransformation.from(SAMPLE_V1)
+                                                                      .to(SAMPLE_V2)
+                                                                      .transform(String.class,
+                                                                                 (in, ctx) -> in + "-upcasted");
             EventTransformerChain chain = EventTransformerChain.builder()
                                                                .register(structuralUpcast)
                                                                .build();
@@ -93,18 +91,17 @@ final class NameChangeRejectedTest {
         }
     }
 
-    @Nested
-    final class PredicateFrom {
+    @Nested final class PredicateFrom {
 
         @Test
         void differentQualifiedNameRejectedAtReadTime() {
             // given: registration is allowed because a predicate's matched source name is
             // not known statically; the rename is only detectable once an event matches.
-            EventTransformer renameTransformer = EventTransformer.from(type -> type.equals(SAMPLE_V1))
-                                                                    .to(RENAMED)
-                                                                    .transform(String.class, (in, ctx) -> in);
+            EventTransformation renameTransformation = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+                                                                          .to(RENAMED)
+                                                                          .transform(String.class, (in, ctx) -> in);
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(renameTransformer)
+                                                               .register(renameTransformation)
                                                                .build();
             EventMessage storedV1 = eventOf(SAMPLE_V1, "payload");
             MessageStream<EventMessage> transformed = chain.transform(
@@ -123,9 +120,10 @@ final class NameChangeRejectedTest {
         @Test
         void sameQualifiedNameVersionBumpApplied() {
             // given
-            EventTransformer structuralUpcast = EventTransformer.from(type -> type.equals(SAMPLE_V1))
-                                                                   .to(SAMPLE_V2)
-                                                                   .transform(String.class, (in, ctx) -> in + "-upcasted");
+            EventTransformation structuralUpcast = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+                                                                      .to(SAMPLE_V2)
+                                                                      .transform(String.class,
+                                                                                 (in, ctx) -> in + "-upcasted");
             EventTransformerChain chain = EventTransformerChain.builder()
                                                                .register(structuralUpcast)
                                                                .build();

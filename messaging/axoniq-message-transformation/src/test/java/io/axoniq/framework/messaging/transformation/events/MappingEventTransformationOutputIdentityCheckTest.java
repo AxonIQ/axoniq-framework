@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import io.axoniq.framework.messaging.transformation.StructuralAwareMessageTypeResolver;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.MessageStream;
@@ -55,7 +56,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *     <li>typed POJO mismatch -> raises {@link ChainConfigurationException};</li>
  *     <li>typed POJO match -> no exception;</li>
  *     <li>structural output ({@code JsonNode} / {@code Map} / raw bytes etc.) is
- *     short-circuited inside the chain via {@link StructuralPayloadTypes}, so the check
+ *     short-circuited by a {@link StructuralAwareMessageTypeResolver}, so the check
  *     is skipped even when the supplied resolver would otherwise resolve the carrier
  *     class to a mismatching {@link MessageType};</li>
  *     <li>diagnostic exception includes the stream position when the storage engine
@@ -63,7 +64,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *     no token is available (entity-load / DCB-source paths).</li>
  * </ul>
  */
-final class OutputIdentityCheckTest {
+final class MappingEventTransformationOutputIdentityCheckTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
@@ -74,10 +75,10 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mismatchBetweenDeclaredToAndResolvedPojoMessageTypeRaises() {
-            EventTransformer wrongTypeProducingTransformer = EventTransformer.from(V1)
+            EventTransformation wrongTypeProducingTransformation = EventTransformation.from(V1)
                                                                                 .to(V2)
                                                                                 .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
-            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
             // WrongTypePojo resolves to a MessageType other than the declared V2.
             MessageTypeResolver resolver = resolverFor(WrongTypePojo.class,
@@ -95,10 +96,10 @@ final class OutputIdentityCheckTest {
 
         @Test
         void matchBetweenDeclaredToAndResolvedPojoMessageTypePassesSilently() {
-            EventTransformer matchingPojoTransformer = EventTransformer.from(V1)
+            EventTransformation matchingPojoTransformation = EventTransformation.from(V1)
                                                                           .to(V2)
                                                                           .transform(JsonNode.class, (in, ctx) -> new SamplePojoV2());
-            EventTransformerChain chain = EventTransformerChain.builder().register(matchingPojoTransformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(matchingPojoTransformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
             // SamplePojoV2 resolves to exactly the declared V2.
             MessageTypeResolver resolver = resolverFor(SamplePojoV2.class, V2);
@@ -116,23 +117,24 @@ final class OutputIdentityCheckTest {
 
         /**
          * A would-mismatch resolver: it would resolve the structural carrier to a non-matching
-         * {@link MessageType} and therefore TRIP the identity check if it were consulted. The
-         * chain's structural-aware guard must short-circuit before this resolver is reached,
-         * so its presence here proves the guard works regardless of what the user supplies.
+         * {@link MessageType} and therefore TRIP the identity check if it were consulted. Wrapping
+         * it in a {@link StructuralAwareMessageTypeResolver} must short-circuit before this resolver
+         * is reached, so its presence here proves the guard works regardless of what the user supplies.
          */
         private final MessageTypeResolver wouldMismatchOnStructuralOutput =
                 payloadClass -> Optional.of(new MessageType(payloadClass.getName(), "0.0.1"));
 
         @Test
         void jsonNodeOutputSkipsIdentityCheckSilently() {
-            EventTransformer jsonNodeProducingTransformer = EventTransformer.from(V1)
+            EventTransformation jsonNodeProducingTransformation = EventTransformation.from(V1)
                                                                                .to(V2)
                                                                                .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
-            EventTransformerChain chain = EventTransformerChain.builder().register(jsonNodeProducingTransformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(jsonNodeProducingTransformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
             List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, wouldMismatchOnStructuralOutput));
+                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER,
+                    new StructuralAwareMessageTypeResolver(wouldMismatchOnStructuralOutput)));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
@@ -140,18 +142,19 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mapOutputSkipsIdentityCheckSilently() {
-            EventTransformer mapProducingTransformer = EventTransformer.from(V1)
+            EventTransformation mapProducingTransformation = EventTransformation.from(V1)
                                                                           .to(V2)
                                                                           .transform(JsonNode.class, (in, ctx) -> {
                                                                               Map<String, Object> result = new HashMap<>();
                                                                               result.put("key", "value");
                                                                               return result;
                                                                           });
-            EventTransformerChain chain = EventTransformerChain.builder().register(mapProducingTransformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(mapProducingTransformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
             List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, wouldMismatchOnStructuralOutput));
+                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER,
+                    new StructuralAwareMessageTypeResolver(wouldMismatchOnStructuralOutput)));
 
             assertThat(outputs).hasSize(1);
             assertThat(outputs.getFirst().type()).isEqualTo(V2);
@@ -163,10 +166,10 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mismatchErrorIncludesStreamPositionWhenTrackingTokenIsOnTheEntryContext() {
-            EventTransformer wrongTypeProducingTransformer = EventTransformer.from(V1)
+            EventTransformation wrongTypeProducingTransformation = EventTransformation.from(V1)
                                                                                 .to(V2)
                                                                                 .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
-            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
             MessageTypeResolver resolver = resolverFor(WrongTypePojo.class,
                                                        new MessageType(WrongTypePojo.class.getName(), "1.0.0"));
@@ -188,10 +191,10 @@ final class OutputIdentityCheckTest {
 
         @Test
         void mismatchErrorOmitsStreamPositionGracefullyWhenNoTrackingTokenIsAvailable() {
-            EventTransformer wrongTypeProducingTransformer = EventTransformer.from(V1)
+            EventTransformation wrongTypeProducingTransformation = EventTransformation.from(V1)
                                                                                 .to(V2)
                                                                                 .transform(JsonNode.class, (in, ctx) -> new WrongTypePojo());
-            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(wrongTypeProducingTransformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
             MessageTypeResolver resolver = resolverFor(WrongTypePojo.class,
                                                        new MessageType(WrongTypePojo.class.getName(), "1.0.0"));
@@ -207,40 +210,6 @@ final class OutputIdentityCheckTest {
                     .isInstanceOf(ChainConfigurationException.class)
                     .hasMessageContaining(storedV1Event.identifier())
                     .hasMessageNotContainingAny("position=");
-        }
-    }
-
-    @Nested
-    final class IdentityCheckBypass {
-
-        @Test
-        void transformerConstructedWithSkipIdentityCheckTrueDoesNotInvokeTheResolver() {
-            // Phase 4 rename builds a DefaultEventTransformer with skipIdentityCheck=true, so the
-            // framework-supplied output identity (the declared 'to') is not double-checked
-            // against a possibly annotated source POJO's class. Wire the constructor here to
-            // prove the flag actually bypasses the check.
-            EventTransformer renameLikeTransformer = new DefaultEventTransformer<>(
-                    new FromMatcher.Concrete(V1),
-                    V2,
-                    JsonNode.class,
-                    JsonNode.class,
-                    (in, ctx) -> new WrongTypePojo(),
-                    true);
-            EventTransformerChain chain = EventTransformerChain.builder().register(renameLikeTransformer).build();
-            EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
-            // A resolver that WOULD flag a mismatch, but the chain must not consult it.
-            MessageTypeResolver wouldMismatchResolver = payloadClass -> {
-                throw new AssertionError("MessageTypeResolver.resolve was unexpectedly invoked despite skipIdentityCheck=true");
-            };
-
-            List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, wouldMismatchResolver));
-
-            assertThat(outputs).hasSize(1);
-            assertThat(outputs.getFirst().type())
-                    .as("framework-set output identity must be the declared 'to' regardless of mapper output class")
-                    .isEqualTo(V2);
-            assertThat(outputs.getFirst().payload()).isInstanceOf(WrongTypePojo.class);
         }
     }
 

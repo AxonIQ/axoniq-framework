@@ -49,17 +49,18 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The chain is safe to invoke concurrently. Eight workers, started simultaneously via a
- * {@link CountDownLatch} starting gun, each runs ten thousand chain invocations against
- * the same shared chain instance and the same input event. Any divergence in output type
- * or payload content fails the test with the iteration index of the first failure.
+ * The chain is safe to invoke concurrently. Eight workers, started simultaneously via a {@link CountDownLatch} starting
+ * gun, each runs ten thousand chain invocations against the same shared chain instance and the same input event. Any
+ * divergence in output type or payload content fails the test with the iteration index of the first failure.
  */
-final class ChainConcurrencyTest {
+final class EventTransformerChainConcurrencyTest {
 
     private static final int THREADS = 8;
     private static final int ITERATIONS_PER_THREAD = 10_000;
 
-    /** Sentinel for "no worker has recorded a failure yet". Any non-negative value is a real iteration index. */
+    /**
+     * Sentinel for "no worker has recorded a failure yet". Any non-negative value is a real iteration index.
+     */
     private static final int NO_FAILURE_RECORDED = -1;
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
@@ -81,9 +82,10 @@ final class ChainConcurrencyTest {
     }
 
     private static void runConcurrencyScenario(@Nullable ProcessingContext context) {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
-                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1).to(V2)
+                                                                      .transform(JsonNode.class,
+                                                                                 (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         ObjectNode stablePayload = JsonNodeFactory.instance.objectNode().put("k", "v");
         EventMessage stableInput = new GenericEventMessage(V1, stablePayload);
 
@@ -92,11 +94,15 @@ final class ChainConcurrencyTest {
 
         try (ExecutorService pool = Executors.newFixedThreadPool(THREADS)) {
             List<CompletableFuture<Void>> workers = IntStream.range(0, THREADS)
-                    .mapToObj(threadIndex -> CompletableFuture.runAsync(() -> {
-                        awaitStart(startingGun);
-                        runIterations(chain, stableInput, stablePayload, context, firstFailedIteration);
-                    }, pool))
-                    .toList();
+                                                             .mapToObj(threadIndex -> CompletableFuture.runAsync(() -> {
+                                                                 awaitStart(startingGun);
+                                                                 runIterations(chain,
+                                                                               stableInput,
+                                                                               stablePayload,
+                                                                               context,
+                                                                               firstFailedIteration);
+                                                             }, pool))
+                                                             .toList();
 
             startingGun.countDown();
             workers.forEach(CompletableFuture::join);

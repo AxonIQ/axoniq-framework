@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * handler-side interceptor sees the event. Higher order value = outer wrap; see
  * {@code DefaultComponentRegistry} decorator-application loop.
  */
-final class DecorationOrderTest {
+final class TransformingEventStoreDecorationOrderTest {
 
     @Test
     void decorationOrderIsHigherThanInterceptingEventStore() {

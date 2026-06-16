@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.transformation.events.configuration;
 
+import io.axoniq.framework.messaging.transformation.StructuralAwareMessageTypeResolver;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import io.axoniq.framework.messaging.transformation.events.TransformingEventStore;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -56,7 +57,8 @@ public final class EventTransformationConfigurationEnhancer implements Configura
                                                           delegate,
                                                           chain,
                                                           config.getComponent(MessageConverter.class),
-                                                          config.getComponent(MessageTypeResolver.class)))
+                                                          new StructuralAwareMessageTypeResolver(
+                                                                  config.getComponent(MessageTypeResolver.class))))
                                                   .orElse(delegate));
     }
 }

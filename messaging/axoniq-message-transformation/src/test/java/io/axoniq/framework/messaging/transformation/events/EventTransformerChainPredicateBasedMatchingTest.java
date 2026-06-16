@@ -37,11 +37,11 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The {@code from(Predicate<MessageType>)} overload of {@code EventTransformation} matches
- * events whose {@link MessageType} satisfies the predicate. Enables semver / regex / range
- * matching without forcing users to register one transformer per concrete version.
+ * The {@code from(Predicate<MessageType>)} overload of {@code EventTransformation} matches events whose
+ * {@link MessageType} satisfies the predicate. Enables semver / regex / range matching without forcing users to
+ * register one transformation per specific version.
  */
-final class PredicateBasedMatchingTest {
+final class EventTransformerChainPredicateBasedMatchingTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V1_PATCH = new MessageType("com.example.CourseCreated", "1.0.1");
@@ -53,10 +53,10 @@ final class PredicateBasedMatchingTest {
 
     @Test
     void everyEventWhoseTypeSatisfiesThePredicateGetsTransformed() {
-        EventTransformer oneToThreeRangeTransformer = EventTransformer.from(
+        EventTransformation oneToThreeRangeTransformation = EventTransformation.from(
                 mt -> "com.example.CourseCreated".equals(mt.qualifiedName().name()) && mt.version().startsWith("1.")
         ).to(V3).transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(oneToThreeRangeTransformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(oneToThreeRangeTransformation).build();
 
         EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
         EventMessage v1PatchEvent = new GenericEventMessage(V1_PATCH, JsonNodeFactory.instance.objectNode());
@@ -72,14 +72,20 @@ final class PredicateBasedMatchingTest {
 
     @Test
     void eventWhoseTypeFailsThePredicatePassesThroughUnchanged() {
-        EventTransformer onlyHeartbeatsTransformer = EventTransformer.from(mt -> mt.qualifiedName().name().equals(UNRELATED.qualifiedName().name()))
-                                                                         .to(V3)
-                                                                         .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(onlyHeartbeatsTransformer).build();
+        EventTransformation onlyHeartbeatsTransformation = EventTransformation.from(mt -> mt.qualifiedName().name()
+                                                                                            .equals(UNRELATED.qualifiedName()
+                                                                                                             .name()))
+                                                                              .to(V3)
+                                                                              .transform(JsonNode.class,
+                                                                                         (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(onlyHeartbeatsTransformation).build();
 
         EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(v1Event)),
+                                                                     null,
+                                                                     CONVERTER,
+                                                                     RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst()).isSameAs(v1Event);

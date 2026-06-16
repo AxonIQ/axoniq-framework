@@ -68,17 +68,17 @@ public final class TransformingEventStore implements EventStore {
      *
      * @param delegate            the inner {@link EventStore} to wrap
      * @param chain               the {@link EventTransformerChain} to apply
-     * @param converter           the {@link MessageConverter} used to convert payloads to each transformer's input type
+     * @param converter           the {@link MessageConverter} used to convert payloads to each transformation's input type
      * @param messageTypeResolver the {@link MessageTypeResolver} used to verify each mapper's output identity
      */
     public TransformingEventStore(EventStore delegate,
                                    EventTransformerChain chain,
                                    MessageConverter converter,
                                    MessageTypeResolver messageTypeResolver) {
-        this.delegate = requireNonNull(delegate, "delegate");
-        this.chain = requireNonNull(chain, "chain");
-        this.converter = requireNonNull(converter, "converter");
-        this.messageTypeResolver = requireNonNull(messageTypeResolver, "messageTypeResolver");
+        this.delegate = requireNonNull(delegate, "delegate may not be null");
+        this.chain = requireNonNull(chain, "chain may not be null");
+        this.converter = requireNonNull(converter, "converter may not be null");
+        this.messageTypeResolver = requireNonNull(messageTypeResolver, "messageTypeResolver may not be null");
     }
 
     @Override
@@ -123,6 +123,8 @@ public final class TransformingEventStore implements EventStore {
     @Override
     public Registration subscribe(
             BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> eventsBatchConsumer) {
+        // Intentionally not transformed: this is the EventBus live dispatch to subscribed listeners,
+        // not a read of stored events. Transformation applies only to the read paths (open / source).
         return delegate.subscribe(eventsBatchConsumer);
     }
 

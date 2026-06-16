@@ -37,10 +37,10 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Events whose {@link MessageType} matches no registered transformation pass through the
- * chain unchanged, and no payload conversion happens on the non-matching path.
+ * Events whose {@link MessageType} matches no registered transformation pass through the chain unchanged, and no
+ * payload conversion happens on the non-matching path.
  */
-final class NonMatchingPassThroughTest {
+final class EventTransformerChainNonMatchingPassThroughTest {
 
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
@@ -48,14 +48,17 @@ final class NonMatchingPassThroughTest {
     private static final MessageTypeResolver RESOLVER = neverInvokedMessageTypeResolver();
 
     @Test
-    void eventWhoseTypeMatchesNoRegisteredTransformerPassesThroughUnchanged() {
-        EventTransformer registeredTransformer = EventTransformer.from(REGISTERED)
-                                                                    .to(new MessageType("com.example.CourseCreated", "2.0.0"))
-                                                                    .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
+    void eventWhoseTypeMatchesNoRegisteredTransformationPassesThroughUnchanged() {
+        EventTransformation registeredTransformation = EventTransformation.from(REGISTERED)
+                                                                          .to(new MessageType(
+                                                                                  "com.example.CourseCreated",
+                                                                                  "2.0.0"))
+                                                                          .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformation).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER, RESOLVER));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(
+                unregisteredEvent)), null, CONVERTER, RESOLVER));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst()).isSameAs(unregisteredEvent);
@@ -65,16 +68,21 @@ final class NonMatchingPassThroughTest {
     @Test
     void noPayloadConversionHappensForNonMatchingEvents() {
         AtomicInteger mapperInvocations = new AtomicInteger();
-        EventTransformer registeredTransformer = EventTransformer.from(REGISTERED)
-                                                                    .to(new MessageType("com.example.CourseCreated", "2.0.0"))
-                                                                    .transform(JsonNode.class, (in, ctx) -> {
-                                                                        mapperInvocations.incrementAndGet();
-                                                                        return in;
-                                                                    });
-        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
+        EventTransformation registeredTransformation = EventTransformation.from(REGISTERED)
+                                                                          .to(new MessageType(
+                                                                                  "com.example.CourseCreated",
+                                                                                  "2.0.0"))
+                                                                          .transform(JsonNode.class, (in, ctx) -> {
+                                                                              mapperInvocations.incrementAndGet();
+                                                                              return in;
+                                                                          });
+        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformation).build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat-payload");
 
-        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)), null, CONVERTER, RESOLVER));
+        collectMessages(chain.transform(MessageStream.fromIterable(List.of(unregisteredEvent)),
+                                        null,
+                                        CONVERTER,
+                                        RESOLVER));
 
         assertThat(mapperInvocations.get()).isZero();
     }

@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.transformation.events;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -46,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@link EventTransformerChain#DEFAULT_MAX_ITERATIONS_PER_EVENT}; deep-history domains can
  * raise it via {@link EventTransformerChain.Builder#maxIterationsPerEvent(int)}.
  */
-final class ChainSafetyBoundTest {
+final class EventTransformerChainSafetyBoundTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
@@ -56,12 +57,12 @@ final class ChainSafetyBoundTest {
     @Test
     void exceedingTheConfiguredBoundRaisesChainConfigurationExceptionNamingTheOverride() {
         AtomicInteger totalMapperInvocations = new AtomicInteger();
-        EventTransformer v1ToV2 = EventTransformer.from(V1).to(V2)
+        EventTransformation v1ToV2 = EventTransformation.from(V1).to(V2)
                                                      .transform(JsonNode.class, (in, ctx) -> {
                                                          totalMapperInvocations.incrementAndGet();
                                                          return in;
                                                      });
-        EventTransformer v2ToV1 = EventTransformer.from(V2).to(V1)
+        EventTransformation v2ToV1 = EventTransformation.from(V2).to(V1)
                                                      .transform(JsonNode.class, (in, ctx) -> {
                                                          totalMapperInvocations.incrementAndGet();
                                                          return in;
@@ -101,11 +102,11 @@ final class ChainSafetyBoundTest {
         EventTransformerChain.Builder negativeBoundBuilder = EventTransformerChain.builder();
 
         assertThatThrownBy(() -> zeroBoundBuilder.maxIterationsPerEvent(0))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("maxIterationsPerEvent must be >= 1");
+                .isInstanceOf(AxonConfigurationException.class)
+                .hasMessageContaining("maxIterationsPerEvent must be strictly positive");
 
         assertThatThrownBy(() -> negativeBoundBuilder.maxIterationsPerEvent(-5))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("maxIterationsPerEvent must be >= 1");
+                .isInstanceOf(AxonConfigurationException.class)
+                .hasMessageContaining("maxIterationsPerEvent must be strictly positive");
     }
 }

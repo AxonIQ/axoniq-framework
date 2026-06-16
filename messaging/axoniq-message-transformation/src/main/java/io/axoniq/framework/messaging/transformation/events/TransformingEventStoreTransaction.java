@@ -72,11 +72,11 @@ final class TransformingEventStoreTransaction implements EventStoreTransaction {
                                        ProcessingContext context,
                                        MessageConverter converter,
                                        MessageTypeResolver messageTypeResolver) {
-        this.delegate = requireNonNull(delegate, "delegate");
-        this.chain = requireNonNull(chain, "chain");
-        this.context = requireNonNull(context, "context");
-        this.converter = requireNonNull(converter, "converter");
-        this.messageTypeResolver = requireNonNull(messageTypeResolver, "messageTypeResolver");
+        this.delegate = requireNonNull(delegate, "delegate may not be null");
+        this.chain = requireNonNull(chain, "chain may not be null");
+        this.context = requireNonNull(context, "context may not be null");
+        this.converter = requireNonNull(converter, "converter may not be null");
+        this.messageTypeResolver = requireNonNull(messageTypeResolver, "messageTypeResolver may not be null");
     }
 
     @Override

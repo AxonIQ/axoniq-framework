@@ -38,11 +38,11 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The event envelope (message identifier, metadata, identity-related fields) is
- * preserved across transformation. A 1:1 transformer may rewrite payload and
- * {@link MessageType}, but framework-controlled envelope fields flow through unchanged.
+ * The event envelope (message identifier, metadata, identity-related fields) is preserved across transformation. A 1:1
+ * transformation may rewrite payload and {@link MessageType}, but framework-controlled envelope fields flow through
+ * unchanged.
  */
-final class EnvelopePreservationTest {
+final class MappingEventTransformationEnvelopePreservationTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
@@ -51,13 +51,17 @@ final class EnvelopePreservationTest {
 
     @Test
     void outputMessageCarriesSameIdentifierAsInputAfterOneToOneTransformation() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                .to(V2)
-                                                                .transform(JsonNode.class, (in, ctx) -> JsonNodeFactory.instance.objectNode());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                      .to(V2)
+                                                                      .transform(JsonNode.class,
+                                                                                 (in, ctx) -> JsonNodeFactory.instance.objectNode());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)),
+                                                                     null,
+                                                                     CONVERTER,
+                                                                     RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().identifier()).isEqualTo(storedV1Event.identifier());
@@ -66,14 +70,17 @@ final class EnvelopePreservationTest {
 
     @Test
     void metadataFlowsForwardUnchanged() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                .to(V2)
-                                                                .transform(JsonNode.class, (in, ctx) -> in);
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                      .to(V2)
+                                                                      .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode())
                 .andMetadata(Map.of("correlationId", "abc-123", "userId", "u-42"));
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)),
+                                                                     null,
+                                                                     CONVERTER,
+                                                                     RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().metadata()).containsEntry("correlationId", "abc-123");
@@ -82,13 +89,17 @@ final class EnvelopePreservationTest {
 
     @Test
     void outputCarriesSameTimestampAsInputAfterOneToOneTransformation() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                .to(V2)
-                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                      .to(V2)
+                                                                      .transform(JsonNode.class,
+                                                                                 (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> outputs = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)),
+                                                                     null,
+                                                                     CONVERTER,
+                                                                     RESOLVER));
 
         assertThat(outputs).hasSize(1);
         assertThat(outputs.getFirst().timestamp()).isEqualTo(storedV1Event.timestamp());
