@@ -64,8 +64,26 @@ class TimeoutWrappedMessageHandlingMember<T> extends WrappedMessageHandlingMembe
 
     @Override
     public MessageStream<?> handle(Message message, ProcessingContext context, @Nullable T target) {
-        // TODO #3559 - Add timeout logic
-        return super.handle(message, context, target);
+        String taskName = String.format("Message [%s] for handler [%s]",
+                                        message.type().name(),
+                                        target != null ? target.getClass().getName() : null);
+        AxonTimeLimitedTask task = new AxonTimeLimitedTask(
+                taskName,
+                timeout,
+                warningThreshold,
+                warningInterval,
+                getClass()
+        );
+        task.start();
+        try {
+            MessageStream<?> result = super.handle(message, context, target);
+            task.ensureNoInterruptionWasSwallowed();
+            return result;
+        } catch (Exception e) {
+            return MessageStream.failed(task.detectInterruptionInsteadOfException(e));
+        } finally {
+            task.complete();
+        }
     }
 
     /**
