@@ -25,18 +25,19 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The result of a {@link StateController @StateController} decision: either an {@link Accept} carrying the events
- * to append (optionally with a result value to surface to the command caller), or a {@link Reject} carrying a
- * reason (and optionally an audit trail).
+ * The result of a {@link Decide @Decide} decision (or the lower-level {@link StateController @StateController}
+ * path): either an {@link Accept} carrying the events to append (optionally with a result value to surface to the
+ * command caller), or a {@link Reject} carrying a reason (and optionally an audit trail).
  * <p>
  * Decisions are values. They never mutate state directly; the framework reads the decision and translates an
  * {@link Accept} into a conditional append against the event store using the DCB consistency boundary recorded
  * during the decision's condition evaluation, and a {@link Reject} into a denial of the command (with audit
  * events, if any, appended through the same {@code EventStoreTransaction}).
  * <p>
- * Use the static factories — {@link #emit(Object...)} for an accept, {@link #reject(String)} for a rejection —
+ * Use the static factories — {@link #accept(Object...)} for an accept, {@link #reject(String)} for a rejection —
  * rather than instantiating the records directly; the factories are the documented surface and read as the
- * intent does in a decision body. When the command caller needs to receive a value (for example a generated
+ * intent does in a decision body. ({@link #emit(Object...)} is a synonym for {@link #accept(Object...)} retained
+ * for the lower-level surface.) When the command caller needs to receive a value (for example a generated
  * identifier), chain {@link Accept#returning(Object)} on the accept to attach it; if no result is supplied, the
  * caller observes {@code null}.
  *

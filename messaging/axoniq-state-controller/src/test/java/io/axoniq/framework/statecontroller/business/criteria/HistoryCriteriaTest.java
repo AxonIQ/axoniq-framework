@@ -349,6 +349,41 @@ class HistoryCriteriaTest {
         }
     }
 
+    @Nested
+    class TypedTagScope {
+
+        @Test
+        void ofTagWithTypesRestrictsTheBoundaryToThoseTypes() {
+            // given three distinct event types under one courseId tag
+            seed(new CourseCreated("c1"), courseTag("c1"));
+            seed(new CourseCapacityChanged("c1", 30), courseTag("c1"));
+            seed(new StudentSubscribedToCourse("c1", "s1"), courseTag("c1"));
+
+            // when narrowing the tag scope to only two of those types in one call
+            History scope = rootHistory().of("courseId", "c1", CourseCreated.class, CourseCapacityChanged.class);
+
+            // then only the listed types are visible; the unlisted type is excluded
+            assertThat(scope.has(CourseCreated.class)).isTrue();
+            assertThat(scope.has(CourseCapacityChanged.class)).isTrue();
+            assertThat(scope.has(StudentSubscribedToCourse.class)).isFalse();
+            assertThat(scope.count(CourseCreated.class, CourseCapacityChanged.class,
+                                   StudentSubscribedToCourse.class)).isEqualTo(2L);
+        }
+
+        @Test
+        void ofTagWithTypesStillExcludesOtherTags() {
+            // given the listed type under two different courseId tags
+            seed(new CourseCreated("c1"), courseTag("c1"));
+            seed(new CourseCreated("c2"), courseTag("c2"));
+
+            // when narrowing to c1 with a type restriction
+            History scope = rootHistory().of("courseId", "c1", CourseCreated.class);
+
+            // then the c2 event remains outside the scope
+            assertThat(scope.count(CourseCreated.class)).isEqualTo(1L);
+        }
+    }
+
     // ----------------------------------------------------------------------
     // Test fixtures
     // ----------------------------------------------------------------------

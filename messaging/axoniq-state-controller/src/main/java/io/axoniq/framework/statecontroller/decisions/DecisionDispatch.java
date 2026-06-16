@@ -45,8 +45,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Internal helpers shared by the annotation-based handler enhancer ({@link StateControllerHandlerEnhancer}) and
- * the declarative {@link StateControllerComponent}.
+ * Internal helpers shared by the business-first {@link Decide @Decide} handler enhancer
+ * ({@link DecideHandlerEnhancer}), the lower-level {@link StateController @StateController} handler enhancer
+ * ({@link StateControllerHandlerEnhancer}), and the declarative {@link StateControllerComponent}.
  * <p>
  * Two responsibilities:
  * <ul>
@@ -62,9 +63,9 @@ import java.util.Set;
  *         {@link Decision.Reject#auditEvents() audit events} as its
  *         {@link CommandExecutionException#getDetails() details}.</li>
  * </ul>
- * Both paths intentionally route through the same helper so the observable behaviour from a command caller's
- * point of view is identical whether the decision was wired via {@link StateController @StateController} or via
- * the declarative builder API.
+ * All paths intentionally route through the same helper so the observable behaviour from a command caller's
+ * point of view is identical whether the decision was wired via {@link Decide @Decide},
+ * {@link StateController @StateController}, or the declarative builder API.
  * <p>
  * On {@link Decision.Accept Accept}, a Dynamic Consistency Boundary (DCB) coverage guard runs before the append:
  * when the decision read at least one {@code History} scope (recorded via

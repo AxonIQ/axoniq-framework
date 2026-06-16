@@ -78,8 +78,9 @@ public interface History {
 
     /**
      * Narrows this {@code History} to the scope identified by the tag {@code tagKey=tagValue}, returning a
-     * scoped {@code History} ready to be read. Sugar over {@link #matching(EventCriteria)} with the criteria
-     * {@link EventCriteria#havingTags(String...) havingTags(tagKey, tagValue.toString())}.
+     * scoped {@code History} ready to be read. A bare tag scope matches every event type carrying the tag; chain
+     * {@link #and(Class[]) and(...)} to restrict it to specific event types (a tag-then-types term), narrowing the
+     * consistency boundary accordingly.
      *
      * @param tagKey   the tag key identifying the scope (for example {@code "account"})
      * @param tagValue the tag value identifying the concrete entity within the scope; converted with
@@ -90,6 +91,30 @@ public interface History {
     History of(String tagKey, Object tagValue);
 
     /**
+     * Narrows this {@code History} to the tag scope {@code tagKey=tagValue} and restricts it to the given event
+     * {@code types} in one call — the type-precise single-scope form. Equivalent to
+     * {@link #of(String, Object) of(tagKey, tagValue)}{@code .}{@link #and(Class[]) and(types)}, or to bare
+     * {@code of(tagKey, tagValue)} when {@code types} is empty.
+     * <p>
+     * Prefer this over the bare {@link #of(String, Object)} when a decision reads only specific event types: the
+     * consistency boundary then covers exactly those {@code (tag, types)} rather than every event sharing the tag,
+     * narrowing the conflict surface and avoiding false conflicts with unrelated events.
+     *
+     * @param tagKey   the tag key identifying the scope (for example {@code "account"})
+     * @param tagValue the tag value identifying the concrete entity within the scope; converted with
+     *                 {@link Object#toString()}
+     * @param types    the event payload classes the scope is restricted to; when empty, no type restriction is
+     *                 applied (equivalent to {@link #of(String, Object)})
+     * @return a scoped {@code History} bound to events tagged {@code tagKey=tagValue} and restricted to
+     *         {@code types}
+     * @throws IllegalStateException if this {@code History} is already narrowed
+     */
+    default History of(String tagKey, Object tagValue, Class<?>... types) {
+        History scope = of(tagKey, tagValue);
+        return types.length == 0 ? scope : scope.and(types);
+    }
+
+    /**
      * Starts a fluent {@link EventCriteria} builder whose first term is <em>tagless</em> and restricted to the
      * given event {@code types}, matching events of those types across all tags. Equivalent to a single DCB term
      * {@link EventCriteria#havingAnyTag() havingAnyTag()}{@code .andBeingOneOfTypes(types)}.
@@ -98,6 +123,12 @@ public interface History {
      * the current term, or {@link #or(String, Object) or(...)} / {@link #or(Class[]) or(...)} to begin a new term.
      * The accumulated terms are turned into a single {@link EventCriteria} on the first read — one term yields that
      * term's criterion, multiple terms are combined with {@link EventCriteria#either(EventCriteria...) either(...)}.
+     * <p>
+     * <strong>Boundary warning:</strong> a tagless term matches events of these types across the entire event
+     * store. Used as the <em>sole</em> scope of an accepting decision it makes the append's consistency boundary
+     * global — every concurrent append of these types, anywhere, conflicts. Prefer
+     * {@link #of(String, Object, Class[]) of(tagKey, tagValue, types)} for an entity-scoped decision, or pair this
+     * with a tagged {@link #or(String, Object) or(...)} term.
      *
      * @param types the event payload classes the first, tagless term is restricted to; at least one is required
      * @return a {@code History} builder whose first term matches the given {@code types} across all tags
@@ -142,6 +173,9 @@ public interface History {
      * Begins a new <em>tagless</em> term restricted to the given event {@code types}, combined with the preceding
      * terms using DCB {@link EventCriteria#either(EventCriteria...) either(...)}. The new term matches events of
      * those types across all tags.
+     * <p>
+     * <strong>Boundary warning:</strong> like {@link #of(Class[])}, a tagless term used as the <em>sole</em> scope
+     * of an accepting decision makes the append's consistency boundary global; pair it with a tagged term.
      * <p>
      * Returns a new builder; the receiver is left unchanged.
      *

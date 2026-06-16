@@ -21,7 +21,6 @@ package io.axoniq.framework.statecontroller.history;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
@@ -66,7 +65,7 @@ public final class RootHistory implements History {
     public History of(String tagKey, Object tagValue) {
         Objects.requireNonNull(tagKey, "tagKey must not be null");
         Objects.requireNonNull(tagValue, "tagValue must not be null");
-        return matching(EventCriteria.havingTags(Tag.of(tagKey, tagValue.toString())));
+        return factory.ofTag(tagKey, tagValue);
     }
 
     @Override

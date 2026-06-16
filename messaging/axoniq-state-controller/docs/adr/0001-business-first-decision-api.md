@@ -94,6 +94,7 @@ Decision transfer(TransferMoney cmd, History history) {
     History from = history.of("account", cmd.fromId());
     History to   = history.of("account", cmd.toId());
 
+    if (from.has(AccountClosed.class))       return reject("source account closed");
     if (to.has(AccountClosed.class))         return reject("target account closed");
 
     BigDecimal balance = from.total(MoneyDeposited.class, MoneyDeposited::amount)

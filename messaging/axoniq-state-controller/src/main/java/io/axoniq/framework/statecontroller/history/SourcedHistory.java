@@ -175,6 +175,32 @@ public final class SourcedHistory implements History {
                                   List.of(Term.taglessTypes(requireTypes(types))));
     }
 
+    /**
+     * Mints a {@code SourcedHistory} builder whose first term is scoped to the single {@code tag}, with no type
+     * restriction until narrowed with {@link #and(Class[]) and(...)}. A bare tag scope loads every event type for
+     * the tag; chaining {@link #and(Class[]) and(...)} restricts it to specific types (a tag-then-types term). Used
+     * by the {@link RootHistory#of(String, Object) tag-scoped builder entry point}.
+     *
+     * @param eventStore        the {@link EventStore} the scope's slice is sourced from
+     * @param processingContext the {@link ProcessingContext} the sourced read participates in
+     * @param typeResolver      the {@link MessageTypeResolver} mapping payload classes to {@link QualifiedName}s
+     * @param converter         the {@link Converter} used to deserialize payloads, or {@code null} when payloads
+     *                          are already instances of the requested type
+     * @param tag               the {@link Tag} the first term is scoped to
+     * @return a {@code SourcedHistory} builder whose first term is scoped to {@code tag}
+     */
+    static SourcedHistory ofTag(EventStore eventStore,
+                                ProcessingContext processingContext,
+                                MessageTypeResolver typeResolver,
+                                @Nullable Converter converter,
+                                Tag tag) {
+        return new SourcedHistory(eventStore,
+                                  processingContext,
+                                  typeResolver,
+                                  converter,
+                                  List.of(Term.taggedScope(Objects.requireNonNull(tag, "tag must not be null"))));
+    }
+
     @Override
     public History of(String tagKey, Object tagValue) {
         throw alreadyNarrowed();

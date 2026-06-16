@@ -39,9 +39,9 @@ import java.math.BigDecimal;
  * These scenarios extend, and do not duplicate, the debit+credit / closed-target / insufficient-funds cases
  * already pinned by {@code AccountsTest}. They cover the balance-boundary arithmetic
  * ({@code balance.compareTo(amount) == 0} succeeds, a balance computed across both deposits and withdrawals), the
- * round-trip tagging of the credit leg (the credited target can fund a follow-up withdrawal), and two behaviours
- * deliberately left as-is by the decision: a self-transfer emits both legs for the same account (net zero) and a
- * transfer <em>from</em> a closed source still succeeds because the decision only guards a closed <em>target</em>.
+ * round-trip tagging of the credit leg (the credited target can fund a follow-up withdrawal), a self-transfer
+ * that emits both legs for the same account (net zero), and the guards that reject a transfer to a closed target
+ * or from a closed source.
  *
  * @author Stefan Dragisic
  * @since 5.2.0
@@ -165,7 +165,7 @@ class AccountsTransferTest {
         }
 
         @Test
-        void aTransferFromAClosedSourceCurrentlySucceeds() {
+        void aTransferFromAClosedSourceIsRejected() {
             // given a funded source that is also closed, and an open target
             fixture.given()
                    .events(new MoneyDeposited("a1", new BigDecimal("100")),
@@ -173,12 +173,11 @@ class AccountsTransferTest {
                    // when transferring from the closed (but funded) source
                    .when()
                    .command(new TransferMoney("a1", "a2", new BigDecimal("40")))
-                   // then current behaviour: the transfer SUCCEEDS. The decision only guards a closed TARGET
-                   // (to.has(AccountClosed)), never a closed SOURCE — an intentional asymmetry pinned here.
-                   // This documents existing behaviour; the decision is NOT changed.
+                   // then the command is rejected: the decision guards a closed source as well as a closed
+                   // target, and nothing is appended
                    .then()
-                   .events(new MoneyWithdrawn("a1", new BigDecimal("40")),
-                           new MoneyDeposited("a2", new BigDecimal("40")));
+                   .exceptionSatisfies(t -> assertThat(t.getMessage()).contains("source account closed"))
+                   .noEvents();
         }
     }
 

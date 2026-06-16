@@ -37,9 +37,9 @@ import static io.axoniq.framework.statecontroller.decisions.Decision.reject;
  * {@link #withdraw(Withdraw, History) withdraw} narrows a single account scope: it rejects a closed account,
  * computes the balance as deposits minus withdrawals, rejects on insufficient funds, and otherwise emits a
  * {@link MoneyWithdrawn}. {@link #transfer(TransferMoney, History) transfer} narrows two account scopes in one
- * decision — the DCB cross-entity payoff — rejecting a closed target or an under-funded source and otherwise
- * emitting a {@link MoneyWithdrawn} on the source followed by a {@link MoneyDeposited} on the target, both
- * inside one consistency boundary spanning the two accounts.
+ * decision — the DCB cross-entity payoff — rejecting a closed source or target, or an under-funded source,
+ * and otherwise emitting a {@link MoneyWithdrawn} on the source followed by a {@link MoneyDeposited} on the
+ * target, both inside one consistency boundary spanning the two accounts.
  *
  * @author Stefan Dragisic
  * @since 5.2.0
@@ -63,6 +63,7 @@ public class Accounts {
         History from = history.of("account", cmd.fromId());
         History to   = history.of("account", cmd.toId());
 
+        if (from.has(AccountClosed.class))       return reject("source account closed");
         if (to.has(AccountClosed.class))         return reject("target account closed");
 
         BigDecimal balance = from.total(MoneyDeposited.class, MoneyDeposited::amount)

@@ -28,6 +28,7 @@ import org.axonframework.messaging.core.Context.ResourceKey;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -73,6 +74,7 @@ public final class HistoryFactory {
     private final MessageTypeResolver typeResolver;
     private final @Nullable Converter converter;
     private final Map<EventCriteria, SourcedHistory> narrowed = new HashMap<>();
+    private final Map<Tag, SourcedHistory> taggedScopes = new HashMap<>();
 
     /**
      * Creates a {@code HistoryFactory} sourcing events from {@code eventStore} as part of
@@ -118,6 +120,25 @@ public final class HistoryFactory {
         return narrowed.computeIfAbsent(
                 criteria,
                 key -> new SourcedHistory(eventStore, processingContext, typeResolver, converter, key));
+    }
+
+    /**
+     * Returns a tag-scoped {@link History} for {@code tagKey=tagValue}, reusing an existing one when this factory
+     * has already minted a {@link SourcedHistory} for the same {@link Tag}, so two reads of the same scope share one
+     * materialized snapshot and one recorded DCB consistency marker. The returned history is a builder whose single
+     * tag-scoped term can be restricted to event types with {@link History#and(Class[]) and(...)}; a bare scope read
+     * loads every event type carrying the tag.
+     *
+     * @param tagKey   the tag key identifying the scope (for example {@code "account"})
+     * @param tagValue the tag value identifying the concrete entity; converted with {@link Object#toString()}
+     * @return a {@link SourcedHistory} scoped to {@code tagKey=tagValue}
+     */
+    History ofTag(String tagKey, Object tagValue) {
+        Objects.requireNonNull(tagKey, "tagKey must not be null");
+        Objects.requireNonNull(tagValue, "tagValue must not be null");
+        return taggedScopes.computeIfAbsent(
+                Tag.of(tagKey, tagValue.toString()),
+                tag -> SourcedHistory.ofTag(eventStore, processingContext, typeResolver, converter, tag));
     }
 
     /**
