@@ -27,23 +27,38 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Registration is startup-only: once {@code build()} has been called, further {@code register(...)}
- * calls are rejected with a {@link ChainConfigurationException}.
+ * Configuration is startup-only: once {@code build()} has been called, further configuration calls on the
+ * builder ({@code register(...)}, {@code maxIterationsPerEvent(...)}) are rejected with a
+ * {@link ChainConfigurationException}.
  */
-final class ChainLockingTest {
+final class EventTransformerChainLockingTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
 
     @Test
     void registrationAfterBuildThrowsChainConfigurationException() {
+        // given
         EventTransformerChain.Builder builder = EventTransformerChain.builder();
         builder.build();
 
-        EventTransformer additionalTransformer =
-                EventTransformer.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformation additionalTransformation =
+                EventTransformation.from(V1).to(V2).transform(JsonNode.class, (in, ctx) -> in);
 
-        assertThatThrownBy(() -> builder.register(additionalTransformer))
+        // when / then
+        assertThatThrownBy(() -> builder.register(additionalTransformation))
+                .isInstanceOf(ChainConfigurationException.class)
+                .hasMessageContaining("build");
+    }
+
+    @Test
+    void maxIterationsPerEventAfterBuildThrowsChainConfigurationException() {
+        // given
+        EventTransformerChain.Builder builder = EventTransformerChain.builder();
+        builder.build();
+
+        // when / then
+        assertThatThrownBy(() -> builder.maxIterationsPerEvent(50))
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining("build");
     }

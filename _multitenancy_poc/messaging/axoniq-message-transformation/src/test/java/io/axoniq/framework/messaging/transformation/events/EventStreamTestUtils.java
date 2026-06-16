@@ -34,6 +34,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -55,7 +56,7 @@ final class EventStreamTestUtils {
         stream.<Void>reduce(null, (acc, entry) -> {
             collected.add(entry.message());
             return null;
-        }).join();
+        }).orTimeout(30, TimeUnit.SECONDS).join();
         return collected;
     }
 
@@ -68,7 +69,7 @@ final class EventStreamTestUtils {
 
     /**
      * A {@link MessageConverter} stand-in for tests whose payloads already match the
-     * transformer's declared input type. The chain's fast path returns the payload directly
+     * transformation's declared input type. The chain's fast path returns the payload directly
      * for already-typed inputs, so the converter is never invoked. Any actual call here
      * fails the test loudly with an {@link AssertionError}, surfacing accidental reliance
      * on conversion in tests that should not need it.
@@ -81,7 +82,7 @@ final class EventStreamTestUtils {
      * Records each {@code convertPayload(...)} invocation and returns
      * {@code converterFunction.apply(message)}; the test supplies the conversion behavior.
      * Use this when the test's subject-under-test IS the chain's slow-path conversion call
-     * (stored payload class differs from the transformer's declared input type).
+     * (stored payload class differs from the transformation's declared input type).
      */
     static <T> RecordingMessageConverter<T> recordingConverter(Function<Message, T> converterFunction) {
         return new RecordingMessageConverter<>(converterFunction);
@@ -149,7 +150,7 @@ final class EventStreamTestUtils {
         public <M extends Message, T> @Nullable T convertPayload(M message, @NonNull Type targetType) {
             throw new AssertionError(
                     "MessageConverter.convertPayload was unexpectedly invoked in a test; "
-                            + "ensure payload type matches the transformer's declared input type.");
+                            + "ensure payload type matches the transformation's declared input type.");
         }
 
         @Override
@@ -187,7 +188,7 @@ final class EventStreamTestUtils {
         return payloadClass -> {
             throw new AssertionError(
                     "MessageTypeResolver.resolve was unexpectedly invoked in a test; "
-                            + "no transformer should have matched this event.");
+                            + "no transformation should have matched this event.");
         };
     }
 

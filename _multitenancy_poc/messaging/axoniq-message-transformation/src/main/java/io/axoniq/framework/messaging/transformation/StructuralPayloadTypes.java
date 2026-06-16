@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.transformation.events;
+package io.axoniq.framework.messaging.transformation;
 
 import org.axonframework.common.annotation.Internal;
 

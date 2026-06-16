@@ -38,11 +38,10 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Acceptance test for {@code EventTransformer.from(...).to(...).transform(...)}, the
- * 1:1 structural payload transformation. A stored v1 event is observed as v2 by handlers
- * consuming the chain's output stream.
+ * Acceptance test for {@code EventTransformation.from(...).to(...).transform(...)}, the 1:1 structural payload
+ * transformation. A stored v1 event is observed as v2 by handlers consuming the chain's output stream.
  */
-final class StructuralTransformationTest {
+final class EventTransformerChainStructuralTransformationTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
@@ -51,22 +50,25 @@ final class StructuralTransformationTest {
 
     @Test
     void storedV1EventIsObservedAsV2AfterRegisteringV1ToV2Transformation() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                .to(V2)
-                                                                .transform(JsonNode.class, (v1, ctx) -> {
-                                                                    int capacity = v1.get("capacity").asInt();
-                                                                    ObjectNode v2 = JsonNodeFactory.instance.objectNode();
-                                                                    v2.put("minCapacity", capacity);
-                                                                    v2.put("maxCapacity", capacity);
-                                                                    return v2;
-                                                                });
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                      .to(V2)
+                                                                      .transform(JsonNode.class, (v1, ctx) -> {
+                                                                          int capacity = v1.get("capacity").asInt();
+                                                                          ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                          v2.put("minCapacity", capacity);
+                                                                          v2.put("maxCapacity", capacity);
+                                                                          return v2;
+                                                                      });
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
         ObjectNode v1Payload = JsonNodeFactory.instance.objectNode();
         v1Payload.put("capacity", 30);
         EventMessage storedV1Event = new GenericEventMessage(V1, v1Payload);
 
-        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> observed = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)),
+                                                                      null,
+                                                                      CONVERTER,
+                                                                      RESOLVER));
 
         assertThat(observed).hasSize(1);
         assertThat(observed.getFirst().type()).isEqualTo(V2);
@@ -78,14 +80,17 @@ final class StructuralTransformationTest {
 
     @Test
     void singleTransformationIsObservedByEveryConsumerOfTheChain() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                .to(V2)
-                                                                .transform(JsonNode.class, (v1, ctx) -> v1.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                      .to(V2)
+                                                                      .transform(JsonNode.class,
+                                                                                 (v1, ctx) -> v1.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
-        List<EventMessage> firstConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
-        List<EventMessage> secondConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> firstConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(
+                storedV1Event)), null, CONVERTER, RESOLVER));
+        List<EventMessage> secondConsumer = collectMessages(chain.transform(MessageStream.fromIterable(List.of(
+                storedV1Event)), null, CONVERTER, RESOLVER));
 
         assertThat(firstConsumer).hasSize(1);
         assertThat(secondConsumer).hasSize(1);

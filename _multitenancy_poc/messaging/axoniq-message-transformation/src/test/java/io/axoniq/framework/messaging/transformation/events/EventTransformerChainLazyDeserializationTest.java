@@ -39,11 +39,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The chain's non-matching path is lazy: the framework's
- * {@code MessageConverter.convertPayload(...)} is never invoked when no transformer
+ * {@code MessageConverter.convertPayload(...)} is never invoked when no transformation
  * matches the event's {@link MessageType}, and events pass through unchanged regardless
  * of chain length. (Wall-clock complexity is verified by JMH, not here.)
  */
-final class LazyDeserializationTest {
+final class EventTransformerChainLazyDeserializationTest {
 
     private static final MessageType REGISTERED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType UNREGISTERED = new MessageType("com.example.SystemHeartbeat", "1.0.0");
@@ -51,15 +51,15 @@ final class LazyDeserializationTest {
     private static final MessageTypeResolver RESOLVER = neverInvokedMessageTypeResolver();
 
     @Test
-    void converterIsNeverInvokedWhenNoTransformerMatches() {
+    void converterIsNeverInvokedWhenNoTransformationMatches() {
         AtomicInteger mapperInvocations = new AtomicInteger();
-        EventTransformer registeredTransformer = EventTransformer.from(REGISTERED)
+        EventTransformation registeredTransformation = EventTransformation.from(REGISTERED)
                                                                     .to(new MessageType("com.example.CourseCreated", "2.0.0"))
                                                                     .transform(JsonNode.class, (in, ctx) -> {
                                                                         mapperInvocations.incrementAndGet();
                                                                         return in;
                                                                     });
-        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(registeredTransformation).build();
 
         List<EventMessage> nonMatchingEvents = IntStream.range(0, 1000)
                 .mapToObj(index -> (EventMessage) new GenericEventMessage(UNREGISTERED, "p-" + index))
@@ -77,7 +77,7 @@ final class LazyDeserializationTest {
         for (int index = 0; index < 100; index++) {
             MessageType fromType = new MessageType("com.example.Type" + index, "1.0.0");
             MessageType toType = new MessageType("com.example.Type" + index, "2.0.0");
-            builder.register(EventTransformer.from(fromType).to(toType).transform(JsonNode.class, (in, ctx) -> in));
+            builder.register(EventTransformation.from(fromType).to(toType).transform(JsonNode.class, (in, ctx) -> in));
         }
         EventTransformerChain chain = builder.build();
         EventMessage unregisteredEvent = new GenericEventMessage(UNREGISTERED, "heartbeat");

@@ -39,12 +39,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 /**
- * When more than one registered transformer would match a given event, the chain applies
+ * When more than one registered transformation would match a given event, the chain applies
  * the LAST registration that matches. Reads as: later registrations override earlier
  * overlapping ones. Single-hop only; multi-hop iteration (v1 -> v2 -> v3 chained) is
  * verified separately.
  */
-final class LastMatchWinsTest {
+final class EventTransformerChainLastMatchWinsTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
@@ -53,24 +53,24 @@ final class LastMatchWinsTest {
     private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
     @Test
-    void laterConcreteRegistrationOverridesEarlierPredicateRegistrationOnOverlappingMatch() {
-        EventTransformer earlierPredicateToV3 = EventTransformer.from(mt -> mt.version().startsWith("1."))
+    void laterExactRegistrationOverridesEarlierPredicateRegistrationOnOverlappingMatch() {
+        EventTransformation earlierPredicateToV3 = EventTransformation.from(mt -> mt.version().startsWith("1."))
                                                                     .to(V3)
                                                                     .transform(JsonNode.class, (in, ctx) -> {
                                                                         ObjectNode out = JsonNodeFactory.instance.objectNode();
                                                                         out.put("via", "predicate");
                                                                         return out;
                                                                     });
-        EventTransformer laterConcreteToV2 = EventTransformer.from(V1)
+        EventTransformation laterExactToV2 = EventTransformation.from(V1)
                                                                  .to(V2)
                                                                  .transform(JsonNode.class, (in, ctx) -> {
                                                                      ObjectNode out = JsonNodeFactory.instance.objectNode();
-                                                                     out.put("via", "concrete");
+                                                                     out.put("via", "exact");
                                                                      return out;
                                                                  });
         EventTransformerChain chain = EventTransformerChain.builder()
                                                             .register(earlierPredicateToV3)
-                                                            .register(laterConcreteToV2)
+                                                            .register(laterExactToV2)
                                                             .build();
 
         EventMessage v1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
@@ -81,19 +81,19 @@ final class LastMatchWinsTest {
         assertThat(outputs.getFirst().type()).isEqualTo(V2);
         assertThat(outputs.getFirst().payload())
                 .asInstanceOf(type(JsonNode.class))
-                .satisfies(node -> assertThat(node.path("via").asText()).isEqualTo("concrete"));
+                .satisfies(node -> assertThat(node.path("via").asText()).isEqualTo("exact"));
     }
 
     @Test
-    void laterPredicateRegistrationOverridesEarlierConcreteRegistrationOnOverlappingMatch() {
-        EventTransformer earlierConcreteToV2 = EventTransformer.from(V1)
+    void laterPredicateRegistrationOverridesEarlierExactRegistrationOnOverlappingMatch() {
+        EventTransformation earlierExactToV2 = EventTransformation.from(V1)
                                                                   .to(V2)
                                                                   .transform(JsonNode.class, (in, ctx) -> {
                                                                       ObjectNode out = JsonNodeFactory.instance.objectNode();
-                                                                      out.put("via", "concrete");
+                                                                      out.put("via", "exact");
                                                                       return out;
                                                                   });
-        EventTransformer laterPredicateToV3 = EventTransformer.from(mt -> mt.version().startsWith("1."))
+        EventTransformation laterPredicateToV3 = EventTransformation.from(mt -> mt.version().startsWith("1."))
                                                                   .to(V3)
                                                                   .transform(JsonNode.class, (in, ctx) -> {
                                                                       ObjectNode out = JsonNodeFactory.instance.objectNode();
@@ -101,7 +101,7 @@ final class LastMatchWinsTest {
                                                                       return out;
                                                                   });
         EventTransformerChain chain = EventTransformerChain.builder()
-                                                           .register(earlierConcreteToV2)
+                                                           .register(earlierExactToV2)
                                                            .register(laterPredicateToV3)
                                                            .build();
 

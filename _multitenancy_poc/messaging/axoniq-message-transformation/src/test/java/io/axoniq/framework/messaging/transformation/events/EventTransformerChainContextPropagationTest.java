@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * payload mapper. This is the single entry point the framework supplies the
  * {@code MessageConverter}, {@code MessageTypeResolver}, and processing context
  */
-final class ChainContextPropagationTest {
+final class EventTransformerChainContextPropagationTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
@@ -49,12 +49,12 @@ final class ChainContextPropagationTest {
     @Test
     void chainForwardsTheActiveProcessingContextToTheUsersMapper() {
         AtomicReference<@Nullable ProcessingContext> seenContext = new AtomicReference<>();
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1).to(V2)
                 .transform(JsonNode.class, (in, ctx) -> {
                     seenContext.set(ctx);
                     return in.deepCopy();
                 });
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         EventMessage input = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
         var realContext = StubProcessingContext.forMessage(input);
 

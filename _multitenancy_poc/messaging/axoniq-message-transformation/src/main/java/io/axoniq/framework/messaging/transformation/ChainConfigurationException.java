@@ -19,13 +19,15 @@
 
 package io.axoniq.framework.messaging.transformation;
 
+import org.axonframework.common.AxonConfigurationException;
+
 /**
  * Thrown when the framework detects an event transformer chain misconfiguration.
  *
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public final class ChainConfigurationException extends RuntimeException {
+public final class ChainConfigurationException extends AxonConfigurationException {
 
     /**
      * Constructs a new exception with the given detail message.

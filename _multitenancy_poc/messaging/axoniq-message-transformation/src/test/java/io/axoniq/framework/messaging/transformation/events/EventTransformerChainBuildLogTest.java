@@ -35,10 +35,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The framework emits exactly one INFO log entry when a chain is built, listing the
+ * The framework emits exactly one DEBUG log entry when a chain is built, listing the
  * registered transformations.
  */
-final class ChainBuildLogTest {
+final class EventTransformerChainBuildLogTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
@@ -51,7 +51,7 @@ final class ChainBuildLogTest {
     void attachAppender() {
         chainLogger = (Logger) LoggerFactory.getLogger(EventTransformerChain.class);
         previousLevel = chainLogger.getLevel();
-        chainLogger.setLevel(Level.INFO);
+        chainLogger.setLevel(Level.DEBUG);
         appender = new ListAppender<>();
         appender.start();
         chainLogger.addAppender(appender);
@@ -65,19 +65,19 @@ final class ChainBuildLogTest {
     }
 
     @Test
-    void buildEmitsExactlyOneInfoLineNamingEachRegisteredTransformer() {
-        EventTransformer v1ToV2 = EventTransformer.from(V1).to(V2)
+    void buildEmitsExactlyOneDebugLineNamingEachRegisteredTransformation() {
+        EventTransformation v1ToV2 = EventTransformation.from(V1).to(V2)
                                                      .transform(JsonNode.class, (in, ctx) -> in);
 
         EventTransformerChain.builder().register(v1ToV2).build();
 
-        List<ILoggingEvent> infoEvents = appender.list.stream()
-                .filter(event -> event.getLevel() == Level.INFO)
+        List<ILoggingEvent> debugEvents = appender.list.stream()
+                .filter(event -> event.getLevel() == Level.DEBUG)
                 .toList();
-        assertThat(infoEvents)
-                .as("exactly one INFO entry MUST be emitted per chain build")
+        assertThat(debugEvents)
+                .as("exactly one DEBUG entry MUST be emitted per chain build")
                 .hasSize(1);
-        String formatted = infoEvents.getFirst().getFormattedMessage();
+        String formatted = debugEvents.getFirst().getFormattedMessage();
         assertThat(formatted)
                 .contains("EventTransformerChain built with 1 transformation(s)")
                 .contains(V1.toString())
@@ -85,22 +85,22 @@ final class ChainBuildLogTest {
     }
 
     @Test
-    void buildEmitsADedicatedNoOpEntryWhenZeroTransformersAreRegistered() {
+    void buildEmitsADedicatedNoOpEntryWhenZeroTransformationsAreRegistered() {
         EventTransformerChain.builder().build();
 
-        List<ILoggingEvent> infoEvents = appender.list.stream()
-                .filter(event -> event.getLevel() == Level.INFO)
+        List<ILoggingEvent> debugEvents = appender.list.stream()
+                .filter(event -> event.getLevel() == Level.DEBUG)
                 .toList();
-        assertThat(infoEvents).hasSize(1);
-        assertThat(infoEvents.getFirst().getFormattedMessage())
+        assertThat(debugEvents).hasSize(1);
+        assertThat(debugEvents.getFirst().getFormattedMessage())
                 .contains("0 transformations")
                 .contains("no-op pass-through");
     }
 
     @Test
-    void buildEmitsNoLogWhenInfoIsDisabled() {
+    void buildEmitsNoLogWhenDebugIsDisabled() {
         chainLogger.setLevel(Level.WARN);
-        EventTransformer v1ToV2 = EventTransformer.from(V1).to(V2)
+        EventTransformation v1ToV2 = EventTransformation.from(V1).to(V2)
                                                      .transform(JsonNode.class, (in, ctx) -> in);
 
         EventTransformerChain.builder().register(v1ToV2).build();

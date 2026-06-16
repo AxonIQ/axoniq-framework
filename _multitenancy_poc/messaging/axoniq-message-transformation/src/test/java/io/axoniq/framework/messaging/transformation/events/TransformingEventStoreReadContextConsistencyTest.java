@@ -65,7 +65,7 @@ import static org.mockito.Mockito.when;
  * The conditions reach the delegate unchanged (storage-engine filtering runs BEFORE the chain),
  * and each context yields the same V2 transformed event for the same stored V1 event.
  */
-final class ReadContextConsistencyTest {
+final class TransformingEventStoreReadContextConsistencyTest {
 
     private static final MessageType V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.CourseCreated", "2.0.0");
@@ -74,9 +74,9 @@ final class ReadContextConsistencyTest {
 
     @Test
     void allThreeReadContextsObserveTheSameTransformedEventAndForwardTheConditionUnchanged() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1).to(V2)
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1).to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
         ObjectNode payload = JsonNodeFactory.instance.objectNode().put("k", "v");
         EventMessage storedV1Event = new GenericEventMessage(V1, payload);

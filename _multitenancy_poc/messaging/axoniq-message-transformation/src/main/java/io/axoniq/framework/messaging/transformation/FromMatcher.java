@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.transformation.events;
+package io.axoniq.framework.messaging.transformation;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
@@ -27,33 +27,33 @@ import java.util.function.Predicate;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Sealed strategy for matching the {@code from} side of an event transformation. Either
- * exact equality against a concrete {@link MessageType} ({@link Concrete}) or a
+ * Sealed strategy for matching the {@code from} side of a transformation. Either
+ * exact equality against a single {@link MessageType} ({@link Exact}) or a
  * user-supplied {@link Predicate} ({@link PredicateBased}).
  *
  * @author Laura Devriendt
  * @since 5.2.0
  */
 @Internal
-sealed interface FromMatcher permits FromMatcher.Concrete, FromMatcher.PredicateBased {
+public sealed interface FromMatcher permits FromMatcher.Exact, FromMatcher.PredicateBased {
 
     /**
      * Answers whether the given {@code candidate} type satisfies this matcher.
      *
-     * @param candidate the event's {@link MessageType}
+     * @param candidate the message's {@link MessageType}
      * @return {@code true} when the candidate matches
      */
     boolean matches(MessageType candidate);
 
     /**
-     * Concrete-source matcher: exact {@link MessageType} equality.
+     * Exact-source matcher: exact {@link MessageType} equality.
      *
      * @param source the source identity
      */
-    record Concrete(MessageType source) implements FromMatcher {
+    record Exact(MessageType source) implements FromMatcher {
 
-        public Concrete {
-            requireNonNull(source, "source");
+        public Exact {
+            requireNonNull(source, "source may not be null");
         }
 
         @Override
@@ -70,7 +70,7 @@ sealed interface FromMatcher permits FromMatcher.Concrete, FromMatcher.Predicate
     record PredicateBased(Predicate<MessageType> predicate) implements FromMatcher {
 
         public PredicateBased {
-            requireNonNull(predicate, "predicate");
+            requireNonNull(predicate, "predicate may not be null");
         }
 
         @Override

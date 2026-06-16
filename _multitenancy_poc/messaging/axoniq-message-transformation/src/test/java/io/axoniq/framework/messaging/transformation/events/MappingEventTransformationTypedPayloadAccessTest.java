@@ -48,30 +48,31 @@ import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 /**
- * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for
- * non-generic input types and {@code transform(TypeReference<T>, BiFunction)} for generic
- * input types such as {@code Map<String, Object>}.
+ * Both {@code transform(...)} overloads: {@code transform(Class<T>, BiFunction)} for non-generic input types and
+ * {@code transform(TypeReference<T>, BiFunction)} for generic input types such as {@code Map<String, Object>}.
  */
-final class TypedPayloadAccessTest {
+final class MappingEventTransformationTypedPayloadAccessTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
     private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
-    @Nested
-    final class ClassOverload {
+    @Nested final class ClassOverload {
 
         @Test
         void fastPathSkipsConverterWhenPayloadIsAlreadyOfDeclaredInputClass() {
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(JsonNode.class, (jsonNode, ctx) -> {
-                                                                        ObjectNode v2 = JsonNodeFactory.instance.objectNode();
-                                                                        v2.put("name", jsonNode.get("name").asText());
-                                                                        return v2;
-                                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(JsonNode.class,
+                                                                                     (jsonNode, ctx) -> {
+                                                                                         ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                                         v2.put("name",
+                                                                                                jsonNode.get("name")
+                                                                                                        .asText());
+                                                                                         return v2;
+                                                                                     });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
             ObjectNode v1Payload = JsonNodeFactory.instance.objectNode();
             v1Payload.put("name", "Math 101");
@@ -89,17 +90,20 @@ final class TypedPayloadAccessTest {
 
         @Test
         void slowPathInvokesConverterWithDeclaredInputClassWhenStoredPayloadIsADifferentType() {
-            // The stored payload is a raw JSON String; the transformer declares JsonNode.class.
+            // The stored payload is a raw JSON String; the transformation declares JsonNode.class.
             // The framework must invoke MessageConverter.convertPayload(message, JsonNode.class)
             // before invoking the mapper.
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(JsonNode.class, (jsonNode, ctx) -> {
-                                                                        ObjectNode v2 = JsonNodeFactory.instance.objectNode();
-                                                                        v2.put("name", jsonNode.get("name").asText());
-                                                                        return v2;
-                                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(JsonNode.class,
+                                                                                     (jsonNode, ctx) -> {
+                                                                                         ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                                         v2.put("name",
+                                                                                                jsonNode.get("name")
+                                                                                                        .asText());
+                                                                                         return v2;
+                                                                                     });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
             EventMessage storedV1Event = new GenericEventMessage(V1, "{\"name\":\"Math 101\"}");
             EventStreamTestUtils.RecordingMessageConverter<JsonNode> recording =
@@ -119,21 +123,21 @@ final class TypedPayloadAccessTest {
         }
     }
 
-    @Nested
-    final class TypeReferenceOverload {
+    @Nested final class TypeReferenceOverload {
 
         @Test
         void fastPathSkipsConverterWhenPayloadIsAlreadyAMap() {
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(mapType, (payload, ctx) -> {
-                                                                        Map<String, Object> result = new HashMap<>(payload);
-                                                                        result.put("upgraded", true);
-                                                                        return result;
-                                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(mapType, (payload, ctx) -> {
+                                                                              Map<String, Object> result = new HashMap<>(
+                                                                                      payload);
+                                                                              result.put("upgraded", true);
+                                                                              return result;
+                                                                          });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
             Map<String, Object> v1Payload = new HashMap<>();
             v1Payload.put("name", "Math 101");
@@ -152,19 +156,20 @@ final class TypedPayloadAccessTest {
 
         @Test
         void slowPathInvokesConverterWithParameterizedTypeWhenStoredPayloadIsADifferentType() {
-            // Stored payload is a raw JSON String; the transformer declares TypeReference<Map<String, Object>> --
+            // Stored payload is a raw JSON String; the transformation declares TypeReference<Map<String, Object>> --
             // the framework must invoke MessageConverter.convertPayload(message, parameterizedMapType) so
             // the generic parameters survive (TypeReference preserves the parameterized type at runtime).
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(mapType, (payload, ctx) -> {
-                                                                        Map<String, Object> result = new HashMap<>(payload);
-                                                                        result.put("upgraded", true);
-                                                                        return result;
-                                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(mapType, (payload, ctx) -> {
+                                                                              Map<String, Object> result = new HashMap<>(
+                                                                                      payload);
+                                                                              result.put("upgraded", true);
+                                                                              return result;
+                                                                          });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
             EventMessage storedV1Event = new GenericEventMessage(V1, "{\"name\":\"Math 101\"}");
             EventStreamTestUtils.RecordingMessageConverter<Map<String, Object>> recording =
@@ -187,20 +192,20 @@ final class TypedPayloadAccessTest {
         }
     }
 
-    @Nested
-    final class ContextFreeOverload {
+    @Nested final class ContextFreeOverload {
 
         @Test
         void classOverloadMapsWithoutAProcessingContextAndStillInvokesTheConverter() {
             // given a transformation registered with a context-free Class<T> mapper
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(JsonNode.class, jsonNode -> {
-                                                                        ObjectNode v2 = JsonNodeFactory.instance.objectNode();
-                                                                        v2.put("name", jsonNode.get("name").asText());
-                                                                        return v2;
-                                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(JsonNode.class, jsonNode -> {
+                                                                              ObjectNode v2 = JsonNodeFactory.instance.objectNode();
+                                                                              v2.put("name",
+                                                                                     jsonNode.get("name").asText());
+                                                                              return v2;
+                                                                          });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
             // and a stored payload whose type differs from the declared input class
             EventMessage storedV1Event = new GenericEventMessage(V1, "{\"name\":\"Math 101\"}");
@@ -226,14 +231,15 @@ final class TypedPayloadAccessTest {
             // given a transformation registered with a context-free TypeReference<T> mapper
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(mapType, payload -> {
-                                                                        Map<String, Object> result = new HashMap<>(payload);
-                                                                        result.put("upgraded", true);
-                                                                        return result;
-                                                                    });
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(mapType, payload -> {
+                                                                              Map<String, Object> result = new HashMap<>(
+                                                                                      payload);
+                                                                              result.put("upgraded", true);
+                                                                              return result;
+                                                                          });
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
 
             EventMessage storedV1Event = new GenericEventMessage(V1, "{\"name\":\"Math 101\"}");
             EventStreamTestUtils.RecordingMessageConverter<Map<String, Object>> recording =
@@ -256,17 +262,17 @@ final class TypedPayloadAccessTest {
         }
     }
 
-    @Nested
-    final class MalformedPayload {
+    @Nested final class MalformedPayload {
 
         @Test
         void converterReturningNullSurfacesAsIllegalStateExceptionIdentifyingTheEvent() {
             // When the converter resolves the stored payload to null (malformed / missing
             // persisted bytes), the chain MUST raise a clear error pinpointing the event.
-            EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
-                                                                    .to(V2)
-                                                                    .transform(JsonNode.class, (jsonNode, ctx) -> jsonNode);
-            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+            EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
+                                                                          .to(V2)
+                                                                          .transform(JsonNode.class,
+                                                                                     (jsonNode, ctx) -> jsonNode);
+            EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
             EventMessage storedV1Event = new GenericEventMessage(V1, "{}");
             EventStreamTestUtils.RecordingMessageConverter<JsonNode> nullReturningConverter =
                     recordingConverter(message -> null);

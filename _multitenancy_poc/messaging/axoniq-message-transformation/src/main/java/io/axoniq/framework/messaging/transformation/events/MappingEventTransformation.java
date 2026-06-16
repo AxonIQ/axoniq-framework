@@ -20,7 +20,9 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.TransformationContext;
+import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
@@ -37,7 +39,7 @@ import java.util.function.BiFunction;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The {@link EventTransformer} implementation, carrying the matching and payload-mapping behavior for a single
+ * A 1:1 payload-mapping {@link EventTransformation}, carrying the matching and mapping behavior for a single
  * registered transformation.
  *
  * @param <T> the input payload type declared at registration
@@ -46,55 +48,32 @@ import static java.util.Objects.requireNonNull;
  * @since 5.2.0
  */
 @Internal
-final class DefaultEventTransformer<T, U> implements EventTransformer {
+final class MappingEventTransformation<T, U> implements EventTransformation {
 
     private final FromMatcher matcher;
     private final MessageType toType;
     private final Type inputType;
     private final Class<T> rawInputClass;
     private final BiFunction<T, @Nullable ProcessingContext, U> mapper;
-    private final boolean skipIdentityCheck;
 
     /**
-     * Constructs a 1:1 payload-mapping transformer with the output-identity check active.
+     * Constructs a 1:1 payload-mapping transformation.
      *
-     * @param matcher       the {@code from}-side matcher
-     * @param toType        the {@code to} identity applied to the output message
-     * @param inputType     the declared input {@link Type}, preserving any generic parameters
-     * @param rawInputClass the raw {@link Class} of the input type
-     * @param mapper        the user-supplied payload mapping function
+     * @param matcher   the {@code from}-side matcher
+     * @param toType    the {@code to} identity applied to the output message
+     * @param inputType the declared input type, preserving any generic parameters
+     * @param mapper    the user-supplied payload mapping function
      */
-    DefaultEventTransformer(FromMatcher matcher,
-                          MessageType toType,
-                          Type inputType,
-                          Class<T> rawInputClass,
-                          BiFunction<T, @Nullable ProcessingContext, U> mapper) {
-        this(matcher, toType, inputType, rawInputClass, mapper, false);
-    }
-
-    /**
-     * Full constructor exposing the {@code skipIdentityCheck} flag.
-     *
-     * @param matcher           the {@code from}-side matcher
-     * @param toType            the {@code to} identity applied to the output message
-     * @param inputType         the declared input {@link Type}
-     * @param rawInputClass     the raw {@link Class} of the input type
-     * @param mapper            the user-supplied payload mapping function
-     * @param skipIdentityCheck {@code true} to skip the output-identity check, for transformers whose output
-     *                          identity is owned by the framework rather than the mapper
-     */
-    DefaultEventTransformer(FromMatcher matcher,
-                          MessageType toType,
-                          Type inputType,
-                          Class<T> rawInputClass,
-                          BiFunction<T, @Nullable ProcessingContext, U> mapper,
-                          boolean skipIdentityCheck) {
-        this.matcher = requireNonNull(matcher, "matcher");
-        this.toType = requireNonNull(toType, "toType");
-        this.inputType = requireNonNull(inputType, "inputType");
-        this.rawInputClass = requireNonNull(rawInputClass, "rawInputClass");
-        this.mapper = requireNonNull(mapper, "mapper");
-        this.skipIdentityCheck = skipIdentityCheck;
+    MappingEventTransformation(FromMatcher matcher,
+                               MessageType toType,
+                               TypeReference<T> inputType,
+                               BiFunction<T, @Nullable ProcessingContext, U> mapper) {
+        requireNonNull(inputType, "inputType may not be null");
+        this.matcher = requireNonNull(matcher, "matcher may not be null");
+        this.toType = requireNonNull(toType, "toType may not be null");
+        this.inputType = inputType.getType();
+        this.rawInputClass = inputType.getTypeAsClass();
+        this.mapper = requireNonNull(mapper, "mapper may not be null");
     }
 
     /**
@@ -108,12 +87,10 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
      */
     @Override
     public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
-        requireNonNull(context, "context");
+        requireNonNull(context, "context may not be null");
         T typedPayload = extractTypedPayload(message, context);
         U mappedPayload = mapper.apply(typedPayload, context.processingContext());
-        if (!skipIdentityCheck) {
-            verifyOutputIdentity(mappedPayload, message, context);
-        }
+        verifyOutputIdentity(mappedPayload, message, context);
         EventMessage output = new GenericEventMessage(
                 message.identifier(),
                 toType,
@@ -173,7 +150,7 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * The {@code from}-side matcher this transformer was built with.
+     * The {@code from}-side matcher this transformation was built with.
      *
      * @return the {@code from}-side matcher
      */
@@ -182,7 +159,7 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
     }
 
     /**
-     * The declared {@code to} identity applied to this transformer's output.
+     * The declared {@code to} identity applied to this transformation's output.
      *
      * @return the declared {@code to} {@link MessageType}
      */
@@ -192,7 +169,7 @@ final class DefaultEventTransformer<T, U> implements EventTransformer {
 
     @Override
     public String toString() {
-        return "DefaultEventTransformer{from=" + matcher
+        return "MappingEventTransformation{from=" + matcher
                 + ", to=" + toType
                 + ", inputType=" + inputType.getTypeName()
                 + '}';

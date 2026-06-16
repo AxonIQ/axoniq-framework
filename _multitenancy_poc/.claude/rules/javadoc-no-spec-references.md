@@ -6,7 +6,7 @@
 
 Applies to:
 - Javadoc (class-level, method-level, field-level)
-- Test class names + test file names (e.g. `StructuralTransformationTest`, NOT `EventTransformationFr001Test`)
+- Test class names + test file names (e.g. `EventTransformerChainStructuralTransformationTest`, NOT `EventTransformationFr001Test`)
 - Body comments (slightly relaxed — see end of file)
 
 The following do NOT belong in any of the above:
@@ -33,13 +33,15 @@ Translate each internal reference into the implementation behaviour it represent
 
 ## Test class naming examples
 
-| Bad (encodes spec IDs) | Good (describes behavior) |
+Name a test after the class/interface under test plus the behavior it verifies (`<ClassUnderTest><Behavior>Test`), never a spec ID. This follows the Axon Framework convention of carrying the class under test in the name (e.g. `AnnotatedEventHandlingComponentSequencingPolicyTest`) while keeping the behavior explicit.
+
+| Bad (encodes spec IDs) | Good (class under test + behavior) |
 |---|---|
-| `EventTransformationFr001Test` | `StructuralTransformationTest` |
-| `EventTransformerChainFr005Test` | `NonMatchingPassThroughTest` |
-| `TransformingEventStoreFr012Test` | `ReadContextConsistencyTest` |
-| `EventTransformerChainFr018Test` | `OutputIdentityCheckTest` |
-| `EventTransformerChainFr004LockTest` | `ChainLockingTest` |
+| `EventTransformationFr001Test` | `EventTransformerChainStructuralTransformationTest` |
+| `EventTransformerChainFr005Test` | `EventTransformerChainNonMatchingPassThroughTest` |
+| `TransformingEventStoreFr012Test` | `TransformingEventStoreReadContextConsistencyTest` |
+| `EventTransformerChainFr018Test` | `MappingEventTransformationOutputIdentityCheckTest` |
+| `EventTransformerChainFr004LockTest` | `EventTransformerChainLockingTest` |
 
 ## Body comments — same principle, slightly relaxed during scaffolding
 

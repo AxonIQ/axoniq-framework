@@ -38,12 +38,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A transformation produced by the factory is unit-testable from a plain JUnit test by
- * registering it with a single-transformer {@link EventTransformerChain} and invoking
+ * registering it with a single-transformation {@link EventTransformerChain} and invoking
  * {@code chain.transform(...)}, the same entry point the framework's
  * {@code TransformingEventStore} decorator uses at production read time. No event store,
  * processor, or framework bootstrap is required.
  */
-final class UnitTestabilityTest {
+final class EventTransformerChainUnitTestabilityTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
@@ -52,10 +52,10 @@ final class UnitTestabilityTest {
 
     @Test
     void transformationIsInvocableThroughASingleTransformerChain() {
-        EventTransformer v1ToV2Transformer = EventTransformer.from(V1)
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1)
                                                                 .to(V2)
                                                                 .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
-        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
         EventMessage storedV1Event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
 
         List<EventMessage> outputs = collectMessages(

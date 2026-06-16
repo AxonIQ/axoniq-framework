@@ -26,14 +26,14 @@ import org.axonframework.messaging.core.MessageStream;
 /**
  * Transforms messages of type {@code M}.
  * <p>
- * A transformer accepts a {@link Message} of type {@code M} and produces zero or more transformed messages of the
+ * A transformation accepts a {@link Message} of type {@code M} and produces zero or more transformed messages of the
  * same type.
  *
  * @param <M> the message type accepted as input and emitted as output
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public interface MessageTransformer<M extends Message> {
+public interface MessageTransformation<M extends Message> {
 
     /**
      * Transforms a message into zero or more messages of the same type. If the transformation fails, the returned

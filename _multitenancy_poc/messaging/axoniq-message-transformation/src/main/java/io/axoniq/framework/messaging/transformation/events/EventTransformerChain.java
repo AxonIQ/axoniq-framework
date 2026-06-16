@@ -20,7 +20,10 @@
 package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.TransformationContext;
+import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageStream;
@@ -39,16 +42,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * An immutable, thread-safe chain of {@link EventTransformer} instances that transforms events at read time.
- * Events that match no transformer pass through unchanged. Use {@link Builder} to construct and register
- * transformers.
+ * An immutable, thread-safe chain of {@link EventTransformation} instances that transforms events at read time.
+ * Events that match no transformation pass through unchanged. Use {@link Builder} to construct and register
+ * transformations.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -65,14 +67,14 @@ public final class EventTransformerChain implements DescribableComponent {
     public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
 
     /**
-     * Concrete-{@code from} transformers, bucketed by {@link QualifiedName}. Each bucket is
-     * stored in registration order; the per-transformer {@code sequence} preserves the
-     * registration order across this map AND {@link #predicateTransformers}.
+     * Exact-{@code from} transformations, bucketed by {@link QualifiedName}. Each bucket is
+     * stored in registration order; the per-transformation {@code sequence} preserves the
+     * registration order across this map AND {@link #predicateTransformations}.
      */
-    private final Map<QualifiedName, List<RegisteredTransformer>> concreteTransformers;
+    private final Map<QualifiedName, List<RegisteredTransformation>> exactTransformations;
 
-    /** Predicate-{@code from} transformers in registration order. */
-    private final List<RegisteredTransformer> predicateTransformers;
+    /** Predicate-{@code from} transformations in registration order. */
+    private final List<RegisteredTransformation> predicateTransformations;
 
     /**
      * Safety bound on per-event iteration. Guards against pathological configurations
@@ -81,28 +83,28 @@ public final class EventTransformerChain implements DescribableComponent {
      */
     private final int maxIterationsPerEvent;
 
-    private EventTransformerChain(Map<QualifiedName, List<RegisteredTransformer>> concreteTransformers,
-                                  List<RegisteredTransformer> predicateTransformers,
+    private EventTransformerChain(Map<QualifiedName, List<RegisteredTransformation>> exactTransformations,
+                                  List<RegisteredTransformation> predicateTransformations,
                                   int maxIterationsPerEvent) {
-        this.concreteTransformers = copyImmutable(concreteTransformers);
-        this.predicateTransformers = List.copyOf(predicateTransformers);
+        this.exactTransformations = copyImmutable(exactTransformations);
+        this.predicateTransformations = List.copyOf(predicateTransformations);
         this.maxIterationsPerEvent = maxIterationsPerEvent;
     }
 
-    private static Map<QualifiedName, List<RegisteredTransformer>> copyImmutable(
-            Map<QualifiedName, List<RegisteredTransformer>> source) {
-        Map<QualifiedName, List<RegisteredTransformer>> copy = HashMap.newHashMap(source.size());
+    private static Map<QualifiedName, List<RegisteredTransformation>> copyImmutable(
+            Map<QualifiedName, List<RegisteredTransformation>> source) {
+        Map<QualifiedName, List<RegisteredTransformation>> copy = HashMap.newHashMap(source.size());
         source.forEach((key, bucket) -> copy.put(key, List.copyOf(bucket)));
         return Map.copyOf(copy);
     }
 
     /**
      * Transforms every event in the given stream by applying the chain at read time. Events matching no
-     * transformer pass through unchanged.
+     * transformation pass through unchanged.
      *
      * @param stream              the input stream of events
      * @param context             the active processing context, or {@code null} when the read path supplies none
-     * @param converter           converts a stored payload to a transformer's declared input type
+     * @param converter           converts a stored payload to a transformation's declared input type
      * @param messageTypeResolver resolves a mapper output's type to verify it against the declared {@code to}
      * @return the transformed stream
      */
@@ -110,25 +112,21 @@ public final class EventTransformerChain implements DescribableComponent {
                                                  @Nullable ProcessingContext context,
                                                  MessageConverter converter,
                                                  MessageTypeResolver messageTypeResolver) {
-        requireNonNull(converter, "converter");
-        requireNonNull(messageTypeResolver, "messageTypeResolver");
-        MessageTypeResolver structuralAwareResolver = payloadClass ->
-                StructuralPayloadTypes.isStructural(payloadClass)
-                        ? Optional.empty()
-                        : messageTypeResolver.resolve(payloadClass);
+        requireNonNull(converter, "converter may not be null");
+        requireNonNull(messageTypeResolver, "messageTypeResolver may not be null");
         // Entry-level map (not mapMessage) keeps the engine-attached Context in scope so the
         // chain can include the stream position in diagnostic exceptions.
         return stream.map(entry -> entry.map(event -> applyChainToOneEvent(
-                event, new TransformationContext(entry, context, converter, structuralAwareResolver))));
+                event, new TransformationContext(entry, context, converter, messageTypeResolver))));
     }
 
     /**
-     * Applies the chain to a single event, repeatedly applying the latest matching transformer until none matches.
+     * Applies the chain to a single event, repeatedly applying the latest matching transformation until none matches.
      */
     private EventMessage applyChainToOneEvent(EventMessage event, TransformationContext context) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
-            DefaultEventTransformer<?, ?> match = findLastMatch(current);
+            MappingEventTransformation<?, ?> match = findLastRegisteredMatch(current);
             if (match == null) {
                 return current;
             }
@@ -137,7 +135,7 @@ public final class EventTransformerChain implements DescribableComponent {
         }
         throw new ChainConfigurationException("""
                 Chain exceeded %d iterations on a single event; \
-                likely a cyclic or self-matching transformer (raise the bound via \
+                likely a cyclic or self-matching transformation (raise the bound via \
                 Builder.maxIterationsPerEvent(int) if your domain genuinely has more hops). \
                 Last event: %s""".formatted(
                 maxIterationsPerEvent,
@@ -145,7 +143,7 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Extracts the single transformed event from a transformer's result stream, rejecting an empty result.
+     * Extracts the single transformed event from a transformation's result stream, rejecting an empty result.
      */
     private static EventMessage singleResult(MessageStream<EventMessage> result,
                                              EventMessage input,
@@ -153,7 +151,7 @@ public final class EventTransformerChain implements DescribableComponent {
         return result.first().next()
                      .map(MessageStream.Entry::message)
                      .orElseThrow(() -> new ChainConfigurationException("""
-                             Transformer produced no output for a 1:1 transformation. \
+                             Transformation produced no output for a 1:1 transformation. \
                              Input event: %s""".formatted(
                              EventDescriptions.describe(input, context.entryContext()))));
     }
@@ -176,83 +174,85 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Returns the latest-registered transformer that matches the event, or {@code null} if
-     * none matches. Scans only the relevant concrete bucket and the predicate list, picking
+     * Returns the latest-registered transformation that matches the event, or {@code null} if
+     * none matches. Scans only the relevant exact bucket and the predicate list, picking
      * whichever has the higher overall registration order.
      */
-    private @Nullable DefaultEventTransformer<?, ?> findLastMatch(EventMessage event) {
+    private @Nullable MappingEventTransformation<?, ?> findLastRegisteredMatch(EventMessage event) {
         MessageType eventType = event.type();
-        List<RegisteredTransformer> concreteBucket = concreteTransformers.get(eventType.qualifiedName());
-        if (concreteBucket == null && predicateTransformers.isEmpty()) {
+        List<RegisteredTransformation> exactBucket = exactTransformations.get(eventType.qualifiedName());
+        if (exactBucket == null && predicateTransformations.isEmpty()) {
             return null;
         }
-        RegisteredTransformer lastConcrete =
-                concreteBucket == null ? null : findLastMatchIn(concreteBucket, eventType);
-        RegisteredTransformer lastPredicate = findLastMatchIn(predicateTransformers, eventType);
-        return pickByRegistrationOrder(lastConcrete, lastPredicate);
+        RegisteredTransformation lastExact =
+                exactBucket == null ? null : findLastRegisteredMatchIn(exactBucket, eventType);
+        RegisteredTransformation lastPredicate = findLastRegisteredMatchIn(predicateTransformations, eventType);
+        return pickByRegistrationOrder(lastExact, lastPredicate);
     }
 
-    private static @Nullable RegisteredTransformer findLastMatchIn(List<RegisteredTransformer> bucket,
+    private static @Nullable RegisteredTransformation findLastRegisteredMatchIn(List<RegisteredTransformation> bucket,
                                                                    MessageType eventType) {
         for (int index = bucket.size() - 1; index >= 0; index--) {
-            RegisteredTransformer candidate = bucket.get(index);
-            if (candidate.transformer().matcher().matches(eventType)) {
+            RegisteredTransformation candidate = bucket.get(index);
+            if (candidate.transformation().matcher().matches(eventType)) {
                 return candidate;
             }
         }
         return null;
     }
 
-    private static @Nullable DefaultEventTransformer<?, ?> pickByRegistrationOrder(
-            @Nullable RegisteredTransformer concreteCandidate,
-            @Nullable RegisteredTransformer predicateCandidate) {
-        if (concreteCandidate == null) {
-            return predicateCandidate == null ? null : predicateCandidate.transformer();
+    private static @Nullable MappingEventTransformation<?, ?> pickByRegistrationOrder(
+            @Nullable RegisteredTransformation exactCandidate,
+            @Nullable RegisteredTransformation predicateCandidate) {
+        if (exactCandidate == null) {
+            return predicateCandidate == null ? null : predicateCandidate.transformation();
         }
         if (predicateCandidate == null) {
-            return concreteCandidate.transformer();
+            return exactCandidate.transformation();
         }
-        return concreteCandidate.sequence() > predicateCandidate.sequence()
-                ? concreteCandidate.transformer()
-                : predicateCandidate.transformer();
+        return exactCandidate.sequence() > predicateCandidate.sequence()
+                ? exactCandidate.transformation()
+                : predicateCandidate.transformation();
     }
 
     /**
      * Exposes the chain's populated structure for framework diagnostics
      * ({@code AxonConfiguration.describe(...)} / Spring Boot Actuator endpoints): the
-     * registered-transformation count, the concrete-{@code from} fan-out per
+     * registered-transformation count, the exact-{@code from} fan-out per
      * {@link QualifiedName}, the predicate-{@code from} fan-out, and the safety bound.
      */
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("transformerCount", transformerCount());
-        descriptor.describeProperty("concreteTransformers", concreteTransformersDescription());
-        descriptor.describeProperty("predicateTransformers", predicateTransformersDescription());
+        descriptor.describeProperty("transformationCount", transformationCount());
+        descriptor.describeProperty("exactTransformations", exactTransformationsDescription());
+        descriptor.describeProperty("predicateTransformations", predicateTransformationsDescription());
         descriptor.describeProperty("maxIterationsPerEvent", maxIterationsPerEvent);
     }
 
-    private int transformerCount() {
-        return predicateTransformers.size()
-                + concreteTransformers.values().stream().mapToInt(List::size).sum();
+    private int transformationCount() {
+        return predicateTransformations.size()
+                + exactTransformations.values().stream().mapToInt(List::size).sum();
     }
 
-    /** Concrete-from buckets rendered as {@code qualifiedName -> [transformer-toString, ...]}. */
-    private Map<String, List<String>> concreteTransformersDescription() {
-        Map<String, List<String>> rendered = HashMap.newHashMap(concreteTransformers.size());
-        concreteTransformers.forEach((qualifiedName, bucket) ->
+    /** Exact-from buckets rendered as {@code qualifiedName -> [transformation-toString, ...]}. */
+    private Map<String, List<String>> exactTransformationsDescription() {
+        Map<String, List<String>> rendered = HashMap.newHashMap(exactTransformations.size());
+        exactTransformations.forEach((qualifiedName, bucket) ->
                 rendered.put(qualifiedName.name(), bucket.stream()
-                                                          .map(entry -> entry.transformer().toString())
+                                                          .map(entry -> entry.transformation().toString())
                                                           .toList()));
         return rendered;
     }
 
-    /** Predicate-from transformers rendered by their {@code toString()}. */
-    private List<String> predicateTransformersDescription() {
-        return predicateTransformers.stream().map(entry -> entry.transformer().toString()).toList();
+    /** Predicate-from transformations rendered by their {@code toString()}. */
+    private List<String> predicateTransformationsDescription() {
+        return predicateTransformations.stream().map(entry -> entry.transformation().toString()).toList();
     }
 
     /**
-     * Start building a new chain.
+     * Start building a new chain. Use {@link Builder#register(EventTransformation)} to add
+     * transformations and, optionally, {@link Builder#maxIterationsPerEvent(int)} to adjust the per-event
+     * iteration safety bound (default {@link #DEFAULT_MAX_ITERATIONS_PER_EVENT}).
      *
      * @return a fresh {@link Builder}
      */
@@ -262,16 +262,22 @@ public final class EventTransformerChain implements DescribableComponent {
 
     /**
      * Fluent builder for {@link EventTransformerChain}. Registration order is application order.
-     * {@link #build()} produces a new, immutable {@link EventTransformerChain}; registration is
-     * startup-only, so {@link #register(EventTransformer)} calls after {@code build()} are rejected.
+     * {@link #build()} produces a new, immutable {@link EventTransformerChain}; configuration is
+     * startup-only, so {@link #register(EventTransformation)} and {@link #maxIterationsPerEvent(int)}
+     * calls after {@code build()} are rejected.
+     * <p>
+     * {@link #maxIterationsPerEvent(int)} caps how many times the chain re-applies transformations to a
+     * single event during fixed-point chaining (default
+     * {@link EventTransformerChain#DEFAULT_MAX_ITERATIONS_PER_EVENT}); it guards against a self-matching
+     * or cyclic configuration and otherwise never fires.
      * <p>
      * Not thread-safe: build the chain on a single thread at startup, then share the
      * resulting {@link EventTransformerChain} (which is immutable and concurrent-safe).
      */
     public static final class Builder {
 
-        private final Map<QualifiedName, List<RegisteredTransformer>> concreteTransformers = new HashMap<>();
-        private final List<RegisteredTransformer> predicateTransformers = new ArrayList<>();
+        private final Map<QualifiedName, List<RegisteredTransformation>> exactTransformations = new HashMap<>();
+        private final List<RegisteredTransformation> predicateTransformations = new ArrayList<>();
         private long nextSequence = 0;
         private boolean alreadyBuilt = false;
         private int maxIterationsPerEvent = DEFAULT_MAX_ITERATIONS_PER_EVENT;
@@ -284,42 +290,52 @@ public final class EventTransformerChain implements DescribableComponent {
          *
          * @param max the new safety bound, strictly positive
          * @return this builder
-         * @throws IllegalArgumentException if {@code max < 1}
+         * @throws ChainConfigurationException if {@link #build()} has already been called
+         * @throws AxonConfigurationException  if {@code max} is not strictly positive
          */
         public Builder maxIterationsPerEvent(int max) {
-            if (max < 1) {
-                throw new IllegalArgumentException(
-                        "maxIterationsPerEvent must be >= 1, got " + max);
-            }
+            assertNotBuilt();
+            BuilderUtils.assertStrictPositive(max, "maxIterationsPerEvent must be strictly positive");
             this.maxIterationsPerEvent = max;
             return this;
         }
 
         /**
-         * Register an {@link EventTransformer} with the chain.
+         * Register an {@link EventTransformation} with the chain.
          *
-         * @param transformer the transformer to add
+         * @param transformation the transformation to add
          * @return this builder
          * @throws ChainConfigurationException if {@link #build()} has already been called
          */
-        public Builder register(EventTransformer transformer) {
-            requireNonNull(transformer, "transformer");
-            if (alreadyBuilt) {
-                throw new ChainConfigurationException(
-                        "register() must be called before build(); this builder has already been built.");
-            }
-            DefaultEventTransformer<?, ?> built = (DefaultEventTransformer<?, ?>) transformer;
-            RegisteredTransformer entry = new RegisteredTransformer(nextSequence++, built);
+        public Builder register(EventTransformation transformation) {
+            assertNotBuilt();
+            requireNonNull(transformation, "transformation may not be null");
+            MappingEventTransformation<?, ?> built = (MappingEventTransformation<?, ?>) transformation;
+            RegisteredTransformation entry = new RegisteredTransformation(nextSequence++, built);
             switch (built.matcher()) {
-                case FromMatcher.Concrete(MessageType source) -> {
+                case FromMatcher.Exact(MessageType source) -> {
                     rejectNameChange(source, built.toType());
-                    concreteTransformers.computeIfAbsent(source.qualifiedName(),
+                    exactTransformations.computeIfAbsent(source.qualifiedName(),
                                                       ignored -> new ArrayList<>())
                                      .add(entry);
                 }
-                case FromMatcher.PredicateBased ignored -> predicateTransformers.add(entry);
+                case FromMatcher.PredicateBased ignored -> predicateTransformations.add(entry);
             }
             return this;
+        }
+
+        /**
+         * Rejects configuration after {@link #build()}. The chain is built once at startup and handed off as an
+         * immutable component, so a configuration call on an already-built builder would silently never reach the
+         * wired chain; failing fast surfaces the misuse instead.
+         *
+         * @throws ChainConfigurationException if {@link #build()} has already been called
+         */
+        private void assertNotBuilt() {
+            if (alreadyBuilt) {
+                throw new ChainConfigurationException(
+                        "Builder is already built; all configuration must happen before build().");
+            }
         }
 
         /**
@@ -330,34 +346,34 @@ public final class EventTransformerChain implements DescribableComponent {
         public EventTransformerChain build() {
             alreadyBuilt = true;
             EventTransformerChain chain = new EventTransformerChain(
-                    concreteTransformers, predicateTransformers, maxIterationsPerEvent);
+                    exactTransformations, predicateTransformations, maxIterationsPerEvent);
             logChainContents(chain);
             return chain;
         }
 
         private static void logChainContents(EventTransformerChain chain) {
-            if (!logger.isInfoEnabled()) {
+            if (!logger.isDebugEnabled()) {
                 return;
             }
-            int count = chain.transformerCount();
+            int count = chain.transformationCount();
             if (count == 0) {
-                logger.info("EventTransformerChain built with 0 transformations (no-op pass-through).");
+                logger.debug("EventTransformerChain built with 0 transformations (no-op pass-through).");
                 return;
             }
             String summary = Stream.concat(
-                            chain.concreteTransformers.values().stream().flatMap(List::stream),
-                            chain.predicateTransformers.stream())
-                    .map(entry -> entry.transformer().toString())
+                            chain.exactTransformations.values().stream().flatMap(List::stream),
+                            chain.predicateTransformations.stream())
+                    .map(entry -> entry.transformation().toString())
                     .collect(Collectors.joining(", "));
-            logger.info("EventTransformerChain built with {} transformation(s): [{}]", count, summary);
+            logger.debug("EventTransformerChain built with {} transformation(s): [{}]", count, summary);
         }
     }
 
     /**
-     * Holds a registered transformer plus its global registration order. The {@code sequence}
-     * lets {@link #findLastMatch} pick the latest match across the concrete index and the
+     * Holds a registered transformation plus its global registration order. The {@code sequence}
+     * lets {@link #findLastRegisteredMatch} pick the latest match across the exact index and the
      * predicate list without keeping a parallel flat list.
      */
-    private record RegisteredTransformer(long sequence, DefaultEventTransformer<?, ?> transformer) {
+    private record RegisteredTransformation(long sequence, MappingEventTransformation<?, ?> transformation) {
     }
 }
