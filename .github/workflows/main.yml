@@ -34,9 +34,9 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ matrix.java-version }}
           cache: "maven"
-          server-id: central
-          server-username: MAVEN_USERNAME
-          server-password: MAVEN_PASSWORD
+          server-id: artifact-registry-snapshots
+          server-username: ARTIFACT_REGISTRY_USERNAME
+          server-password: ARTIFACT_REGISTRY_PASSWORD
 
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
@@ -62,14 +62,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Deploy to Sonatype
+      - name: Authenticate to Google Cloud
+        if: success() && matrix.deploy-enabled
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GKE_CLOUD_DEV_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: success() && matrix.deploy-enabled
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Artifact Registry
         if: success() && matrix.deploy-enabled
         run: |
-          ./mvnw -B -U -ntp -Dstyle.color=always -Possrh deploy -DskipTests=true
+          export ARTIFACT_REGISTRY_USERNAME=oauth2accesstoken
+          export ARTIFACT_REGISTRY_PASSWORD=$(gcloud auth print-access-token)
+          ./mvnw -B -U -ntp -Dstyle.color=always deploy -DskipTests=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAVEN_USERNAME: ${{ secrets.SONATYPE_TOKEN_ID }}
-          MAVEN_PASSWORD: ${{ secrets.SONATYPE_TOKEN_PASS }}
 
       - name: Notify run to Slack
         uses: rtCamp/action-slack-notify@v2

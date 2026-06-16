@@ -583,11 +583,46 @@
         </profile>
     </profiles>
 
+    <distributionManagement>
+        <repository>
+            <id>artifact-registry</id>
+            <name>AxonIQ Maven Registry (Releases)</name>
+            <url>https://europe-west4-maven.pkg.dev/axoniq-platform/axoniq-maven-registry</url>
+        </repository>
+        <snapshotRepository>
+            <id>artifact-registry-snapshots</id>
+            <name>AxonIQ Maven Registry (Snapshots)</name>
+            <url>https://europe-west4-maven.pkg.dev/axoniq-cloud-dev/axoniq-maven-registry</url>
+        </snapshotRepository>
+    </distributionManagement>
+
     <repositories>
         <repository>
             <name>Central Portal Snapshots</name>
             <id>central-portal-snapshots</id>
             <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>artifact-registry</id>
+            <name>AxonIQ Maven Registry (Releases)</name>
+            <url>https://europe-west4-maven.pkg.dev/axoniq-platform/axoniq-maven-registry</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>artifact-registry-snapshots</id>
+            <name>AxonIQ Maven Registry (Snapshots)</name>
+            <url>https://europe-west4-maven.pkg.dev/axoniq-cloud-dev/axoniq-maven-registry</url>
             <releases>
                 <enabled>false</enabled>
             </releases>
