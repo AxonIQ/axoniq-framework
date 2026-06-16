@@ -40,6 +40,11 @@ import static io.axoniq.framework.statecontroller.decisions.Decision.reject;
  * decision — the DCB cross-entity payoff — rejecting a closed source or target, or an under-funded source,
  * and otherwise emitting a {@link MoneyWithdrawn} on the source followed by a {@link MoneyDeposited} on the
  * target, both inside one consistency boundary spanning the two accounts.
+ * <p>
+ * {@link #closeAccount(CloseAccount, History) closeAccount} exercises more of the API in one decision: a
+ * type-precise scope via {@code history.of("account", id, types...)}, a balance and a transaction
+ * {@link History#count(Class[]) count}, an audit event recorded on rejection, and a {@link ClosingStatement}
+ * returned to the caller.
  *
  * @author Stefan Dragisic
  * @since 5.2.0
@@ -72,5 +77,24 @@ public class Accounts {
 
         return accept(new MoneyWithdrawn(cmd.fromId(), cmd.amount()),
                       new MoneyDeposited(cmd.toId(),   cmd.amount()));
+    }
+
+    @Decide
+    Decision closeAccount(CloseAccount cmd, History history) {
+        History account = history.of("account", cmd.accountId(),
+                                     MoneyDeposited.class, MoneyWithdrawn.class, AccountClosed.class);
+
+        if (account.has(AccountClosed.class)) return reject("account already closed");
+
+        BigDecimal balance = account.total(MoneyDeposited.class, MoneyDeposited::amount)
+                             .subtract(account.total(MoneyWithdrawn.class, MoneyWithdrawn::amount));
+        if (balance.signum() != 0) {
+            return reject("account balance must be zero to close")
+                    .recording(new AccountClosureRejected(cmd.accountId(), balance));
+        }
+
+        long transactions = account.count(MoneyDeposited.class, MoneyWithdrawn.class);
+        return accept(new AccountClosed(cmd.accountId()))
+                .returning(new ClosingStatement(cmd.accountId(), transactions));
     }
 }
