@@ -1,3 +1,4 @@
+[.axoniq-feature]
 = Course Catalog Example
 :navtitle: Example
 

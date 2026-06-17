@@ -1,3 +1,4 @@
+[.axoniq-feature]
 = Defining Transformations
 :navtitle: Defining transformations
 
@@ -6,19 +7,29 @@ You name the event identity it matches (`from`), the identity it produces (`to`)
 
 == A single transformation
 
+A single transformation maps one stored version of an event to the next.
+The `from` and `to` identities name the same event and differ only in version, and the mapper rewrites the payload from the old shape to the new one, so a transformation only ever changes an event's version and payload.
+Each step is small and self-contained, and you register one per version so the chain can compose them.
+
 A v1 `CoursePublished` stored a single `capacity` field.
 This transformation lifts it into the v2 shape that carries `minCapacity` and `maxCapacity`:
 
 [source,java]
 ----
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
+import org.axonframework.messaging.core.MessageType;
+
 public final class CoursePublishedV1ToV2 {
 
     private static final MessageType FROM = new MessageType("coursecatalog.CoursePublished", "1.0.0");
     private static final MessageType TO   = new MessageType("coursecatalog.CoursePublished", "2.0.0");
 
     public static EventTransformation build() {
-        return EventTransformation.from(FROM)                                     // <1>
-                                  .to(TO)                                         // <2>
+        return EventTransformation.from(FROM)                                             // <1>
+                                  .to(TO)                                                 // <2>
                                   .transform(JsonNode.class, CoursePublishedV1ToV2::map); // <3>
     }
 
@@ -41,20 +52,6 @@ public final class CoursePublishedV1ToV2 {
 
 [NOTE]
 The `JsonNode` used here is the Jackson 3 type (`tools.jackson.databind.JsonNode`), the same representation Axon Framework's default converter works with.
-
-[IMPORTANT]
-.Renaming an event is not supported
-====
-A transformation may change an event's _version_ and _payload_, but not its qualified name.
-The `to` identity must share the qualified name of `from`.
-
-If they differ, the chain raises a `ChainConfigurationException`:
-
-* with a concrete `from`, the mismatch is detected when the chain is built, so the failure surfaces at startup.
-* with a <<_matching_multiple_event_versions,predicate `from`>>, a match can only be resolved per event, so the failure surfaces when such an event is read.
-
-Keep the same qualified name on both sides and change only the version.
-====
 
 == Working with generic payloads
 
@@ -87,12 +84,11 @@ private static Map<String, Object> map(Map<String, Object> v1) {
 [#_mapping_to_a_typed_event]
 == Mapping to a typed event
 
-The mappers above read and write `JsonNode` or `Map`.
-That is convenient for an intermediate shape that has no class of its own, but it gives up compile-time safety: a misspelled field or a wrong type only surfaces at read time.
+Reading and writing `JsonNode` or `Map` is convenient, but it gives up compile-time safety: a misspelled field or wrong type only surfaces at read time, and the loosely-typed nodes coerce values in ways you did not ask for (dates and UUIDs become strings, a small number is an `int` while a larger one is a `long`).
 
-When a hop produces an event you still have as a class, you can map straight to it and let the compiler check the result.
-This is usually the _current_ version of the event.
-Describe the _stored_ shape as a plain `record`, map it to the current event, and let Axon Framework deserialize the stored payload into that record for you:
+You can avoid that by mapping between records and letting the compiler check the result.
+Describe the _stored_ shape as a small `record` that mirrors the old version, and map it to the next version of the event.
+Axon Framework deserializes the stored payload into that record before your mapper runs:
 
 [source,java]
 ----
@@ -124,8 +120,20 @@ record Id(String value) { }
 <2> The mapper works on named, typed fields and returns the current `CoursePublished` event, so a misspelled field or wrong type is now a compile error.
 <3> The schema `record` only describes the _stored_ shape. It mirrors the wire form exactly, including identifiers written as `{"value": ...}` objects, and stays free of the live value objects, which the mapper builds at the end.
 
-The schema record has no relation to the live event class; it exists solely to read the old payload safely.
-Because the mapper returns a typed event, Axon Framework resolves its identity and rejects a wrong-shaped output: if the produced event's identity does not match the declared `to`, the chain raises a `ChainConfigurationException`.
+[IMPORTANT]
+.The stored-shape record is a throwaway, not a domain class
+====
+The input `record` (here `V2Schema`) exists only to read one historic version.
+Keep it next to the transformation that uses it, and do not add it, or a handler for it, to your domain model.
+
+You never accumulate a class or an event handler per historic version: the chain lifts every stored version to the current shape, so handlers only ever deal with the current event.
+When the event changes again, you add one more transformation, nothing else.
+====
+
+Mapping the final hop straight to the current event class, as above, is fully type-safe but couples that transformation to the class.
+When the event changes again, map what is now an older version to its own stored-shape `record` instead, exactly as the earlier hops do, so the historic transformation keeps compiling unchanged.
+
+Because the mapper returns a typed object, Axon Framework resolves its identity and rejects a wrong-shaped output: if the produced event's identity does not match the declared `to`, the chain raises a `ChainConfigurationException`.
 A `JsonNode` or `Map` output skips that check, so the typed form catches a class of mistakes the untyped one cannot.
 
 [#_reading_from_the_processing_context]
@@ -147,6 +155,7 @@ Keep it out of the signature otherwise, so the common case stays a plain payload
 == Matching multiple event versions
 
 Sometimes one rule should apply to a _range_ of stored identities rather than a single one.
+This is the exception, not the norm: prefer a concrete `MessageType` with one transformation per version step, and reach for a predicate only when a whole range of historic versions genuinely folds to a single target.
 Instead of a concrete `MessageType`, pass a predicate to `from(...)`:
 
 [source,java]

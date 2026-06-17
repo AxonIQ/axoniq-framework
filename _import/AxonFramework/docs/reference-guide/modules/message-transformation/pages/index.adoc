@@ -47,6 +47,9 @@ EventTransformation transformation =
 
 You register one transformation per version step and let Axon Framework apply them in order, so a v1 event read today reaches your handler as the current version.
 
+A transformation maps the payload either as an intermediate representation, such as `JsonNode`, `Map`, or raw bytes, or as a typed `record` that mirrors the stored shape.
+The structural form needs no extra classes, the typed form gives compile-time safety, and you can mix the two across a chain.
+
 From here:
 
 * xref:message-transformation:defining-transformations.adoc[] shows how to write the individual transformations, map straight to a typed event, work with generic payloads, and match several event versions at once.

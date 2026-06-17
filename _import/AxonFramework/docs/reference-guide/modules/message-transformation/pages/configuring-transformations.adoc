@@ -1,3 +1,4 @@
+[.axoniq-feature]
 = Configuring Transformations
 :navtitle: Configuring transformations
 
@@ -10,14 +11,19 @@ Build the chain with the transformations in the order they should run:
 
 [source,java]
 ----
-public static EventTransformerChain chain() {
-    return EventTransformerChain.builder()                            // <1>
-                                .register(SystemAnnouncementLegacyUplift.build())
-                                .register(CoursePublishedV1ToV2.build()) // <2>
-                                .register(CoursePublishedV2ToV3.build())
-                                .register(StudentRegisteredV1ToV2.build())
-                                .register(WelcomeMessageBetaCleanup.build())
-                                .build();                             // <3>
+import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
+
+public final class CourseCatalogTransformations {
+
+    public static EventTransformerChain chain() {
+        return EventTransformerChain.builder()                               // <1>
+                                    .register(SystemAnnouncementLegacyUplift.build())
+                                    .register(CoursePublishedV1ToV2.build()) // <2>
+                                    .register(CoursePublishedV2ToV3.build())
+                                    .register(StudentRegisteredV1ToV2.build())
+                                    .register(WelcomeMessageBetaCleanup.build())
+                                    .build();                                // <3>
+    }
 }
 ----
 <1> Start building the chain.
@@ -25,7 +31,7 @@ public static EventTransformerChain chain() {
 <3> `build()` produces an immutable chain, ready to register as a component.
 
 Then make that chain available to your configuration as an `EventTransformerChain` component.
-You only ever supply the chain: a transformation enhancer detects that component and installs the event-store transformation for you, so there is nothing to wire on the event store itself.
+You only ever supply the chain. The framework's configuration detects the chain and installs decorates the event store with transformation logic for you. Hence, there is nothing to wire on the event store itself for users.
 How you register the component depends on your setup:
 
 [tabs]
@@ -87,11 +93,11 @@ Register transformations in version order so each hop hands off to the one after
 
 A stored v1 `CoursePublished` is lifted to v2 by the first transformation, then that result is lifted to v3 by the second, so your handler always receives the current shape.
 
-[TIP]
+[IMPORTANT]
 .Prefer small, single-step transformations
 ====
 Write one transformation per version step (`v1` to `v2`, then `v2` to `v3`) rather than a single transformation that jumps straight from `v1` to `v3`.
-This is the incremental approach Greg Young recommends for versioning in event-sourced systems: each step stays small, isolated, and easy to reason about, and adding a new version means appending one more transformation while the chain keeps composing the steps for you.
+This is the incremental approach to versioning in event-sourced systems: each step stays small, isolated, and easy to reason about, and adding a new version means appending one more transformation while the chain keeps composing the steps for you.
 ====
 
 [NOTE]
@@ -165,7 +171,7 @@ TransformationTester.forTransformation(CoursePublishedV1ToV2.build())        // 
 <3> Assert on the output: its new type and payload.
 
 `TransformationTester` is a few lines of test code in the example, not a framework dependency.
-Copy it into your own project, or assert on the built transformation however you prefer.
+AxonIQ plans to provide integrated transformation testing in a future release. For now, copy `TransformationTester` into your own project, or assert on the built transformation however you prefer.
 
 [NOTE]
 .Untyped output is not identity-checked
