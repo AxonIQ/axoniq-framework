@@ -137,6 +137,8 @@ final class TransformationIndex {
     }
 
     /**
+     * Counts every registered transformation, across both the exact buckets and the predicate list.
+     *
      * @return the number of registered transformations
      */
     int count() {
@@ -145,6 +147,8 @@ final class TransformationIndex {
     }
 
     /**
+     * Renders, for framework diagnostics, the exact-{@code from} transformations bucketed by qualified name.
+     *
      * @return exact-{@code from} buckets rendered as {@code qualifiedName -> [transformation-toString, ...]}
      */
     Map<String, List<String>> exactTransformationsDescription() {
@@ -156,6 +160,8 @@ final class TransformationIndex {
     }
 
     /**
+     * Renders, for framework diagnostics, the predicate-{@code from} transformations in registration order.
+     *
      * @return predicate-{@code from} transformations rendered by their {@code toString()}
      */
     List<String> predicateTransformationsDescription() {
