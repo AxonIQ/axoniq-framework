@@ -31,6 +31,7 @@ import io.axoniq.axonserver.grpc.command.Command;
 import io.axoniq.axonserver.grpc.command.CommandResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -52,6 +53,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
@@ -456,10 +458,12 @@ class AxonServerCommandBusConnectorTest {
 
     private CommandBusConnector.Handler getIncomingHandler(AxonServerCommandBusConnector instance) {
         try {
-            Field field = instance.getClass().getDeclaredField("incomingHandler");
-            field.setAccessible(true);
-            return (CommandBusConnector.Handler) field.get(instance);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
+            Field field = StreamSupport.stream(ReflectionUtils.fieldsOf(instance.getClass()).spliterator(), false)
+                                       .filter(candidate -> "incomingHandler".equals(candidate.getName()))
+                                       .findFirst()
+                                       .orElseThrow(() -> new NoSuchFieldException("incomingHandler"));
+            return ReflectionUtils.getFieldValue(field, instance);
+        } catch (NoSuchFieldException e) {
             throw new RuntimeException(e);
         }
     }
