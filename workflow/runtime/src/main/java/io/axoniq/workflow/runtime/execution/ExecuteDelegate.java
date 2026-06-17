@@ -139,7 +139,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
                         && s.getStep(stepName).status() == StepStatus.STARTED);
             } catch (InterruptedException e) {
-                return WorkflowStepResults.failed(stepName, e);
+                Thread.currentThread().interrupt();
+                return WorkflowStepResults.canceled(stepName);
             }
         }
 
