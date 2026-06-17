@@ -61,6 +61,20 @@ final class EventStreamTestUtils {
     }
 
     /**
+     * Consume every {@link MessageStream.Entry} from {@code stream} and return them as a {@link List}, preserving
+     * each entry's {@link org.axonframework.messaging.core.Context} (and thus its stream position). Useful for
+     * asserting position survives a drop. After this call the stream is exhausted.
+     */
+    static List<MessageStream.Entry<EventMessage>> collectEntries(MessageStream<EventMessage> stream) {
+        List<MessageStream.Entry<EventMessage>> collected = new ArrayList<>();
+        stream.<Void>reduce(null, (acc, entry) -> {
+            collected.add(entry);
+            return null;
+        }).orTimeout(30, TimeUnit.SECONDS).join();
+        return collected;
+    }
+
+    /**
      * Constructs a {@link GenericEventMessage} with the given {@link MessageType} and payload.
      */
     static EventMessage eventOf(MessageType type, Object payload) {
