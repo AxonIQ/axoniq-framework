@@ -17,21 +17,16 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.api.query;
+package io.axoniq.framework.examples.faculty.read.coursestats;
 
 
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import org.axonframework.messaging.queryhandling.QueryBus;
+import io.axoniq.framework.examples.shared.ids.CourseId;
+import org.axonframework.messaging.queryhandling.annotation.Query;
+import org.axonframework.messaging.queryhandling.annotation.QueryResponse;
 
-import java.util.function.Function;
-
-/**
- * Factory for creating {@link QueryBus} segments for a given {@link TenantDescriptor}. After a segment is created, it
- * may be started automatically by the factory.
- *
- * @author Stefan Dragisic
- * @since 4.6.0
- */
-public interface TenantQuerySegmentFactory extends Function<TenantDescriptor, QueryBus> {
-
+@Query
+public record GetCourseStatsById(CourseId courseId) {
+    @QueryResponse
+    public record Result(CoursesStatsReadModel stats) {
+    }
 }
