@@ -21,7 +21,9 @@ package io.axoniq.framework.messaging.transformation;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 
+import java.util.Set;
 import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
@@ -63,18 +65,27 @@ public sealed interface FromMatcher permits FromMatcher.Exact, FromMatcher.Predi
     }
 
     /**
-     * Predicate-source matcher: matches any {@link MessageType} the predicate accepts.
+     * Predicate-source matcher: matches any {@link MessageType} the predicate accepts. When
+     * {@code declaredFromTypes} is non-empty it acts as a pre-filter: only events whose
+     * {@link MessageType#qualifiedName()} is one of those names ever reach the predicate. An empty
+     * set evaluates the predicate against every candidate.
      *
-     * @param predicate the source predicate
+     * @param predicate         the source predicate
+     * @param declaredFromTypes the qualified names the predicate is restricted to; empty means every candidate
      */
-    record PredicateBased(Predicate<MessageType> predicate) implements FromMatcher {
+    record PredicateBased(Predicate<MessageType> predicate,
+                          Set<QualifiedName> declaredFromTypes) implements FromMatcher {
 
         public PredicateBased {
             requireNonNull(predicate, "predicate may not be null");
+            declaredFromTypes = Set.copyOf(requireNonNull(declaredFromTypes, "declaredFromTypes may not be null"));
         }
 
         @Override
         public boolean matches(MessageType candidate) {
+            if (!declaredFromTypes.isEmpty() && !declaredFromTypes.contains(candidate.qualifiedName())) {
+                return false;
+            }
             return predicate.test(candidate);
         }
     }
