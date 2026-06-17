@@ -22,11 +22,15 @@ package io.axoniq.framework.messaging.transformation.events;
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.MessageTransformation;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -58,14 +62,70 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
 
     /**
      * Begin a 1:1 transformation matching any {@link MessageType} for which the supplied predicate returns
-     * {@code true}.
+     * {@code true}. Optionally restrict the match to specific {@code from} type names via
+     * {@link PredicateFromStep#declaringFromTypes(QualifiedName...)}, then continue with {@code to(...)}.
      *
      * @param sourcePredicate the matcher
-     * @return a builder awaiting {@code to(...)}
+     * @return a builder optionally restricting the match before awaiting {@code to(...)}
      */
-    static ToStep from(Predicate<MessageType> sourcePredicate) {
+    static PredicateFromStep from(Predicate<MessageType> sourcePredicate) {
         requireNonNull(sourcePredicate, "sourcePredicate may not be null");
-        return new ToStep(new FromMatcher.PredicateBased(sourcePredicate));
+        return new PredicateFromStep(sourcePredicate);
+    }
+
+    /**
+     * The {@code from}-side matcher selecting the events this transformation applies to. The chain's lookup uses
+     * this; the declared {@code to} identity, if any, is variant-specific and not part of this contract.
+     *
+     * @return the {@code from}-side matcher
+     */
+    @Internal
+    FromMatcher matcher();
+
+    /**
+     * Continuation of {@link #from(Predicate)}; optionally restricts the predicate match to a set of declared
+     * {@code from} type names before {@code to(...)} is supplied.
+     */
+    final class PredicateFromStep {
+
+        private final Predicate<MessageType> sourcePredicate;
+
+        private PredicateFromStep(Predicate<MessageType> sourcePredicate) {
+            this.sourcePredicate = sourcePredicate;
+        }
+
+        /**
+         * Restrict the predicate match to events whose {@link QualifiedName} is one of the given types. The
+         * predicate is then evaluated only against those types, never against any other event.
+         *
+         * @param declaredFromTypes the {@code from} type names to match; at least one is required
+         * @return a builder awaiting {@code to(...)}
+         * @throws IllegalArgumentException if {@code declaredFromTypes} is empty
+         */
+        public ToStep declaringFromTypes(QualifiedName... declaredFromTypes) {
+            requireNonNull(declaredFromTypes, "declaredFromTypes may not be null");
+            Set<QualifiedName> declared = new LinkedHashSet<>(declaredFromTypes.length);
+            for (QualifiedName declaredType : declaredFromTypes) {
+                declared.add(requireNonNull(declaredType, "declaredFromTypes element may not be null"));
+            }
+            if (declared.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "declaringFromTypes(...) requires at least one qualified name; "
+                                + "omit it entirely to evaluate the predicate against every event.");
+            }
+            return new ToStep(new FromMatcher.PredicateBased(sourcePredicate, declared));
+        }
+
+        /**
+         * Declare the {@code to} identity, leaving the predicate match unrestricted.
+         *
+         * @param target the {@code to} identity
+         * @return a builder awaiting {@code transform(...)}
+         */
+        public TransformStep to(MessageType target) {
+            requireNonNull(target, "target may not be null");
+            return new ToStep(new FromMatcher.PredicateBased(sourcePredicate, Set.of())).to(target);
+        }
     }
 
     /** Continuation of {@link #from(MessageType)} / {@link #from(Predicate)}; supplies {@code to(...)}. */

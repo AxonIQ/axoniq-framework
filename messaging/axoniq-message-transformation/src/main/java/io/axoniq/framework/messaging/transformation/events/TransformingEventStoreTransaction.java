@@ -30,6 +30,7 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jspecify.annotations.Nullable;
 
 import java.util.function.Consumer;
@@ -82,8 +83,19 @@ final class TransformingEventStoreTransaction implements EventStoreTransaction {
     @Override
     public MessageStream<? extends EventMessage> source(SourcingCondition condition,
                                                          @Nullable Consumer<Position> resumePositionCallback) {
+        SourcingCondition widenedCondition = widen(condition);
         return chain.transform(
-                delegate.source(condition, resumePositionCallback), context, converter, messageTypeResolver);
+                delegate.source(widenedCondition, resumePositionCallback), context, converter, messageTypeResolver);
+    }
+
+    /**
+     * Widens the condition's {@link EventCriteria} so a type-filtering read still reaches every source type the
+     * chain transforms into a queried type. Returns the same condition instance when nothing is broadened.
+     */
+    private SourcingCondition widen(SourcingCondition condition) {
+        EventCriteria original = condition.criteria();
+        EventCriteria widened = chain.widen(original);
+        return widened == original ? condition : condition.withCriteria(widened);
     }
 
     @Override

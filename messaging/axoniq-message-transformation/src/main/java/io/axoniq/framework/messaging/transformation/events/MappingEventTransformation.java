@@ -149,12 +149,8 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
         return converted;
     }
 
-    /**
-     * The {@code from}-side matcher this transformation was built with.
-     *
-     * @return the {@code from}-side matcher
-     */
-    FromMatcher matcher() {
+    @Override
+    public FromMatcher matcher() {
         return matcher;
     }
 
