@@ -178,13 +178,6 @@ public final class EventTransformerChain implements DescribableComponent {
         }
     }
 
-    /**
-     * Exposes the chain's populated structure for framework diagnostics
-     * ({@code AxonConfiguration.describe(...)} / Spring Boot Actuator endpoints): the
-     * registered-transformation count, the exact-{@code from} fan-out per qualified name, the
-     * predicate-{@code from} fan-out, the safety bound, and the read-time widening graph plus the
-     * targets whose type filter is dropped.
-     */
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("transformationCount", index.count());

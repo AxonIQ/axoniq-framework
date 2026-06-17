@@ -50,10 +50,6 @@ final class EventTransformerChainCriteriaWideningTest {
 
     private static final Predicate<MessageType> ANY = type -> true;
 
-    private static EventTransformation declaredFromTransformation(QualifiedName declaredFrom, MessageType to) {
-        return declaredFromTransformation(to, declaredFrom);
-    }
-
     // A predicate mapping that declares specific from-types, so it contributes a widening edge from each declared
     // type to the target. (Not a rename: this exercises the widening graph, not the read-time transform.)
     private static EventTransformation declaredFromTransformation(MessageType to, QualifiedName... declaredFrom) {
@@ -98,7 +94,7 @@ final class EventTransformerChainCriteriaWideningTest {
         void matchAllCriteriaIsLeftUnchanged() {
             // given a chain that can widen
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
                                                                .build();
 
             // when / then a match-everything criteria carries no type filter to widen
@@ -110,7 +106,7 @@ final class EventTransformerChainCriteriaWideningTest {
         void criterionUnrelatedToTheChainIsLeftUnchanged() {
             // given a chain that widens CourseCreated reads only
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
                                                                .build();
             EventCriteria criteria = EventCriteria.havingAnyTag().andBeingOneOfTypes(UNRELATED);
 
@@ -122,7 +118,7 @@ final class EventTransformerChainCriteriaWideningTest {
         void tagOnlyCriterionIsLeftUnchangedByAnActiveWidener() {
             // given a chain that can widen, but a criterion carrying tags only (no type filter)
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
                                                                .build();
             EventCriteria criteria = EventCriteria.havingTags(COURSE_TAG);
 
@@ -138,7 +134,7 @@ final class EventTransformerChainCriteriaWideningTest {
         void declaredFromTypesAreAddedToTheTypeFilter() {
             // given a transformation declaring it consumes the legacy type into the current type
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
                                                                .build();
             EventCriteria criteria = EventCriteria.havingAnyTag().andBeingOneOfTypes(CURRENT);
 
@@ -158,8 +154,8 @@ final class EventTransformerChainCriteriaWideningTest {
         void transitiveDeclaredFromTypesResolveToFixedPoint() {
             // given a two-hop rename graph: oldest -> legacy -> current
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
-                                                               .register(declaredFromTransformation(OLDEST, LEGACY_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
+                                                               .register(declaredFromTransformation(LEGACY_V2, OLDEST))
                                                                .build();
             EventCriteria criteria = EventCriteria.havingAnyTag().andBeingOneOfTypes(CURRENT);
 
@@ -197,7 +193,7 @@ final class EventTransformerChainCriteriaWideningTest {
         void tagsArePreservedWhenTypesAreWidened() {
             // given a chain that widens the current type
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
                                                                .build();
             EventCriteria criteria = EventCriteria.havingTags(COURSE_TAG).andBeingOneOfTypes(CURRENT);
 
@@ -217,7 +213,7 @@ final class EventTransformerChainCriteriaWideningTest {
         void eachCriterionInAnOrCombinationIsWidenedIndependently() {
             // given a chain that widens the current type but not the unrelated type
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(declaredFromTransformation(LEGACY, CURRENT_V2))
+                                                               .register(declaredFromTransformation(CURRENT_V2, LEGACY))
                                                                .build();
             EventCriteria criteria = EventCriteria.havingAnyTag().andBeingOneOfTypes(CURRENT)
                                                   .or(EventCriteria.havingAnyTag().andBeingOneOfTypes(UNRELATED));

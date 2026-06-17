@@ -50,24 +50,24 @@ final class CriteriaWidener {
     /**
      * Maps a target type name to the source type names that transform into it.
      */
-    private final Map<QualifiedName, Set<QualifiedName>> wideningSourcesByTargetName;
+    private final Map<QualifiedName, Set<QualifiedName>> sourcesByTarget;
 
     /**
      * Target type names whose read type filter must be dropped because their source types cannot be enumerated.
      */
-    private final Set<QualifiedName> typeFilterDroppingTargetNames;
+    private final Set<QualifiedName> droppingTargets;
 
     /**
      * Whether any criterion can be widened.
      */
     private final boolean active;
 
-    private CriteriaWidener(Map<QualifiedName, Set<QualifiedName>> wideningSourcesByTargetName,
-                            Set<QualifiedName> typeFilterDroppingTargetNames) {
-        this.wideningSourcesByTargetName = copyImmutable(wideningSourcesByTargetName);
-        this.typeFilterDroppingTargetNames = Set.copyOf(typeFilterDroppingTargetNames);
-        this.active = !this.wideningSourcesByTargetName.isEmpty()
-                || !this.typeFilterDroppingTargetNames.isEmpty();
+    private CriteriaWidener(Map<QualifiedName, Set<QualifiedName>> sourcesByTarget,
+                            Set<QualifiedName> droppingTargets) {
+        this.sourcesByTarget = copyImmutable(sourcesByTarget);
+        this.droppingTargets = Set.copyOf(droppingTargets);
+        this.active = !this.sourcesByTarget.isEmpty()
+                || !this.droppingTargets.isEmpty();
     }
 
     /**
@@ -133,10 +133,10 @@ final class CriteriaWidener {
             if (!reachable.add(name)) {
                 continue;
             }
-            if (typeFilterDroppingTargetNames.contains(name)) {
+            if (droppingTargets.contains(name)) {
                 dropTypeFilter = true;
             }
-            Set<QualifiedName> sources = wideningSourcesByTargetName.get(name);
+            Set<QualifiedName> sources = sourcesByTarget.get(name);
             if (sources != null) {
                 pending.addAll(sources);
             }
@@ -179,21 +179,26 @@ final class CriteriaWidener {
     }
 
     /**
-     * @return the widening closure rendered as {@code target -> [source qualified name, ...]} for
-     * framework diagnostics
+     * Renders, for framework diagnostics, the widening edges from each target type to the source types that
+     * transform into it.
+     *
+     * @return the widening closure rendered as {@code target -> [source qualified name, ...]}
      */
     Map<String, List<String>> graphDescription() {
-        Map<String, List<String>> rendered = HashMap.newHashMap(wideningSourcesByTargetName.size());
-        wideningSourcesByTargetName.forEach((target, sources) ->
+        Map<String, List<String>> rendered = HashMap.newHashMap(sourcesByTarget.size());
+        sourcesByTarget.forEach((target, sources) ->
                 rendered.put(target.name(), sources.stream().map(QualifiedName::name).sorted().toList()));
         return rendered;
     }
 
     /**
-     * @return target qualified names whose read-time type filter is dropped, rendered by name
+     * Renders, for framework diagnostics, the target types whose read-time type filter is dropped because their
+     * source types cannot be enumerated.
+     *
+     * @return the type-filter-dropping target names, rendered by qualified name
      */
     List<String> typeFilterDroppingDescription() {
-        return typeFilterDroppingTargetNames.stream().map(QualifiedName::name).sorted().toList();
+        return droppingTargets.stream().map(QualifiedName::name).sorted().toList();
     }
 
     private static Map<QualifiedName, Set<QualifiedName>> copyImmutable(
