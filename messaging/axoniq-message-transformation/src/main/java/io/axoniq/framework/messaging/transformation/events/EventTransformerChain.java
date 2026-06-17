@@ -162,8 +162,9 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Rejects a rename: a transformation may only change the version of a {@link MessageType},
-     * not its {@code QualifiedName}.
+     * Rejects a name change by a payload mapping. Only a rename
+     * ({@link EventTransformation#rename(MessageType, MessageType)}) may change a {@link MessageType}'s
+     * {@code QualifiedName}; a mapping may change only the version.
      *
      * @param from the {@code from} identity
      * @param to   the declared {@code to} identity
@@ -172,8 +173,9 @@ public final class EventTransformerChain implements DescribableComponent {
     private static void rejectNameChange(MessageType from, MessageType to) {
         if (!from.qualifiedName().equals(to.qualifiedName())) {
             throw new ChainConfigurationException("""
-                    Event renaming is not supported: from=%s and to=%s have different \
-                    qualified names. A transformation may only change the version of the message type, not the name.""".formatted(
+                    A mapping may not change the qualified name: from=%s and to=%s differ. \
+                    Use a rename (EventTransformation.rename) to change the name; \
+                    a mapping may change only the version.""".formatted(
                     from, to));
         }
     }

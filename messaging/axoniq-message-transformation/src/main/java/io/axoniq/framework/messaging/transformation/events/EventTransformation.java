@@ -39,27 +39,34 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * An event-specific {@link MessageTransformation} describing how stored events of one {@link MessageType} are
- * rewritten into another when they are read.
+ * rewritten into another when they are read. A transformation is either a 1:1 payload mapping
+ * ({@link MappingEventTransformation}) or a pure rename ({@link RenameEventTransformation}).
  * <p>
- * A transformation is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare
- * the resulting identity and {@code transform(...)} to supply the payload mapper:
+ * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
+ * resulting identity and {@code transform(...)} to supply the payload mapper:
  * <ul>
  *     <li><b>Concrete</b> ({@link #from(MessageType)}): matches a single source {@link MessageType} by exact
  *     equality. The source type name is known up front.</li>
  *     <li><b>Predicate-based</b> ({@link #from(Predicate)}): matches every {@link MessageType} for which the
  *     supplied predicate returns {@code true}.</li>
  * </ul>
+ * A pure rename is built with {@link #rename(MessageType, MessageType)}: it leaves the payload unchanged and, unlike
+ * the mapping paths, may change the {@link QualifiedName} rather than only the version.
  * <pre>{@code
- * // Concrete: rewrite a single, known source type.
+ * // Concrete mapping: rewrite a single, known source type.
  * EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
  *                    .to(new MessageType("com.example.CourseCreated", "2.0.0"))
  *                    .transform(String.class, (payload, context) -> payload);
  *
- * // Predicate-based: match many source types, declaring them so reads stay type-filtered.
+ * // Predicate-based mapping: match many source types, declaring them so reads stay type-filtered.
  * EventTransformation.from(type -> "1.0.0".equals(type.version()))
  *                    .declaringFromTypes(new QualifiedName("com.example.CourseCreated"))
  *                    .to(new MessageType("com.example.CourseCreated", "2.0.0"))
  *                    .transform(String.class, (payload, context) -> payload);
+ *
+ * // Pure rename: same payload, new identity.
+ * EventTransformation.rename(new MessageType("com.example.CourseCreated", "1.0.0"),
+ *                            new MessageType("com.example.CourseRegistered", "1.0.0"));
  * }</pre>
  * <p>
  * <b>Why the declared {@code from} types matter.</b> When entities are sourced, read criteria are widened so a
@@ -75,7 +82,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.2.0
  */
 public sealed interface EventTransformation extends MessageTransformation<EventMessage>
-        permits MappingEventTransformation {
+        permits MappingEventTransformation, RenameEventTransformation {
 
     /**
      * Begin a 1:1 transformation matching the given {@code from} identity by exact equality. Continue
@@ -100,6 +107,25 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
     static PredicateFromStep from(Predicate<MessageType> sourcePredicate) {
         requireNonNull(sourcePredicate, "sourcePredicate may not be null");
         return new PredicateFromStep(sourcePredicate);
+    }
+
+    /**
+     * Begin a pure rename of events from {@code source} to {@code target}, leaving the payload unchanged.
+     * Unlike {@link #from(MessageType)}, a rename may change the {@link QualifiedName}, not only the version.
+     *
+     * @param source the {@code from} identity to match
+     * @param target the {@code to} identity applied to the output
+     * @return the rename transformation
+     * @throws IllegalArgumentException if {@code source} and {@code target} are identical
+     */
+    static EventTransformation rename(MessageType source, MessageType target) {
+        requireNonNull(source, "source may not be null");
+        requireNonNull(target, "target may not be null");
+        if (source.equals(target)) {
+            throw new IllegalArgumentException(
+                    "A rename must change the identity, but source and target are identical: " + source);
+        }
+        return new RenameEventTransformation(source, target);
     }
 
     /**
