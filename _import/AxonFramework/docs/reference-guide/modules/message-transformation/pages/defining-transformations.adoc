@@ -84,7 +84,7 @@ private static Map<String, Object> map(Map<String, Object> v1) {
 [#_mapping_to_a_typed_event]
 == Mapping to a typed event
 
-Reading and writing `JsonNode` or `Map` is convenient, but it gives up compile-time safety: a misspelled field or wrong type only surfaces at read time, and the loosely-typed nodes coerce values in ways you did not ask for (dates and UUIDs become strings, a small number is an `int` while a larger one is a `long`).
+Reading and writing `JsonNode` or `Map` is convenient, but it gives up compile-time safety: a misspelled field or wrong type only surfaces at read time, and the loosely typed nodes coerce values in ways you did not ask for (dates and UUIDs become strings, a small number is an `int` while a larger one is a `long`).
 
 You can avoid that by mapping between records and letting the compiler check the result.
 Describe the _stored_ shape as a small `record` that mirrors the old version, and map it to the next version of the event.
