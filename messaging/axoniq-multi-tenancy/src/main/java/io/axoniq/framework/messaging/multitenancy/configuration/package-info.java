@@ -18,9 +18,9 @@
  */
 
 /**
- * Axoniq Multi-Tenancy API - event.
+ * Configuration enhancers that wire multi-tenancy into the Axon Framework configuration.
  */
 @NullMarked
-package io.axoniq.framework.messaging.multitenancy.api.event;
+package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import org.jspecify.annotations.NullMarked;

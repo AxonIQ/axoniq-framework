@@ -27,6 +27,15 @@ import java.util.function.Predicate;
  * @author Stefan Dragisic
  * @since 4.6.0
  */
+@FunctionalInterface
 public interface TenantConnectPredicate extends Predicate<TenantDescriptor> {
+
+    /**
+     * A TenantConnectPredicate that always returns {@code true}.
+     * @return predicate that always returns {@code true}
+     */
+    static TenantConnectPredicate alwaysTrue() {
+        return tenant -> true;
+    }
 
 }

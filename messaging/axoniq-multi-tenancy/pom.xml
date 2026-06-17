@@ -32,7 +32,8 @@
 
     <name>Axoniq Framework - Multi Tenancy</name>
     <description>
-        Module providing multi tenancy support.
+        Module containing Axon Framework infrastructure components capable of delegating towards tenant-specific
+        versions of these components.
     </description>
 
     <dependencies>
@@ -91,33 +92,6 @@
         <dependency>
             <groupId>org.hsqldb</groupId>
             <artifactId>hsqldb</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Spring - used for testing only! -->
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-context-support</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-orm</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-tx</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>tools.jackson.dataformat</groupId>
-            <artifactId>jackson-dataformat-cbor</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

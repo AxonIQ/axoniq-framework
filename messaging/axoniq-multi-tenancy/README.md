@@ -34,90 +34,120 @@ Multi-Tenancy aims for strict data isolation between tenants.
 
 ## Setup Flow
 
-The intended Axon Server multitenancy setup is:
+The current Axon Server multitenancy setup is:
 
 * one shared `AxonServerConfiguration`
 * one shared `AxonServerConnectionManager`
-* one tenant registry/provider that knows which tenants exist
-* one `MultiTenantCommandBus` at the application level
-* one dedicated command-bus segment per tenant context
+* one shared `TenantProvider`
+* one shared `TenantResolverRegistry`
+* one `CommandBusConnector` that is actually a `MultiTenantAxonServerCommandBusConnector`
+* one `DistributedCommandBus` decorated in by the normal distributed messaging enhancer
 
-The tenant-specific segment is not a copied application stack. It is only:
+The tenant-specific runtime is not a copied application stack. It is only:
 
-* one `AxonServerConnection` for the tenant context
-* one `AxonServerCommandBusConnector`
-* one local `SimpleCommandBus`
-* one `DistributedCommandBus`
+* one `AxonServerConnection` per tenant context
+* one tenant-local command subscription registry
+* one tenant-local in-flight command map
 
-### How Tenants Become Known
+### What Happens At Startup
 
-Tenants are made known to the system by a tenant provider or registry. Typical sources are:
+1. The application configurer runs the multi-tenancy enhancer.
+2. The enhancer registers `TenantConnectPredicate`, `TenantProvider`, and `TenantResolverRegistry`.
+3. The enhancer creates `MultiTenantAxonServerCommandBusConnector`.
+4. The enhancer binds the connector to the `TenantProvider`.
+5. The `TenantProvider` discovers the existing Axon Server contexts.
+6. For every matching context, the provider calls `registerAndStartTenant(...)` on the connector.
+7. The connector creates a tenant entry and asks `AxonServerConnectionManager` for the connection for that tenant context.
+8. The connector stores that connection and waits for command subscriptions.
+9. Later, the distributed messaging enhancer sees the registered `CommandBusConnector` and decorates the application `CommandBus` into a `DistributedCommandBus`.
 
-* a static list from configuration
-* contexts discovered from Axon Server
-* an external source of truth such as a database or configuration service
+### What Happens When A Tenant Is Registered
 
-Once a tenant is known, it is registered with the multi-tenant command bus:
+When the provider adds a tenant, the connector:
 
-```java
-multiTenantCommandBus.registerAndStartTenant(TenantDescriptor.tenantWithId("tenant-a"));
-```
+* creates the tenant entry if it does not exist yet
+* stores the tenant-specific `AxonServerConnection`
+* replays every command name that has already been subscribed
+* makes that tenant immediately ready for command dispatch and handler subscriptions
+
+This means a tenant can appear after the application already started and it still receives the full command handler set.
+
+### Command Handler Subscription Flow
+
+1. Application code subscribes a command handler on the `CommandBus`.
+2. The `DistributedCommandBus` forwards that subscription to the `CommandBusConnector`.
+3. `MultiTenantAxonServerCommandBusConnector` stores the command name and load factor once.
+4. The connector loops over all known tenants.
+5. For each tenant it registers the handler on that tenant’s Axon Server command channel.
+6. Axon Server now knows that this handler exists in every tenant context.
 
 ### Command Dispatch Flow
 
-1. Application code dispatches a command to `MultiTenantCommandBus`.
-2. `TenantResolver` resolves the tenant for the command.
-3. `MultiTenantCommandBus` looks up the tenant segment.
-4. The tenant segment is a `DistributedCommandBus`.
-5. The distributed bus uses its connector.
-6. The connector uses the tenant-specific Axon Server connection.
-7. Axon Server receives the command in the tenant context.
-8. Axon Server routes the command to the matching handler in that context.
+1. Application code dispatches a command on the shared `CommandBus`.
+2. `TenantResolver` resolves the tenant from the command message.
+3. `DistributedCommandBus` delegates the dispatch to the connector.
+4. `MultiTenantAxonServerCommandBusConnector` resolves the tenant again and selects the matching tenant entry.
+5. The connector uses that tenant’s `AxonServerConnection`.
+6. Axon Server receives the command in that tenant context.
+7. Axon Server routes the command to the matching handler in that context.
 
 ### Mermaid Overview
 
 ```mermaid
 flowchart TD
-    A[Application] --> B[One AxonServerConfiguration]
-    B --> C[One AxonServerConnectionManager]
-    A --> D[TenantProvider / Tenant registry]
-    D --> E[Register tenant A]
-    D --> F[Register tenant B]
-    E --> G[Register tenant A in bus]
-    F --> H[Register tenant B in bus]
-
-    A --> I[Register command handlers]
-    I --> J[Subscribe handler on multi-tenant bus]
-    J --> K[Handler registered on all tenant segments]
-
-    A --> L[Dispatch command]
-    L --> M[TenantResolver resolves tenant from message]
-    M --> N[MultiTenantCommandBus finds tenant segment]
-    N --> O[Dedicated DistributedCommandBus for that tenant]
-    O --> P[AxonServerCommandBusConnector]
-    P --> Q[Get tenant Axon Server connection]
-    Q --> R[Axon Server context for tenant]
-    R --> S[Correct handler in that context]
+    A[Application starts] --> B[MultiTenancyConfigurationDefaults enhancer]
+    B --> C[Register TenantProvider]
+    B --> D[Register TenantResolverRegistry]
+    B --> E[Create MultiTenantAxonServerCommandBusConnector]
+    E --> F[Bind connector to TenantProvider]
+    F --> G[Discover existing Axon Server contexts]
+    G --> H[registerAndStartTenant per context]
+    H --> I[Create tenant entry]
+    I --> J[Get tenant connection]
+    J --> K[Tenant-local connection stored]
+    E --> L[Distributed messaging enhancer decorates CommandBus]
+    L --> M[DistributedCommandBus]
+    M --> N[Connector subscription fan-out]
+    M --> O[Connector dispatch routing]
 ```
 
 ```mermaid
 sequenceDiagram
     participant App as Application
-    participant MT as MultiTenantCommandBus
-    participant TR as TenantResolver
-    participant TS as Tenant Segment
+    participant Enh as MultiTenancyConfigurationDefaults
+    participant Prov as TenantProvider
+    participant Conn as MultiTenantAxonServerCommandBusConnector
     participant CM as AxonServerConnectionManager
+    participant Dist as DistributedCommandBus
+    participant TR as TenantResolver
     participant CX as AxonServerConnection
     participant AS as Axon Server
     participant H as Command Handler
 
-    App->>MT: dispatch(command)
-    MT->>TR: resolve tenant from command
-    TR-->>MT: tenantDescriptor
-    MT->>TS: resolve tenant segment
-    TS->>CM: getConnection(tenantContext)
-    CM-->>TS: connection for that context
-    TS->>CX: send command
+    App->>Enh: configure()
+    Enh->>Prov: create / register provider
+    Enh->>Conn: create connector
+    Enh->>Conn: bindToTenantProvider()
+    Prov->>Conn: registerAndStartTenant(existing tenant)
+    Conn->>CM: getConnection(tenantContext)
+    CM-->>Conn: tenant connection
+    Conn->>Conn: store tenant entry
+    Prov-->>Enh: provider ready
+    Enh->>Dist: CommandBus decorated with connector
+
+    App->>Dist: subscribe(commandName, handler)
+    Dist->>Conn: subscribe(commandName, loadFactor)
+    Conn->>Conn: store command name once
+    Conn->>CX: register command handler for each tenant
+    CX->>AS: subscribe in tenant context
+
+    App->>Dist: dispatch(command)
+    Dist->>TR: resolve tenant from message
+    TR-->>Dist: tenantDescriptor
+    Dist->>Conn: dispatch(command)
+    Conn->>CM: getConnection(tenantContext)
+    CM-->>Conn: tenant connection
+    Conn->>CX: send command
     CX->>AS: command in tenant context
     AS->>H: invoke matching handler
     H-->>AS: result
@@ -126,84 +156,12 @@ sequenceDiagram
 
 ### Practical Summary
 
-* Tenants are registered through a provider/registry.
-* Handlers are registered once on `MultiTenantCommandBus`.
-* `TenantResolver` selects the tenant per command.
-* The tenant segment uses the tenant context connection.
-* The system keeps one shared Axon Server configuration and one shared infrastructure setup.
+* Tenants are discovered by the provider.
+* The enhancer binds the connector to the provider after creation.
+* Existing tenants are registered immediately.
+* Handler subscriptions are fanned out to every tenant.
+* Dispatch uses the tenant resolved from the command message.
 * The only tenant-specific variation is the connection target, not a copied configuration graph.
-
-### Why Handlers Still Work With New Tenant Segments
-
-This is the key detail in the current design:
-
-* command handlers are not registered on one global shared `SimpleCommandBus`
-* instead, every tenant gets its own local `SimpleCommandBus`
-* the multi-tenant bus keeps the handler definitions centrally
-* when a new tenant segment is created, the existing handlers are replayed onto that new segment
-
-So the factory can create a brand new tenant segment at tenant registration time without losing handler registrations.
-The new segment starts empty, and `MultiTenantCommandBus` repopulates it from its own handler registry.
-
-That means the registration path is:
-
-1. A handler is registered once on `MultiTenantCommandBus`.
-2. `MultiTenantCommandBus` stores the handler in its internal handler map.
-3. The handler is propagated to all already existing tenant segments.
-4. Each tenant segment registers the handler on its own local `SimpleCommandBus`.
-5. The `DistributedCommandBus` then subscribes the command name on the tenant-specific Axon Server connector.
-
-And the tenant startup path is:
-
-1. A tenant is discovered or registered.
-2. `MultiTenantCommandBus` asks the tenant segment factory for a bus for that tenant.
-3. The factory creates a fresh tenant-local command bus stack.
-4. `MultiTenantCommandBus` replays all already known handlers onto that new tenant segment.
-5. The tenant segment becomes ready to receive commands for that tenant context.
-
-### Handler Replay Diagram
-
-```mermaid
-sequenceDiagram
-    participant App as Application
-    participant MT as MultiTenantCommandBus
-    participant HS as Handler Registry
-    participant TS as New Tenant Segment
-    participant DCB as DistributedCommandBus
-    participant LCB as Local SimpleCommandBus
-    participant CON as Axon Server Connector
-
-    App->>MT: subscribe(commandName, handler)
-    MT->>HS: store handler
-    MT->>TS: subscribe handler on existing tenant segments
-    TS->>DCB: subscribe(commandName, handler)
-    DCB->>LCB: register handler locally
-    DCB->>CON: subscribe command name in tenant context
-
-    App->>MT: registerAndStartTenant(tenant)
-    MT->>TS: create new tenant segment
-    MT->>TS: replay all stored handlers
-    TS->>DCB: subscribe(commandName, handler)
-    DCB->>LCB: register handler locally
-    DCB->>CON: subscribe command name in tenant context
-```
-
-### What This Means Operationally
-
-If you have tenants `tenant-a` and `tenant-b`:
-
-* `tenant-a` gets its own local `SimpleCommandBus`
-* `tenant-b` gets its own local `SimpleCommandBus`
-* both tenant segments receive the same handler registrations
-* the handler instance is reused
-* the bus segment state is not reused
-* each tenant segment points at its own Axon Server context connection
-
-This is why a new tenant segment is not a problem:
-
-* the tenant segment is the runtime container for that tenant
-* the `MultiTenantCommandBus` is the source of truth for registered command handlers
-* tenant segments can be created later and still receive the full handler set
 
 ### Short Recap
 
@@ -216,18 +174,16 @@ This is why a new tenant segment is not a problem:
 
 ### Query Bus Parity
 
-The query side follows the same multi-tenant shape as the command side:
+The Axon Server-backed query side follows the same multi-tenant shape as the command side:
 
 * one shared Axon Server configuration
 * one shared connection manager
 * one tenant-specific connection per Axon Server context
-* one tenant-local `SimpleQueryBus`
-* one tenant-local `DistributedQueryBus`
-* one `MultiTenantQueryBus` that resolves the tenant and delegates to the matching tenant segment
+* one `MultiTenantAxonServerQueryBusConnector` that resolves the tenant and talks to the matching connection
 
 The only meaningful difference is the tenant lookup source for update-style operations:
 
-* `query(...)`, `subscriptionQuery(...)`, and `subscribeToUpdates(...)` resolve the tenant directly from the `QueryMessage`
+* `query(...)` and `subscriptionQuery(...)` resolve the tenant directly from the `QueryMessage`
 * `emitUpdate(...)`, `completeSubscriptions(...)`, and `completeSubscriptionsExceptionally(...)` resolve the tenant from the current `ProcessingContext`
 * the `ProcessingContext` carries the current `Message` via `Message.fromContext(processingContext)`
 
@@ -236,3 +192,29 @@ That preserves the README rule set:
 * no N+1 infrastructure graph
 * one shared framework setup
 * only tenant-specific connections and segments
+
+## Current state - 17.06.2026
+
+The module is now in a working AF5 multi-tenancy shape, with the following pieces in place:
+
+* `MultiTenancyConfigurationDefaults` is the main wiring entry point.
+* `TenantResolverRegistry` is present and the example configuration uses the default metadata-based resolver.
+* `TenantConnectPredicate` is used to decide which Axon Server contexts should be treated as tenants.
+* `MultiTenantAxonServerCommandBusConnector` and `MultiTenantAxonServerQueryBusConnector` both keep tenant-local connector state and replay subscriptions when new tenants appear.
+* `TenantRoutingEventStore` routes event-store work to tenant-specific event-store segments.
+* `TenantPersistentStreamMessageSourceFactory` now exists as the seam for building tenant-specific persistent stream message sources.
+* `MultiTenantPersistentStreamMessageSource` fans out one consumer to per-tenant persistent stream sources and names the tenant streams by tenant id.
+
+What the current implementation already proves:
+
+* tenant discovery and registration work with the shared `TenantProvider`
+* command, query, event-store, and persistent-stream routing are covered by unit tests
+* the non-Spring example under `examples/multi-tenancy-java` exercises the module against Axon Server with two tenants (`foo-a` and `foo-b`)
+* tenant metadata is propagated through the example via the default `tenantId` metadata key
+
+What is still explicitly unfinished or intentionally left open:
+
+* `MultiTenancyConfigurationDefaults` still contains `FIXME` placeholders for embedded-mode defaults, snapshot-store support, and tenant component parameter resolvers
+* the `TenantPersistentStreamMessageSourceFactory` is wired, but the module still depends on the surrounding Axon Server multi-tenant setup to provide the right tenant contexts
+
+In short: the module is beyond the proof-of-concept stage for Axon Server command/query/event-store routing and persistent streams, but the generalized multi-tenancy API surface still has clear follow-up work marked in code.

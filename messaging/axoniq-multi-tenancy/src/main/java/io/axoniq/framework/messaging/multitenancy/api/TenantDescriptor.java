@@ -26,7 +26,7 @@ import java.util.Objects;
  * A descriptor for tenants.
  *
  * @param tenantId   The identifier of this tenant.
- * @param properties The properties of this tenant.
+ * @param properties The properties of this tenant - usually context properties of an Axon Server context.
  *
  * @author Stefan Dragisic
  * @since 4.6.0

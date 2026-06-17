@@ -21,6 +21,6 @@
  * Axoniq Multi-Tenancy - command.
  */
 @NullMarked
-package io.axoniq.framework.messaging.multitenancy.command;
+package io.axoniq.framework.messaging.multitenancy.commandhandling;
 
 import org.jspecify.annotations.NullMarked;
