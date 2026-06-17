@@ -39,3 +39,4 @@ docs/_playbook/build
 
 # flattened maven pom
 .flattened-pom.xml
+/.env.local
