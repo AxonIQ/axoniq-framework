@@ -46,6 +46,7 @@ final class EventTransformerChainDescribableComponentTest {
 
     private static final MessageType COURSE_V1 = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType COURSE_V2 = new MessageType("com.example.CourseCreated", "2.0.0");
+    private static final MessageType LEGACY_COURSE_V1 = new MessageType("com.example.LegacyCourseCreated", "1.0.0");
     private static final MessageType STUDENT_V1 = new MessageType("com.example.StudentRegistered", "1.0.0");
     private static final MessageType STUDENT_V2 = new MessageType("com.example.StudentRegistered", "2.0.0");
 
@@ -96,6 +97,45 @@ final class EventTransformerChainDescribableComponentTest {
     }
 
     @Test
+    void describeToExposesTheReadTimeWideningGraphMappingTargetsToTheirSources() {
+        // given a mapping that declares a legacy from-type, so a CourseCreated read also fetches that legacy name
+        EventTransformation declaredFromMapping = EventTransformation.from(mt -> true)
+                                                                     .declaringFromTypes(LEGACY_COURSE_V1.qualifiedName())
+                                                                     .to(COURSE_V2)
+                                                                     .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(declaredFromMapping).build();
+
+        ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
+        chain.describeTo(descriptor);
+
+        // then the widening graph maps the queried (target) type to its source qualified names
+        ArgumentCaptor<Map<?, ?>> graphCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("wideningGraph"), graphCaptor.capture());
+        assertThat(graphCaptor.getValue())
+                .asInstanceOf(MAP)
+                .containsEntry("com.example.CourseCreated", List.of("com.example.LegacyCourseCreated"));
+    }
+
+    @Test
+    void describeToExposesTheTargetsWhoseTypeFilterIsDroppedByAnUndeclaredPredicate() {
+        // given a predicate-from transformation declaring no source types: its sources cannot be enumerated
+        EventTransformation wildcard = EventTransformation.from(mt -> true)
+                                                          .to(COURSE_V2)
+                                                          .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(wildcard).build();
+
+        ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
+        chain.describeTo(descriptor);
+
+        // then the produced type is reported as a target whose read-time type filter is dropped
+        ArgumentCaptor<Collection<?>> droppingCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("typeFilterDroppingTargets"), droppingCaptor.capture());
+        assertThat(droppingCaptor.getValue())
+                .asInstanceOf(LIST)
+                .containsExactly("com.example.CourseCreated");
+    }
+
+    @Test
     void describeToOnAnEmptyChainExposesAZeroCountAndEmptyContainers() {
         EventTransformerChain chain = EventTransformerChain.builder().build();
 
@@ -111,5 +151,13 @@ final class EventTransformerChainDescribableComponentTest {
         ArgumentCaptor<Collection<?>> predicateCaptor = ArgumentCaptor.captor();
         verify(descriptor).describeProperty(eq("predicateTransformations"), predicateCaptor.capture());
         assertThat(predicateCaptor.getValue()).asInstanceOf(LIST).isEqualTo(List.of());
+
+        ArgumentCaptor<Map<?, ?>> wideningGraphCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("wideningGraph"), wideningGraphCaptor.capture());
+        assertThat(wideningGraphCaptor.getValue()).asInstanceOf(MAP).isEmpty();
+
+        ArgumentCaptor<Collection<?>> droppingCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("typeFilterDroppingTargets"), droppingCaptor.capture());
+        assertThat(droppingCaptor.getValue()).asInstanceOf(LIST).isEqualTo(List.of());
     }
 }

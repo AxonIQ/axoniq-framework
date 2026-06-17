@@ -846,6 +846,19 @@ a last resort if the old stream must be fully replaced.
   adds one (typically as a `MessageHandlerInterceptor`), it sits after the transformer in the
   read pipeline. This ordering is a framework invariant, not a developer responsibility.
   _Traces to: (no user story, security/threat-model invariant)._
+- **FR-022 (Read-time criteria widening)**: When a transformation chain is registered, a
+  type-filtering read (`@EventCriteriaBuilder`, `SourcingCondition`, or `StreamingCondition`)
+  MUST still return every event the chain can transform into one of the queried types.
+  The read-side decorators widen the `EventCriteria` before delegating to storage: each
+  type-restricted criterion is broadened to also match the `from` types that transform
+  (transitively) into one of its queried types; a queried type produced by a predicate-`from`
+  transformer that declares no `from` types drops that criterion's type filter entirely
+  (tags preserved). Without this, combining a 1:1 transform / rename with a type filter
+  silently yields incomplete entities. Widening is zero-cost when the chain cannot widen
+  anything. Full design, the declared-`from` predicate pre-filter semantics, the supporting
+  `EventCriteria.mapCriteria` framework addition, and verified risks are in
+  [to_discuss/criteria-widening.md](expanded_scope/criteria-widening.md).
+  _Traces to: US1, US2 (correctness of transforms under a type-filtering read)._
 
 ## Key Entities
 
