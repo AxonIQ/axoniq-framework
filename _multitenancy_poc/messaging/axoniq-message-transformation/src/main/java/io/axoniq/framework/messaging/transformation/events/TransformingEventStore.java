@@ -31,6 +31,7 @@ import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.jspecify.annotations.Nullable;
 
@@ -96,7 +97,18 @@ public final class TransformingEventStore implements EventStore {
     @Override
     public MessageStream<EventMessage> open(StreamingCondition condition,
                                             @Nullable ProcessingContext context) {
-        return chain.transform(delegate.open(condition, context), context, converter, messageTypeResolver);
+        StreamingCondition widenedCondition = widen(condition);
+        return chain.transform(delegate.open(widenedCondition, context), context, converter, messageTypeResolver);
+    }
+
+    /**
+     * Widens the condition's {@link EventCriteria} so a type-filtering read still reaches every source type the
+     * chain transforms into a queried type. Returns the same condition instance when nothing is broadened.
+     */
+    private StreamingCondition widen(StreamingCondition condition) {
+        EventCriteria original = condition.criteria();
+        EventCriteria widened = chain.widen(original);
+        return widened == original ? condition : condition.withCriteria(widened);
     }
 
     @Override

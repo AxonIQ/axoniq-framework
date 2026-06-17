@@ -29,21 +29,18 @@ import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -51,6 +48,10 @@ import static java.util.Objects.requireNonNull;
  * An immutable, thread-safe chain of {@link EventTransformation} instances that transforms events at read time.
  * Events that match no transformation pass through unchanged. Use {@link Builder} to construct and register
  * transformations.
+ * <p>
+ * The chain is a thin read-time engine composing two read-models derived from the registered transformations: a
+ * {@link TransformationIndex} answering which transformation applies to an event, and a {@link CriteriaWidener}
+ * broadening read criteria so a type-filtering read also fetches the source types the chain transforms.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -66,15 +67,11 @@ public final class EventTransformerChain implements DescribableComponent {
      */
     public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
 
-    /**
-     * Exact-{@code from} transformations, bucketed by {@link QualifiedName}. Each bucket is
-     * stored in registration order; the per-transformation {@code sequence} preserves the
-     * registration order across this map AND {@link #predicateTransformations}.
-     */
-    private final Map<QualifiedName, List<RegisteredTransformation>> exactTransformations;
+    /** Last-match-wins lookup of the transformation applying to an event. */
+    private final TransformationIndex index;
 
-    /** Predicate-{@code from} transformations in registration order. */
-    private final List<RegisteredTransformation> predicateTransformations;
+    /** Broadens read criteria so type-filtering reads also fetch the source types this chain transforms. */
+    private final CriteriaWidener widener;
 
     /**
      * Safety bound on per-event iteration. Guards against pathological configurations
@@ -83,19 +80,12 @@ public final class EventTransformerChain implements DescribableComponent {
      */
     private final int maxIterationsPerEvent;
 
-    private EventTransformerChain(Map<QualifiedName, List<RegisteredTransformation>> exactTransformations,
-                                  List<RegisteredTransformation> predicateTransformations,
+    private EventTransformerChain(TransformationIndex index,
+                                  CriteriaWidener widener,
                                   int maxIterationsPerEvent) {
-        this.exactTransformations = copyImmutable(exactTransformations);
-        this.predicateTransformations = List.copyOf(predicateTransformations);
+        this.index = index;
+        this.widener = widener;
         this.maxIterationsPerEvent = maxIterationsPerEvent;
-    }
-
-    private static Map<QualifiedName, List<RegisteredTransformation>> copyImmutable(
-            Map<QualifiedName, List<RegisteredTransformation>> source) {
-        Map<QualifiedName, List<RegisteredTransformation>> copy = HashMap.newHashMap(source.size());
-        source.forEach((key, bucket) -> copy.put(key, List.copyOf(bucket)));
-        return Map.copyOf(copy);
     }
 
     /**
@@ -121,16 +111,31 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
+     * Widens the given read {@link EventCriteria} so a type-filtering read still returns every event this chain
+     * can transform into one of the queried types. Returns the same instance when nothing can be widened.
+     *
+     * @param criteria the read-time criteria to widen
+     * @return the widened criteria, or the same instance when nothing is broadened
+     */
+    public EventCriteria widen(EventCriteria criteria) {
+        requireNonNull(criteria, "criteria may not be null");
+        return widener.widen(criteria);
+    }
+
+    /**
      * Applies the chain to a single event, repeatedly applying the latest matching transformation until none matches.
      */
     private EventMessage applyChainToOneEvent(EventMessage event, TransformationContext context) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
-            MappingEventTransformation<?, ?> match = findLastRegisteredMatch(current);
+            EventTransformation match = index.findLastMatch(current.type());
             if (match == null) {
                 return current;
             }
-            rejectNameChange(current.type(), match.toType());
+            // Only a payload mapping is constrained to a version change; other variants own their own rules.
+            if (match instanceof MappingEventTransformation<?, ?> mapping) {
+                rejectNameChange(current.type(), mapping.toType());
+            }
             current = singleResult(match.transform(current, context), current, context);
         }
         throw new ChainConfigurationException("""
@@ -145,7 +150,7 @@ public final class EventTransformerChain implements DescribableComponent {
     /**
      * Extracts the single transformed event from a transformation's result stream, rejecting an empty result.
      */
-    private static EventMessage singleResult(MessageStream<EventMessage> result,
+    private static EventMessage singleResult(MessageStream<? extends EventMessage> result,
                                              EventMessage input,
                                              TransformationContext context) {
         return result.first().next()
@@ -158,7 +163,7 @@ public final class EventTransformerChain implements DescribableComponent {
 
     /**
      * Rejects a rename: a transformation may only change the version of a {@link MessageType},
-     * not its {@link QualifiedName}.
+     * not its {@code QualifiedName}.
      *
      * @param from the {@code from} identity
      * @param to   the declared {@code to} identity
@@ -174,79 +179,20 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Returns the latest-registered transformation that matches the event, or {@code null} if
-     * none matches. Scans only the relevant exact bucket and the predicate list, picking
-     * whichever has the higher overall registration order.
-     */
-    private @Nullable MappingEventTransformation<?, ?> findLastRegisteredMatch(EventMessage event) {
-        MessageType eventType = event.type();
-        List<RegisteredTransformation> exactBucket = exactTransformations.get(eventType.qualifiedName());
-        if (exactBucket == null && predicateTransformations.isEmpty()) {
-            return null;
-        }
-        RegisteredTransformation lastExact =
-                exactBucket == null ? null : findLastRegisteredMatchIn(exactBucket, eventType);
-        RegisteredTransformation lastPredicate = findLastRegisteredMatchIn(predicateTransformations, eventType);
-        return pickByRegistrationOrder(lastExact, lastPredicate);
-    }
-
-    private static @Nullable RegisteredTransformation findLastRegisteredMatchIn(List<RegisteredTransformation> bucket,
-                                                                   MessageType eventType) {
-        for (int index = bucket.size() - 1; index >= 0; index--) {
-            RegisteredTransformation candidate = bucket.get(index);
-            if (candidate.transformation().matcher().matches(eventType)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    private static @Nullable MappingEventTransformation<?, ?> pickByRegistrationOrder(
-            @Nullable RegisteredTransformation exactCandidate,
-            @Nullable RegisteredTransformation predicateCandidate) {
-        if (exactCandidate == null) {
-            return predicateCandidate == null ? null : predicateCandidate.transformation();
-        }
-        if (predicateCandidate == null) {
-            return exactCandidate.transformation();
-        }
-        return exactCandidate.sequence() > predicateCandidate.sequence()
-                ? exactCandidate.transformation()
-                : predicateCandidate.transformation();
-    }
-
-    /**
      * Exposes the chain's populated structure for framework diagnostics
      * ({@code AxonConfiguration.describe(...)} / Spring Boot Actuator endpoints): the
-     * registered-transformation count, the exact-{@code from} fan-out per
-     * {@link QualifiedName}, the predicate-{@code from} fan-out, and the safety bound.
+     * registered-transformation count, the exact-{@code from} fan-out per qualified name, the
+     * predicate-{@code from} fan-out, the safety bound, and the read-time widening graph plus the
+     * targets whose type filter is dropped.
      */
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("transformationCount", transformationCount());
-        descriptor.describeProperty("exactTransformations", exactTransformationsDescription());
-        descriptor.describeProperty("predicateTransformations", predicateTransformationsDescription());
+        descriptor.describeProperty("transformationCount", index.count());
+        descriptor.describeProperty("exactTransformations", index.exactTransformationsDescription());
+        descriptor.describeProperty("predicateTransformations", index.predicateTransformationsDescription());
         descriptor.describeProperty("maxIterationsPerEvent", maxIterationsPerEvent);
-    }
-
-    private int transformationCount() {
-        return predicateTransformations.size()
-                + exactTransformations.values().stream().mapToInt(List::size).sum();
-    }
-
-    /** Exact-from buckets rendered as {@code qualifiedName -> [transformation-toString, ...]}. */
-    private Map<String, List<String>> exactTransformationsDescription() {
-        Map<String, List<String>> rendered = HashMap.newHashMap(exactTransformations.size());
-        exactTransformations.forEach((qualifiedName, bucket) ->
-                rendered.put(qualifiedName.name(), bucket.stream()
-                                                          .map(entry -> entry.transformation().toString())
-                                                          .toList()));
-        return rendered;
-    }
-
-    /** Predicate-from transformations rendered by their {@code toString()}. */
-    private List<String> predicateTransformationsDescription() {
-        return predicateTransformations.stream().map(entry -> entry.transformation().toString()).toList();
+        descriptor.describeProperty("wideningGraph", widener.graphDescription());
+        descriptor.describeProperty("typeFilterDroppingTargets", widener.typeFilterDroppingDescription());
     }
 
     /**
@@ -276,9 +222,7 @@ public final class EventTransformerChain implements DescribableComponent {
      */
     public static final class Builder {
 
-        private final Map<QualifiedName, List<RegisteredTransformation>> exactTransformations = new HashMap<>();
-        private final List<RegisteredTransformation> predicateTransformations = new ArrayList<>();
-        private long nextSequence = 0;
+        private final List<EventTransformation> transformations = new ArrayList<>();
         private boolean alreadyBuilt = false;
         private int maxIterationsPerEvent = DEFAULT_MAX_ITERATIONS_PER_EVENT;
 
@@ -310,17 +254,12 @@ public final class EventTransformerChain implements DescribableComponent {
         public Builder register(EventTransformation transformation) {
             assertNotBuilt();
             requireNonNull(transformation, "transformation may not be null");
-            MappingEventTransformation<?, ?> built = (MappingEventTransformation<?, ?>) transformation;
-            RegisteredTransformation entry = new RegisteredTransformation(nextSequence++, built);
-            switch (built.matcher()) {
-                case FromMatcher.Exact(MessageType source) -> {
-                    rejectNameChange(source, built.toType());
-                    exactTransformations.computeIfAbsent(source.qualifiedName(),
-                                                      ignored -> new ArrayList<>())
-                                     .add(entry);
-                }
-                case FromMatcher.PredicateBased ignored -> predicateTransformations.add(entry);
+            // Only a payload mapping with an exact from is held to a version-only change; other variants are exempt.
+            if (transformation instanceof MappingEventTransformation<?, ?> mapping
+                    && mapping.matcher() instanceof FromMatcher.Exact(MessageType source)) {
+                rejectNameChange(source, mapping.toType());
             }
+            transformations.add(transformation);
             return this;
         }
 
@@ -345,35 +284,25 @@ public final class EventTransformerChain implements DescribableComponent {
          */
         public EventTransformerChain build() {
             alreadyBuilt = true;
-            EventTransformerChain chain = new EventTransformerChain(
-                    exactTransformations, predicateTransformations, maxIterationsPerEvent);
-            logChainContents(chain);
-            return chain;
+            TransformationIndex index = TransformationIndex.of(transformations);
+            CriteriaWidener widener = CriteriaWidener.of(index.transformations());
+            logChainContents(index);
+            return new EventTransformerChain(index, widener, maxIterationsPerEvent);
         }
 
-        private static void logChainContents(EventTransformerChain chain) {
+        private static void logChainContents(TransformationIndex index) {
             if (!logger.isDebugEnabled()) {
                 return;
             }
-            int count = chain.transformationCount();
+            int count = index.count();
             if (count == 0) {
                 logger.debug("EventTransformerChain built with 0 transformations (no-op pass-through).");
                 return;
             }
-            String summary = Stream.concat(
-                            chain.exactTransformations.values().stream().flatMap(List::stream),
-                            chain.predicateTransformations.stream())
-                    .map(entry -> entry.transformation().toString())
-                    .collect(Collectors.joining(", "));
+            String summary = index.transformations()
+                                  .map(EventTransformation::toString)
+                                  .collect(Collectors.joining(", "));
             logger.debug("EventTransformerChain built with {} transformation(s): [{}]", count, summary);
         }
-    }
-
-    /**
-     * Holds a registered transformation plus its global registration order. The {@code sequence}
-     * lets {@link #findLastRegisteredMatch} pick the latest match across the exact index and the
-     * predicate list without keeping a parallel flat list.
-     */
-    private record RegisteredTransformation(long sequence, MappingEventTransformation<?, ?> transformation) {
     }
 }
