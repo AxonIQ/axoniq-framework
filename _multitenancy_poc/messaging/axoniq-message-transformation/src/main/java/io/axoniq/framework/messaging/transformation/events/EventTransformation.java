@@ -39,7 +39,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * An event-specific {@link MessageTransformation} describing how stored events of one {@link MessageType} are
- * rewritten into another when they are read. A transformation is either a 1:1 payload mapping or a pure rename.
+ * rewritten into another when they are read. A transformation is either a 1:1 payload mapping, a pure rename,
+ * or a 1:0 drop.
  * <p>
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
@@ -50,7 +51,9 @@ import static java.util.Objects.requireNonNull;
  *     supplied predicate returns {@code true}.</li>
  * </ul>
  * A pure rename is built with {@link #rename(MessageType, MessageType)}: it leaves the payload unchanged and, unlike
- * the mapping paths, may change the {@link QualifiedName} rather than only the version.
+ * the mapping paths, may change the {@link QualifiedName} rather than only the version. A drop is built with
+ * {@link #drop(MessageType)}: matched events are removed from the read stream while their stream position is still
+ * advanced.
  * <pre>{@code
  * // Concrete mapping: rewrite a single, known source type.
  * EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
@@ -66,6 +69,9 @@ import static java.util.Objects.requireNonNull;
  * // Pure rename: same payload, new identity.
  * EventTransformation.rename(new MessageType("com.example.CourseCreated", "1.0.0"),
  *                            new MessageType("com.example.CourseRegistered", "1.0.0"));
+ *
+ * // Drop: remove matched events from the read stream.
+ * EventTransformation.drop(new MessageType("com.example.CourseCreated", "1.0.0"));
  * }</pre>
  * <p>
  * <b>Why the declared {@code from} types matter.</b> When entities are sourced, read criteria are widened so a
@@ -81,7 +87,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.2.0
  */
 public sealed interface EventTransformation extends MessageTransformation<EventMessage>
-        permits MappingEventTransformation, RenameEventTransformation {
+        permits MappingEventTransformation, RenameEventTransformation, DropEventTransformation {
 
     /**
      * Begin a 1:1 transformation matching the given {@code from} identity by exact equality. Continue
@@ -125,6 +131,18 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
                     "A rename must change the identity, but source and target are identical: " + source);
         }
         return new RenameEventTransformation(source, target);
+    }
+
+    /**
+     * Drop events of identity {@code source} from the read stream, so no handler receives them. A dropped event's
+     * stream position is still advanced, so a streaming processor resumes after it rather than reprocessing it.
+     *
+     * @param source the identity to drop
+     * @return the drop transformation
+     */
+    static EventTransformation drop(MessageType source) {
+        requireNonNull(source, "source may not be null");
+        return new DropEventTransformation(source);
     }
 
     /**

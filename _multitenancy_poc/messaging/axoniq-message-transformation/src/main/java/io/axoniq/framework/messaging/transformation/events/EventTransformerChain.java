@@ -26,6 +26,7 @@ import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -40,14 +41,15 @@ import org.slf4j.LoggerFactory;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * An immutable, thread-safe chain of {@link EventTransformation} instances that transforms events at read time.
- * Events that match no transformation pass through unchanged. Use {@link Builder} to construct and register
- * transformations.
+ * Events that match no transformation pass through unchanged; an event a transformation drops is removed. Use
+ * {@link Builder} to construct and register transformations.
  * <p>
  * The chain is a thin read-time engine composing two read-models derived from the registered transformations: a
  * {@link TransformationIndex} answering which transformation applies to an event, and a {@link CriteriaWidener}
@@ -66,6 +68,13 @@ public final class EventTransformerChain implements DescribableComponent {
      * {@link Builder#maxIterationsPerEvent(int)}.
      */
     public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
+
+    /**
+     * Marks a read-stream entry whose event was dropped, so it is filtered out while surviving entries keep their
+     * stream position.
+     */
+    private static final Context.ResourceKey<Boolean> DROPPED =
+            Context.ResourceKey.withLabel("eventTransformationDropped");
 
     /** Last-match-wins lookup of the transformation applying to an event. */
     private final TransformationIndex index;
@@ -90,7 +99,8 @@ public final class EventTransformerChain implements DescribableComponent {
 
     /**
      * Transforms every event in the given stream by applying the chain at read time. Events matching no
-     * transformation pass through unchanged.
+     * transformation pass through unchanged; an event a transformation drops is removed, and surviving events keep
+     * their stream position.
      *
      * @param stream              the input stream of events
      * @param context             the active processing context, or {@code null} when the read path supplies none
@@ -104,10 +114,26 @@ public final class EventTransformerChain implements DescribableComponent {
                                                  MessageTypeResolver messageTypeResolver) {
         requireNonNull(converter, "converter may not be null");
         requireNonNull(messageTypeResolver, "messageTypeResolver may not be null");
-        // Entry-level map (not mapMessage) keeps the engine-attached Context in scope so the
-        // chain can include the stream position in diagnostic exceptions.
-        return stream.map(entry -> entry.map(event -> applyChainToOneEvent(
-                event, new TransformationContext(entry, context, converter, messageTypeResolver))));
+        // The map replaces or tags each entry; the filter then removes the dropped ones. Entry-level map (not
+        // mapMessage) keeps the engine-attached Context in scope, so diagnostics can include the stream position
+        // and surviving entries keep their tracking token.
+        return stream.map(entry -> transformEntry(entry, context, converter, messageTypeResolver))
+                     .filter(entry -> !entry.containsResource(DROPPED));
+    }
+
+    /**
+     * Runs the chain over one read-stream entry, replacing its message with the transformed event, or tagging it
+     * with {@link #DROPPED} when a transformation dropped the event so the filter step removes it.
+     */
+    private MessageStream.Entry<EventMessage> transformEntry(MessageStream.Entry<? extends EventMessage> entry,
+                                                             @Nullable ProcessingContext context,
+                                                             MessageConverter converter,
+                                                             MessageTypeResolver messageTypeResolver) {
+        TransformationContext transformationContext =
+                new TransformationContext(entry, context, converter, messageTypeResolver);
+        return applyChainToOneEvent(entry.message(), transformationContext)
+                .map(result -> entry.map(original -> result))
+                .orElseGet(() -> entry.<EventMessage>map(dropped -> dropped).withResource(DROPPED, Boolean.TRUE));
     }
 
     /**
@@ -123,18 +149,28 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Applies the chain to a single event, repeatedly applying the latest matching transformation until none matches.
+     * Applies the chain to a single event until no transformation matches.
+     *
+     * @return the transformed event, or {@link Optional#empty()} when a transformation dropped it
      */
-    private EventMessage applyChainToOneEvent(EventMessage event, TransformationContext context) {
+    private Optional<EventMessage> applyChainToOneEvent(EventMessage event, TransformationContext context) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
             EventTransformation match = index.findLastMatch(current.type());
             if (match == null) {
-                return current;
+                return Optional.of(current);
             }
-            // Only a payload mapping is constrained to a version change; other variants own their own rules.
-            if (match instanceof MappingEventTransformation<?, ?> mapping) {
-                assertMappingVersionChangeOnly(current.type(), mapping.toType());
+            switch (match) {
+                // A 1:0 drop is terminal: stop with no output so the entry is removed from the stream.
+                case DropEventTransformation ignored -> {
+                    return Optional.empty();
+                }
+                // A rename may change the qualified name, so the name-change guard does not apply.
+                case RenameEventTransformation ignored -> {
+                }
+                // A payload mapping may only change the version, never the qualified name.
+                case MappingEventTransformation<?, ?> mapping ->
+                        assertMappingVersionChangeOnly(current.type(), mapping.toType());
             }
             current = singleResult(match.transform(current, context), current, context);
         }
