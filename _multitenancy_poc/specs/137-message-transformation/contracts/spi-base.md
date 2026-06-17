@@ -9,51 +9,49 @@ Shared SPI base for events (5.2.0) and -- when delivered -- commands and queries
 
 ## `MessageTransformer<M extends Message>`
 
-Generic SPI base. Single-message input, stream output: each transformer emits zero elements (drop), one (1:1), or N (1:N split) for one matched input message. `M` is preserved across the call -- a transformer does not turn a command into an event. Each message type has its own typed chain that composes many transformers into a stream-in / stream-out pipeline: `EventTransformerChain` ([spi-events.md](spi-events.md), 5.2.0) and the deferred `CommandTransformerChain` / `QueryTransformerChain` ([spi-commands-queries.md](spi-commands-queries.md), 5.3+). This per-transformer SPI is intentionally the simpler shape so user code stays a plain `BiFunction`-equivalent returning a `MessageStream`.
+Generic base type. Single-message input, stream output: each transformer emits zero elements (drop), one (1:1), or N (1:N split) for one matched input message. `M` is preserved across the call -- a transformer does not turn a command into an event. Each message type has its own typed chain that composes many transformers into a stream-in / stream-out pipeline: `EventTransformerChain` ([spi-events.md](spi-events.md), 5.2.0) and the deferred `CommandTransformerChain` / `QueryTransformerChain` ([spi-commands-queries.md](spi-commands-queries.md), 5.3+). This per-transformer type is an internal execution hook (`@Internal`), not a user extension point: users pass a plain `BiFunction` mapper to the typed factory, which produces the transformer (the event specialization is `sealed`). Single-message-in / stream-out so the chain drives each matched transformer uniformly.
 
 ```java
 package io.axoniq.framework.messaging.transformation;
 
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 /**
- * Base SPI for message transformations. The element type {@code M} is preserved -- a
+ * Base type for message transformations. The element type {@code M} is preserved -- a
  * transformer does not turn a command into an event. Per call it MAY change the
  * {@link org.axonframework.messaging.core.MessageType} identity, the payload's Java type
  * or structure, and the cardinality (1:N split / 1:0 drop for events; commands and
  * queries are 1:1 only).
  * <p>
- * Most users do not implement this directly; use the typed factory
- * {@code EventTransformation} (plus {@code CommandTransformation} / {@code QueryTransformation}
- * in 5.3+).
+ * This is a handle, not an entry point: users never implement it or invoke it directly.
+ * They obtain instances from a typed factory ({@code EventTransformation}, plus
+ * {@code CommandTransformation} / {@code QueryTransformation} in 5.3+) and register them
+ * with the matching chain, which calls {@code transform} once a message matches.
  *
  * @param <M> the {@link Message} subtype this transformer accepts and emits
  * @author Laura Devriendt
  * @since 5.2.0
  */
-@FunctionalInterface
-@NullMarked
 public interface MessageTransformer<M extends Message> {
 
     /**
      * Transform a single matched message. Called by the chain only when {@code message}
      * matches this transformer's {@code from}. The output stream MAY contain zero (drop),
      * one (1:1), or more (1:N) elements.
+     * <p>
+     * Marked {@link Internal}: this is the framework's execution hook, driven by the chain.
+     * Application code holds and registers transformers but never invokes this method.
      *
      * @param message the matched input message
-     * @param context the active processing context. Non-null on the entity-load read path
-     *                ({@code EventStore.transaction(ctx)}); MAY be {@code null} on the
-     *                tracking-processor read path
-     *                ({@code EventStore.open(StreamingCondition, @Nullable ProcessingContext)})
-     *                when the caller passes {@code null}. Implementations MUST tolerate
-     *                {@code null}.
+     * @param context the framework-supplied {@link TransformationContext} carrying the active
+     *                processing context (nullable) plus the converter and resolver the
+     *                transformation needs
      * @return the resulting output stream
      */
-    MessageStream<? extends M> transform(M message, @Nullable ProcessingContext context);
+    @Internal
+    MessageStream<? extends M> transform(M message, TransformationContext context);
 }
 ```
 
@@ -61,9 +59,50 @@ public interface MessageTransformer<M extends Message> {
 - **Deterministic + thread-safe** (FR-006): no external services, no time/randomness, no mutable shared state. Constant in-process data is fine. The framework MAY invoke `transform` concurrently. Not enforced at runtime.
 - **Non-matching elements pass through unchanged** (FR-005) with no payload conversion (FR-011).
 - **Output identity check** (FR-018): for any 1:1 transformer that supplies a payload mapper, the framework MUST verify after invocation that the output's resolved `MessageType` matches the declared `to`. A mismatch raises a clear error under FR-015 with full context (declared `to`, actual output identity, stream position). Pure renames (no payload mapper) satisfy this trivially because the framework sets the output identity itself. Does NOT apply to 1:N / 1:0 transformers (events only, FR-003): output identities there are mapper-determined by design.
-- Users almost never implement this directly -- they use the typed factories declared in [public-api.md](public-api.md).
+- Users never implement this -- the type is an `@Internal` handle; they use the typed factories declared in [public-api.md](public-api.md).
 
 **Cross-references**: FR-001, FR-005, FR-006, FR-011, FR-018, FR-019, US1.
+
+---
+
+## `TransformationContext`
+
+Framework-supplied bundle of the per-invocation services a `transform(...)` call needs. The chain builds one instance per source message and passes it, unchanged, to every transformer applied to that message. Users never construct it; it is `@Internal` plumbing whose component set may evolve between minor / patch releases.
+
+```java
+package io.axoniq.framework.messaging.transformation;
+
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Per-invocation services for a {@link MessageTransformer#transform} call.
+ *
+ * @param entryContext        the read-stream entry's {@link Context}, carrying stream position when available
+ * @param processingContext   the active {@link ProcessingContext}, or {@code null} when the read path supplies none
+ * @param converter           the {@link MessageConverter} for stored-payload conversion
+ * @param messageTypeResolver the {@link MessageTypeResolver} for the output-identity check
+ * @author Laura Devriendt
+ * @since 5.2.0
+ */
+@Internal
+public record TransformationContext(
+        Context entryContext,
+        @Nullable ProcessingContext processingContext,
+        MessageConverter converter,
+        MessageTypeResolver messageTypeResolver) { }
+```
+
+**Contract**:
+- `entryContext`, `converter`, `messageTypeResolver` are non-null (validated in the canonical constructor); `processingContext` is nullable -- tracking-processor reads supply none.
+- Built by the chain, one per source message, and shared unchanged across every transformer applied to that message.
+- `entryContext` carries the read-stream position (a `TrackingToken`) for events, used in diagnostics. For commands and queries (5.3+) there is no read-stream entry; their chains pass the message's processing `Context` (or `Context.empty()`), so the field stays meaningful across message types without a shape change.
+
+**Cross-references**: FR-006, FR-009, FR-012, FR-018.
 
 ---
 
@@ -75,7 +114,7 @@ Each message type has its own typed chain holding only its transformers. There i
 - `CommandTransformerChain` -- [spi-commands-queries.md](spi-commands-queries.md), 5.3+
 - `QueryTransformerChain` -- [spi-commands-queries.md](spi-commands-queries.md), 5.3+
 
-All three share the same shape: a `builder()` that returns an immutable, locked chain on `build()`; one `register(...)` overload; one `transform(MessageStream<MessageSubtype>) -> MessageStream<? extends MessageSubtype>` method. They differ only in the bound `M`. Behaviour (FR-004 startup-only registration, FR-007 fixed-point iteration with last-match-wins, FR-008 conflict detection, FR-011 hybrid lookup) is identical across all three -- documented once per chain in its file, not duplicated here.
+All three share the same shape: a `builder()` that returns an immutable, locked chain on `build()`; one `register(...)` overload; one `transform(MessageStream<MessageSubtype>, @Nullable ProcessingContext, MessageConverter, MessageTypeResolver) -> MessageStream<MessageSubtype>` method (the converter + resolver are supplied by the configuration enhancer, not the user). They differ only in the bound `M`. Behaviour (FR-004 startup-only registration, FR-007 fixed-point iteration with last-match-wins, FR-008 conflict detection, FR-011 hybrid lookup) is identical across all three -- documented once per chain in its file, not duplicated here.
 
 ---
 
