@@ -17,7 +17,7 @@
 package org.axonframework.examples.demo.coursecatalog.catalog.chain;
 
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import org.axonframework.examples.demo.coursecatalog.catalog.CourseCatalogMessageNames;
 import org.axonframework.examples.demo.coursecatalog.catalog.testutil.ChainTester;
@@ -45,15 +45,15 @@ class RenameRejectedTest {
 
         @Test
         void renamingOneEventTypeToAnotherIsRejectedAtRegistration() {
-            // given: a transformer that would rename CoursePublished into StudentRegistered
-            EventTransformer renameTransformer =
-                    EventTransformer.from(new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "1.0.0"))
+            // given: a transformation that would rename CoursePublished into StudentRegistered
+            EventTransformation renameTransformation =
+                    EventTransformation.from(new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "1.0.0"))
                                        .to(new MessageType(CourseCatalogMessageNames.STUDENT_REGISTERED, "1.0.0"))
                                        .transform(JsonNode.class, (node, ctx) -> node);
             EventTransformerChain.Builder builder = EventTransformerChain.builder();
 
             // when / then
-            assertThatThrownBy(() -> builder.register(renameTransformer))
+            assertThatThrownBy(() -> builder.register(renameTransformation))
                     .isInstanceOf(ChainConfigurationException.class)
                     .hasMessageContaining("renaming")
                     .hasMessageContaining(CourseCatalogMessageNames.COURSE_PUBLISHED)
@@ -63,8 +63,8 @@ class RenameRejectedTest {
         @Test
         void bumpingTheVersionWhileKeepingTheNameIsAllowed() {
             // given: a same-name version bump (the supported structural upcast)
-            EventTransformer structuralUpcast =
-                    EventTransformer.from(new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "1.0.0"))
+            EventTransformation structuralUpcast =
+                    EventTransformation.from(new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "1.0.0"))
                                        .to(new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "2.0.0"))
                                        .transform(JsonNode.class, (node, ctx) -> node);
 
@@ -83,12 +83,12 @@ class RenameRejectedTest {
             // given: registration is allowed because a predicate's matched source name is not
             // known statically; the rename only surfaces once a CoursePublished event matches.
             MessageType coursePublishedV1 = new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "1.0.0");
-            EventTransformer renameTransformer =
-                    EventTransformer.from(type -> type.equals(coursePublishedV1))
+            EventTransformation renameTransformation =
+                    EventTransformation.from(type -> type.equals(coursePublishedV1))
                                        .to(new MessageType(CourseCatalogMessageNames.STUDENT_REGISTERED, "1.0.0"))
                                        .transform(JsonNode.class, (node, ctx) -> node);
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(renameTransformer)
+                                                               .register(renameTransformation)
                                                                .build();
 
             // when / then: the rename is rejected as the matching event flows through the chain
@@ -112,8 +112,8 @@ class RenameRejectedTest {
             // given: a predicate that matches only CoursePublished v1 and bumps it to v2 (the
             // exact-equality predicate keeps the v2 output from re-matching and looping)
             MessageType coursePublishedV1 = new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "1.0.0");
-            EventTransformer structuralUpcast =
-                    EventTransformer.from(type -> type.equals(coursePublishedV1))
+            EventTransformation structuralUpcast =
+                    EventTransformation.from(type -> type.equals(coursePublishedV1))
                                        .to(new MessageType(CourseCatalogMessageNames.COURSE_PUBLISHED, "2.0.0"))
                                        .transform(JsonNode.class, (node, ctx) -> node);
             EventTransformerChain chain = EventTransformerChain.builder()

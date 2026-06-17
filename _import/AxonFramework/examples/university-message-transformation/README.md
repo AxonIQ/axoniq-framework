@@ -5,18 +5,18 @@ An example of the event message transformation chain in AxonIQ Framework 5.2.
 Stored events outlive the code that wrote them. The chain lifts each historic payload
 into its current shape on the read path, so it is easier for handlers to handle them.
 
-This demo wires transformers into one chain on a course catalog that has gone
+This demo wires transformations into one chain on a course catalog that has gone
 through schema evolution, and exercises them end to end.
 
 ## The transformations
 
-| Transformer | From / To | What it teaches |
+| Transformation | From / To | What it teaches |
 |---|---|---|
 | `CoursePublishedV1ToV2` | `CoursePublished#1.0.0` / `#2.0.0` | A single `capacity` field becomes `minCapacity` + `maxCapacity`. |
 | `CoursePublishedV2ToV3` | `CoursePublished#2.0.0` / `#3.0.0` | Two-hop chain: a stored v1 event reaches handlers as v3. |
 | `StudentRegisteredV1ToV2` | `StudentRegistered#1.0.0` / `#2.0.0` | `TypeReference<Map<String,Object>>` overload, no Jackson dependency in user code. |
 | `SystemAnnouncementLegacyUplift` | `SystemAnnouncement#0.0.1` / `#1.0.0` | Unversioned legacy events: `@Event` without a `version` defaults to `0.0.1`. |
-| `WelcomeMessageBetaCleanup` | `WelcomeMessageSent#0.*` / `#1.0.0` | Predicate-based source, one transformer matches every beta version. |
+| `WelcomeMessageBetaCleanup` | `WelcomeMessageSent#0.*` / `#1.0.0` | Predicate-based source, one transformation matches every beta version. |
 
 The chain is composed in
 [`CourseCatalogTransformations`](src/main/java/org/axonframework/examples/demo/coursecatalog/catalog/transformations/CourseCatalogTransformations.java).
@@ -26,7 +26,7 @@ the `TransformingEventStore` decorator on top of the store.
 
 [`LegacyEventSeeder`](src/main/java/org/axonframework/examples/demo/coursecatalog/catalog/seed/LegacyEventSeeder.java)
 writes the historic events on startup (idempotently), so the application boots into
-a state that actually exercises every transformer above.
+a state that actually exercises every transformation above.
 
 The chain runs on all three read paths wired here: entity load on the write slices,
 the consistency check used by `EnrollStudent`, and the catalog projection.
@@ -40,7 +40,7 @@ org.axonframework.examples.demo.coursecatalog
 |  +- events                          (current-shape event records)
 |  +- read/catalogview                (projection, read model, query)
 |  +- seed                            (legacy event seeder)
-|  +- transformations                 (chain composition + transformers)
+|  +- transformations                 (chain composition + transformations)
 |  +- values                          (CapacityRange value object)
 |  +- write                           (command slices + RequestRegionCommandInterceptor)
 |     +- publishcourse
@@ -68,7 +68,7 @@ The bootstrap seeds the legacy history, dispatches a few sample commands, awaits
 the projection, prints the resulting catalog view, and shuts down.
 
 The bundled `logback.xml` enables `DEBUG` for `io.axoniq.framework.messaging.transformation`,
-so the chain build log naming every registered transformer shows up on startup.
+so the chain build log naming every registered transformation shows up on startup.
 
 ### Against Axon Server
 
@@ -157,7 +157,7 @@ Tests live next to the production code they cover, in the matching package:
 
 | Where | What you'll find |
 |---|---|
-| `catalog/transformations/` | each transformer in isolation, with fixture JSON under `src/test/resources/transformations/` |
+| `catalog/transformations/` | each transformation in isolation, with fixture JSON under `src/test/resources/transformations/` |
 | `catalog/chain/` | the composed chain (build log, locking, identity check, concurrency, decoration order) |
 | `catalog/write/<slice>/` | one write slice per package, full app fixture |
 | `catalog/read/catalogview/` | the catalog projection and query |

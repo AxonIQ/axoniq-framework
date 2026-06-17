@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Fluent harness for running a full {@link EventTransformerChain} on a test input.
  * Mirrors the {@code given -> when -> then} shape of the {@code AxonTestFixture};
  * use this for multi-hop scenarios or full-chain behavior, and
- * {@link TransformationTester} for single-transformer tests.
+ * {@link TransformationTester} for single-transformation tests.
  */
 public final class ChainTester {
 

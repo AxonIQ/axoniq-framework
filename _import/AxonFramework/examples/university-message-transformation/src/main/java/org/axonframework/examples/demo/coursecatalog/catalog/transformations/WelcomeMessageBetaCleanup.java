@@ -19,7 +19,7 @@ package org.axonframework.examples.demo.coursecatalog.catalog.transformations;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import org.axonframework.examples.demo.coursecatalog.catalog.CourseCatalogMessageNames;
 import org.axonframework.messaging.core.MessageType;
 
@@ -27,7 +27,7 @@ import java.util.function.Predicate;
 
 /**
  * Uses the predicate-based {@code from} overload to match any {@code 0.x} version
- * in a single transformer instead of one transformer per beta version.
+ * in a single transformation instead of one transformation per beta version.
  */
 public final class WelcomeMessageBetaCleanup {
 
@@ -41,9 +41,9 @@ public final class WelcomeMessageBetaCleanup {
     private WelcomeMessageBetaCleanup() {
     }
 
-    /** @return the transformer registered into the chain */
-    public static EventTransformer build() {
-        return EventTransformer.from(FROM_PREDICATE).to(TO).transform(JsonNode.class, WelcomeMessageBetaCleanup::map);
+    /** @return the transformation registered into the chain */
+    public static EventTransformation build() {
+        return EventTransformation.from(FROM_PREDICATE).to(TO).transform(JsonNode.class, WelcomeMessageBetaCleanup::map);
     }
 
     private static JsonNode map(JsonNode beta) {

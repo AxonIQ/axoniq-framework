@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import org.axonframework.examples.demo.coursecatalog.catalog.testutil.ChainTester;
 import org.axonframework.messaging.core.MessageType;
@@ -38,14 +38,14 @@ class OutputIdentityCheckTest {
 
     @Test
     void misconfiguredMapperOutputIdentityRaisesChainConfigurationException() {
-        // A 1:1 transformer whose mapper returns a typed POJO that the configured resolver
+        // A 1:1 transformation whose mapper returns a typed POJO that the configured resolver
         // resolves to a MessageType other than the declared `to`. The chain MUST refuse it.
-        EventTransformer misconfiguredTransformer = EventTransformer
+        EventTransformation misconfiguredTransformation = EventTransformation
                 .from(new MessageType("coursecatalog.SamplePayload", "1.0.0"))
                 .to(DECLARED_TO)
                 .transform(JsonNode.class, (in, ctx) -> new WrongPayload());
 
-        EventTransformerChain chain = EventTransformerChain.builder().register(misconfiguredTransformer).build();
+        EventTransformerChain chain = EventTransformerChain.builder().register(misconfiguredTransformation).build();
 
         ChainTester.forChain(chain)
                    .usingTypeResolver(cls -> cls == WrongPayload.class

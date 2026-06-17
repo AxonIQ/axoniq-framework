@@ -43,7 +43,7 @@ class ChainBuildLogTest {
         appender = new ListAppender<>();
         appender.start();
         chainLogger.addAppender(appender);
-        chainLogger.setLevel(Level.INFO);
+        chainLogger.setLevel(Level.DEBUG);
     }
 
     @AfterEach
@@ -52,14 +52,14 @@ class ChainBuildLogTest {
     }
 
     @Test
-    void chainBuildEmitsOneInfoEntryNamingEveryRegisteredTransformer() {
+    void chainBuildEmitsOneDebugEntryNamingEveryRegisteredTransformation() {
         CourseCatalogTransformations.chain();
 
-        List<ILoggingEvent> infoEntries = appender.list.stream()
-                                                       .filter(e -> e.getLevel() == Level.INFO)
-                                                       .toList();
-        assertThat(infoEntries).hasSize(1);
-        assertThat(infoEntries.getFirst().getFormattedMessage())
+        List<ILoggingEvent> debugEntries = appender.list.stream()
+                                                        .filter(e -> e.getLevel() == Level.DEBUG)
+                                                        .toList();
+        assertThat(debugEntries).hasSize(1);
+        assertThat(debugEntries.getFirst().getFormattedMessage())
                 .contains("6 transformation(s)",
                           "coursecatalog.CoursePublished#1.0.0",
                           "coursecatalog.CoursePublished#2.0.0",

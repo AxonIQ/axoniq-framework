@@ -27,7 +27,7 @@
         </encoder>
     </appender>
 
-    <!-- The transformation chain emits one DEBUG entry at build naming every registered transformer. -->
+    <!-- The transformation chain emits one DEBUG entry at build naming every registered transformation. -->
     <logger name="io.axoniq.framework.messaging.transformation" level="DEBUG"/>
 
     <!-- Quiet the noisy ones (matches university-java's template). -->

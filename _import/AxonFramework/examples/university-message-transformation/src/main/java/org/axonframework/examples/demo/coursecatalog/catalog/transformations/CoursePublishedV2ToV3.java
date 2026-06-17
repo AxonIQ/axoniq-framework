@@ -16,7 +16,7 @@
 
 package org.axonframework.examples.demo.coursecatalog.catalog.transformations;
 
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import org.axonframework.examples.demo.coursecatalog.catalog.CourseCatalogMessageNames;
 import org.axonframework.examples.demo.coursecatalog.catalog.events.CoursePublished;
 import org.axonframework.examples.demo.coursecatalog.catalog.values.CapacityRange;
@@ -43,9 +43,9 @@ public final class CoursePublishedV2ToV3 {
     private CoursePublishedV2ToV3() {
     }
 
-    /** @return the transformer registered into the chain */
-    public static EventTransformer build() {
-        return EventTransformer.from(FROM).to(TO).transform(V2Schema.class, CoursePublishedV2ToV3::map);
+    /** @return the transformation registered into the chain */
+    public static EventTransformation build() {
+        return EventTransformation.from(FROM).to(TO).transform(V2Schema.class, CoursePublishedV2ToV3::map);
     }
 
     private static CoursePublished map(V2Schema v2) {

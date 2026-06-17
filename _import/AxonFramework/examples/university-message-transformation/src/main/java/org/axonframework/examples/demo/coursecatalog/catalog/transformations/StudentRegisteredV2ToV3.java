@@ -19,7 +19,7 @@ package org.axonframework.examples.demo.coursecatalog.catalog.transformations;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import org.axonframework.examples.demo.coursecatalog.catalog.CourseCatalogMessageNames;
 import org.axonframework.examples.demo.coursecatalog.shared.region.RequestRegion;
 import org.axonframework.messaging.core.MessageType;
@@ -46,9 +46,9 @@ public final class StudentRegisteredV2ToV3 {
     private StudentRegisteredV2ToV3() {
     }
 
-    /** @return the transformer registered into the chain */
-    public static EventTransformer build() {
-        return EventTransformer.from(FROM).to(TO).transform(JsonNode.class, StudentRegisteredV2ToV3::map);
+    /** @return the transformation registered into the chain */
+    public static EventTransformation build() {
+        return EventTransformation.from(FROM).to(TO).transform(JsonNode.class, StudentRegisteredV2ToV3::map);
     }
 
     private static JsonNode map(JsonNode v2, @Nullable ProcessingContext context) {

@@ -16,7 +16,7 @@
 
 package org.axonframework.examples.demo.coursecatalog.catalog.testutil;
 
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
@@ -34,9 +34,9 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Fluent harness for invoking a single {@link EventTransformer} on a test input.
+ * Fluent harness for invoking a single {@link EventTransformation} on a test input.
  * Mirrors the {@code given -> when -> then} shape of the {@code AxonTestFixture},
- * so transformer tests read the same as slice tests.
+ * so transformation tests read the same as slice tests.
  *
  * <pre>{@code
  * TransformationTester.forTransformation(CoursePublishedV1ToV2.build())
@@ -52,20 +52,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public final class TransformationTester {
 
-    private final EventTransformer transformer;
+    private final EventTransformation transformation;
     private MessageConverter converter = new DelegatingMessageConverter(new JacksonConverter());
     private MessageTypeResolver typeResolver = cls -> Optional.empty();
 
-    private TransformationTester(EventTransformer transformer) {
-        this.transformer = transformer;
+    private TransformationTester(EventTransformation transformation) {
+        this.transformation = transformation;
     }
 
     /**
-     * @param transformer the transformer under test
-     * @return a new tester targeting {@code transformer}
+     * @param transformation the transformation under test
+     * @return a new tester targeting {@code transformation}
      */
-    public static TransformationTester forTransformation(EventTransformer transformer) {
-        return new TransformationTester(transformer);
+    public static TransformationTester forTransformation(EventTransformation transformation) {
+        return new TransformationTester(transformation);
     }
 
     /**
@@ -127,7 +127,7 @@ public final class TransformationTester {
             return this;
         }
 
-        /** @return the {@code when} phase, after running the transformer on the given input */
+        /** @return the {@code when} phase, after running the transformation on the given input */
         public When when() {
             if (inputType == null) {
                 throw new IllegalStateException("given().messageType(...) was not set");
@@ -135,12 +135,12 @@ public final class TransformationTester {
             if (inputPayload == null) {
                 throw new IllegalStateException("given().payload(...) or .payloadFromResource(...) was not set");
             }
-            EventTransformerChain chain = EventTransformerChain.builder().register(transformer).build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(transformation).build();
             return new When(TransformationOutcome.run(chain, inputType, inputPayload, converter, typeResolver));
         }
     }
 
-    /** Holds the outcome of running the transformer. Use {@link #then()} to assert against it. */
+    /** Holds the outcome of running the transformation. Use {@link #then()} to assert against it. */
     public static final class When {
         private final TransformationOutcome outcome;
 
@@ -155,7 +155,7 @@ public final class TransformationTester {
     }
 
     /**
-     * Chainable assertions on the transformer's outcome. Each method either succeeds and
+     * Chainable assertions on the transformation's outcome. Each method either succeeds and
      * returns {@code this} for further chaining, or fails the test by throwing an
      * {@link AssertionError}.
      */
@@ -175,14 +175,14 @@ public final class TransformationTester {
         /** @return this, after asserting exactly zero output events */
         public Then noOutput() {
             outcome.requireSuccess();
-            assertThat(outcome.outputs()).as("transformer output").isEmpty();
+            assertThat(outcome.outputs()).as("transformation output").isEmpty();
             return this;
         }
 
         /** @return this, after asserting exactly one output event */
         public Then singleOutput() {
             outcome.requireSuccess();
-            assertThat(outcome.outputs()).as("transformer output").hasSize(1);
+            assertThat(outcome.outputs()).as("transformation output").hasSize(1);
             return this;
         }
 

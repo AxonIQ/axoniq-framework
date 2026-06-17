@@ -16,7 +16,7 @@
 
 package org.axonframework.examples.demo.coursecatalog.catalog.chain;
 
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import org.axonframework.examples.demo.coursecatalog.catalog.testutil.ChainTester;
 import org.axonframework.messaging.core.MessageType;
@@ -35,7 +35,7 @@ class MapperExceptionPropagationTest {
 
     @Test
     void runtimeExceptionFromMapperPropagatesThroughChain() {
-        EventTransformer throwing = EventTransformer
+        EventTransformation throwing = EventTransformation
                 .from(INPUT_TYPE)
                 .to(OUTPUT_TYPE)
                 .transform(JsonNode.class, (in, ctx) -> {

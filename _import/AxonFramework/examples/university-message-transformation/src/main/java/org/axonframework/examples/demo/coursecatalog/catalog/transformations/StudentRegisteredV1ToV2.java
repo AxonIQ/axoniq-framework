@@ -16,7 +16,7 @@
 
 package org.axonframework.examples.demo.coursecatalog.catalog.transformations;
 
-import io.axoniq.framework.messaging.transformation.events.EventTransformer;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
 import org.axonframework.common.TypeReference;
 import org.axonframework.examples.demo.coursecatalog.catalog.CourseCatalogMessageNames;
 import org.axonframework.messaging.core.MessageType;
@@ -29,7 +29,7 @@ import java.util.Map;
  * Lifts a v1 {@code StudentRegistered} (separate {@code firstName} and
  * {@code lastName}) into the v2 shape with a combined {@code fullName}, using
  * the generic {@code TypeReference<Map<String, Object>>} overload of
- * {@code EventTransformer.transform(...)}.
+ * {@code EventTransformation.transform(...)}.
  */
 public final class StudentRegisteredV1ToV2 {
 
@@ -44,9 +44,9 @@ public final class StudentRegisteredV1ToV2 {
     private StudentRegisteredV1ToV2() {
     }
 
-    /** @return the transformer registered into the chain */
-    public static EventTransformer build() {
-        return EventTransformer.from(FROM).to(TO).transform(INPUT_TYPE, StudentRegisteredV1ToV2::map);
+    /** @return the transformation registered into the chain */
+    public static EventTransformation build() {
+        return EventTransformation.from(FROM).to(TO).transform(INPUT_TYPE, StudentRegisteredV1ToV2::map);
     }
 
     private static Map<String, Object> map(Map<String, Object> v1) {

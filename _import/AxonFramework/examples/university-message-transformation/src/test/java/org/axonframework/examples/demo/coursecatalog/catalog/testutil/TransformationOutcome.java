@@ -89,13 +89,13 @@ final class TransformationOutcome {
 
     void requireSuccess() {
         if (thrown != null) {
-            throw new AssertionError("Expected success but transformer threw: " + thrown, thrown);
+            throw new AssertionError("Expected success but transformation threw: " + thrown, thrown);
         }
     }
 
     Throwable requireException() {
         if (thrown == null) {
-            throw new AssertionError("Expected an exception but transformer ran successfully");
+            throw new AssertionError("Expected an exception but transformation ran successfully");
         }
         return thrown;
     }
