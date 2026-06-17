@@ -147,10 +147,12 @@ final class CriteriaWidener {
     private static void index(EventTransformation transformation,
                               Map<QualifiedName, Set<QualifiedName>> sourcesByTarget,
                               Set<QualifiedName> droppingTargets) {
-        // Only a payload mapping declares a 'to' that contributes widening edges. Later variants (rename, drop)
-        // add their own cases here.
-        if (transformation instanceof MappingEventTransformation<?, ?> mapping) {
-            indexEdges(mapping.matcher(), mapping.toType().qualifiedName(), sourcesByTarget, droppingTargets);
+        // A mapping and a rename both declare a 'to' that contributes widening edges.
+        switch (transformation) {
+            case MappingEventTransformation<?, ?> mapping ->
+                    indexEdges(mapping.matcher(), mapping.toType().qualifiedName(), sourcesByTarget, droppingTargets);
+            case RenameEventTransformation rename ->
+                    indexEdges(rename.matcher(), rename.toType().qualifiedName(), sourcesByTarget, droppingTargets);
         }
     }
 

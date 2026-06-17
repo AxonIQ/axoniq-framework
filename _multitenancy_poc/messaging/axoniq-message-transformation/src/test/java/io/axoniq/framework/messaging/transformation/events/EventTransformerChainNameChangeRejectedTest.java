@@ -35,13 +35,14 @@ import static io.axoniq.framework.messaging.transformation.events.EventStreamTes
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.eventOf;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Verifies the chain rejects a rename (a {@code QualifiedName} change) while still allowing a same-name version bump.
- * Renaming is unsupported because the transformation runs at read time, after the storage engine has filtered the
- * stream by the stored (old) name, so the events a rename targets are never surfaced. An exact {@code from} is rejected
- * at registration; a predicate {@code from} only at read time, as its matched name is known per-event.
+ * Verifies a payload mapping may not change a {@code QualifiedName} (it may change only the version); a genuine name
+ * change must use {@link EventTransformation#rename(MessageType, MessageType)}, which the chain accepts. A
+ * name-changing mapping with an exact {@code from} is rejected at registration; with a predicate {@code from} only at
+ * read time, as its matched name is known per-event.
  */
 final class EventTransformerChainNameChangeRejectedTest {
 
@@ -54,18 +55,28 @@ final class EventTransformerChainNameChangeRejectedTest {
 
         @Test
         void differentQualifiedNameRejectedAtRegistration() {
-            // given
-            EventTransformation renameTransformation = EventTransformation.from(SAMPLE_V1)
-                                                                          .to(RENAMED)
-                                                                          .transform(String.class, (in, ctx) -> in);
+            // given a payload mapping whose declared 'to' changes the qualified name, not just the version
+            EventTransformation nameChangingMapping = EventTransformation.from(SAMPLE_V1)
+                                                                         .to(RENAMED)
+                                                                         .transform(String.class, (in, ctx) -> in);
             EventTransformerChain.Builder builder = EventTransformerChain.builder();
 
             // when / then
-            assertThatThrownBy(() -> builder.register(renameTransformation))
+            assertThatThrownBy(() -> builder.register(nameChangingMapping))
                     .isInstanceOf(ChainConfigurationException.class)
-                    .hasMessageContaining("renaming")
+                    .hasMessageContaining("rename")
                     .hasMessageContaining(SAMPLE_V1.toString())
                     .hasMessageContaining(RENAMED.toString());
+        }
+
+        @Test
+        void renameWithDifferentQualifiedNameIsAcceptedAtRegistration() {
+            // given a genuine rename (not a mapping) that changes the qualified name
+            EventTransformation rename = EventTransformation.rename(SAMPLE_V1, RENAMED);
+
+            // when / then a rename is exactly how a name change is expressed, so it is accepted
+            assertThatCode(() -> EventTransformerChain.builder().register(rename).build())
+                    .doesNotThrowAnyException();
         }
 
         @Test
@@ -96,12 +107,12 @@ final class EventTransformerChainNameChangeRejectedTest {
         @Test
         void differentQualifiedNameRejectedAtReadTime() {
             // given: registration is allowed because a predicate's matched source name is
-            // not known statically; the rename is only detectable once an event matches.
-            EventTransformation renameTransformation = EventTransformation.from(type -> type.equals(SAMPLE_V1))
-                                                                          .to(RENAMED)
-                                                                          .transform(String.class, (in, ctx) -> in);
+            // not known statically; the name change is only detectable once an event matches.
+            EventTransformation nameChangingMapping = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+                                                                         .to(RENAMED)
+                                                                         .transform(String.class, (in, ctx) -> in);
             EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(renameTransformation)
+                                                               .register(nameChangingMapping)
                                                                .build();
             EventMessage storedV1 = eventOf(SAMPLE_V1, "payload");
             MessageStream<EventMessage> transformed = chain.transform(
@@ -112,7 +123,7 @@ final class EventTransformerChainNameChangeRejectedTest {
                     .isInstanceOf(CompletionException.class)
                     .cause()
                     .isInstanceOf(ChainConfigurationException.class)
-                    .hasMessageContaining("renaming")
+                    .hasMessageContaining("rename")
                     .hasMessageContaining(SAMPLE_V1.toString())
                     .hasMessageContaining(RENAMED.toString());
         }
