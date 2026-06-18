@@ -39,3 +39,31 @@ What we'd keep is the exact match, including the ability to pass several version
 I'm on leave from the end of next week for two weeks. My PRs haven't been fully reviewed yet, and the main thing I need from Steven is a read on how he sees this going. The goal is to get everything through before I'm out, but that hinges on how fast the reviews move and on where we land on the predicate question.
 
 One thing worth flagging is that the longer we sit on this decision, the harder the remaining PRs get to review, because they're built on top of this work. Settling the API shape unblocks the rest of the review flow, so the predicate decision is effectively a blocker. Ideally we'd have it resolved as soon as possible, so the base pr can be merged in into the feature branch and I do not need to rework everything that is built on top of it
+
+## Conclusion (decided 2026-06-15, implemented)
+
+We landed somewhere different from "drop the predicate entirely." The problem was never that predicates exist; it was that registration order let a predicate fall _between_ exact matches, which is what breaks an annotation-based setup. So we keep predicates, but give them a fixed, lowest priority instead of removing them.
+
+**Resolution model.** Matching is now two tiers, resolved like Java overload resolution rather than by registration order:
+
+1. **Exact identity matches** (a concrete `from`, including a multi-version `from(List)`) are resolved by identity, independent of registration order. The most specific match wins, and ambiguity is a build-time error.
+2. **Predicates are a fallback**, consulted only when no exact match claims the event. Among predicates the first registered match wins. A predicate never sits between exact matches, and an exact match always beats a predicate.
+
+There are no "pre" predicates; only this single fallback tier.
+
+**What ships now:**
+
+- `from` also accepts a `List<MessageType>`: a multi-version exact match with one mapper, covering the "customer with a pile of odd versions" case (`IntStream.range(...).mapToObj(...).toList()`) that the predicate was meant to solve, while staying fast and order-independent.
+- Conflict rejection at build time: two transformations claiming the same exact identity (including a list overlapping another list or a single, or a drop overlapping a transform) are rejected with a `ChainConfigurationException`.
+- Predicates stay, demoted to the fallback tier and documented as the last resort: never preferred over an exact match, and always evaluated on a no-exact-match read, so they must be cheap. The docs steer people to `from(List)` instead of `type -> versions.contains(type.version())`.
+
+**Why predicates stay rather than being dropped.** Dropping them would have been simpler, but the real fix for the concerns John and I raised is the _ordering_, not the predicate's existence. A fixed-priority fallback removes the ordering problem (and the need for an `@Order`-style priority on annotations) without losing the open-ended matching predicates provide.
+
+**Deliberately deferred, and provably additive:**
+
+- **Version ranges** as a first-class semantic matcher (a structured low/high bound, not an opaque predicate), slotting into the same exact-first resolution.
+- **Annotation-based / bean-based registration**, which can only ever produce semantic (exact/range) matchers and so needs no priority annotation.
+
+Both are new surface added beside what ships now and require no change to existing user code, _because_ the order-independent resolution lands now. That order-independence is the one change that could not have been deferred without a breaking change later.
+
+**Status.** Implemented as a new PR layered behind the drop PR: axoniq-framework branch `feature/137/impl-phase-6-semantic-matching` (off `feature/137/impl-phase-5-drop`), AxonFramework docs/demo on `feature/axoniq/137/phase-6-semantic-matching` (off `feature/axoniq/137/phase-5-drop`). The feature is implemented in the drop branch's existing naming (`EventTransformation` units, `EventTransformerChain`); the `EventTransformation`->`EventTransformer` rename remains its own separate PR. The `message-transformation` reference guide and the `university-message-transformation` demo lead with `from(List)` and frame predicates as the fallback.

@@ -30,7 +30,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Sealed strategy for matching the {@code from} side of a transformation. Either
- * exact equality against a single {@link MessageType} ({@link Exact}) or a
+ * exact equality against one of a fixed set of {@link MessageType}s ({@link Exact}) or a
  * user-supplied {@link Predicate} ({@link PredicateBased}).
  *
  * @author Laura Devriendt
@@ -48,19 +48,32 @@ public sealed interface FromMatcher permits FromMatcher.Exact, FromMatcher.Predi
     boolean matches(MessageType candidate);
 
     /**
-     * Exact-source matcher: exact {@link MessageType} equality.
+     * Exact-source matcher: matches an event whose {@link MessageType} equals one of a fixed set of identities.
      *
-     * @param source the source identity
+     * @param sources the exact identities to match; at least one is required
      */
-    record Exact(MessageType source) implements FromMatcher {
+    record Exact(Set<MessageType> sources) implements FromMatcher {
 
         public Exact {
-            requireNonNull(source, "source may not be null");
+            sources = Set.copyOf(requireNonNull(sources, "sources may not be null"));
+            if (sources.isEmpty()) {
+                throw new IllegalArgumentException("An exact matcher requires at least one source.");
+            }
+        }
+
+        /**
+         * Creates a matcher for a single exact identity.
+         *
+         * @param source the exact identity to match
+         * @return the matcher, never {@code null}
+         */
+        public static Exact of(MessageType source) {
+            return new Exact(Set.of(requireNonNull(source, "source may not be null")));
         }
 
         @Override
         public boolean matches(MessageType candidate) {
-            return source.equals(candidate);
+            return sources.contains(candidate);
         }
     }
 
