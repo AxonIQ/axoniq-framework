@@ -33,7 +33,7 @@ public final class CourseCatalogTransformations {
 <4> `build()` produces an immutable chain, ready to register as a component.
 
 Then make that chain available to your configuration as an `EventTransformerChain` component.
-You only ever supply the chain. The framework's configuration detects the chain and installs decorates the event store with transformation logic for you. Hence, there is nothing to wire on the event store itself for users.
+You only ever supply the chain. The framework's configuration detects the chain and decorates the event store with transformation logic for you. Hence, there is nothing to wire on the event store itself for users.
 How you register the component depends on your setup:
 
 [tabs]
