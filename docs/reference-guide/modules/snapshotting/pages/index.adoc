@@ -1,3 +1,4 @@
+[.axoniq-feature]
 = Snapshots
 
 Event-sourced entities reconstruct their state by replaying events from the event store. For entities that change frequently or exist for a long time, the number of events can grow significantly. Replaying all events each time an entity is loaded may eventually impact performance.
