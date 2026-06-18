@@ -32,17 +32,18 @@ import java.util.Objects;
  * Accumulates the {@link EventCriteria consistency boundaries} a decision actually read through the
  * {@link History} surface, keyed on the in-flight {@link ProcessingContext}.
  * <p>
- * Each time a {@link SourcedHistory} materializes a scope it {@link #record(ProcessingContext, EventCriteria)
- * records} the folded {@link EventCriteria} that defines exactly which events that read observed — its Dynamic
- * Consistency Boundary (DCB) read surface. The decision-dispatch side then {@link #readCriteria(ProcessingContext)
- * reads back} this accumulated list to enforce that every accepted event is covered by at least one boundary the
- * decision read, closing the tagging-drift gap where an appended event tagged differently from any read scope
- * would slip past the DCB optimistic lock.
+ * Each time a scope is sourced — by a {@link SourcedHistory} on the eager {@link History} path, or by a
+ * {@code SourcedEventStream} on the lazy
+ * {@link io.axoniq.framework.statecontroller.decisions.DecisionContext DecisionContext} path — it
+ * {@link #record(ProcessingContext, EventCriteria) records} the folded {@link EventCriteria} that defines exactly
+ * which events that read observed: its Dynamic Consistency Boundary (DCB) read surface. The decision-dispatch side
+ * then {@link #readCriteria(ProcessingContext) reads back} this accumulated list to enforce that every accepted
+ * event is covered by at least one boundary the decision read, closing the tagging-drift gap where an appended
+ * event tagged differently from any read scope would slip past the DCB optimistic lock.
  * <p>
- * Only the {@link History} path populates this resource. The legacy
- * {@link io.axoniq.framework.statecontroller.decisions.DecisionContext DecisionContext} /
- * {@code SourcedEventStream} path never touches it, so for any command dispatched through that surface
- * {@link #readCriteria(ProcessingContext)} returns an empty list and the coverage guard never fires.
+ * Both decision surfaces (eager {@code History} and lazy {@code DecisionContext}) populate this resource, so the
+ * coverage guard applies to either. A decision that reads no scope records nothing, leaving
+ * {@link #readCriteria(ProcessingContext)} empty and the guard disabled — a legitimate unconditional append.
  * <p>
  * <h3>Threading.</h3>
  * The accumulated list is mutated without synchronization; this relies on AF5's
@@ -85,12 +86,11 @@ public final class ReadBoundaries {
     }
 
     /**
-     * Returns the {@link EventCriteria consistency boundaries} recorded for the given {@code processingContext}
-     * through the {@link History} surface, in the order they were read.
+     * Returns the {@link EventCriteria consistency boundaries} recorded for the given {@code processingContext},
+     * in the order they were read, across both the eager {@code History} and lazy {@code DecisionContext} surfaces.
      * <p>
-     * Returns an empty, unmodifiable list when no {@link History} scope was materialized — which is always the
-     * case for the legacy {@link io.axoniq.framework.statecontroller.decisions.DecisionContext DecisionContext}
-     * path, signalling the coverage guard to stay disabled.
+     * Returns an empty, unmodifiable list when no scope was read (for example an unconditional decision),
+     * signalling the coverage guard to stay disabled.
      *
      * @param processingContext the current processing context
      * @return the recorded read criteria in read order, or an empty list when none were recorded

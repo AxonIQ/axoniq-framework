@@ -81,6 +81,10 @@ public class AccountsViaContext {
 
         BooleanCondition fromClosed = from.contains(AccountClosed.class);
         BooleanCondition toClosed = to.contains(AccountClosed.class);
+        // The credit is appended to the target, so its type must fall inside a scope this decision read: read the
+        // target's money movements so MoneyDeposited lands inside the target's consistency boundary (covering the
+        // appended credit and guarding it against concurrent money movements on the target).
+        to.containsAnyOf(MoneyDeposited.class, MoneyWithdrawn.class);
         NumericCondition<BigDecimal> fromBalance =
                 from.sum(MoneyDeposited.class, MoneyDeposited::amount)
                     .minus(from.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount));

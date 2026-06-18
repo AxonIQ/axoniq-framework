@@ -25,6 +25,7 @@ import io.axoniq.framework.statecontroller.conditions.FutureCondition;
 import io.axoniq.framework.statecontroller.conditions.MatchBuilder;
 import io.axoniq.framework.statecontroller.conditions.NumericCondition;
 import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
+import io.axoniq.framework.statecontroller.history.ReadBoundaries;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.conversion.Converter;
@@ -342,6 +343,9 @@ public final class SourcedEventStream implements EventStream {
         EventCriteria criteria = allTypes.isEmpty()
                 ? tagged
                 : tagged.andBeingOneOfTypes(allTypes.toArray(new QualifiedName[0]));
+        // Record this scope's read boundary so the decision-dispatch coverage guard also applies to the lazy
+        // DecisionContext/EventStream path, mirroring SourcedHistory on the eager path.
+        ReadBoundaries.record(processingContext, criteria);
         return SourcingCondition.conditionFor(criteria);
     }
 

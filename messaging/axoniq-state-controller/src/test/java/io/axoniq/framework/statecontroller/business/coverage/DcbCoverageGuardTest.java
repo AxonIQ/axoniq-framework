@@ -56,8 +56,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *         normally;</li>
  *     <li>{@link Unconditional} — a decision that reads no {@code History} scope accepts an untagged event,
  *         proving the guard stays disabled for a legitimate creation append;</li>
- *     <li>{@link Legacy} — a {@code @StateController} decision (the {@code DecisionContext} surface) commits its
- *         events regardless of tagging, proving the guard never fires off the legacy path.</li>
+ *     <li>{@link LazyPath} — the guard applies to the lazy {@code DecisionContext} surface too (a
+ *         {@code @StateController} decision reading {@code ctx.scope(...)}): an uncovered emit is rejected, a
+ *         correctly-tagged one commits.</li>
  * </ul>
  *
  * @author Stefan Dragisic
@@ -152,28 +153,47 @@ class DcbCoverageGuardTest {
     }
 
     @Nested
-    class Legacy {
+    class LazyPath {
 
-        @Test
-        void aStateControllerDecisionAppendsItsEventsRegardlessOfTagging() {
-            // given a fixture wiring the legacy @StateController component instead of the @Decide one
+        private AxonTestFixture legacyFixture;
+
+        @BeforeEach
+        void setUpLegacy() {
             var configurer = MessagingConfigurer.create().registerCommandHandlingModule(
                     CommandHandlingModule.named("LegacyCoverage")
                                          .commandHandlers(ch ->
                                                                   ch.autodetectedCommandHandlingComponent(
                                                                           c -> new LegacyDecisions()
                                                                   )));
-            var legacyFixture = AxonTestFixture.with(configurer);
+            legacyFixture = AxonTestFixture.with(configurer);
+        }
 
-            // when a legacy decision reads ctx.scope("account", "a1") then emits a completely untagged event;
-            //      the legacy path records no read boundaries, so the guard must never fire
+        @Test
+        void aStateControllerEmittingAnEventOutsideTheReadScopeIsRejected() {
+            // given a legacy @StateController decision that reads ctx.scope("account", "a1") then emits a
+            //       completely untagged event — the lazy DecisionContext path now records its read boundary too
             legacyFixture.given()
                          .events(new AccountOpened("a1"))
                          .when()
                          .command(new RecordLegacyNote("a1"))
-                         // then the untagged event commits, proving the legacy surface is left untouched
+                         // then the untagged event is covered by no read boundary, so the guard fires here too
                          .then()
-                         .events(new UntaggedNote("a1"));
+                         .exceptionSatisfies(t ->
+                                                     assertThat(uncoveredEventException(t).getMessage())
+                                                             .contains(UntaggedNote.class.getName()))
+                         .noEvents();
+        }
+
+        @Test
+        void aStateControllerEmittingAnEventCoveringTheReadScopeCommits() {
+            // given a legacy decision that reads ctx.scope("account", "a1") and emits an event @EventTag-ged account=a1
+            legacyFixture.given()
+                         .events(new AccountOpened("a1"))
+                         .when()
+                         .command(new RecordLegacyCoveredNote("a1"))
+                         // then the covered event passes the guard on the lazy path and commits
+                         .then()
+                         .events(new AccountNoted("a1"));
         }
     }
 
@@ -212,6 +232,10 @@ class DcbCoverageGuardTest {
     }
 
     record RecordLegacyNote(String accountId) {
+
+    }
+
+    record RecordLegacyCoveredNote(String accountId) {
 
     }
 
@@ -279,18 +303,29 @@ class DcbCoverageGuardTest {
     }
 
     /**
-     * Legacy {@code @StateController} decision over the {@code DecisionContext} surface. It reads a scope and emits
-     * an untagged event; because the legacy path records no {@code History} read boundaries the coverage guard
-     * never fires here, so the event commits regardless of its tagging.
+     * Legacy {@code @StateController} decisions over the {@code DecisionContext} surface. The lazy path now records
+     * its read boundaries too, so the coverage guard applies here as well: {@link #record} emits an untagged event
+     * outside the scope it read (rejected), while {@link #recordCovered} emits a correctly-tagged event (commits).
      */
     public static class LegacyDecisions {
 
         @StateController
         public Decision record(RecordLegacyNote cmd, DecisionContext ctx) {
             EventStream account = ctx.scope("account", cmd.accountId());
-            // Force the read so the legacy scope is genuinely sourced; it still records no ReadBoundaries.
+            // Force the read so the lazy scope is sourced and its read boundary recorded; the untagged emit below
+            // is then covered by no boundary, so the guard fires.
             account.contains(AccountOpened.class).isTrue();
             return Decision.emit(new UntaggedNote(cmd.accountId()));
+        }
+
+        @StateController
+        public Decision recordCovered(RecordLegacyCoveredNote cmd, DecisionContext ctx) {
+            EventStream account = ctx.scope("account", cmd.accountId());
+            // The lazy boundary is type-precise, so register the emitted type BEFORE the read seals the scope:
+            // AccountNoted is then covered (and it is @EventTag-ged account=id to match the scope read).
+            account.contains(AccountNoted.class);
+            account.contains(AccountOpened.class).isTrue();
+            return Decision.emit(new AccountNoted(cmd.accountId()));
         }
     }
 }
