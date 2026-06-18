@@ -60,7 +60,8 @@ class ChainBuildLogTest {
                                                         .toList();
         assertThat(debugEntries).hasSize(1);
         assertThat(debugEntries.getFirst().getFormattedMessage())
-                .contains("6 transformation(s)",
+                .contains("7 transformation(s)",
+                          "coursecatalog.CourseOffered#1.0.0",
                           "coursecatalog.CoursePublished#1.0.0",
                           "coursecatalog.CoursePublished#2.0.0",
                           "coursecatalog.StudentRegistered#1.0.0",

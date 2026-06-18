@@ -17,11 +17,14 @@
 package org.axonframework.examples.demo.coursecatalog.catalog.transformations;
 
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
+import org.axonframework.examples.demo.coursecatalog.catalog.events.CoursePublished;
 
 /**
  * Composes the catalog's event transformations into a single
  * {@link EventTransformerChain}. Registration order matters: v1 to v2 must precede
- * v2 to v3 so a stored v1 event reaches a handler as the current shape.
+ * v2 to v3 so a stored v1 event reaches a handler as the current shape. The
+ * {@code CourseOffered} rename runs first, so a renamed event then flows through the
+ * {@link CoursePublished} version chain.
  */
 public final class CourseCatalogTransformations {
 
@@ -31,6 +34,7 @@ public final class CourseCatalogTransformations {
     /** @return the chain registered with the catalog's configuration */
     public static EventTransformerChain chain() {
         return EventTransformerChain.builder()
+                                    .register(CourseOfferedToCoursePublished.build())
                                     .register(SystemAnnouncementLegacyUplift.build())
                                     .register(CoursePublishedV1ToV2.build())
                                     .register(CoursePublishedV2ToV3.build())
