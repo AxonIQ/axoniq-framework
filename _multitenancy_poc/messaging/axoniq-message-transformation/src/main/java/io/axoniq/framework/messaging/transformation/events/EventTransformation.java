@@ -39,8 +39,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * An event-specific {@link MessageTransformation} describing how stored events of one {@link MessageType} are
- * rewritten into another when they are read. A transformation is either a 1:1 payload mapping
- * ({@link MappingEventTransformation}) or a pure rename ({@link RenameEventTransformation}).
+ * rewritten into another when they are read. A transformation is either a 1:1 payload mapping or a pure rename.
  * <p>
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
@@ -110,12 +109,12 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
     }
 
     /**
-     * Begin a pure rename of events from {@code source} to {@code target}, leaving the payload unchanged.
+     * Create a pure rename of events from {@code source} to {@code target}, leaving the payload unchanged.
      * Unlike {@link #from(MessageType)}, a rename may change the {@link QualifiedName}, not only the version.
      *
      * @param source the {@code from} identity to match
      * @param target the {@code to} identity applied to the output
-     * @return the rename transformation
+     * @return the completed rename {@link EventTransformation}, ready to register without further builder steps
      * @throws IllegalArgumentException if {@code source} and {@code target} are identical
      */
     static EventTransformation rename(MessageType source, MessageType target) {

@@ -134,7 +134,7 @@ public final class EventTransformerChain implements DescribableComponent {
             }
             // Only a payload mapping is constrained to a version change; other variants own their own rules.
             if (match instanceof MappingEventTransformation<?, ?> mapping) {
-                rejectNameChange(current.type(), mapping.toType());
+                assertMappingVersionChangeOnly(current.type(), mapping.toType());
             }
             current = singleResult(match.transform(current, context), current, context);
         }
@@ -162,7 +162,7 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Rejects a name change by a payload mapping. Only a rename
+     * Asserts a payload mapping changes only the version, never the qualified name. Only a rename
      * ({@link EventTransformation#rename(MessageType, MessageType)}) may change a {@link MessageType}'s
      * {@code QualifiedName}; a mapping may change only the version.
      *
@@ -170,7 +170,7 @@ public final class EventTransformerChain implements DescribableComponent {
      * @param to   the declared {@code to} identity
      * @throws ChainConfigurationException if the {@code from} and {@code to} qualified names differ
      */
-    private static void rejectNameChange(MessageType from, MessageType to) {
+    private static void assertMappingVersionChangeOnly(MessageType from, MessageType to) {
         if (!from.qualifiedName().equals(to.qualifiedName())) {
             throw new ChainConfigurationException("""
                     A mapping may not change the qualified name: from=%s and to=%s differ. \
@@ -252,7 +252,7 @@ public final class EventTransformerChain implements DescribableComponent {
             // Only a payload mapping with an exact from is held to a version-only change; other variants are exempt.
             if (transformation instanceof MappingEventTransformation<?, ?> mapping
                     && mapping.matcher() instanceof FromMatcher.Exact(MessageType source)) {
-                rejectNameChange(source, mapping.toType());
+                assertMappingVersionChangeOnly(source, mapping.toType());
             }
             transformations.add(transformation);
             return this;
