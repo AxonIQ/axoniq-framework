@@ -52,7 +52,7 @@ The structural form needs no extra classes, the typed form gives compile-time sa
 
 From here:
 
-* xref:message-transformation:defining-transformations.adoc[] shows how to write the individual transformations, map straight to a typed event, work with generic payloads, match several event versions at once, and rename an event.
+* xref:message-transformation:defining-transformations.adoc[] shows how to write the individual transformations, map straight to a typed event, work with generic payloads, match several event versions at once, rename an event, and drop one entirely.
 * xref:message-transformation:configuring-transformations.adoc[] shows how to assemble them into a chain, register it, and test it.
 * xref:message-transformation:demo.adoc[] is a runnable example that exercises every technique on a course catalog end to end.
 

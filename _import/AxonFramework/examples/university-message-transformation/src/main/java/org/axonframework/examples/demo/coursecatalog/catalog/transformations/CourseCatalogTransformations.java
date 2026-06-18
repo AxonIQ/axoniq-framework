@@ -25,6 +25,9 @@ import org.axonframework.examples.demo.coursecatalog.catalog.events.CoursePublis
  * v2 to v3 so a stored v1 event reaches a handler as the current shape. The
  * {@code CourseOffered} rename runs first, so a renamed event then flows through the
  * {@link CoursePublished} version chain.
+ * <p>
+ * The {@code SystemHeartbeat} drop is order-independent: no other transformation matches that
+ * event, so it removes the legacy heartbeats from the read stream wherever it sits.
  */
 public final class CourseCatalogTransformations {
 
@@ -41,6 +44,7 @@ public final class CourseCatalogTransformations {
                                     .register(StudentRegisteredV1ToV2.build())
                                     .register(StudentRegisteredV2ToV3.build())
                                     .register(WelcomeMessageBetaCleanup.build())
+                                    .register(SystemHeartbeatDrop.build())
                                     .build();
     }
 }
