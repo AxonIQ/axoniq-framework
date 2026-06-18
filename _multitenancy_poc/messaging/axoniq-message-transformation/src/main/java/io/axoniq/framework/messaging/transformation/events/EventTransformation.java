@@ -138,7 +138,7 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      * stream position is still advanced, so a streaming processor resumes after it rather than reprocessing it.
      *
      * @param source the identity to drop
-     * @return the drop transformation
+     * @return a completed drop {@link EventTransformation}, ready to register without further builder steps
      */
     static EventTransformation drop(MessageType source) {
         requireNonNull(source, "source may not be null");
