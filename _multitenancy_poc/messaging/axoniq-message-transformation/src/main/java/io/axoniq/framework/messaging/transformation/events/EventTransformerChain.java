@@ -42,6 +42,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -50,6 +51,10 @@ import static java.util.Objects.requireNonNull;
  * An immutable, thread-safe chain of {@link EventTransformation} instances that transforms events at read time.
  * Events that match no transformation pass through unchanged; an event a transformation drops is removed. Use
  * {@link Builder} to construct and register transformations.
+ * <p>
+ * An exact identity match always takes precedence over a predicate match, independent of registration order; a
+ * predicate {@code from} is consulted only when no exact match applies, and among predicates the first registered
+ * match wins.
  * <p>
  * The chain is a thin read-time engine composing two read-models derived from the registered transformations: a
  * {@link TransformationIndex} answering which transformation applies to an event, and a {@link CriteriaWidener}
@@ -76,7 +81,7 @@ public final class EventTransformerChain implements DescribableComponent {
     private static final Context.ResourceKey<Boolean> DROPPED =
             Context.ResourceKey.withLabel("eventTransformationDropped");
 
-    /** Last-match-wins lookup of the transformation applying to an event. */
+    /** Two-tier lookup of the transformation applying to an event: exact match first, predicate fallback. */
     private final TransformationIndex index;
 
     /** Broadens read criteria so type-filtering reads also fetch the source types this chain transforms. */
@@ -156,7 +161,7 @@ public final class EventTransformerChain implements DescribableComponent {
     private Optional<EventMessage> applyChainToOneEvent(EventMessage event, TransformationContext context) {
         EventMessage current = event;
         for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
-            EventTransformation match = index.findLastMatch(current.type());
+            EventTransformation match = index.findMatch(current.type());
             if (match == null) {
                 return Optional.of(current);
             }
@@ -238,7 +243,9 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Fluent builder for {@link EventTransformerChain}. Registration order is application order.
+     * Fluent builder for {@link EventTransformerChain}. An exact {@code from} match takes precedence over a
+     * predicate match independent of registration order. Predicates are consulted only when no exact match
+     * applies, in registration order.
      * {@link #build()} produces a new, immutable {@link EventTransformerChain}; configuration is
      * startup-only, so {@link #register(EventTransformation)} and {@link #maxIterationsPerEvent(int)}
      * calls after {@code build()} are rejected.
@@ -287,8 +294,8 @@ public final class EventTransformerChain implements DescribableComponent {
             requireNonNull(transformation, "transformation may not be null");
             // Only a payload mapping with an exact from is held to a version-only change; other variants are exempt.
             if (transformation instanceof MappingEventTransformation<?, ?> mapping
-                    && mapping.matcher() instanceof FromMatcher.Exact(MessageType source)) {
-                assertMappingVersionChangeOnly(source, mapping.toType());
+                    && mapping.matcher() instanceof FromMatcher.Exact(Set<MessageType> sources)) {
+                sources.forEach(source -> assertMappingVersionChangeOnly(source, mapping.toType()));
             }
             transformations.add(transformation);
             return this;
@@ -312,6 +319,7 @@ public final class EventTransformerChain implements DescribableComponent {
          * Builds and returns the immutable chain.
          *
          * @return the built chain
+         * @throws ChainConfigurationException if two transformations match the same exact source identity
          */
         public EventTransformerChain build() {
             alreadyBuilt = true;

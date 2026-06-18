@@ -100,7 +100,7 @@ public record TransformedEvent(MessageType type, Object payload) {
 
 Public, immutable chain of `EventTransformer` instances. Built once at startup via `EventTransformerChain.builder()` and locked at `.build()`. Registered with the framework configuration as a component; the `EventTransformationConfigurationEnhancer` (see below) installs the decorator.
 
-Behaviour is shared across all typed chains (events / commands / queries) -- see [spi-base.md](spi-base.md) "Chains are per message type" for the rationale. Specifically: startup-only registration (FR-004), fixed-point iteration with last-match-wins (FR-007), `QualifiedName`-keyed map + predicate list hybrid lookup (FR-011), conflict detection (FR-008), defensive runtime safety bound. Same contract clauses, typed to `EventMessage`.
+Behaviour is shared across all typed chains (events / commands / queries) -- see [spi-base.md](spi-base.md) "Chains are per message type" for the rationale. Specifically: startup-only registration (FR-004), fixed-point iteration with two-tier resolution -- exact `from` by identity (order-independent), predicate `from` as fallback (first registered match), exact always beating predicate (FR-005, FR-007), `QualifiedName`-keyed map + predicate list hybrid lookup (FR-011), exact-overlap rejection at build time plus the deferred conflict checks (FR-008), defensive runtime safety bound. Same contract clauses, typed to `EventMessage`.
 
 ```java
 package io.axoniq.framework.messaging.transformation.events;
@@ -130,7 +130,9 @@ public final class EventTransformerChain implements DescribableComponent {
     public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
 
     /**
-     * Apply the chain to the given stream. Fixed-point iteration, last match wins;
+     * Apply the chain to the given stream. Fixed-point iteration; an exact {@code from} match
+     * (by identity, order-independent) wins over a predicate match, and among predicates the
+     * first registered match wins;
      * non-matching elements pass through unchanged in constant time. The converter and
      * resolver are supplied by {@code TransformingEventStore} (resolved by the
      * configuration enhancer), not by the user.
@@ -150,7 +152,7 @@ public final class EventTransformerChain implements DescribableComponent {
 
     public static Builder builder() { /* ... */ }
 
-    /** Fluent builder; registration order = application order. */
+    /** Fluent builder; exact {@code from} matches resolve by identity, predicate {@code from} by first-registered-wins. */
     public static final class Builder {
         public Builder register(EventTransformer transformer) { /* ... */ }
         public Builder maxIterationsPerEvent(int max) { /* ... */ }

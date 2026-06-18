@@ -164,7 +164,8 @@ final class CriteriaWidener {
                                    Map<QualifiedName, Set<QualifiedName>> sourcesByTarget,
                                    Set<QualifiedName> droppingTargets) {
         switch (matcher) {
-            case FromMatcher.Exact(MessageType source) -> addSource(sourcesByTarget, target, source.qualifiedName());
+            case FromMatcher.Exact(Set<MessageType> sources) ->
+                    sources.forEach(source -> addSource(sourcesByTarget, target, source.qualifiedName()));
             case FromMatcher.PredicateBased(Predicate<MessageType> ignored, Set<QualifiedName> declaredFromTypes) -> {
                 if (declaredFromTypes.isEmpty()) {
                     droppingTargets.add(target);

@@ -114,7 +114,7 @@ Each message type has its own typed chain holding only its transformers. There i
 - `CommandTransformerChain` -- [spi-commands-queries.md](spi-commands-queries.md), 5.3+
 - `QueryTransformerChain` -- [spi-commands-queries.md](spi-commands-queries.md), 5.3+
 
-All three share the same shape: a `builder()` that returns an immutable, locked chain on `build()`; one `register(...)` overload; one `transform(MessageStream<MessageSubtype>, @Nullable ProcessingContext, MessageConverter, MessageTypeResolver) -> MessageStream<MessageSubtype>` method (the converter + resolver are supplied by the configuration enhancer, not the user). They differ only in the bound `M`. Behaviour (FR-004 startup-only registration, FR-007 fixed-point iteration with last-match-wins, FR-008 conflict detection, FR-011 hybrid lookup) is identical across all three -- documented once per chain in its file, not duplicated here.
+All three share the same shape: a `builder()` that returns an immutable, locked chain on `build()`; one `register(...)` overload; one `transform(MessageStream<MessageSubtype>, @Nullable ProcessingContext, MessageConverter, MessageTypeResolver) -> MessageStream<MessageSubtype>` method (the converter + resolver are supplied by the configuration enhancer, not the user). They differ only in the bound `M`. Behaviour (FR-004 startup-only registration, FR-005/FR-007 fixed-point iteration with two-tier resolution -- exact `from` by identity, predicate `from` fallback, exact beats predicate, FR-008 exact-overlap rejection at build time, FR-011 hybrid lookup) is identical across all three -- documented once per chain in its file, not duplicated here.
 
 ---
 
@@ -167,7 +167,7 @@ Detection points:
 
 ## Version-range matching
 
-Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). Registration order = apply order; no auto-detection of overlapping predicates.
+Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). For several *known* versions, prefer the exact multi-version overload `from(List<MessageType>)` -- exact matches are order-independent and outrank predicates. Predicates are the fallback tier: consulted only when no exact match claims the event, with the first registered matching predicate winning.
 
 **Cross-references**: FR-020.
 

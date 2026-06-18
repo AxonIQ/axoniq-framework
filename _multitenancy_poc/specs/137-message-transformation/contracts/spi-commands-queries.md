@@ -111,7 +111,7 @@ public final class CommandTransformerChain {
 }
 ```
 
-Behaviour (FR-004 startup-only, FR-007 fixed-point iteration with last-match-wins, FR-008 conflicts, FR-011 hybrid lookup) is shared across the three typed chains; see [spi-base.md](spi-base.md).
+Behaviour (FR-004 startup-only, FR-005/FR-007 fixed-point iteration with two-tier resolution -- exact `from` by identity, predicate `from` fallback, FR-008 conflicts, FR-011 hybrid lookup) is shared across the three typed chains; see [spi-base.md](spi-base.md).
 
 ---
 
@@ -162,7 +162,7 @@ See also spec Part C "Query response transformation `[Deferred]`" and the parall
 
 ## `QueryTransformerChain`
 
-Parallel to `CommandTransformerChain` above, typed to `QueryMessage`. Same shape -- stream entry point + the single-message overload required by `QueryBus.subscribe(...)`-time wrapping. Same shared behaviour clauses (FR-004 / FR-007 last-match / FR-008 / FR-011). Omitted here to avoid repetition; see [spi-base.md](spi-base.md) and the `CommandTransformerChain` block above.
+Parallel to `CommandTransformerChain` above, typed to `QueryMessage`. Same shape -- stream entry point + the single-message overload required by `QueryBus.subscribe(...)`-time wrapping. Same shared behaviour clauses (FR-004 / FR-005+FR-007 exact-beats-predicate two-tier resolution / FR-008 / FR-011). Omitted here to avoid repetition; see [spi-base.md](spi-base.md) and the `CommandTransformerChain` block above.
 
 ---
 

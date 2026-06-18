@@ -30,6 +30,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -45,8 +46,9 @@ import static java.util.Objects.requireNonNull;
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
  * <ul>
- *     <li><b>Concrete</b> ({@link #from(MessageType)}): matches a single source {@link MessageType} by exact
- *     equality. The source type name is known up front.</li>
+ *     <li><b>Concrete</b> ({@link #from(MessageType)}, or {@link #from(List)} to cover several known versions
+ *     with one mapper): matches a source {@link MessageType} by exact equality. The source type is known up
+ *     front.</li>
  *     <li><b>Predicate-based</b> ({@link #from(Predicate)}): matches every {@link MessageType} for which the
  *     supplied predicate returns {@code true}.</li>
  * </ul>
@@ -98,7 +100,25 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      */
     static ToStep from(MessageType source) {
         requireNonNull(source, "source may not be null");
-        return new ToStep(new FromMatcher.Exact(source));
+        return new ToStep(FromMatcher.Exact.of(source));
+    }
+
+    /**
+     * Begin a 1:1 transformation matching any of the given {@code sources} by exact equality, mapping each with a
+     * single mapper. Use this to cover several known versions at once. Continue with {@code to(...)} then
+     * {@code transform(...)}.
+     *
+     * @param sources the {@code from} identities to match; at least one is required
+     * @return a builder awaiting {@code to(...)}
+     * @throws IllegalArgumentException if {@code sources} is empty
+     */
+    static ToStep from(List<MessageType> sources) {
+        requireNonNull(sources, "sources may not be null");
+        Set<MessageType> distinct = LinkedHashSet.newLinkedHashSet(sources.size());
+        for (MessageType source : sources) {
+            distinct.add(requireNonNull(source, "sources element may not be null"));
+        }
+        return new ToStep(new FromMatcher.Exact(distinct));
     }
 
     /**

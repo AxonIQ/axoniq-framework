@@ -97,6 +97,33 @@ final class EventTransformerChainDescribableComponentTest {
     }
 
     @Test
+    void aMultiVersionFromListCountsAsOneTransformationInOneBucket() {
+        // a from(List) of three versions of one event is a single registration, bucketed once by qualified name
+        EventTransformation multiVersion =
+                EventTransformation.from(List.of(COURSE_V1,
+                                                 COURSE_V2,
+                                                 new MessageType("com.example.CourseCreated", "3.0.0")))
+                                   .to(new MessageType("com.example.CourseCreated", "9.0.0"))
+                                   .transform(JsonNode.class, (in, ctx) -> in);
+        EventTransformerChain chain = EventTransformerChain.builder().register(multiVersion).build();
+
+        ComponentDescriptor descriptor = Mockito.mock(ComponentDescriptor.class);
+        chain.describeTo(descriptor);
+
+        // the three listed versions are one registration under one bucket, not three
+        verify(descriptor).describeProperty("transformationCount", 1);
+        ArgumentCaptor<Map<?, ?>> exactCaptor = ArgumentCaptor.captor();
+        verify(descriptor).describeProperty(eq("exactTransformations"), exactCaptor.capture());
+        assertThat(exactCaptor.getValue())
+                .asInstanceOf(MAP)
+                .containsOnlyKeys("com.example.CourseCreated");
+        assertThat(exactCaptor.getValue().get("com.example.CourseCreated"))
+                .asInstanceOf(LIST)
+                .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains(multiVersion.toString());
+    }
+
+    @Test
     void describeToExposesTheReadTimeWideningGraphMappingTargetsToTheirSources() {
         // given a mapping that declares a legacy from-type, so a CourseCreated read also fetches that legacy name
         EventTransformation declaredFromMapping = EventTransformation.from(mt -> true)

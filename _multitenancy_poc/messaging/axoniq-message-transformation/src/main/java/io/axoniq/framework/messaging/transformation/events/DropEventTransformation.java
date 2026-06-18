@@ -51,7 +51,7 @@ final class DropEventTransformation implements EventTransformation {
      */
     DropEventTransformation(MessageType source) {
         this.source = requireNonNull(source, "source may not be null");
-        this.matcher = new FromMatcher.Exact(source);
+        this.matcher = FromMatcher.Exact.of(source);
     }
 
     /**
