@@ -319,8 +319,8 @@ public sealed interface EventCriteria
      * Marked {@link Internal @Internal}: it backs the framework's read-time criteria rewriting and is not yet a
      * committed public capability.
      *
-     * @param mapper Rewrites a single {@link EventCriterion}; return it unchanged to leave it as-is.
-     * @return The transformed criteria, or this same instance when nothing changed.
+     * @param mapper rewrites a single {@link EventCriterion}; return it unchanged to leave it as-is
+     * @return the transformed criteria, or this same instance when nothing changed
      */
     @Internal
     default EventCriteria mapEachCriterion(Function<EventCriterion, EventCriteria> mapper) {
