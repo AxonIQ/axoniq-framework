@@ -57,7 +57,7 @@ public class RetryingCommandBus implements CommandBus {
      * {@link org.axonframework.messaging.commandhandling.interception.InterceptingCommandBus} (order
      * {@code Integer.MIN_VALUE + 100}), so that retries also pass through the interceptor chain.
      */
-    public static final int DECORATION_ORDER = Integer.MIN_VALUE + 200;
+    public static final int DECORATION_ORDER = Integer.MIN_VALUE + 1000;
 
     private final CommandBus delegate;
     private final RetryScheduler retryScheduler;
