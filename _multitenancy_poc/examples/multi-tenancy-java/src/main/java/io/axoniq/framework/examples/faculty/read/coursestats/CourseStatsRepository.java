@@ -22,6 +22,7 @@ package io.axoniq.framework.examples.faculty.read.coursestats;
 
 import io.axoniq.framework.examples.shared.ids.CourseId;
 import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.axonframework.messaging.eventhandling.replay.annotation.ResetHandler;
 
 import java.util.List;
 import java.util.Optional;
@@ -74,5 +75,11 @@ class InMemoryCourseStatsRepository implements CourseStatsRepository {
                 .append("tenantId", tenantId)
                 .append("stats", stats)
                 .toString();
+    }
+
+    @ResetHandler
+    public void reset() {
+        logger.info("Resetting course stats repository for tenant {}", tenantId);
+        stats.clear();
     }
 }
