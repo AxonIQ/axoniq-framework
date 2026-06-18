@@ -1,5 +1,11 @@
 # Multi Tenancy Java
 
+## Monitoring
+
+* [Axon Server (localhost)](http://localhost:8024/)
+* [Axon Platform](https://platform.dev.axoniq.net/)
+
+
 ## Current state - 17.06.2026
 
 - The example module wires `CourseStatsRepository` as a tenant-scoped component instead of a singleton.
