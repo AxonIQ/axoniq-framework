@@ -200,7 +200,7 @@ public final class EventTransformerChain implements DescribableComponent {
     /**
      * Asserts a payload mapping changes only the version, never the qualified name. Only a rename
      * ({@link EventTransformation#rename(MessageType, MessageType)}) may change a {@link MessageType}'s
-     * {@code QualifiedName}; a mapping may change only the version.
+     * {@link org.axonframework.messaging.core.QualifiedName}; a mapping may change only the version.
      *
      * @param from the {@code from} identity
      * @param to   the declared {@code to} identity

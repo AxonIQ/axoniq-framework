@@ -32,8 +32,9 @@ import static java.util.Objects.requireNonNull;
  * A 1:0 drop {@link EventTransformation}: it suppresses an event matched by exact identity {@code source}, declaring
  * no {@code to} and producing no output. The chain removes a matched event by short-circuiting on this variant; a
  * direct {@link #transform(EventMessage, TransformationContext)} call yields an empty stream. A drop converts no
- * payload and resolves no identity, so neither the {@code MessageConverter} nor the {@code MessageTypeResolver} is
- * consulted.
+ * payload and resolves no identity, so neither the
+ * {@link org.axonframework.messaging.core.conversion.MessageConverter} nor the
+ * {@link org.axonframework.messaging.core.MessageTypeResolver} is consulted.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -64,8 +65,6 @@ final class DropEventTransformation implements EventTransformation {
      */
     @Override
     public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
-        requireNonNull(message, "message may not be null");
-        requireNonNull(context, "context may not be null");
         return MessageStream.empty();
     }
 
