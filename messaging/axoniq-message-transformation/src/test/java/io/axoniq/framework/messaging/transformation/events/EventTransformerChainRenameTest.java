@@ -49,8 +49,6 @@ final class EventTransformerChainRenameTest {
     private static final MessageType COURSE_CREATED = new MessageType("com.example.CourseCreated", "1.0.0");
     private static final MessageType COURSE_CREATED_V2 = new MessageType("com.example.CourseCreated", "2.0.0");
     private static final MessageType COURSE_REGISTERED = new MessageType("com.example.CourseRegistered", "1.0.0");
-    private static final MessageType COURSE_V1 = new MessageType("com.example.Course", "1.0.0");
-    private static final MessageType COURSE_V2 = new MessageType("com.example.Course", "2.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Nested
@@ -108,18 +106,18 @@ final class EventTransformerChainRenameTest {
         void versionBumpReachesTheNewVersionWithItsPayloadUnchanged() {
             // given a rename that only bumps the version (same qualified name, version 1.0.0 to 2.0.0)
             CoursePayload payload = new CoursePayload("CS-101");
-            EventTransformation rename = EventTransformation.rename(COURSE_V1, COURSE_V2);
+            EventTransformation rename = EventTransformation.rename(COURSE_CREATED, COURSE_CREATED_V2);
             EventTransformerChain chain = EventTransformerChain.builder().register(rename).build();
-            EventMessage storedV1 = eventOf(COURSE_V1, payload);
+            EventMessage storedCourseCreated = eventOf(COURSE_CREATED, payload);
 
             // when the chain reads the stream
             List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(storedV1)),
+                    MessageStream.fromIterable(List.of(storedCourseCreated)),
                     null, CONVERTER, neverInvokedMessageTypeResolver()));
 
             // then the event surfaces under the new version carrying the very same payload instance
             assertThat(outputs).hasSize(1);
-            assertThat(outputs.getFirst().type()).isEqualTo(COURSE_V2);
+            assertThat(outputs.getFirst().type()).isEqualTo(COURSE_CREATED_V2);
             assertThat(outputs.getFirst().payload()).isSameAs(payload);
         }
 

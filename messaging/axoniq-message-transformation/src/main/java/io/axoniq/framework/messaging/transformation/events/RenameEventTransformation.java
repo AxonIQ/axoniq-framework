@@ -34,8 +34,8 @@ import static java.util.Objects.requireNonNull;
  * the new identity {@code target}, passing the stored payload, metadata, timestamp and identifier through
  * unchanged. Unlike {@link MappingEventTransformation}, a rename may change the
  * {@link org.axonframework.messaging.core.QualifiedName}, not only the version. The framework owns the new
- * identity, so neither the {@code MessageConverter} nor the {@code MessageTypeResolver} is consulted and no
- * output-identity check applies.
+ * identity, so neither the {@link org.axonframework.messaging.core.conversion.MessageConverter} nor the
+ * {@link org.axonframework.messaging.core.MessageTypeResolver} is consulted and no output-identity check applies.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -70,7 +70,6 @@ final class RenameEventTransformation implements EventTransformation {
      */
     @Override
     public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
-        requireNonNull(message, "message may not be null");
         requireNonNull(context, "context may not be null");
         EventMessage output = new GenericEventMessage(
                 message.identifier(),
