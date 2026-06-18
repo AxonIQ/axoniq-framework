@@ -166,9 +166,7 @@ public class DefaultQueryGateway implements QueryGateway {
                                                                                   context,
                                                                                   updateBufferSize);
         return FluxUtils.of(response)
-                        .mapNotNull(m -> mapper.apply(m.message()))
-                        .doOnCancel(response::close)
-                        .doOnError((e) -> response.close());
+                        .mapNotNull(m -> mapper.apply(m.message()));
     }
 
     private QueryMessage asQueryMessage(Object query) {
