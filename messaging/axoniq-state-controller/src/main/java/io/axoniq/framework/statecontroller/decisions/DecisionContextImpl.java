@@ -21,6 +21,8 @@ package io.axoniq.framework.statecontroller.decisions;
 
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
 import io.axoniq.framework.statecontroller.eventstream.SourcedEventStream;
+import io.axoniq.framework.statecontroller.history.History;
+import io.axoniq.framework.statecontroller.history.HistoryFactory;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -124,6 +126,16 @@ public final class DecisionContextImpl implements DecisionContext {
     @Override
     public Instant time() {
         return clock.instant();
+    }
+
+    @Override
+    public History history() {
+        return HistoryFactory.rootHistoryFor(processingContext);
+    }
+
+    @Override
+    public ProcessingContext processingContext() {
+        return processingContext;
     }
 
     private SourcedEventStream scopeFor(Set<Tag> tags) {

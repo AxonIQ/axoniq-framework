@@ -24,8 +24,10 @@ import io.axoniq.framework.statecontroller.conditions.Condition;
 import io.axoniq.framework.statecontroller.conditions.MatchBuilder;
 import io.axoniq.framework.statecontroller.conditions.NumericCondition;
 import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
+import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.ToLongFunction;
 
@@ -60,9 +62,17 @@ import java.util.function.ToLongFunction;
  * unbounded loads, and accumulation is better expressed as a {@code fold}.
  * <p>
  * No events are loaded when an {@code EventStream} is constructed; loading happens on the first
- * {@link Condition#value()} (or specialized evaluator) of any condition derived from it, at which point all
+ * {@link Condition#resolve()} (or specialized evaluator) of any condition derived from it, at which point all
  * conditions declared so far are satisfied in a single coordinated read. The position observed at that read is
  * what later becomes the DCB consistency point used by an {@code Accept} decision.
+ * <p>
+ * For decision bodies that want a value inline rather than a deferred {@link Condition}, each lazy helper has an
+ * eager {@code resolveXxx(...)} sibling ({@link #resolveContains}, {@link #resolveCount}, {@link #resolveSum},
+ * {@link #resolveLatest}, {@link #resolveLatestOf}, {@link #resolveFirst}) that builds the condition and forces
+ * it in one call. These shortcuts trade batching for convenience: each one issues its own coordinated read
+ * immediately, so two {@code resolveXxx(...)} calls on the same scope load twice. Reach for them when a single
+ * value is needed at the point of use; declare the lazy {@link Condition}s and force them together when several
+ * questions about the same scope should share one read.
  *
  * @author Allard Buijze
  * @since 5.2.0
@@ -190,5 +200,104 @@ public interface EventStream {
      * @return an {@link EventCondition} producing the first matching event
      */
     EventCondition firstOf(Class<?>... types);
+
+    // ----------------------------------------------------------------------
+    // Eager resolveXxx(...) shortcuts
+    // ----------------------------------------------------------------------
+
+    /**
+     * Eager shortcut for {@link #contains(Class)}: builds the membership condition and forces it immediately,
+     * returning a primitive {@code boolean}.
+     * <p>
+     * Equivalent to {@code contains(type).resolve()}. This forces a coordinated read of the scope at the point of
+     * call (no batching with other conditions); use it when a single membership answer is wanted inline rather
+     * than declared as a deferred {@link BooleanCondition}.
+     *
+     * @param type the event payload type to look for
+     * @return {@code true} if any event in the stream is an instance of {@code type}
+     */
+    default boolean resolveContains(Class<?> type) {
+        return contains(type).resolve();
+    }
+
+    /**
+     * Eager shortcut for {@link #count(Class[])}: builds the count condition and forces it immediately, returning
+     * a primitive {@code long}.
+     * <p>
+     * Equivalent to {@code count(types).resolve()}. This forces a coordinated read of the scope at the point of
+     * call (no batching with other conditions); use it when a single count is wanted inline rather than declared
+     * as a deferred {@link NumericCondition}.
+     *
+     * @param types the event payload types to count; at least one required
+     * @return the combined count of events across all matching {@code types}
+     */
+    default long resolveCount(Class<?>... types) {
+        return count(types).resolve();
+    }
+
+    /**
+     * Eager shortcut for {@link #sum(Class, Function)}: builds the sum condition and forces it immediately,
+     * returning the total as a {@link BigDecimal}.
+     * <p>
+     * Equivalent to {@code sum(type, mapper).resolve()}. This forces a coordinated read of the scope at the point
+     * of call (no batching with other conditions); use it when a single total is wanted inline rather than
+     * declared as a deferred {@link NumericCondition}.
+     *
+     * @param type   the event payload type to sum over
+     * @param mapper the projection from each event to a {@link BigDecimal} addend
+     * @param <E>    the event payload type
+     * @return the total of {@code mapper} applied to every matching event
+     */
+    default <E> BigDecimal resolveSum(Class<E> type, Function<? super E, BigDecimal> mapper) {
+        return sum(type, mapper).resolve();
+    }
+
+    /**
+     * Eager shortcut for {@link #latest(Class)}: builds the selection condition and forces it immediately,
+     * returning the most recent matching event as an {@link Optional}.
+     * <p>
+     * Equivalent to {@code latest(type).resolve()}. This forces a coordinated read of the scope at the point of
+     * call (no batching with other conditions); use it when the latest event is wanted inline rather than
+     * declared as a deferred {@link OptionalCondition}.
+     *
+     * @param type the event payload type to find
+     * @param <E>  the event payload type
+     * @return the most recent event of {@code type}, or {@link Optional#empty()} if none is present
+     */
+    default <E> Optional<E> resolveLatest(Class<E> type) {
+        return latest(type).resolve();
+    }
+
+    /**
+     * Eager shortcut for {@link #latestOf(Class[])}: builds the selection condition and forces it immediately,
+     * returning the most recent matching event payload directly (or {@code null} if none matched), so it can be
+     * consumed with {@code instanceof} at the call site.
+     * <p>
+     * Equivalent to {@code latestOf(types).resolve().orElse(null)}. This forces a coordinated read of the scope at
+     * the point of call (no batching with other conditions); use it when the latest event among several types is
+     * wanted inline for pattern matching rather than declared as a deferred {@link EventCondition}.
+     *
+     * @param types the candidate event payload types
+     * @return the most recent event matching any of {@code types}, or {@code null} if none is present
+     */
+    default @Nullable Object resolveLatestOf(Class<?>... types) {
+        return latestOf(types).resolve().orElse(null);
+    }
+
+    /**
+     * Eager shortcut for {@link #first(Class)}: builds the selection condition and forces it immediately,
+     * returning the earliest matching event as an {@link Optional}.
+     * <p>
+     * Equivalent to {@code first(type).resolve()}. This forces a coordinated read of the scope at the point of
+     * call (no batching with other conditions); use it when the first event is wanted inline rather than declared
+     * as a deferred {@link OptionalCondition}.
+     *
+     * @param type the event payload type to find
+     * @param <E>  the event payload type
+     * @return the earliest event of {@code type}, or {@link Optional#empty()} if none is present
+     */
+    default <E> Optional<E> resolveFirst(Class<E> type) {
+        return first(type).resolve();
+    }
 
 }

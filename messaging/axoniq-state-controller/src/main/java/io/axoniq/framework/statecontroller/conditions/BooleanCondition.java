@@ -28,11 +28,12 @@ import java.util.function.Function;
 /**
  * A {@link Condition} whose value is a boolean, with logical combinators and readable evaluation methods.
  * <p>
- * {@link #isTrue()} and {@link #isFalse()} are the idiomatic way to consume a {@code BooleanCondition} in a
- * decision body: they force the condition once and return a primitive {@code boolean} suitable for use directly
- * in an {@code if} statement. The logical combinators ({@link #and(BooleanCondition)}, {@link #or(BooleanCondition)},
- * {@link #not()}, {@link #xor(BooleanCondition)}) preserve the {@code BooleanCondition} type so chains stay fluent
- * without lifting back from {@link Condition}.
+ * {@link #resolve()} is the idiomatic way to consume a {@code BooleanCondition} in a decision body: it forces
+ * the condition once and returns a {@link Boolean} that auto-unboxes to a primitive {@code boolean} for direct
+ * use in an {@code if} statement (for example {@code if (closed.resolve())}); {@link #isFalse()} forces it and
+ * returns the negated primitive. The logical combinators ({@link #and(BooleanCondition)},
+ * {@link #or(BooleanCondition)}, {@link #not()}, {@link #xor(BooleanCondition)}) preserve the
+ * {@code BooleanCondition} type so chains stay fluent without lifting back from {@link Condition}.
  * <p>
  * Implementers need only supply {@link Condition#asCompletableFuture()}; every other operation — including
  * {@link #map(Function) map} and {@link Condition#zip(Condition, java.util.function.BiFunction) zip} — is
@@ -57,11 +58,18 @@ public interface BooleanCondition extends Condition<Boolean> {
 
     /**
      * Forces this condition and returns whether its value is {@code true}.
+     * <p>
+     * On a {@code BooleanCondition} the force verb is the inherited {@link #resolve()}, which returns a
+     * {@link Boolean} that auto-unboxes to a primitive {@code boolean} for direct use in an {@code if} statement
+     * (for example {@code if (closed.resolve())}). This method is retained only as a deprecated alias.
      *
      * @return {@code true} if and only if the condition's value is {@link Boolean#TRUE}
+     * @deprecated in favour of {@link #resolve()}, the force verb on {@code Condition}; this method now delegates
+     * to {@link #resolve()}
      */
+    @Deprecated
     default boolean isTrue() {
-        return Boolean.TRUE.equals(value());
+        return Boolean.TRUE.equals(resolve());
     }
 
     /**
@@ -70,7 +78,7 @@ public interface BooleanCondition extends Condition<Boolean> {
      * @return {@code true} if and only if the condition's value is {@link Boolean#FALSE}
      */
     default boolean isFalse() {
-        return Boolean.FALSE.equals(value());
+        return Boolean.FALSE.equals(resolve());
     }
 
     /**

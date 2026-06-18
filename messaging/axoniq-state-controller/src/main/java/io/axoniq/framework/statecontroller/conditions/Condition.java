@@ -31,13 +31,13 @@ import java.util.function.Function;
  * A deferred question about a slice of event history that produces a single value of type {@code T} when forced.
  * <p>
  * Conditions are the unit of composition in a State Controller decision. They are declared procedurally but not
- * evaluated until {@link #asCompletableFuture()} (or its synchronous bridge {@link #value()}, or a specialized
- * evaluator such as {@link BooleanCondition#isTrue()}) is invoked. Declaring a condition records intent;
+ * evaluated until {@link #asCompletableFuture()} (or its synchronous bridge {@link #resolve()}, or a specialized
+ * evaluator such as {@link BooleanCondition#resolve()}) is invoked. Declaring a condition records intent;
  * evaluating it triggers a single coordinated load of the underlying events for the enclosing scope. Holding a
  * {@code Condition} reference is therefore cheap and free of side effects.
  * <p>
  * The asynchronous shape — {@link #asCompletableFuture()} returning a {@link CompletableFuture} — is the primary
- * operation. {@link #value()} is a synchronous convenience that bridges the future back to the caller via
+ * operation. {@link #resolve()} is the synchronous force verb that bridges the future back to the caller via
  * {@link FutureUtils#joinAndUnwrap(CompletableFuture, Duration)}; this preserves the imperative style of a
  * decision body while keeping the underlying loading lifecycle non-blocking. Operators ({@link #map},
  * {@link #zip}) are implemented as decorators that chain {@code thenApply}/{@code thenCombine} on the upstream
@@ -55,7 +55,7 @@ import java.util.function.Function;
 public interface Condition<T> {
 
     /**
-     * Default safety-net timeout used by {@link #value()} when bridging the asynchronous result back to a
+     * Default safety-net timeout used by {@link #resolve()} when bridging the asynchronous result back to a
      * synchronous caller. Thirty seconds is long enough that no realistic loaded scope should hit it under
      * healthy conditions, but short enough that pathological cases (deadlocks, partitioned event stores)
      * surface as failures rather than thread leaks.
@@ -83,15 +83,29 @@ public interface Condition<T> {
     /**
      * Forces this condition synchronously, returning its value.
      * <p>
-     * Default implementation bridges {@link #asCompletableFuture()} back to a synchronous result through
+     * This is the synchronous force verb on a {@code Condition}: it triggers the underlying coordinated load (if
+     * not already in flight) and blocks until the value is available. The default implementation bridges
+     * {@link #asCompletableFuture()} back to a synchronous result through
      * {@link FutureUtils#joinAndUnwrap(CompletableFuture, Duration)} with the
      * {@link #CONDITION_LOAD_TIMEOUT default safety-net timeout}, preserving the original exception type if
      * the underlying load fails. Implementations with a cheaper synchronous path may override.
      *
      * @return the value produced by this condition
      */
-    default T value() {
+    default T resolve() {
         return FutureUtils.joinAndUnwrap(asCompletableFuture(), CONDITION_LOAD_TIMEOUT);
+    }
+
+    /**
+     * Forces this condition synchronously, returning its value.
+     *
+     * @return the value produced by this condition
+     * @deprecated in favour of {@link #resolve()}, the force verb on {@code Condition}; this method now delegates
+     * to {@link #resolve()}
+     */
+    @Deprecated
+    default T value() {
+        return resolve();
     }
 
     /**
