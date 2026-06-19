@@ -30,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Two transformations may not claim the same exact source identity; the chain rejects such a configuration when
- * built, whether the duplicate comes from two single-version registrations or from a list that overlaps another.
+ * built, whether the duplicate comes from two single-version registrations, from a list that overlaps another, or
+ * from a rename or drop that claims a source another transformation already holds.
  */
 final class EventTransformerChainDuplicateExactSourceRejectedTest {
 
@@ -75,5 +76,31 @@ final class EventTransformerChainDuplicateExactSourceRejectedTest {
         assertThatThrownBy(builder::build)
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining(V2.toString());
+    }
+
+    @Test
+    void aDropAndARenameOnTheSameSourceAreRejected() {
+        // given a drop and a rename that both claim V1 exactly
+        EventTransformerChain.Builder builder = EventTransformerChain.builder()
+                .register(EventTransformation.drop(V1))
+                .register(EventTransformation.rename(V1, V2));
+
+        // when the chain is built / then it is rejected, naming the conflicting source
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(ChainConfigurationException.class)
+                .hasMessageContaining(V1.toString());
+    }
+
+    @Test
+    void twoRenamesOnTheSameSourceAreRejected() {
+        // given two renames that both match V1 exactly
+        EventTransformerChain.Builder builder = EventTransformerChain.builder()
+                .register(EventTransformation.rename(V1, V2))
+                .register(EventTransformation.rename(V1, V3));
+
+        // when the chain is built / then it is rejected, naming the conflicting source
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(ChainConfigurationException.class)
+                .hasMessageContaining(V1.toString());
     }
 }
