@@ -63,7 +63,8 @@ public interface BackoffStrategy {
     }
 
     /**
-     * Exponential backoff: {@code min(base * 2^(attempt-1), max)}.
+     * Exponential backoff: {@code min(base * 2^(attempt-1), max)}, clamped to {@code max} at large attempt counts so the
+     * factor/multiply can never overflow, go negative, or wrap.
      *
      * @param base base delay for the first attempt.
      * @param max  maximum delay cap.
@@ -71,7 +72,11 @@ public interface BackoffStrategy {
      */
     static BackoffStrategy exponential(Duration base, Duration max) {
         return attempt -> {
-            long factor = 1L << (attempt - 1); // 2^(attempt-1)
+            // Clamp to max before any overflowing/negative/wrapped shift or multiply.
+            long factor = 1L << Math.min(Math.max(attempt - 1, 0), 62);
+            if (base.isZero() || base.isNegative() || factor > max.dividedBy(base)) {
+                return max;
+            }
             Duration computed = base.multipliedBy(factor);
             return computed.compareTo(max) > 0 ? max : computed;
         };
