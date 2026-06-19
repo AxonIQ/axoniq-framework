@@ -674,22 +674,22 @@ a last resort if the old stream must be fully replaced.
   the chain locks once event processing begins. Late registration MUST be rejected with a clear
   "chain is locked" error. Annotation-based registration is out of scope for this release.
   _Traces to: US1, US5, US6 scenario 4._
-- **FR-005 (Matching)**: A transformation declares `from` as one of: a concrete `MessageType`, a
-  list of concrete `MessageType`s (`from(List<MessageType>)` -- exact match against any of several
-  known versions with a single mapper), or a `Predicate<MessageType>` (user-supplied: e.g. range,
-  regex, semver, optionally narrowed with `declaringFromTypes(...)`). The concrete and list forms
-  are *exact* matches (exact-equals on `QualifiedName` + `version`); the predicate form is the
-  *fallback* tier. Non-matching events pass through unchanged. Naming consistency between `from`
-  identities and the names produced by the configured `MessageTypeResolver` is the user's
-  responsibility.
+- **FR-005 (Matching)**: A transformation declares `from` as one of: a concrete `MessageType`, or a
+  `Predicate<MessageType>` (user-supplied: e.g. range, regex, semver, optionally narrowed with
+  `declaringFromTypes(...)`). The concrete form is an *exact* match (exact-equals on `QualifiedName`
+  + `version`); the predicate form is the *fallback* tier. An event that evolves through versions is
+  modelled one version step at a time (each step its own transformation, composed by the chain); the
+  framework intentionally offers no way to bind one transformation to a set of versions. Non-matching
+  events pass through unchanged. Naming consistency between `from` identities and the names produced by
+  the configured `MessageTypeResolver` is the user's responsibility.
 
   **Resolution**: matching is two-tier, resolved like Java overload resolution. (1) **Exact tier**:
-  a transformation whose `from` is a concrete `MessageType` (or a `List<MessageType>` containing the
-  event's type) claims the event by identity, independent of registration order. (2) **Predicate
+  a transformation whose `from` is a concrete `MessageType` claims the event by identity,
+  independent of registration order. (2) **Predicate
   tier (fallback)**: predicate `from` matchers are consulted ONLY when no exact match claims the
   event; among predicates the first registered match wins. An exact match ALWAYS beats a predicate.
   Overlapping exact claims (any two transformations claiming the same exact identity, whatever their
-  `from` flavour -- single, list, drop, or rename) are rejected at chain-build time with a
+  `from` flavour -- single, drop, or rename) are rejected at chain-build time with a
   `ChainConfigurationException`; the framework does NOT silently resolve them. Reference-guide docs
   MUST surface the two-tier model with a worked example.
   _Traces to: US1 scenario 3, US5._
@@ -844,11 +844,11 @@ a last resort if the old stream must be fully replaced.
   be expressed by supplying a `Predicate<MessageType>` to `from(...)` (see FR-005). The
   framework does not ship a semver helper in 5.2.0; users compose their own predicates or
   pull in a helper that the `axon-common` module is expected to provide as follow-on work
-  (see [plan.md](plan.md) "Required axon-framework additions"). When several *known* versions need
-  the same mapper, prefer the exact multi-version overload `from(List<MessageType>)` over a
-  `versions.contains(v)` predicate -- exact matches are order-independent and outrank predicates.
-  Open-ended ranges still use a predicate; among predicates the first registered match wins, and any
-  exact match for the same event takes precedence over every predicate.
+  (see [plan.md](plan.md) "Required axon-framework additions"). A predicate is for an open-ended range
+  that cannot be enumerated; do not fake-match a closed set of *known* versions with a
+  `versions.contains(v)` predicate -- match those exactly, one transformation per version step (exact
+  matches are order-independent and outrank predicates). Among predicates the first registered match
+  wins, and any exact match for the same event takes precedence over every predicate.
   _Traces to: FR-004, FR-005._
 - **FR-021 (Data-protection ordering)**: Data-protection mechanisms (PII redaction, field-level
   masking, payload decryption, etc.) MUST operate downstream of the transformation chain.
@@ -888,9 +888,9 @@ a last resort if the old stream must be fully replaced.
   pass-through.
 - **`from` predicate**: When `from(Predicate<MessageType>)` is used instead of `from(MessageType)`,
   the predicate decides matching (range, regex, semver, etc.). It is the *fallback* tier: consulted
-  only when no exact (`from(MessageType)` or `from(List<MessageType>)`) match claims the event. The
-  `from(List<MessageType>)` overload is the preferred way to cover several known versions with one
-  mapper. Composable with a future `SemverPredicate` helper expected in `axon-common`.
+  only when no exact `from(MessageType)` match claims the event. It is for an open-ended range that
+  cannot be enumerated; known versions are matched exactly, one transformation per version step.
+  Composable with a future `SemverPredicate` helper expected in `axon-common`.
 - **DCB read (`SourcingCondition`)**: Dynamic Consistency Boundary, AF5's mechanism for
   command-side consistency without a fixed aggregate root. Bounded stream that may span multiple
   entities. One of the three reading contexts in FR-012 (alongside entity loads and tracking

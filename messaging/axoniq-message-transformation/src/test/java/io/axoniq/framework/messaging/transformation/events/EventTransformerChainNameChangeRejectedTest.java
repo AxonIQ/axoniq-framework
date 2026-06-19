@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletionException;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
@@ -50,7 +49,6 @@ final class EventTransformerChainNameChangeRejectedTest {
     private static final MessageType SAMPLE_V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType SAMPLE_V2 = new MessageType("com.example.Sample", "2.0.0");
     private static final MessageType RENAMED = new MessageType("com.example.Renamed", "1.0.0");
-    private static final MessageType FOREIGN_V1 = new MessageType("com.example.Foreign", "1.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
 
     @Nested final class ExactFrom {
@@ -69,22 +67,6 @@ final class EventTransformerChainNameChangeRejectedTest {
                     .hasMessageContaining("rename")
                     .hasMessageContaining(SAMPLE_V1.toString())
                     .hasMessageContaining(RENAMED.toString());
-        }
-
-        @Test
-        void multiVersionSetWithAForeignNameRejectedAtRegistration() {
-            // given a multi-version 'from' where one source's qualified name differs from 'to'
-            EventTransformation transformation = EventTransformation.from(Set.of(SAMPLE_V1, FOREIGN_V1))
-                                                                    .to(SAMPLE_V2)
-                                                                    .transform(String.class, (in, ctx) -> in);
-            EventTransformerChain.Builder builder = EventTransformerChain.builder();
-
-            // when / then the foreign-named source is rejected as a rename
-            assertThatThrownBy(() -> builder.register(transformation))
-                    .isInstanceOf(ChainConfigurationException.class)
-                    .hasMessageContaining("rename")
-                    .hasMessageContaining(FOREIGN_V1.toString())
-                    .hasMessageContaining(SAMPLE_V2.toString());
         }
 
         @Test

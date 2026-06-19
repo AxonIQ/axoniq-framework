@@ -63,13 +63,12 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
 /**
  * Factory producing {@link EventTransformation} instances. Use one of the static methods
- * ({@link #from(MessageType)} / {@link #from(Set)} / {@link #from(Predicate)},
+ * ({@link #from(MessageType)} / {@link #from(Predicate)},
  * {@link #rename(MessageType, MessageType)}, {@link #split(MessageType)},
  * {@link #drop(MessageType)}) and register the result with
  * {@code EventTransformerChain.builder().register(...)}.
@@ -90,18 +89,6 @@ public final class EventTransformation {
      * @return a builder awaiting {@code to(...)}
      */
     public static SingleEventTransformationBuilder from(MessageType source) { /* ... */ }
-
-    /**
-     * Begin a 1:1 transformation matching any of the given {@code sources} by exact equality,
-     * mapping each with one mapper. Use this to cover several known versions at once. Order is
-     * irrelevant; the identities are matched by exact equality and held as a set. Continue with
-     * {@code to(...)} then {@code transform(...)}.
-     *
-     * @param sources the {@code from} identities to match; at least one is required
-     * @return a builder awaiting {@code to(...)}
-     * @throws org.axonframework.common.AxonConfigurationException if {@code sources} is empty
-     */
-    public static SingleEventTransformationBuilder from(Set<MessageType> sources) { /* ... */ }
 
     /**
      * Begin a 1:1 transformation matching any {@link MessageType} for which the supplied
