@@ -157,12 +157,12 @@ In Axon Framework 5 you register transformations with an `EventTransformerChain`
 The chain matches each event by its type and applies every matching step in turn until the event reaches its current version, so a stored v1 event still reaches your handler fully upcasted.
 When several transformations could match the same event, the most specific one wins (an exact `from` beats a predicate), independent of registration order.
 
-Axon Framework 4 registered each upcaster on the `Configurer`, which assembled an `EventUpcasterChain` for you:
+Axon Framework 4 composed upcasters into an `EventUpcasterChain`:
 
 [source,java]
 ----
-Configurer configurer = DefaultConfigurer.defaultConfiguration()
-        .registerEventUpcaster(config -> new SystemAnnouncement0_to_1Upcaster());
+EventUpcasterChain upcasters =
+        new EventUpcasterChain(new SystemAnnouncement0_to_1Upcaster());
 ----
 
 Axon Framework 5 builds an `EventTransformerChain` explicitly and exposes it as a component:
