@@ -950,12 +950,7 @@
       "version": 3195,
       "versionNonce": 1949708924,
       "isDeleted": true,
-      "boundElements": [
-        {
-          "id": "eDRF3-MLPdnijtwBh6kQd",
-          "type": "text"
-        }
-      ],
+      "boundElements": [],
       "updated": 1779208456877,
       "link": null,
       "locked": false
@@ -2060,6 +2055,83 @@
       "verticalAlign": "middle",
       "containerId": "d2-XYQpzwVhtidMdE200d",
       "originalText": "Workflow Engine",
+      "autoResize": true,
+      "lineHeight": 1.25,
+      "baseline": 18
+    },
+    {
+      "id": "06zEJh2DJrc8zY0ocCP2m",
+      "type": "rectangle",
+      "x": 320,
+      "y": 280,
+      "width": 288.3720930232557,
+      "height": 54.2640139599663,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#e8fcf2",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "-pTD3ODvKexyooCCzAmBQ"
+      ],
+      "frameId": null,
+      "index": "b0X",
+      "roundness": {
+        "type": 3
+      },
+      "seed": 250548272,
+      "version": 3009,
+      "versionNonce": 1342280752,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "WDWiTqGAkl28WKB1AxVqa",
+          "type": "text"
+        }
+      ],
+      "updated": 1781877129453,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "WDWiTqGAkl28WKB1AxVqa",
+      "type": "text",
+      "x": 345.57615271279974,
+      "y": 294.63200697998315,
+      "width": 237.21978759765625,
+      "height": 25,
+      "angle": 0,
+      "strokeColor": "#181d27",
+      "backgroundColor": "#e8fcf2",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "-pTD3ODvKexyooCCzAmBQ"
+      ],
+      "frameId": null,
+      "index": "b0Y",
+      "roundness": null,
+      "seed": 150833712,
+      "version": 3003,
+      "versionNonce": 515530960,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1781877138982,
+      "link": null,
+      "locked": false,
+      "text": "Message transformation",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "06zEJh2DJrc8zY0ocCP2m",
+      "originalText": "Message transformation",
       "autoResize": true,
       "lineHeight": 1.25,
       "baseline": 18
