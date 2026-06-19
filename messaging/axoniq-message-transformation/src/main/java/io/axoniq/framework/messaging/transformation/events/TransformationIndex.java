@@ -132,6 +132,8 @@ final class TransformationIndex {
         if (bucket == null) {
             return null;
         }
+        // At most one candidate can match: every exact source is claimed by a single transformation (duplicates
+        // are rejected when the index is built), so the first match is necessarily the only match.
         for (EventTransformation candidate : bucket) {
             if (candidate.matcher().matches(eventType)) {
                 return candidate;

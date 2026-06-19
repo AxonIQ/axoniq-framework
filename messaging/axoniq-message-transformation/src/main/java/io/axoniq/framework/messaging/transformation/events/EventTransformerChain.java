@@ -284,10 +284,16 @@ public final class EventTransformerChain implements DescribableComponent {
 
         /**
          * Register an {@link EventTransformation} with the chain.
+         * <p>
+         * A payload mapping with an exact {@code from} may change only the version, never the
+         * {@link org.axonframework.messaging.core.QualifiedName}; such a name change is rejected here, at
+         * registration time. Use {@link EventTransformation#rename(MessageType, MessageType)} to change the name.
          *
          * @param transformation the transformation to add
          * @return this builder
-         * @throws ChainConfigurationException if {@link #build()} has already been called
+         * @throws ChainConfigurationException if {@link #build()} has already been called, or if
+         *                                     {@code transformation} is a payload mapping whose exact {@code from}
+         *                                     and {@code to} qualified names differ
          */
         public Builder register(EventTransformation transformation) {
             assertNotBuilt();

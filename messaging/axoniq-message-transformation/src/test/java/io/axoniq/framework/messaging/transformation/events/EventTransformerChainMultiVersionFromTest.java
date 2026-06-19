@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -30,9 +31,10 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
@@ -41,8 +43,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * {@code from(List)} matches an event whose type equals any of the listed identities, applying one mapper to all of
- * them; a version that is not listed is left untouched.
+ * {@code from(Set)} matches an event whose type equals any of the given identities, applying one mapper to all of
+ * them; a version that is not included is left untouched.
  */
 final class EventTransformerChainMultiVersionFromTest {
 
@@ -58,7 +60,7 @@ final class EventTransformerChainMultiVersionFromTest {
     void everyListedVersionIsTransformedBySingleRegistration() {
         // given one registration covering versions 1, 2 and 3
         EventTransformerChain chain = chainWith(
-                EventTransformation.from(List.of(V1, V2, V3))
+                EventTransformation.from(Set.of(V1, V2, V3))
                                    .to(TARGET)
                                    .transform(JsonNode.class, (in, ctx) -> in));
 
@@ -73,7 +75,7 @@ final class EventTransformerChainMultiVersionFromTest {
     void aVersionNotInTheListPassesThroughUnchanged() {
         // given one registration covering versions 1, 2 and 3
         EventTransformerChain chain = chainWith(
-                EventTransformation.from(List.of(V1, V2, V3))
+                EventTransformation.from(Set.of(V1, V2, V3))
                                    .to(TARGET)
                                    .transform(JsonNode.class, (in, ctx) -> in));
 
@@ -91,29 +93,28 @@ final class EventTransformerChainMultiVersionFromTest {
     final class InputValidation {
 
         @Test
-        void nullListIsRejected() {
+        void nullSetIsRejected() {
             //noinspection DataFlowIssue
-            assertThatThrownBy(() -> EventTransformation.from((List<MessageType>) null))
+            assertThatThrownBy(() -> EventTransformation.from((Set<MessageType>) null))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("sources");
         }
 
         @Test
         void nullElementIsRejected() {
-            List<MessageType> withNull = new ArrayList<>();
+            Set<MessageType> withNull = new HashSet<>();
             withNull.add(V1);
             withNull.add(null);
 
             //noinspection DataFlowIssue
             assertThatThrownBy(() -> EventTransformation.from(withNull))
-                    .isInstanceOf(NullPointerException.class)
-                    .hasMessageContaining("sources element");
+                    .isInstanceOf(NullPointerException.class);
         }
 
         @Test
-        void emptyListIsRejected() {
-            assertThatThrownBy(() -> EventTransformation.from(List.<MessageType>of()))
-                    .isInstanceOf(IllegalArgumentException.class)
+        void emptySetIsRejected() {
+            assertThatThrownBy(() -> EventTransformation.from(Set.<MessageType>of()))
+                    .isInstanceOf(AxonConfigurationException.class)
                     .hasMessageContaining("at least one source");
         }
     }
