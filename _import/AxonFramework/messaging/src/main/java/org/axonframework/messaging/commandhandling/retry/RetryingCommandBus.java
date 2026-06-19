@@ -39,10 +39,7 @@ import static org.axonframework.common.FutureUtils.unwrap;
  * <p>
  * A {@link RetryScheduler} is used to determine if and how retries are performed. A {@code CommandBus} is automatically
  * decorated whenever a {@code RetryScheduler} is present in the
- * {@link org.axonframework.common.configuration.Configuration}. For manual decoration, be sure to use a
- * {@link
- * org.axonframework.common.configuration.ComponentRegistry#registerDecorator(org.axonframework.common.configuration.DecoratorDefinition)
- * decorator} with an order close to the {@link #DECORATION_ORDER} to ensure other components are not overtaken.
+ * {@link org.axonframework.common.configuration.Configuration}.
  *
  * @author Allard Buijze
  * @since 5.0.0
