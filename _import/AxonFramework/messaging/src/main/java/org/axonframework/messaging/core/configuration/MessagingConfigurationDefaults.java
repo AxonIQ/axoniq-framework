@@ -120,7 +120,7 @@ import java.util.List;
  * Furthermore, this enhancer will decorate the:
  * <ul>
  *     <li>The {@link CommandGateway} in a {@link ConvertingCommandGateway} with the present {@link MessageConverter}.</li>
- *     <li>The {@link CommandBus} in a {@link RetryingCommandBus} <b>if</b> a {@link RetryScheduler} is present in the
+ *     <li>The {@link CommandBus} is a {@link RetryingCommandBus} <b>if</b> a {@link RetryScheduler} is present in the
  *     registry. The {@link RetryingCommandBus} is applied outside the {@link InterceptingCommandBus} so that retries
  *     also traverse the interceptor chain.</li>
  *     <li>The {@link CommandBus} in a {@link InterceptingCommandBus} <b>if</b> there are any
