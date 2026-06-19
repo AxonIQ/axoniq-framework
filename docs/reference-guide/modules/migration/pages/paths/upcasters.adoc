@@ -118,7 +118,7 @@ The identity also differs: Axon Framework 4 keyed off the payload's class name, 
 [NOTE]
 .Unversioned events
 ====
-Events stored without a version are treated as version `0.0.1` in Axon Framework 5.
+Events that do not have an explicit version set via the `@Event` annotation default to version `0.0.1` in Axon Framework 5.
 Match that version in `from(...)` when lifting legacy events, as shown above.
 ====
 
