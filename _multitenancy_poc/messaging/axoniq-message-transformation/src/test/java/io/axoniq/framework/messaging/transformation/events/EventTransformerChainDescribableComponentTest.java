@@ -29,6 +29,7 @@ import org.mockito.Mockito;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.InstanceOfAssertFactories.LIST;
@@ -97,12 +98,12 @@ final class EventTransformerChainDescribableComponentTest {
     }
 
     @Test
-    void aMultiVersionFromListCountsAsOneTransformationInOneBucket() {
-        // a from(List) of three versions of one event is a single registration, bucketed once by qualified name
+    void aMultiVersionFromSetCountsAsOneTransformationInOneBucket() {
+        // a from(Set) of three versions of one event is a single registration, bucketed once by qualified name
         EventTransformation multiVersion =
-                EventTransformation.from(List.of(COURSE_V1,
-                                                 COURSE_V2,
-                                                 new MessageType("com.example.CourseCreated", "3.0.0")))
+                EventTransformation.from(Set.of(COURSE_V1,
+                                                COURSE_V2,
+                                                new MessageType("com.example.CourseCreated", "3.0.0")))
                                    .to(new MessageType("com.example.CourseCreated", "9.0.0"))
                                    .transform(JsonNode.class, (in, ctx) -> in);
         EventTransformerChain chain = EventTransformerChain.builder().register(multiVersion).build();

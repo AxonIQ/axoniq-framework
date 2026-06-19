@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.MessageTransformation;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
@@ -29,7 +30,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -46,11 +46,16 @@ import static java.util.Objects.requireNonNull;
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
  * <ul>
- *     <li><b>Concrete</b> ({@link #from(MessageType)}, or {@link #from(Collection)} to cover several known versions
+ *     <li><b>Concrete</b> ({@link #from(MessageType)}, or {@link #from(Set)} to cover several known versions
  *     with one mapper): matches a source {@link MessageType} by exact equality. The source type is known up
- *     front.</li>
+ *     front. <b>Prefer this path whenever the source identities are known.</b> Exact matches are resolved by a
+ *     constant-time identity lookup and let the chain widen read criteria to precisely those source types, so
+ *     they impose no per-event scanning cost.</li>
  *     <li><b>Predicate-based</b> ({@link #from(Predicate)}): matches every {@link MessageType} for which the
- *     supplied predicate returns {@code true}.</li>
+ *     supplied predicate returns {@code true}. Reach for this only when the source identities cannot be
+ *     enumerated up front: each predicate is evaluated against non-exact events in registration order, a
+ *     per-event cost that grows with the number of predicates, and the widened read criteria are necessarily
+ *     broader than the concrete path's. Both can carry a significant performance penalty.</li>
  * </ul>
  * A pure rename is built with {@link #rename(MessageType, MessageType)}: it leaves the payload unchanged and, unlike
  * the mapping paths, may change the {@link QualifiedName} rather than only the version. A drop is built with
@@ -109,17 +114,16 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      * {@code transform(...)}.
      *
      * @param sources the {@code from} identities to match; at least one is required. Order is irrelevant: the
-     *                identities are matched by exact equality and held as a set, so any {@link Collection} works
+     *                identities are matched by exact equality and held as a set
      * @return a builder awaiting {@code to(...)}
-     * @throws IllegalArgumentException if {@code sources} is empty
+     * @throws AxonConfigurationException if {@code sources} is empty
      */
-    static ToStep from(Collection<MessageType> sources) {
+    static ToStep from(Set<MessageType> sources) {
         requireNonNull(sources, "sources may not be null");
-        Set<MessageType> distinct = LinkedHashSet.newLinkedHashSet(sources.size());
-        for (MessageType source : sources) {
-            distinct.add(requireNonNull(source, "sources element may not be null"));
+        if (sources.isEmpty()) {
+            throw new AxonConfigurationException("An exact matcher requires at least one source.");
         }
-        return new ToStep(new FromMatcher.Exact(distinct));
+        return new ToStep(new FromMatcher.Exact(sources));
     }
 
     /**

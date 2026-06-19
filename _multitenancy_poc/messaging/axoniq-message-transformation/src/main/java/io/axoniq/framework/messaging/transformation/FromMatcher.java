@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.transformation;
 
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -57,7 +58,7 @@ public sealed interface FromMatcher permits FromMatcher.Exact, FromMatcher.Predi
         public Exact {
             sources = Set.copyOf(requireNonNull(sources, "sources may not be null"));
             if (sources.isEmpty()) {
-                throw new IllegalArgumentException("An exact matcher requires at least one source.");
+                throw new AxonConfigurationException("An exact matcher requires at least one source.");
             }
         }
 

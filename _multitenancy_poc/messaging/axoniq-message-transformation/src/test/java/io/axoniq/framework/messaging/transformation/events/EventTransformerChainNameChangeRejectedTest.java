@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletionException;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
@@ -71,9 +72,9 @@ final class EventTransformerChainNameChangeRejectedTest {
         }
 
         @Test
-        void multiVersionListWithAForeignNameRejectedAtRegistration() {
+        void multiVersionSetWithAForeignNameRejectedAtRegistration() {
             // given a multi-version 'from' where one source's qualified name differs from 'to'
-            EventTransformation transformation = EventTransformation.from(List.of(SAMPLE_V1, FOREIGN_V1))
+            EventTransformation transformation = EventTransformation.from(Set.of(SAMPLE_V1, FOREIGN_V1))
                                                                     .to(SAMPLE_V2)
                                                                     .transform(String.class, (in, ctx) -> in);
             EventTransformerChain.Builder builder = EventTransformerChain.builder();

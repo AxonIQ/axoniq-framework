@@ -154,7 +154,7 @@ public final class EventTransformerChain implements DescribableComponent {
 
     /** Fluent builder; exact {@code from} matches resolve by identity, predicate {@code from} by first-registered-wins. */
     public static final class Builder {
-        public Builder register(EventTransformer transformer) { /* ... */ }
+        public Builder register(EventTransformation transformation) { /* ... */ }
         public Builder maxIterationsPerEvent(int max) { /* ... */ }
         public EventTransformerChain build() { /* ... */ }
     }
