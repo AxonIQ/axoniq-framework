@@ -120,11 +120,27 @@ Suppose every `0.x` beta `WelcomeMessageSent` folds up to `1.0.0`, but the `0.9.
 
 [source,java]
 ----
-.register(WelcomeMessageBetaCleanup.build())   // <1>
-.register(WelcomeMessage090ToV1.build())       // <2>
+QualifiedName welcomeMessageSent = new QualifiedName("coursecatalog.WelcomeMessageSent");
+MessageType v1 = new MessageType(welcomeMessageSent, "1.0.0");
+
+EventTransformation betaCleanup =                                       // <1>
+        EventTransformation.from(type -> type.version().startsWith("0."))
+                           .declaringFromTypes(welcomeMessageSent)
+                           .to(v1)
+                           .transform(JsonNode.class, WelcomeMessageBetaCleanup::map);
+
+EventTransformation beta090ToV1 =                                       // <2>
+        EventTransformation.from(new MessageType(welcomeMessageSent, "0.9.0"))
+                           .to(v1)
+                           .transform(JsonNode.class, WelcomeMessage090ToV1::map);
+
+EventTransformerChain.builder()
+                     .register(betaCleanup)
+                     .register(beta090ToV1)
+                     .build();
 ----
-<1> A broad predicate matching every `0.x` version (`0.x` -> `1.0.0`).
-<2> An exact transformation for the `0.9.0` version (`0.9.0` -> `1.0.0`).
+<1> A broad predicate matching every `0.x` version (`0.x` -> `1.0.0`) with `from(Predicate)`, scoped to `WelcomeMessageSent` via `declaringFromTypes(...)`.
+<2> An exact transformation for just the `0.9.0` version (`0.9.0` -> `1.0.0`) with `from(MessageType)`, which therefore wins for a stored `0.9.0` event.
 
 A stored `0.9.0` event matches both.
 The exact `0.9.0` transformation wins, producing `1.0.0`, which no transformation matches further, so the predicate never runs for `0.9.0` while still handling every other `0.x` version.
