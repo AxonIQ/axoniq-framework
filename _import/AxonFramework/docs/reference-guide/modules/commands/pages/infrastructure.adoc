@@ -260,8 +260,10 @@ Failures that do not match are propagated immediately without retrying.
 [source,java]
 ----
 // Only retry when the failure is not a validation error
-RetryPolicy policy = new FilteringRetryPolicy(delegate,
-        e -> !(e instanceof IllegalArgumentException));
+RetryPolicy policy = new FilteringRetryPolicy(
+        delegate,
+        e -> !(e instanceof IllegalArgumentException)
+);
 ----
 
 Compose them to express the exact behavior you need.
