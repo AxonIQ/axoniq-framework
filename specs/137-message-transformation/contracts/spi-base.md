@@ -7,7 +7,7 @@
 
 Shared SPI base for events (5.2.0) and -- when delivered -- commands and queries (5.3+). User-facing factory methods, builder usage, and end-to-end code samples are in [public-api.md](public-api.md); this file documents the SPI shape only.
 
-## `MessageTransformer<M extends Message>`
+## `MessageTransformation<M extends Message>`
 
 Generic base type. Single-message input, stream output: each transformer emits zero elements (drop), one (1:1), or N (1:N split) for one matched input message. `M` is preserved across the call -- a transformer does not turn a command into an event. Each message type has its own typed chain that composes many transformers into a stream-in / stream-out pipeline: `EventTransformerChain` ([spi-events.md](spi-events.md), 5.2.0) and the deferred `CommandTransformerChain` / `QueryTransformerChain` ([spi-commands-queries.md](spi-commands-queries.md), 5.3+). This per-transformer type is an internal execution hook (`@Internal`), not a user extension point: users pass a plain `BiFunction` mapper to the typed factory, which produces the transformer (the event specialization is `sealed`). Single-message-in / stream-out so the chain drives each matched transformer uniformly.
 
@@ -34,7 +34,7 @@ import org.axonframework.messaging.core.MessageStream;
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public interface MessageTransformer<M extends Message> {
+public interface MessageTransformation<M extends Message> {
 
     /**
      * Transform a single matched message. Called by the chain only when {@code message}
@@ -80,7 +80,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Per-invocation services for a {@link MessageTransformer#transform} call.
+ * Per-invocation services for a {@link MessageTransformation#transform} call.
  *
  * @param entryContext        the read-stream entry's {@link Context}, carrying stream position when available
  * @param processingContext   the active {@link ProcessingContext}, or {@code null} when the read path supplies none
@@ -167,7 +167,7 @@ Detection points:
 
 ## Version-range matching
 
-Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). For several *known* versions, prefer the exact multi-version overload `from(List<MessageType>)` -- exact matches are order-independent and outrank predicates. Predicates are the fallback tier: consulted only when no exact match claims the event, with the first registered matching predicate winning.
+Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). For several *known* versions, prefer the exact multi-version overload `from(Set<MessageType>)` -- exact matches are order-independent and outrank predicates. Predicates are the fallback tier: consulted only when no exact match claims the event, with the first registered matching predicate winning.
 
 **Cross-references**: FR-020.
 
