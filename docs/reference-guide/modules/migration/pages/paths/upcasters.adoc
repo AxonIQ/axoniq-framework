@@ -120,6 +120,9 @@ The identity also differs: Axon Framework 4 keyed off the payload's class name, 
 ====
 Events that do not have an explicit version set via the `@Event` annotation default to version `0.0.1` in Axon Framework 5.
 Match that version in `from(...)` when lifting legacy events, as shown above.
+
+Events that were already stored without a version (the Axon Framework 4 default when no revision was specified) are a separate case: they resolve to version `0.0.0`, kept distinct from the `0.0.1` default so that they always sort as older than any explicitly versioned event.
+See xref:migration:paths/event-store.adoc#missing-revision[Events without a revision] for how the `EventTypeResolver` resolves this at read time and how to configure a different fallback.
 ====
 
 [#_renaming_an_event]
