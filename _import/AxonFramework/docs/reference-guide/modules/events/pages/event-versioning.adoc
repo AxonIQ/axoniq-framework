@@ -92,18 +92,11 @@ Payload conversion handles many common versioning scenarios without requiring up
 * **Changing field types** - Converters can transform compatible types (for example String to Integer, Date to Instant).
 * **Restructuring for different handlers** - Different handlers can use completely different Java types for the same event.
 
-[[event-upcasting]]
-[.axoniq-feature]
-== Event Upcasting
-
-Upcasting rewrites the stored representation of an event when it is read, for the structural changes that xref:#event_versioning_at_handling_time[payload conversion at handling time] cannot express on its own.
-
-[WARNING]
-.Upcasting is now event transformation
-====
-Axon Framework 5 replaces the Axon Framework 4 upcaster with [.advanced-framework]#event transformation# in Axoniq Framework: a different, declarative approach that can reshape, rename, and drop stored events, with more on the way also on message level (see https://github.com/AxonFramework/AxonFramework/issues/3597[issue #3597]).
 ifdef::advanced-framework[]
-See the xref:message-transformation:index.adoc[event transformation reference] to get started, and the xref:migration:paths/upcasters.adoc[upcaster migration path] to migrate Axon Framework 4 upcasters.
-endif::[]
-For most versioning, xref:#event_versioning_at_handling_time[payload conversion at handling time] is all you need.
+[NOTE]
+.Structural changes use event transformation
 ====
+For the structural changes that payload conversion cannot express (reshaping, renaming, or dropping stored events), Axoniq Framework provides [.advanced-framework]#event transformation#, the declarative successor to the Axon Framework 4 upcaster.
+See the xref:message-transformation:index.adoc[event transformation reference] to get started, and the xref:migration:paths/upcasters.adoc[upcaster migration path] to migrate existing Axon Framework 4 upcasters.
+====
+endif::[]
