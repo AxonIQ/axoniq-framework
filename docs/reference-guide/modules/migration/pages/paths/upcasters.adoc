@@ -118,7 +118,7 @@ The identity also differs: Axon Framework 4 keyed off the payload's class name, 
 [NOTE]
 .Unversioned events
 ====
-Events stored without a version are treated as version `0.0.1` in Axon Framework 5.
+Events that do not have an explicit version set via the `@Event` annotation default to version `0.0.1` in Axon Framework 5.
 Match that version in `from(...)` when lifting legacy events, as shown above.
 ====
 
@@ -156,6 +156,25 @@ In Axon Framework 4 you registered upcasters with an `EventUpcasterChain`.
 In Axon Framework 5 you register transformations with an `EventTransformerChain`, one per version step.
 The chain matches each event by its type and applies every matching step in turn until the event reaches its current version, so a stored v1 event still reaches your handler fully upcasted.
 When several transformations could match the same event, the most specific one wins (an exact `from` beats a predicate), independent of registration order.
+
+Axon Framework 4 composed upcasters into an `EventUpcasterChain`:
+
+[source,java]
+----
+EventUpcasterChain upcasters =
+        new EventUpcasterChain(new SystemAnnouncement0_to_1Upcaster());
+----
+
+Axon Framework 5 builds an `EventTransformerChain` explicitly and exposes it as a component:
+
+[source,java]
+----
+EventTransformerChain chain =
+        EventTransformerChain.builder()
+                             .register(SystemAnnouncementLegacyUplift.build())
+                             .build();
+----
+
 See xref:message-transformation:configuring-transformations.adoc[Configuring transformations] for the full setup, including the configuration.
 
 == Structural changes not yet covered
