@@ -167,7 +167,7 @@ Detection points:
 
 ## Version-range matching
 
-Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). For several *known* versions, prefer the exact multi-version overload `from(Set<MessageType>)` -- exact matches are order-independent and outrank predicates. Predicates are the fallback tier: consulted only when no exact match claims the event, with the first registered matching predicate winning.
+Version ranges (e.g. semver `1.x`, `>=1.0 <2.0`) are expressed by passing a `Predicate<MessageType>` to `from(...)` rather than a concrete `MessageType`. The framework ships no semver helper in 5.2.0; users compose their own predicates or pull in the `SemverPredicate` helper expected as follow-on work in `axon-common` (see [plan.md](plan.md) "Required axon-framework additions"). Known versions are matched exactly instead, modelled one version step at a time -- exact matches are order-independent and outrank predicates. The framework intentionally offers no way to bind one transformation to a set of versions. Predicates are the fallback tier: consulted only when no exact match claims the event, with the first registered matching predicate winning.
 
 **Cross-references**: FR-020.
 

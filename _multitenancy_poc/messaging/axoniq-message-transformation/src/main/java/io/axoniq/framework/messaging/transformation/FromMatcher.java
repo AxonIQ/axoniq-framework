@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.transformation;
 
-import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -31,7 +30,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Sealed strategy for matching the {@code from} side of a transformation. Either
- * exact equality against one of a fixed set of {@link MessageType}s ({@link Exact}) or a
+ * exact equality against a fixed {@link MessageType} ({@link Exact}) or a
  * user-supplied {@link Predicate} ({@link PredicateBased}).
  *
  * @author Laura Devriendt
@@ -49,32 +48,19 @@ public sealed interface FromMatcher permits FromMatcher.Exact, FromMatcher.Predi
     boolean matches(MessageType candidate);
 
     /**
-     * Exact-source matcher: matches an event whose {@link MessageType} equals one of a fixed set of identities.
+     * Exact-source matcher: matches an event whose {@link MessageType} equals a fixed identity.
      *
-     * @param sources the exact identities to match; at least one is required
+     * @param source the exact identity to match
      */
-    record Exact(Set<MessageType> sources) implements FromMatcher {
+    record Exact(MessageType source) implements FromMatcher {
 
         public Exact {
-            sources = Set.copyOf(requireNonNull(sources, "sources may not be null"));
-            if (sources.isEmpty()) {
-                throw new AxonConfigurationException("An exact matcher requires at least one source.");
-            }
-        }
-
-        /**
-         * Creates a matcher for a single exact identity.
-         *
-         * @param source the exact identity to match
-         * @return the matcher, never {@code null}
-         */
-        public static Exact of(MessageType source) {
-            return new Exact(Set.of(requireNonNull(source, "source may not be null")));
+            requireNonNull(source, "source may not be null");
         }
 
         @Override
         public boolean matches(MessageType candidate) {
-            return sources.contains(candidate);
+            return source.equals(candidate);
         }
     }
 

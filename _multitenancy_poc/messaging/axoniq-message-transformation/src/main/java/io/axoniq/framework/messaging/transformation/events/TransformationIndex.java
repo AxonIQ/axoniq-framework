@@ -28,10 +28,8 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -72,8 +70,8 @@ final class TransformationIndex {
         Map<MessageType, EventTransformation> claimedSources = new HashMap<>();
         for (EventTransformation transformation : registrationOrder) {
             switch (transformation.matcher()) {
-                case FromMatcher.Exact(Set<MessageType> sources) ->
-                        indexExact(transformation, sources, exactBuckets, claimedSources);
+                case FromMatcher.Exact(MessageType source) ->
+                        indexExact(transformation, source, exactBuckets, claimedSources);
                 case FromMatcher.PredicateBased ignored -> predicateList.add(transformation);
             }
         }
@@ -81,29 +79,21 @@ final class TransformationIndex {
     }
 
     /**
-     * Buckets an exact transformation by each of its source qualified names, after rejecting any source already
-     * claimed by an earlier transformation.
+     * Buckets an exact transformation under its source's qualified name, after rejecting a source already claimed by
+     * an earlier transformation.
      * <p>
-     * A mapping's sources all share its {@code to} qualified name (enforced by the registration-time name-change
-     * guard), and a rename or drop carries a single source, so the transformation lands under exactly one qualified
-     * name. That is what lets {@link #count()} and {@link #transformations()} treat the buckets as a partition
-     * without double-counting.
+     * Each exact transformation carries a single source, so it lands under exactly one qualified name. That is what
+     * lets {@link #count()} and {@link #transformations()} treat the buckets as a partition without double-counting.
      */
     private static void indexExact(EventTransformation transformation,
-                                   Set<MessageType> sources,
+                                   MessageType source,
                                    Map<QualifiedName, List<EventTransformation>> exactBuckets,
                                    Map<MessageType, EventTransformation> claimedSources) {
-        Set<QualifiedName> names = new LinkedHashSet<>();
-        for (MessageType source : sources) {
-            EventTransformation previous = claimedSources.putIfAbsent(source, transformation);
-            if (previous != null) {
-                throw duplicateSource(source, previous, transformation);
-            }
-            names.add(source.qualifiedName());
+        EventTransformation previous = claimedSources.putIfAbsent(source, transformation);
+        if (previous != null) {
+            throw duplicateSource(source, previous, transformation);
         }
-        for (QualifiedName name : names) {
-            exactBuckets.computeIfAbsent(name, ignored -> new ArrayList<>()).add(transformation);
-        }
+        exactBuckets.computeIfAbsent(source.qualifiedName(), ignored -> new ArrayList<>()).add(transformation);
     }
 
     private static ChainConfigurationException duplicateSource(MessageType source,

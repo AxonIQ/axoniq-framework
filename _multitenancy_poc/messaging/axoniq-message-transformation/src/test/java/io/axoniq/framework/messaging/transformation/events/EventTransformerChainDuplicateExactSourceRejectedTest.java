@@ -24,14 +24,12 @@ import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.Test;
 
-import java.util.Set;
-
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Two transformations may not claim the same exact source identity; the chain rejects such a configuration when
- * built, whether the duplicate comes from two single-version registrations, from a multi-version set that overlaps
- * another, or from a rename or drop that claims a source another transformation already holds.
+ * built, whether the duplicate comes from two single-version registrations or from a rename or drop that claims a
+ * source another transformation already holds.
  */
 final class EventTransformerChainDuplicateExactSourceRejectedTest {
 
@@ -50,32 +48,6 @@ final class EventTransformerChainDuplicateExactSourceRejectedTest {
         assertThatThrownBy(builder::build)
                 .isInstanceOf(ChainConfigurationException.class)
                 .hasMessageContaining(V1.toString());
-    }
-
-    @Test
-    void aSetOverlappingAnotherExactSourceIsRejected() {
-        // given a set covering V1 and V2 alongside a single exact transformation on V2
-        EventTransformerChain.Builder builder = EventTransformerChain.builder()
-                .register(EventTransformation.from(Set.of(V1, V2)).to(V3).transform(JsonNode.class, (in, ctx) -> in))
-                .register(EventTransformation.from(V2).to(V3).transform(JsonNode.class, (in, ctx) -> in));
-
-        // when the chain is built / then it is rejected on the overlapping V2
-        assertThatThrownBy(builder::build)
-                .isInstanceOf(ChainConfigurationException.class)
-                .hasMessageContaining(V2.toString());
-    }
-
-    @Test
-    void twoSetsOverlappingOnAVersionAreRejected() {
-        // given two multi-version registrations that both include V2
-        EventTransformerChain.Builder builder = EventTransformerChain.builder()
-                .register(EventTransformation.from(Set.of(V1, V2)).to(V3).transform(JsonNode.class, (in, ctx) -> in))
-                .register(EventTransformation.from(Set.of(V2, V3)).to(V1).transform(JsonNode.class, (in, ctx) -> in));
-
-        // when the chain is built / then it is rejected on the shared V2
-        assertThatThrownBy(builder::build)
-                .isInstanceOf(ChainConfigurationException.class)
-                .hasMessageContaining(V2.toString());
     }
 
     @Test

@@ -21,7 +21,6 @@ package io.axoniq.framework.messaging.transformation.events;
 
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import io.axoniq.framework.messaging.transformation.MessageTransformation;
-import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
@@ -46,11 +45,11 @@ import static java.util.Objects.requireNonNull;
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
  * <ul>
- *     <li><b>Concrete</b> ({@link #from(MessageType)}, or {@link #from(Set)} to cover several known versions
- *     with one mapper): matches a source {@link MessageType} by exact equality. The source type is known up
- *     front. <b>Prefer this path whenever the source identities are known.</b> Exact matches are resolved by a
- *     constant-time identity lookup and let the chain widen read criteria to precisely those source types, so
- *     they impose no per-event scanning cost.</li>
+ *     <li><b>Concrete</b> ({@link #from(MessageType)}): matches a source {@link MessageType} by exact equality.
+ *     The source type is known up front. <b>Prefer this path whenever the source identities are known</b>,
+ *     registering one transformation per version step. Exact matches are resolved by a constant-time identity lookup
+ *     and let the chain widen read criteria to precisely those source types, so they impose no per-event
+ *     scanning cost.</li>
  *     <li><b>Predicate-based</b> ({@link #from(Predicate)}): matches every {@link MessageType} for which the
  *     supplied predicate returns {@code true}. Reach for this only when the source identities cannot be
  *     enumerated up front: each predicate is evaluated against non-exact events in registration order, a
@@ -105,25 +104,7 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      */
     static ToStep from(MessageType source) {
         requireNonNull(source, "source may not be null");
-        return new ToStep(FromMatcher.Exact.of(source));
-    }
-
-    /**
-     * Begin a 1:1 transformation matching any of the given {@code sources} by exact equality, mapping each with a
-     * single mapper. Use this to cover several known versions at once. Continue with {@code to(...)} then
-     * {@code transform(...)}.
-     *
-     * @param sources the {@code from} identities to match; at least one is required. Order is irrelevant: the
-     *                identities are matched by exact equality and held as a set
-     * @return a builder awaiting {@code to(...)}
-     * @throws AxonConfigurationException if {@code sources} is empty
-     */
-    static ToStep from(Set<MessageType> sources) {
-        requireNonNull(sources, "sources may not be null");
-        if (sources.isEmpty()) {
-            throw new AxonConfigurationException("An exact matcher requires at least one source.");
-        }
-        return new ToStep(new FromMatcher.Exact(sources));
+        return new ToStep(new FromMatcher.Exact(source));
     }
 
     /**

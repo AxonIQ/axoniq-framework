@@ -42,7 +42,6 @@ import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -300,8 +299,8 @@ public final class EventTransformerChain implements DescribableComponent {
             requireNonNull(transformation, "transformation may not be null");
             // Only a payload mapping with an exact from is held to a version-only change; other variants are exempt.
             if (transformation instanceof MappingEventTransformation<?, ?> mapping
-                    && mapping.matcher() instanceof FromMatcher.Exact(Set<MessageType> sources)) {
-                sources.forEach(source -> assertMappingVersionChangeOnly(source, mapping.toType()));
+                    && mapping.matcher() instanceof FromMatcher.Exact(MessageType source)) {
+                assertMappingVersionChangeOnly(source, mapping.toType());
             }
             transformations.add(transformation);
             return this;
