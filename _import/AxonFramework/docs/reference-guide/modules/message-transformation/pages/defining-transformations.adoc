@@ -62,7 +62,7 @@ To change the name itself, with the payload carried over unchanged, use a <<_ren
 If a `transform(...)`'s `from` and `to` qualified names differ, the chain raises a `ChainConfigurationException`:
 
 * with a concrete `from`, the mismatch is detected when the chain is built, so the failure surfaces at startup.
-* with a <<_matching_multiple_event_versions,predicate `from`>>, a match can only be resolved per event, so the failure surfaces when such an event is read.
+* with a <<_matching_with_a_predicate,predicate `from`>>, a match can only be resolved per event, so the failure surfaces when such an event is read.
 ====
 
 == Working with generic payloads
@@ -166,33 +166,19 @@ Keep it out of the signature otherwise, so the common case stays a plain payload
 [#_matching_multiple_event_versions]
 == Matching multiple event versions
 
-Sometimes one rule should apply to several stored versions rather than a single one.
-Pass a set of `MessageType` values to `from(...)`, and the one mapper applies to every given identity:
+An event that has changed more than once is handled one version step at a time: each step is its own transformation, with its own mapper, and the chain composes them, so a stored `v1` is lifted to `v2` and then to `v3` on read.
+Write one transformation per version step rather than one that jumps straight from `v1` to `v3`.
 
-[source,java]
-----
-private static final QualifiedName NAME = new QualifiedName("coursecatalog.WelcomeMessageSent");
-private static final MessageType TO = new MessageType(NAME, "1.0.0"); // <1>
+The framework offers no way to bind a single transformation to a set of source versions, and that is deliberate.
+Reusing one transformation across several `MessageType` versions is a smell rather than something to reach for: a single mapper covering several versions has to branch over which one it received, while a per-version transformation stays a straight-line mapper that reads more clearly and is easier to evolve.
+If you genuinely want the same mapper on several versions, nothing stops you from registering one transformation per version yourself, but the framework will not suggest it for you.
 
-public static EventTransformation build() {
-    return EventTransformation.from(Set.of(                        // <2>
-                                      new MessageType(NAME, "0.1.0"),
-                                      new MessageType(NAME, "0.2.0"),
-                                      new MessageType(NAME, "0.3.0")))
-                              .to(TO)
-                              .transform(JsonNode.class, WelcomeMessageBetaCleanup::map);
-}
-----
-<1> `to` keeps the same qualified name and bumps only the version. A `transform(...)` does not change the name (use a <<_renaming_an_event,rename>> for that).
-<2> `from(Set)` matches any of the given identities by exact equality, folding all of them up to `1.0.0` with a single registration and a single mapper.
-
-This stays an _exact_ match: every given version is matched by identity, so the chain routes to it in constant time and resolves it without depending on registration order.
-Prefer it whenever the versions to cover are known, even a long run produced with code such as `IntStream.range(0, 50).mapToObj(v -> new MessageType(NAME, "0." + v + ".0")).collect(Collectors.toSet())`.
+The one shape that does not decompose into version steps is a whole _range_ of historic versions that collapses to a single target and cannot be enumerated up front. Match that with a predicate.
 
 [#_matching_with_a_predicate]
 === Matching with a predicate
 
-This is the exception, not the norm: prefer exact matching (`from(MessageType)`, or `from(Set)` for several known versions), one transformation per version step, and reach for a predicate only when a whole range of historic versions genuinely folds to a single target and the versions cannot be listed up front.
+This is the exception, not the norm: prefer exact matching with one transformation per version step, and reach for a predicate only when a whole range of historic versions genuinely folds to a single target and the versions cannot be listed up front.
 Pass the predicate to `from(...)` and scope it to the names it is meant for with `declaringFromTypes(...)`.
 The declared names act as a _pre-filter_: the predicate only ever sees events of those names, so it can match on version alone.
 
@@ -221,7 +207,7 @@ This single transformation folds every `0.x` version of `WelcomeMessageSent` up 
 .A predicate cannot be optimized
 ====
 The chain cannot look inside a predicate, so unlike an exact `from` it is evaluated for every event that reaches the fallback step (an exact match always takes precedence; see xref:configuring-transformations.adoc#_when_more_than_one_transformation_matches[When more than one transformation matches]).
-Never use one merely to cover a handful of known versions, such as `type -> versions.contains(type.version())`: that runs on every read and the chain cannot optimize it. List the versions in `from(Set)` instead.
+Never use one merely to cover a handful of known versions, such as `type -> versions.contains(type.version())`: that runs on every read and the chain cannot optimize it. Match known versions exactly instead, one transformation per version step.
 ====
 
 ==== Without a pre-filter

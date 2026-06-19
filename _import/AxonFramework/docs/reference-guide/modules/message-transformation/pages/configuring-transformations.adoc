@@ -113,8 +113,9 @@ If a single event legitimately needs more hops, raise the bound with `EventTrans
 == When more than one transformation matches
 
 Chaining handles the common case where each transformation matches a _different_ identity and hands off to the next.
-When _several_ registered transformations could match the _same_ stored event, the chain resolves it like Java overload resolution: the *most specific* match wins, independent of registration order.
-An exact identity match (a concrete `from`, including each version of a xref:defining-transformations.adoc#_matching_multiple_event_versions[multi-version `from`]) is more specific than a xref:defining-transformations.adoc#_matching_with_a_predicate[predicate `from`], so it always wins; a predicate runs only when no exact match claims the event, and among predicates the first registered one wins.
+When _several_ registered transformations could match the _same_ stored event, the chain resolves it like Java overload resolution: the *most specific* match wins.
+An exact identity match (a concrete `from`) always wins over a xref:defining-transformations.adoc#_matching_with_a_predicate[predicate `from`], independent of registration order.
+A predicate runs only when no exact match claims the event, when several predicates overlap, the first registered one wins.
 
 Suppose every `0.x` beta `WelcomeMessageSent` folds up to `1.0.0`, but the `0.9.0` beta needs its own mapping:
 

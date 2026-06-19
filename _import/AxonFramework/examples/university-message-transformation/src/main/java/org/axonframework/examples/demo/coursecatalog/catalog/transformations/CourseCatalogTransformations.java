@@ -32,10 +32,10 @@ import io.axoniq.framework.messaging.transformation.events.EventTransformerChain
  * the same exact identity are rejected when the chain is built. This chain has a single predicate
  * ({@link WelcomeMessageBetaCleanup}), so no such contest arises.
  * <p>
- * {@code WelcomeMessageBetaCleanup} is registered here only to demonstrate that an exact {@code from} takes
- * precedence over a predicate. When the beta versions are known up front, the preferred form is the exact
- * {@link WelcomeMessageBetaCleanupViaSet}, which lists them in a {@code from(Set)} rather than matching with a
- * predicate.
+ * {@code WelcomeMessageBetaCleanup} folds the open-ended range of {@code 0.x} beta versions up to
+ * {@code 1.0.0} with a predicate, the right tool when the versions to fold cannot be enumerated up
+ * front. An event that evolves through known versions is instead modelled one version step at a time,
+ * as {@code CoursePublished} and {@code StudentRegistered} are above.
  */
 public final class CourseCatalogTransformations {
 
