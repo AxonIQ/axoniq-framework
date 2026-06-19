@@ -329,6 +329,8 @@ import org.axonframework.messaging.core.retry.ExponentialBackOffRetryPolicy;
 import org.axonframework.messaging.core.retry.FilteringRetryPolicy;
 import org.axonframework.messaging.core.retry.MaxAttemptsPolicy;
 import org.axonframework.messaging.core.retry.RetryScheduler;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 import java.util.concurrent.Executors;
 
