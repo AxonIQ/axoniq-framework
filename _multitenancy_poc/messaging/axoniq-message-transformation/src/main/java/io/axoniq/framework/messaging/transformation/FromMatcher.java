@@ -30,7 +30,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Sealed strategy for matching the {@code from} side of a transformation. Either
- * exact equality against a single {@link MessageType} ({@link Exact}) or a
+ * exact equality against a fixed {@link MessageType} ({@link Exact}) or a
  * user-supplied {@link Predicate} ({@link PredicateBased}).
  *
  * @author Laura Devriendt
@@ -48,9 +48,9 @@ public sealed interface FromMatcher permits FromMatcher.Exact, FromMatcher.Predi
     boolean matches(MessageType candidate);
 
     /**
-     * Exact-source matcher: exact {@link MessageType} equality.
+     * Exact-source matcher: matches an event whose {@link MessageType} equals a fixed identity.
      *
-     * @param source the source identity
+     * @param source the exact identity to match
      */
     record Exact(MessageType source) implements FromMatcher {
 

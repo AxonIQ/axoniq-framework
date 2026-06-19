@@ -7,26 +7,28 @@
 
 Event-specific specialization of the [shared SPI base](spi-base.md). Ships with the integration types that decorate the `EventStore` at runtime. Covers US1-US5. User-facing factory methods and end-to-end usage examples are in [public-api.md](public-api.md); chain-level concerns are in [spi-base.md](spi-base.md).
 
-## `EventTransformer`
+## `EventTransformation`
 
-`MessageTransformer<EventMessage>` specialization for events.
+`MessageTransformation<EventMessage>` specialization for events, and the user-facing factory that builds one.
 
 ```java
 package io.axoniq.framework.messaging.transformation.events;
 
-import io.axoniq.framework.messaging.transformation.MessageTransformer;
-import io.axoniq.framework.messaging.transformation.TransformationContext;
+import io.axoniq.framework.messaging.transformation.FromMatcher;
+import io.axoniq.framework.messaging.transformation.MessageTransformation;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 /**
- * Event-specific {@link MessageTransformer}: a sealed handle for a single registered event
- * transformation, produced exclusively by the {@code EventTransformation} factory and
- * registered with an {@code EventTransformerChain}. Sealing makes the factory the only source
- * of instances; raw lambdas cannot be supplied.
+ * Event-specific {@link MessageTransformation}: a sealed handle for a single registered event
+ * transformation. The factory and the handle are the same type -- the user-facing static
+ * factory methods ({@code from(...)}, {@code rename(...)}, {@code drop(...)}, see
+ * [public-api.md](public-api.md)) build instances, and sealing makes those factories the only
+ * source of instances; raw lambdas cannot be supplied. Instances are registered with an
+ * {@code EventTransformerChain}.
  * <p>
- * A transformer rewrites only the {@link EventMessage} itself -- its
+ * A transformation rewrites only the {@link EventMessage} itself -- its
  * {@link org.axonframework.messaging.core.MessageType}, payload, and metadata. Properties
  * that live alongside the event in the read stream -- the tags resolved at append time
  * and any tracking-position or sequence information carried on the
@@ -37,16 +39,19 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * @author Laura Devriendt
  * @since 5.2.0
  */
-public sealed interface EventTransformer extends MessageTransformer<EventMessage>
-        permits DefaultEventTransformer {
+public sealed interface EventTransformation extends MessageTransformation<EventMessage>
+        permits MappingEventTransformation, RenameEventTransformation, DropEventTransformation {
 
-    @Override
+    /**
+     * The {@code from}-side matcher the chain reads for routing; the actual rewrite runs through
+     * the {@code transform(...)} method inherited from {@link MessageTransformation}.
+     */
     @Internal
-    MessageStream<? extends EventMessage> transform(EventMessage message, TransformationContext context);
+    FromMatcher matcher();
 }
 ```
 
-The sole permitted implementation is the package-private `@Internal` `DefaultEventTransformer`, produced by the `EventTransformation` factory. It carries the matching metadata (`from` / `to`) the chain reads for routing and owns the convert -> map -> identity-check -> rewrap pipeline cohesively.
+The three permitted implementations are package-private `final` classes, each produced by a factory method and owning its convert -> map -> identity-check -> rewrap pipeline cohesively: `MappingEventTransformation` (1:1 payload mapping), `RenameEventTransformation` (pure rename, payload unchanged), and `DropEventTransformation` (1:0 drop). Each carries the matching metadata (`from` / `to`) the chain reads for routing.
 
 **Event-specific contract** (in addition to base contract in [spi-base.md](spi-base.md)):
 - **Envelope preservation** (FR-010): entity type, entity identifier, tracking token, and sequence number MUST be carried unchanged from input to output. Framework overrides any attempt to modify them. For 1:N splits, every replacement inherits the input's envelope (no renumbering -- all N share the input's tracking token + sequence number). Metadata MAY be modified via the message-level entry point.
@@ -98,9 +103,9 @@ public record TransformedEvent(MessageType type, Object payload) {
 
 ## `EventTransformerChain`
 
-Public, immutable chain of `EventTransformer` instances. Built once at startup via `EventTransformerChain.builder()` and locked at `.build()`. Registered with the framework configuration as a component; the `EventTransformationConfigurationEnhancer` (see below) installs the decorator.
+Public, immutable chain of `EventTransformation` instances. Built once at startup via `EventTransformerChain.builder()` and locked at `.build()`. Registered with the framework configuration as a component; the `EventTransformationConfigurationEnhancer` (see below) installs the decorator.
 
-Behaviour is shared across all typed chains (events / commands / queries) -- see [spi-base.md](spi-base.md) "Chains are per message type" for the rationale. Specifically: startup-only registration (FR-004), fixed-point iteration with last-match-wins (FR-007), `QualifiedName`-keyed map + predicate list hybrid lookup (FR-011), conflict detection (FR-008), defensive runtime safety bound. Same contract clauses, typed to `EventMessage`.
+Behaviour is shared across all typed chains (events / commands / queries) -- see [spi-base.md](spi-base.md) "Chains are per message type" for the rationale. Specifically: startup-only registration (FR-004), fixed-point iteration with two-tier resolution -- exact `from` by identity (order-independent), predicate `from` as fallback (first registered match), exact always beating predicate (FR-005, FR-007), `QualifiedName`-keyed map + predicate list hybrid lookup (FR-011), exact-overlap rejection at build time plus the deferred conflict checks (FR-008), defensive runtime safety bound. Same contract clauses, typed to `EventMessage`.
 
 ```java
 package io.axoniq.framework.messaging.transformation.events;
@@ -114,7 +119,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Immutable chain of {@link EventTransformer} instances applied at event read time.
+ * Immutable chain of {@link EventTransformation} instances applied at event read time.
  * Built once at startup via {@link Builder} and locked on {@link Builder#build()}.
  * Register the chain with the Axon configuration as an
  * {@code EventTransformerChain.class}-typed component; the framework installs the
@@ -130,7 +135,9 @@ public final class EventTransformerChain implements DescribableComponent {
     public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
 
     /**
-     * Apply the chain to the given stream. Fixed-point iteration, last match wins;
+     * Apply the chain to the given stream. Fixed-point iteration; an exact {@code from} match
+     * (by identity, order-independent) wins over a predicate match, and among predicates the
+     * first registered match wins;
      * non-matching elements pass through unchanged in constant time. The converter and
      * resolver are supplied by {@code TransformingEventStore} (resolved by the
      * configuration enhancer), not by the user.
@@ -150,9 +157,9 @@ public final class EventTransformerChain implements DescribableComponent {
 
     public static Builder builder() { /* ... */ }
 
-    /** Fluent builder; registration order = application order. */
+    /** Fluent builder; exact {@code from} matches resolve by identity, predicate {@code from} by first-registered-wins. */
     public static final class Builder {
-        public Builder register(EventTransformer transformer) { /* ... */ }
+        public Builder register(EventTransformation transformation) { /* ... */ }
         public Builder maxIterationsPerEvent(int max) { /* ... */ }
         public EventTransformerChain build() { /* ... */ }
     }

@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.transformation.events;
 
+import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import io.axoniq.framework.messaging.transformation.FromMatcher;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
@@ -32,9 +33,13 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Immutable, last-match-wins lookup of the {@link EventTransformation} applying to an event. Exact-{@code
- * from} transformations are bucketed by {@link QualifiedName} for constant-time lookup; predicate-{@code from}
- * transformations are scanned in registration order. A later registration wins a tie.
+ * Immutable lookup of the {@link EventTransformation} applying to an event.
+ * <p>
+ * An exact identity ({@code from}-by-{@link MessageType}) match always wins over a predicate match: predicates are
+ * consulted only when no exact transformation matches, and among predicates the first registered match wins. Exact
+ * matches do not depend on registration order; two transformations matching the same exact source are rejected when
+ * the index is built. Exact-{@code from} transformations are bucketed by {@link QualifiedName} for constant-time
+ * lookup; predicate-{@code from} transformations are scanned in registration order.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -42,87 +47,98 @@ import java.util.stream.Stream;
 @Internal
 final class TransformationIndex {
 
-    /**
-     * Exact-{@code from} transformations bucketed by {@link QualifiedName}, each bucket in registration order. The
-     * per-transformation {@code sequence} preserves the registration order across this map and
-     * {@link #predicateTransformations}.
-     */
-    private final Map<QualifiedName, List<RegisteredTransformation>> exactTransformationsByName;
+    private final Map<QualifiedName, List<EventTransformation>> exactTransformationsByName;
+    private final List<EventTransformation> predicateTransformations;
 
-    /** Predicate-{@code from} transformations in registration order. */
-    private final List<RegisteredTransformation> predicateTransformations;
-
-    private TransformationIndex(Map<QualifiedName, List<RegisteredTransformation>> exactTransformationsByName,
-                                List<RegisteredTransformation> predicateTransformations) {
+    private TransformationIndex(Map<QualifiedName, List<EventTransformation>> exactTransformationsByName,
+                                List<EventTransformation> predicateTransformations) {
         this.exactTransformationsByName = copyImmutable(exactTransformationsByName);
         this.predicateTransformations = List.copyOf(predicateTransformations);
     }
 
     /**
-     * Builds an index from the transformations in registration order; a later registration wins a tie in
-     * {@link #findLastMatch(MessageType)}.
+     * Builds an index from the transformations in registration order. Order is retained only for predicate matching;
+     * exact matches are resolved by identity and are order-independent.
      *
      * @param registrationOrder the registered transformations, oldest first
      * @return the immutable index, never {@code null}
+     * @throws ChainConfigurationException if two transformations match the same exact source identity
      */
     static TransformationIndex of(List<EventTransformation> registrationOrder) {
-        Map<QualifiedName, List<RegisteredTransformation>> exactBuckets = new HashMap<>();
-        List<RegisteredTransformation> predicateList = new ArrayList<>();
-        long sequence = 0;
+        Map<QualifiedName, List<EventTransformation>> exactBuckets = new HashMap<>();
+        List<EventTransformation> predicateList = new ArrayList<>();
+        Map<MessageType, EventTransformation> claimedSources = new HashMap<>();
         for (EventTransformation transformation : registrationOrder) {
-            RegisteredTransformation entry = new RegisteredTransformation(sequence++, transformation);
             switch (transformation.matcher()) {
-                case FromMatcher.Exact(MessageType source) -> exactBuckets
-                        .computeIfAbsent(source.qualifiedName(), ignored -> new ArrayList<>())
-                        .add(entry);
-                case FromMatcher.PredicateBased ignored -> predicateList.add(entry);
+                case FromMatcher.Exact(MessageType source) ->
+                        indexExact(transformation, source, exactBuckets, claimedSources);
+                case FromMatcher.PredicateBased ignored -> predicateList.add(transformation);
             }
         }
         return new TransformationIndex(exactBuckets, predicateList);
     }
 
     /**
-     * Returns the latest-registered transformation matching {@code eventType}, or {@code null} when none matches.
-     * Scans only the relevant exact bucket and the predicate list, picking whichever has the higher overall
-     * registration order.
+     * Buckets an exact transformation under its source's qualified name, after rejecting a source already claimed by
+     * an earlier transformation.
+     * <p>
+     * Each exact transformation carries a single source, so it lands under exactly one qualified name. That is what
+     * lets {@link #count()} and {@link #transformations()} treat the buckets as a partition without double-counting.
+     */
+    private static void indexExact(EventTransformation transformation,
+                                   MessageType source,
+                                   Map<QualifiedName, List<EventTransformation>> exactBuckets,
+                                   Map<MessageType, EventTransformation> claimedSources) {
+        EventTransformation previous = claimedSources.putIfAbsent(source, transformation);
+        if (previous != null) {
+            throw duplicateSource(source, previous, transformation);
+        }
+        exactBuckets.computeIfAbsent(source.qualifiedName(), ignored -> new ArrayList<>()).add(transformation);
+    }
+
+    private static ChainConfigurationException duplicateSource(MessageType source,
+                                                               EventTransformation previous,
+                                                               EventTransformation current) {
+        return new ChainConfigurationException("""
+                Two transformations match the same source %s; an exact source may be claimed only once. \
+                Conflicting transformations: %s and %s.""".formatted(source, previous, current));
+    }
+
+    /**
+     * Returns the transformation matching {@code eventType}, or {@code null} when none matches. An exact match wins
+     * over a predicate match; among predicates the first registered match wins.
      *
      * @param eventType the type of the event being transformed
      * @return the matching transformation, or {@code null} if none matches
      */
     @Nullable
-    EventTransformation findLastMatch(MessageType eventType) {
-        List<RegisteredTransformation> exactBucket = exactTransformationsByName.get(eventType.qualifiedName());
-        if (exactBucket == null && predicateTransformations.isEmpty()) {
-            return null;
-        }
-        RegisteredTransformation lastExact = exactBucket == null ? null : findLastMatchIn(exactBucket, eventType);
-        RegisteredTransformation lastPredicate = findLastMatchIn(predicateTransformations, eventType);
-        return pickLaterRegistration(lastExact, lastPredicate);
+    EventTransformation findMatch(MessageType eventType) {
+        EventTransformation exactMatch = findExactMatch(eventType);
+        return exactMatch != null ? exactMatch : findFirstPredicateMatch(eventType);
     }
 
-    private static @Nullable RegisteredTransformation findLastMatchIn(List<RegisteredTransformation> bucket,
-                                                                      MessageType eventType) {
-        for (int index = bucket.size() - 1; index >= 0; index--) {
-            RegisteredTransformation candidate = bucket.get(index);
-            if (candidate.transformation().matcher().matches(eventType)) {
+    private @Nullable EventTransformation findExactMatch(MessageType eventType) {
+        List<EventTransformation> bucket = exactTransformationsByName.get(eventType.qualifiedName());
+        if (bucket == null) {
+            return null;
+        }
+        // At most one candidate can match: every exact source is claimed by a single transformation (duplicates
+        // are rejected when the index is built), so the first match is necessarily the only match.
+        for (EventTransformation candidate : bucket) {
+            if (candidate.matcher().matches(eventType)) {
                 return candidate;
             }
         }
         return null;
     }
 
-    private static @Nullable EventTransformation pickLaterRegistration(
-            @Nullable RegisteredTransformation exactCandidate,
-            @Nullable RegisteredTransformation predicateCandidate) {
-        if (exactCandidate == null) {
-            return predicateCandidate == null ? null : predicateCandidate.transformation();
+    private @Nullable EventTransformation findFirstPredicateMatch(MessageType eventType) {
+        for (EventTransformation candidate : predicateTransformations) {
+            if (candidate.matcher().matches(eventType)) {
+                return candidate;
+            }
         }
-        if (predicateCandidate == null) {
-            return exactCandidate.transformation();
-        }
-        return exactCandidate.sequence() > predicateCandidate.sequence()
-                ? exactCandidate.transformation()
-                : predicateCandidate.transformation();
+        return null;
     }
 
     /**
@@ -132,8 +148,7 @@ final class TransformationIndex {
      */
     Stream<EventTransformation> transformations() {
         return Stream.concat(exactTransformationsByName.values().stream().flatMap(List::stream),
-                             predicateTransformations.stream())
-                     .map(RegisteredTransformation::transformation);
+                             predicateTransformations.stream());
     }
 
     /**
@@ -154,8 +169,7 @@ final class TransformationIndex {
     Map<String, List<String>> exactTransformationsDescription() {
         Map<String, List<String>> rendered = HashMap.newHashMap(exactTransformationsByName.size());
         exactTransformationsByName.forEach((qualifiedName, bucket) ->
-                rendered.put(qualifiedName.name(),
-                             bucket.stream().map(entry -> entry.transformation().toString()).toList()));
+                rendered.put(qualifiedName.name(), bucket.stream().map(Object::toString).toList()));
         return rendered;
     }
 
@@ -165,21 +179,13 @@ final class TransformationIndex {
      * @return predicate-{@code from} transformations rendered by their {@code toString()}
      */
     List<String> predicateTransformationsDescription() {
-        return predicateTransformations.stream().map(entry -> entry.transformation().toString()).toList();
+        return predicateTransformations.stream().map(Object::toString).toList();
     }
 
-    private static Map<QualifiedName, List<RegisteredTransformation>> copyImmutable(
-            Map<QualifiedName, List<RegisteredTransformation>> source) {
-        Map<QualifiedName, List<RegisteredTransformation>> copy = HashMap.newHashMap(source.size());
+    private static Map<QualifiedName, List<EventTransformation>> copyImmutable(
+            Map<QualifiedName, List<EventTransformation>> source) {
+        Map<QualifiedName, List<EventTransformation>> copy = HashMap.newHashMap(source.size());
         source.forEach((key, bucket) -> copy.put(key, List.copyOf(bucket)));
         return Map.copyOf(copy);
-    }
-
-    /**
-     * A registered transformation paired with its registration {@code sequence}, so the latest registration wins a
-     * tie across the exact buckets and the predicate list without keeping a parallel flat list.
-     */
-    private record RegisteredTransformation(long sequence, EventTransformation transformation) {
-
     }
 }

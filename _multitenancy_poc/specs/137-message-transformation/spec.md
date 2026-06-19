@@ -290,9 +290,9 @@ version requires updating all previous transformations.
    **When** a v1.0.0 event is read,
    **Then** the v2->v3 transformation does not match v1.0.0 (input version does not match),
    the v1->v2 transformation applies, and the framework's fixed-point iteration immediately
-   restarts and applies v2->v3, so the handler receives version 3.0.0. Ordering is the user's
-   responsibility for concrete `MessageType` `from` matches; the framework does not validate
-   it.
+   restarts and applies v2->v3, so the handler receives version 3.0.0. Concrete `MessageType`
+   `from` matches are resolved by identity, independent of registration order; the framework
+   rejects two transformations that claim the same exact `from`.
 
 #### User Story 6: Feedback on Misconfiguration and Runtime Failures (Priority: P1)
 
@@ -668,24 +668,30 @@ a last resort if the old stream must be fully replaced.
   constraint on output identities for this pattern. Self-loop detection (FR-008) does not apply
   since no `to` identity is declared.
   _Traces to: US3, US4._
-- **FR-004 (Ordering and lifecycle)**: Registration order MUST be the chain application order, the
-  framework MUST NOT reorder. Registration is programmatic and valid only at application startup;
+- **FR-004 (Resolution and lifecycle)**: Exact (concrete `MessageType`) `from` matches are resolved
+  by identity, independent of registration order; registration order governs only the
+  predicate-`from` fallback tier, where the first registered matching predicate wins. Registration is programmatic and valid only at application startup;
   the chain locks once event processing begins. Late registration MUST be rejected with a clear
   "chain is locked" error. Annotation-based registration is out of scope for this release.
   _Traces to: US1, US5, US6 scenario 4._
-- **FR-005 (Matching)**: A transformation declares `from` either as a concrete `MessageType`
-  (default: exact-equals comparison on `QualifiedName` + `version`) or as a `Predicate<MessageType>`
-  (user-supplied: e.g. range, regex, semver). Non-matching events pass through unchanged. Naming
-  consistency between `from` identities and the names produced by the configured
-  `MessageTypeResolver` is the user's responsibility.
+- **FR-005 (Matching)**: A transformation declares `from` as one of: a concrete `MessageType`, or a
+  `Predicate<MessageType>` (user-supplied: e.g. range, regex, semver, optionally narrowed with
+  `declaringFromTypes(...)`). The concrete form is an *exact* match (exact-equals on `QualifiedName`
+  + `version`); the predicate form is the *fallback* tier. An event that evolves through versions is
+  modelled one version step at a time (each step its own transformation, composed by the chain); the
+  framework intentionally offers no way to bind one transformation to a set of versions. Non-matching
+  events pass through unchanged. Naming consistency between `from` identities and the names produced by
+  the configured `MessageTypeResolver` is the user's responsibility.
 
-  **Ordering**: when more than one registered transformation can match the same input (e.g. a
-  predicate that overlaps with another predicate, or a predicate that overlaps with a
-  concrete `MessageType`), the framework MUST apply the **last match in registration order**.
-  This means a new transformation added at the bottom of the registration list **overrides**
-  any earlier transformation whose `from` also matches -- matching the common "later definition
-  wins" intuition. Deterministic; the user owns the choice -- there is no overlap
-  auto-detection. Reference-guide docs MUST surface this with a worked example.
+  **Resolution**: matching is two-tier, resolved like Java overload resolution. (1) **Exact tier**:
+  a transformation whose `from` is a concrete `MessageType` claims the event by identity,
+  independent of registration order. (2) **Predicate
+  tier (fallback)**: predicate `from` matchers are consulted ONLY when no exact match claims the
+  event; among predicates the first registered match wins. An exact match ALWAYS beats a predicate.
+  Overlapping exact claims (any two transformations claiming the same exact identity, whatever their
+  `from` flavour -- single, drop, or rename) are rejected at chain-build time with a
+  `ChainConfigurationException`; the framework does NOT silently resolve them. Reference-guide docs
+  MUST surface the two-tier model with a worked example.
   _Traces to: US1 scenario 3, US5._
 - **FR-006 (Determinism and thread-safety)**: Transformations MUST be deterministic and
   thread-safe, same input always produces the same output, and the framework MAY invoke them
@@ -696,8 +702,9 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1 scenarios 4 and 6, US5 scenario 1._
 - **FR-007 (Chain composition)**: The framework MUST process each incoming message by
   fixed-point iteration over the registered transformations:
-  1. Walk the registrations in registration order; track the **last** transformation whose
-     `from` matches the current message.
+  1. Resolve the matching transformation two-tier: first the exact tier (concrete / list `from`
+     keyed by identity, order-independent), then -- only if no exact match -- the predicate tier
+     (first registered matching predicate).
   2. If a match was found, invoke it; otherwise terminate and emit the current message.
   3. For 1:1 output: replace the current message with the output, restart from step 1.
   4. For 1:N output: each output re-enters the chain independently (recursive step 1).
@@ -706,17 +713,19 @@ a last resort if the old stream must be fully replaced.
   This subsumes both same-name version bumps (e.g. v1 -> v2 -> v3 of `CourseCreated`) and
   cross-name renames (e.g. `CourseOpened` -> `CourseCreated`) without special-casing.
   _Traces to: US1 scenario 4, US2, US3 scenario 4, US5._
-- **FR-008 (Conflict detection) [Deferred to US6 / 5.3+]**: The framework MUST detect (when US6 lands):
-  - **Duplicate `from`** (two 1:1 transformations with the same concrete `(name, version)`):
-    raised at registration time.
-  - **Self-loop** (concrete `from == to`): raised at registration time.
+- **FR-008 (Conflict detection)**:
+  - **Overlapping exact `from`** (any two transformations claiming the same exact `(name, version)`,
+    whatever their `from` flavour -- single, list, drop, or rename): raised at
+    chain-build time with a `ChainConfigurationException`. **Shipped in 5.2.0** as part of the
+    exact-match tier (FR-005).
+  - **Self-loop** (concrete `from == to`) [Deferred to US6]: raised at registration time.
   - **Multi-step cycle** in the graph of concrete `from -> to` edges (e.g. `X@1.0.0 -> X@2.0.0`
-    then `X@2.0.0 -> X@1.0.0`): raised at chain lock time with the full edge list.
+    then `X@2.0.0 -> X@1.0.0`) [Deferred to US6]: raised at chain lock time with the full edge list.
 
-  **5.2.0 status**: the static duplicate / self-loop / multi-step-cycle checks above are deferred
-  to US6 and NOT shipped in 5.2.0. What ships is the defensive runtime safety bound to prevent
-  infinite loops from pathological misconfiguration that cannot be detected statically (e.g. two
-  overlapping predicate `from`s producing each other's input) -- shipped as the user-tunable
+  **5.2.0 status**: exact-`from` overlap rejection ships in 5.2.0 (above). The self-loop and
+  multi-step-cycle checks remain deferred to US6. Also shipped is the defensive runtime safety bound
+  to prevent infinite loops from pathological misconfiguration that cannot be detected statically
+  (e.g. two overlapping predicate `from`s producing each other's input) -- the user-tunable
   `EventTransformerChain.Builder.maxIterationsPerEvent(int)` (default `DEFAULT_MAX_ITERATIONS_PER_EVENT`).
   _Traces to: US6._
 - **FR-009 (Typed payload access)**: Each transformation declares a target Java type at
@@ -835,9 +844,11 @@ a last resort if the old stream must be fully replaced.
   be expressed by supplying a `Predicate<MessageType>` to `from(...)` (see FR-005). The
   framework does not ship a semver helper in 5.2.0; users compose their own predicates or
   pull in a helper that the `axon-common` module is expected to provide as follow-on work
-  (see [plan.md](plan.md) "Required axon-framework additions"). The framework does NOT
-  validate ordering of overlapping predicates -- registration order = apply order; the user
-  owns the ordering choice.
+  (see [plan.md](plan.md) "Required axon-framework additions"). A predicate is for an open-ended range
+  that cannot be enumerated; do not fake-match a closed set of *known* versions with a
+  `versions.contains(v)` predicate -- match those exactly, one transformation per version step (exact
+  matches are order-independent and outrank predicates). Among predicates the first registered match
+  wins, and any exact match for the same event takes precedence over every predicate.
   _Traces to: FR-004, FR-005._
 - **FR-021 (Data-protection ordering)**: Data-protection mechanisms (PII redaction, field-level
   masking, payload decryption, etc.) MUST operate downstream of the transformation chain.
@@ -866,8 +877,9 @@ a last resort if the old stream must be fully replaced.
   patterns: **1:1** (`from` + `to` identity + optional payload mapper, structural change or
   rename) and **1:N/1:0** (`from` identity + mapper producing 0..N replacement events, split or
   drop). Detailed contract: FR-001 to FR-003.
-- **Transformation chain**: The ordered sequence of registered transformations applied when
-  reading messages. Order = registration sequence (FR-004).
+- **Transformation chain**: The set of registered transformations applied when reading messages.
+  Exact `from` matches resolve by identity (order-independent); predicate `from` matches are a
+  fallback resolved by first-registered-wins (FR-004, FR-005).
 - **MessageType / Event identity**: `QualifiedName` (arbitrary non-empty string, typically
   built from a namespace + local name like `com.example.CourseCreated`) + arbitrary non-empty
   version string (e.g., `1.0.0`). Both components always present. Unversioned legacy events
@@ -875,19 +887,23 @@ a last resort if the old stream must be fully replaced.
   `MessageTypeResolver`, mismatches between registered names and stream names silently
   pass-through.
 - **`from` predicate**: When `from(Predicate<MessageType>)` is used instead of `from(MessageType)`,
-  the predicate decides matching (range, regex, semver, etc.). Composable with a future
-  `SemverPredicate` helper expected in `axon-common`.
+  the predicate decides matching (range, regex, semver, etc.). It is the *fallback* tier: consulted
+  only when no exact `from(MessageType)` match claims the event. It is for an open-ended range that
+  cannot be enumerated; known versions are matched exactly, one transformation per version step.
+  Composable with a future `SemverPredicate` helper expected in `axon-common`.
 - **DCB read (`SourcingCondition`)**: Dynamic Consistency Boundary, AF5's mechanism for
   command-side consistency without a fixed aggregate root. Bounded stream that may span multiple
   entities. One of the three reading contexts in FR-012 (alongside entity loads and tracking
   processor reads).
 
 ## Success Criteria
-- **SC-001 (Order)**: 100% of registered transformations are applied in registration order,
-  verifiable across all in-scope use cases. Verifies FR-004.
-- **SC-002 (Conflicts) [Deferred with FR-008 / US6]**: When US6 lands, every conflict class in
-  FR-008 is detected and reported before any event is processed. 5.2.0 ships only the defensive
-  runtime safety bound (see FR-008), not the static checks.
+- **SC-001 (Resolution)**: exact `from` matches resolve by identity independent of registration
+  order, predicate `from` matches resolve to the first registered match, and an exact match always
+  beats a predicate -- verifiable across all in-scope use cases. Verifies FR-004 / FR-005.
+- **SC-002 (Conflicts) [Partly shipped with FR-008]**: 5.2.0 detects and rejects overlapping exact
+  `from` claims at chain-build time, plus the defensive runtime safety bound (see FR-008). The
+  remaining static checks (self-loop, multi-step cycle) land with US6, when every conflict class in
+  FR-008 is detected and reported before any event is processed.
 - **SC-003 (Examples)**: All in-scope use cases for the delivered slice are demonstrated in a
   new Maven sub-module under `AxonFramework/examples/` (case-sensitive directory; alongside `university-demo`,
   `university-java`, `university-java-springboot-3`, etc.). For 5.2.0 this covers the events
