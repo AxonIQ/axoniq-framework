@@ -222,6 +222,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                       workflowName,
                                       eventNameCustomizer),
                     ctx).get(5, TimeUnit.SECONDS); // FIXME constant?
+            try {
+                awaitStateChange(s -> s.workflowStatus().isTerminal());
+            } catch (Exception e) {
+                logger.error("Error waiting for completion of workflow instance {}", workflowId, e);
+            }
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
     }
