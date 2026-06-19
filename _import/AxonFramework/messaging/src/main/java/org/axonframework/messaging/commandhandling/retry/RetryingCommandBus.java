@@ -68,8 +68,7 @@ public class RetryingCommandBus implements CommandBus {
      */
     public RetryingCommandBus(CommandBus delegate,
                               RetryScheduler retryScheduler) {
-        this.delegate = requireNonNull(delegate, "The command bus delegate must be null.");
-         this.delegate = requireNonNull(delegate, "The command bus delegate must not be null.");
+        this.delegate = requireNonNull(delegate, "The command bus delegate must not be null.");
         this.retryScheduler = requireNonNull(retryScheduler, "The RetryScheduler must not be null.");
     }
 
