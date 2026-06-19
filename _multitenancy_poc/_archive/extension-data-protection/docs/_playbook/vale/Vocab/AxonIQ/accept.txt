@@ -1,7 +1,0 @@
-Initializr
-[Mm]atchers?
-[Ss]napshotters?
-[Ss]napshotting
-[Uu]pcasters?
-[Uu]pcasted
-[Uu]pcasting
