@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.transformation.events;
 
+import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
 import io.axoniq.framework.messaging.transformation.TransformationContext;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
@@ -186,49 +187,38 @@ final class EventTransformerChainDropTest {
     }
 
     @Nested
-    final class LastMatchWins {
+    final class SameSourceConflict {
 
         @Test
-        void aLaterDropOverridesAnEarlierTransformOnTheSameSource() {
-            // given a 1:1 transform of SystemHeartbeat registered before a drop of the same source
+        void aDropAndATransformOnTheSameSourceAreRejected() {
+            // given a 1:1 transform and a drop both claiming SystemHeartbeat v1 exactly
             EventTransformation bump = EventTransformation.from(HEARTBEAT_V1)
                                                           .to(HEARTBEAT_V2)
                                                           .transform(String.class, payload -> payload);
-            EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(bump)
-                                                               .register(EventTransformation.drop(HEARTBEAT_V1))
-                                                               .build();
-            EventMessage storedHeartbeat = eventOf(HEARTBEAT_V1, "heartbeat-payload");
+            EventTransformerChain.Builder builder = EventTransformerChain.builder()
+                                                                         .register(bump)
+                                                                         .register(EventTransformation.drop(HEARTBEAT_V1));
 
-            // when the chain reads the event
-            List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(storedHeartbeat)),
-                    null, neverInvokedConverter(), neverInvokedMessageTypeResolver()));
-
-            // then the later-registered drop wins and the event is suppressed
-            assertThat(outputs).isEmpty();
+            // when the chain is built / then the ambiguous overlap is rejected, naming the source
+            assertThatThrownBy(builder::build)
+                    .isInstanceOf(ChainConfigurationException.class)
+                    .hasMessageContaining(HEARTBEAT_V1.toString());
         }
 
         @Test
-        void anEarlierDropIsOverriddenByALaterTransformOnTheSameSource() {
-            // given a drop of SystemHeartbeat registered before a 1:1 transform of the same source
+        void aDropAndATransformOnTheSameSourceAreRejectedRegardlessOfOrder() {
+            // given the same pair registered drop-first
             EventTransformation bump = EventTransformation.from(HEARTBEAT_V1)
                                                           .to(HEARTBEAT_V2)
                                                           .transform(String.class, payload -> payload);
-            EventTransformerChain chain = EventTransformerChain.builder()
-                                                               .register(EventTransformation.drop(HEARTBEAT_V1))
-                                                               .register(bump)
-                                                               .build();
-            EventMessage storedHeartbeat = eventOf(HEARTBEAT_V1, "heartbeat-payload");
+            EventTransformerChain.Builder builder = EventTransformerChain.builder()
+                                                                         .register(EventTransformation.drop(HEARTBEAT_V1))
+                                                                         .register(bump);
 
-            // when the chain reads the event
-            List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(storedHeartbeat)),
-                    null, neverInvokedConverter(), alwaysEmptyMessageTypeResolver()));
-
-            // then the later-registered transform wins, so the event surfaces under the new version
-            assertThat(outputs).singleElement().satisfies(output ->
-                    assertThat(output.type()).isEqualTo(HEARTBEAT_V2));
+            // when the chain is built / then it is still rejected, since resolution is order-independent
+            assertThatThrownBy(builder::build)
+                    .isInstanceOf(ChainConfigurationException.class)
+                    .hasMessageContaining(HEARTBEAT_V1.toString());
         }
     }
 

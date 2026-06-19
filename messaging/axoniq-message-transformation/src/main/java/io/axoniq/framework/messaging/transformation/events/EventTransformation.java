@@ -45,10 +45,16 @@ import static java.util.Objects.requireNonNull;
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
  * <ul>
- *     <li><b>Concrete</b> ({@link #from(MessageType)}): matches a single source {@link MessageType} by exact
- *     equality. The source type name is known up front.</li>
+ *     <li><b>Concrete</b> ({@link #from(MessageType)}): matches a source {@link MessageType} by exact equality.
+ *     The source type is known up front. <b>Prefer this path whenever the source identities are known</b>,
+ *     registering one transformation per version step. Exact matches are resolved by a constant-time identity lookup
+ *     and let the chain widen read criteria to precisely those source types, so they impose no per-event
+ *     scanning cost.</li>
  *     <li><b>Predicate-based</b> ({@link #from(Predicate)}): matches every {@link MessageType} for which the
- *     supplied predicate returns {@code true}.</li>
+ *     supplied predicate returns {@code true}. Reach for this only when the source identities cannot be
+ *     enumerated up front: each predicate is evaluated against non-exact events in registration order, a
+ *     per-event cost that grows with the number of predicates, and the widened read criteria are necessarily
+ *     broader than the concrete path's. Both can carry a significant performance penalty.</li>
  * </ul>
  * A pure rename is built with {@link #rename(MessageType, MessageType)}: it leaves the payload unchanged and, unlike
  * the mapping paths, may change the {@link QualifiedName} rather than only the version. A drop is built with

@@ -6,7 +6,7 @@
 
 The user-facing API consists of three things:
 1. A **typed chain per message type** -- `EventTransformerChain.builder()` (5.2.0), plus `CommandTransformerChain.builder()` / `QueryTransformerChain.builder()` (5.3+). Each is registered as its own component.
-2. The per-type **factories** (`EventTransformation`, plus `CommandTransformation` and `QueryTransformation` in 5.3+) that produce `MessageTransformer` instances without the user writing SPI code.
+2. The per-type **factories** (`EventTransformation`, plus `CommandTransformation` and `QueryTransformation` in 5.3+) that produce `MessageTransformation` instances without the user writing SPI code.
 3. The **registration pattern** in Axon configuration (a `ConfigurationEnhancer` per message type does the wiring; the user only registers the typed chain instance(s) as components).
 
 See also: [shared SPI base](spi-base.md), [event SPI](spi-events.md), [commands and queries SPI](spi-commands-queries.md).
@@ -67,7 +67,7 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
 /**
- * Factory producing {@link EventTransformer} instances. Use one of the static methods
+ * Factory producing {@link EventTransformation} instances. Use one of the static methods
  * ({@link #from(MessageType)} / {@link #from(Predicate)},
  * {@link #rename(MessageType, MessageType)}, {@link #split(MessageType)},
  * {@link #drop(MessageType)}) and register the result with
@@ -141,9 +141,9 @@ public final class EventTransformation {
          * @param inputType     the type the stored payload is converted to before invocation
          * @param payloadMapper maps the input payload + (possibly-null) processing context to
          *                      its transformed output
-         * @return the resulting {@link EventTransformer}
+         * @return the resulting {@link EventTransformation}
          */
-        public <T, U> EventTransformer transform(Class<T> inputType,
+        public <T, U> EventTransformation transform(Class<T> inputType,
                                                   BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
 
         /**
@@ -161,9 +161,9 @@ public final class EventTransformation {
          * @param inputType     the {@link org.axonframework.common.TypeReference} the stored
          *                      payload is converted to
          * @param payloadMapper maps the input payload + processing context to its transformed output
-         * @return the resulting {@link EventTransformer}
+         * @return the resulting {@link EventTransformation}
          */
-        public <T, U> EventTransformer transform(org.axonframework.common.TypeReference<T> inputType,
+        public <T, U> EventTransformation transform(org.axonframework.common.TypeReference<T> inputType,
                                                   BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 
@@ -175,9 +175,9 @@ public final class EventTransformation {
      *
      * @param source the {@code from} identity
      * @param target the {@code to} identity
-     * @return the resulting {@link EventTransformer}
+     * @return the resulting {@link EventTransformation}
      */
-    public static EventTransformer rename(MessageType source, MessageType target) { /* ... */ }
+    public static EventTransformation rename(MessageType source, MessageType target) { /* ... */ }
 
     /* US3 -- split (FR-003, MAY in 5.2.0; method name reserved per
        Forward-compatibility invariant #4) -------------------------------------- */
@@ -205,9 +205,9 @@ public final class EventTransformation {
          * @param <T>               input payload type
          * @param inputType         the type the stored payload is converted to before invocation
          * @param replacementMapper maps the input payload + processing context to its replacement events
-         * @return the resulting {@link EventTransformer}
+         * @return the resulting {@link EventTransformation}
          */
-        public <T> EventTransformer transform(Class<T> inputType,
+        public <T> EventTransformation transform(Class<T> inputType,
                                               BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> replacementMapper) { /* ... */ }
     }
 
@@ -220,9 +220,9 @@ public final class EventTransformation {
      * resumes after it and does not reprocess it.
      *
      * @param source the {@code from} identity of the event to drop
-     * @return an {@link EventTransformer} that suppresses matching events
+     * @return an {@link EventTransformation} that suppresses matching events
      */
-    public static EventTransformer drop(MessageType source) { /* ... */ }
+    public static EventTransformation drop(MessageType source) { /* ... */ }
 }
 ```
 
@@ -246,7 +246,7 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
 /**
- * Factory producing {@link CommandTransformer} instances. 1:1 only -- commands are
+ * Factory producing {@link CommandTransformation} instances. 1:1 only -- commands are
  * single-intent, so split / drop are not exposed. Mirrors the {@link EventTransformation}
  * shape for the patterns it does support.
  *
@@ -272,9 +272,9 @@ public final class CommandTransformation {
      *
      * @param source the {@code from} identity
      * @param target the {@code to} identity
-     * @return the resulting {@link CommandTransformer}
+     * @return the resulting {@link CommandTransformation}
      */
-    public static CommandTransformer rename(MessageType source, MessageType target) { /* ... */ }
+    public static CommandTransformation rename(MessageType source, MessageType target) { /* ... */ }
 
     public static final class SingleCommandTransformationBuilder {
         /**
@@ -293,9 +293,9 @@ public final class CommandTransformation {
          * @param <U>           output payload type
          * @param inputType     the type the input command's payload is converted to before invocation
          * @param payloadMapper maps the input payload + processing context to its transformed output
-         * @return the resulting {@link CommandTransformer}
+         * @return the resulting {@link CommandTransformation}
          */
-        public <T, U> CommandTransformer transform(Class<T> inputType,
+        public <T, U> CommandTransformation transform(Class<T> inputType,
                                                     BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 }
@@ -313,7 +313,7 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
 /**
- * Factory producing {@link QueryTransformer} instances. 1:1 only. Subscription-query update
+ * Factory producing {@link QueryTransformation} instances. 1:1 only. Subscription-query update
  * streams flowing back to subscribers are NOT transformed -- only the incoming query is.
  *
  * @author Laura Devriendt
@@ -338,9 +338,9 @@ public final class QueryTransformation {
      *
      * @param source the {@code from} identity
      * @param target the {@code to} identity
-     * @return the resulting {@link QueryTransformer}
+     * @return the resulting {@link QueryTransformation}
      */
-    public static QueryTransformer rename(MessageType source, MessageType target) { /* ... */ }
+    public static QueryTransformation rename(MessageType source, MessageType target) { /* ... */ }
 
     public static final class SingleQueryTransformationBuilder {
         /**
@@ -359,9 +359,9 @@ public final class QueryTransformation {
          * @param <U>           output payload type
          * @param inputType     the type the input query's payload is converted to before invocation
          * @param payloadMapper maps the input payload + processing context to its transformed output
-         * @return the resulting {@link QueryTransformer}
+         * @return the resulting {@link QueryTransformation}
          */
-        public <T, U> QueryTransformer transform(Class<T> inputType,
+        public <T, U> QueryTransformation transform(Class<T> inputType,
                                                   BiFunction<T, @Nullable ProcessingContext, U> payloadMapper) { /* ... */ }
     }
 }
@@ -507,7 +507,7 @@ misconfiguration; under normal use it never fires.
 
 ## What is NOT in the public API
 
-- The `MessageTransformer<M>` interface and its specializations are SPI -- advanced users MAY implement them directly but the factories are the supported route.
+- The `MessageTransformation<M>` interface and its specializations are SPI -- advanced users MAY implement them directly but the factories are the supported route.
 - `TransformingEventStore`, `TransformingEventStoreTransaction`, `TransformingCommandBus`, `TransformingQueryBus` are `@Internal` -- users do not instantiate them; the `ConfigurationEnhancer` does.
 - The append / dispatch / publish paths are not decorated; transformations run at READ / receive only (FR-021).
 - Sender-side transformation (new-to-old at the sender, "downcasting" in industry terms) is explicitly out of scope (spec Part C).
