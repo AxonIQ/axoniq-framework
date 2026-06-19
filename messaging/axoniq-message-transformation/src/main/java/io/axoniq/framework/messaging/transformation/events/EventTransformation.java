@@ -29,8 +29,8 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -46,7 +46,7 @@ import static java.util.Objects.requireNonNull;
  * A mapping is built through one of two {@code from} paths, each continuing with {@code to(...)} to declare the
  * resulting identity and {@code transform(...)} to supply the payload mapper:
  * <ul>
- *     <li><b>Concrete</b> ({@link #from(MessageType)}, or {@link #from(List)} to cover several known versions
+ *     <li><b>Concrete</b> ({@link #from(MessageType)}, or {@link #from(Collection)} to cover several known versions
  *     with one mapper): matches a source {@link MessageType} by exact equality. The source type is known up
  *     front.</li>
  *     <li><b>Predicate-based</b> ({@link #from(Predicate)}): matches every {@link MessageType} for which the
@@ -108,11 +108,12 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      * single mapper. Use this to cover several known versions at once. Continue with {@code to(...)} then
      * {@code transform(...)}.
      *
-     * @param sources the {@code from} identities to match; at least one is required
+     * @param sources the {@code from} identities to match; at least one is required. Order is irrelevant: the
+     *                identities are matched by exact equality and held as a set, so any {@link Collection} works
      * @return a builder awaiting {@code to(...)}
      * @throws IllegalArgumentException if {@code sources} is empty
      */
-    static ToStep from(List<MessageType> sources) {
+    static ToStep from(Collection<MessageType> sources) {
         requireNonNull(sources, "sources may not be null");
         Set<MessageType> distinct = LinkedHashSet.newLinkedHashSet(sources.size());
         for (MessageType source : sources) {
