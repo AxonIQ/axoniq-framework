@@ -117,7 +117,7 @@ import java.util.List;
  *     <li>Registers a {@link DefaultMessageMonitorRegistry} for class {@link MessageMonitorRegistry}</li>
  * </ul>
  * <p>
- * Furthermore, this enhancer will decorate the:
+* Furthermore, this enhancer will decorate the following components:
  * <ul>
  *     <li>The {@link CommandGateway} in a {@link ConvertingCommandGateway} with the present {@link MessageConverter}.</li>
  *     <li>The {@link CommandBus} is a {@link RetryingCommandBus} <b>if</b> a {@link RetryScheduler} is present in the
