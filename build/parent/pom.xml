@@ -51,9 +51,9 @@
 
         <!-- Database -->
         <c3p0.version>0.9.1.2</c3p0.version>
-        <hikari.version>7.0.2</hikari.version>
+        <hikari.version>7.1.0</hikari.version>
         <hsqldb.version>2.7.4</hsqldb.version>
-        <hibernate-core.version>7.4.1.Final</hibernate-core.version>
+        <hibernate-core.version>7.4.2.Final</hibernate-core.version>
         <mysql-connector-java.version>9.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.11</postgresql.version>
         <ojdbc.version>23.26.1.0.0</ojdbc.version>
@@ -105,7 +105,7 @@
 
         <!-- Maven plugins -->
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
-        <checkstyle.version>13.5.0</checkstyle.version>
+        <checkstyle.version>13.6.0</checkstyle.version>
     </properties>
 
     <dependencyManagement>
