@@ -18,7 +18,7 @@ jobs:
       matrix:
         include:
           - java-version: 21
-            sonar-enabled: true
+            sonar-enabled: false
             deploy-enabled: true
           - java-version: 25
             sonar-enabled: false
