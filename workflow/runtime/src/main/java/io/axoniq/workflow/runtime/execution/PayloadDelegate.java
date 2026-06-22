@@ -76,28 +76,29 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
         var payloadModification = command.payloadModification();
         var eventNameCustomizer = command.eventNameCustomizer();
         workflowExecution.recordStepReference(stepName);
-        // Drift guard: payload publishes COMPLETED directly, so guard only on first live publish.
+        // Drift guard + replay-skip gate: payload publishes COMPLETED directly, so gate both the guard and the
+        // publish on the first live run. On a post-crash live re-run the step is already present, so skip
+        // re-publishing (the replay-skip gate the other primitives have) to avoid a duplicate terminal record.
         if (!workflowExecution.state().containsStep(stepName)) {
             workflowExecution.guardAgainstReplayDrift(stepName);
+            workflowExecution.appendTask(e -> {
+                                             // apply modification right away
+                                             var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());
+                                             var payloadEvent = completedStep(workflowContext,
+                                                                              stepName,
+                                                                              sanitize(newPayload),
+                                               NAME, // replace later the entire payload
+                                                                              merge(parentEventNameCustomizer, eventNameCustomizer));
+                                             ProcessingContextUtils.executeWithResult(
+                                                     workflowExecution.workflowId(),
+                                                     unitOfWorkFactory,
+                                                     executor,
+                                                     workflowExecution.processingContext(),
+                                                     ctx -> eventSink.publish(ctx, payloadEvent)
+                                             ).join();
+                                         }
+            );
         }
-
-        workflowExecution.appendTask(e -> {
-                                         // apply modification right away
-                                         var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());
-                                         var payloadEvent = completedStep(workflowContext,
-                                                                          stepName,
-                                                                          sanitize(newPayload),
-                                           NAME, // replace later the entire payload
-                                                                          merge(parentEventNameCustomizer, eventNameCustomizer));
-                                         ProcessingContextUtils.executeWithResult(
-                                                 workflowExecution.workflowId(),
-                                                 unitOfWorkFactory,
-                                                 executor,
-                                                 workflowExecution.processingContext(),
-                                                 ctx -> eventSink.publish(ctx, payloadEvent)
-                                         ).join();
-                                     }
-        );
         try {
             workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
                     && s.getStep(stepName).status() == StepStatus.COMPLETED);
