@@ -38,6 +38,7 @@ import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejecte
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.EmptyAppendTransaction;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
@@ -69,16 +70,35 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
     private final TaggedEventConverter converter;
 
     /**
-     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}.
+     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter},
+     * using {@link EventTypeResolver#DEFAULT} to resolve {@link org.axonframework.messaging.core.MessageType
+     * MessageTypes} when reading events back from Axon Server.
      *
-     * @param connection The context-specific backing connection to Axon Server.
-     * @param converter  The converter to use to serialize {@link EventMessage#payload() payloads} and complex
-     *                   {@link Metadata} values into bytes.
+     * @param connection the context-specific backing connection to Axon Server
+     * @param converter  the converter to use to serialize {@link EventMessage#payload() payloads} and complex
+     *                   {@link Metadata} values into bytes
      */
     public AxonServerEventStorageEngine(AxonServerConnection connection,
                                         EventConverter converter) {
+        this(connection, converter, EventTypeResolver.DEFAULT);
+    }
+
+    /**
+     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection}, {@code converter}, and
+     * {@code eventTypeResolver}.
+     *
+     * @param connection        the context-specific backing connection to Axon Server
+     * @param converter         the converter to use to serialize {@link EventMessage#payload() payloads} and complex
+     *                          {@link Metadata} values into bytes
+     * @param eventTypeResolver the resolver used to construct a {@link org.axonframework.messaging.core.MessageType
+     *                          MessageType} from the event name and version stored in Axon Server, handling missing or
+     *                          empty versions for legacy events
+     */
+    public AxonServerEventStorageEngine(AxonServerConnection connection,
+                                        EventConverter converter,
+                                        EventTypeResolver eventTypeResolver) {
         this.connection = Objects.requireNonNull(connection, "The Axon Server connection cannot be null.");
-        this.converter = new TaggedEventConverter(converter);
+        this.converter = new TaggedEventConverter(converter, eventTypeResolver);
     }
 
     @Override
