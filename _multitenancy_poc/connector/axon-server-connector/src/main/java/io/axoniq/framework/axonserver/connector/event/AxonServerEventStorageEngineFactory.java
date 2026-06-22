@@ -63,8 +63,8 @@ public class AxonServerEventStorageEngineFactory implements ComponentFactory<Axo
      *
      * @param context the name of the context for which to open an {@link AxonServerConnection} for the
      *                {@link AxonServerEventStorageEngine} under construction
-     * @param config  the configuration from which to retrieve an {@link AxonServerConnectionManager} and
-     *                {@link EventConverter} for the {@link AxonServerEventStorageEngine} under construction
+     * @param config  the configuration from which to retrieve an {@link AxonServerConnectionManager},
+     *                {@link EventConverter}, and optional {@link EventTypeResolver} for the {@link AxonServerEventStorageEngine} under construction
      * @return an {@link AxonServerEventStorageEngine}, connecting to the given {@code context}
      */
     public static AxonServerEventStorageEngine constructForContext(String context,
