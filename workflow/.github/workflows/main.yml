@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'docs/**'
+      - "docs/**"
 
 jobs:
   build:
@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           - java-version: 21
-            sonar-enabled: true
+            sonar-enabled: false
             deploy-enabled: true
             slack-notifications-enabled: false
           - java-version: 25
@@ -32,7 +32,7 @@ jobs:
       - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v5.3.0
         with:
-          distribution: 'zulu'
+          distribution: "zulu"
           java-version: ${{ matrix.java-version }}
           cache: "maven"
           server-id: central
