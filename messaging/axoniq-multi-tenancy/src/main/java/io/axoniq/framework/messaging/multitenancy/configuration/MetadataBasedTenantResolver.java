@@ -53,7 +53,7 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
  * </code></pre>
  *
  * @author Theo Emanuelsson
- * @since 5.2.0
+ * @since 5.3.0
  * @see TenantResolver
  * @see SimpleCorrelationDataProvider
  */

@@ -54,7 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * replayed to newly registered tenants.
  *
  * @author Jan Galinski
- * @since 5.2.0
+ * @since 5.3.0
  */
 public class MultiTenantAxonServerCommandBusConnector extends AbstractAxonServerCommandBusConnector
         implements MultiTenantAwareComponent {

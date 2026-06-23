@@ -38,7 +38,7 @@ import org.jspecify.annotations.Nullable;
  * When a type-specific resolver is not configured, the general resolver is returned as a fallback.
  *
  * @author Theo Emanuelsson
- * @since 5.2.0
+ * @since 5.3.0
  * @see TenantResolverRegistry
  */
 @Internal

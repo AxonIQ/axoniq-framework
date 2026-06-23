@@ -28,7 +28,7 @@ import java.util.function.Function;
  * may be started automatically by the factory.
  *
  * @author Stefan Dragisic
- * @since 4.6.0
+ * @since 5.3.0
  */
 @FunctionalInterface
 public interface TenantEventSegmentFactory extends Function<TenantDescriptor, EventStore> {

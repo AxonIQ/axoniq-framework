@@ -59,7 +59,7 @@ import java.util.function.BiFunction;
  * @author Steven van Beelen
  * @author Theo Emanuelsson
  * @author Jan Galinski
- * @since 4.6.0
+ * @since 5.3.0
  */
 public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComponent {
 

@@ -47,7 +47,7 @@ import java.util.function.BiFunction;
  * consumer to all tenant segments and keeps the tenant segments registered for later tenant additions.
  *
  * @author Jan Galinski
- * @since 5.2.0
+ * @since 5.3.0
  */
 public class MultiTenantPersistentStreamMessageSource implements SubscribableEventSource, MultiTenantAwareComponent {
 

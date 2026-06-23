@@ -29,7 +29,8 @@ import java.util.Objects;
  * @param properties The properties of this tenant - usually context properties of an Axon Server context.
  *
  * @author Stefan Dragisic
- * @since 4.6.0
+ * @author Jan Galinski
+ * @since 5.3.0
  */
 public record TenantDescriptor(
         String tenantId,

@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * to newly registered tenants.
  *
  * @author Jan Galinski
- * @since 5.2.0
+ * @since 5.3.0
  */
 public class MultiTenantAxonServerQueryBusConnector extends AbstractAxonServerQueryBusConnector
         implements MultiTenantAwareComponent {
@@ -64,18 +64,38 @@ public class MultiTenantAxonServerQueryBusConnector extends AbstractAxonServerQu
     private final Map<String, TenantState> tenantStates = new ConcurrentHashMap<>();
     private final Set<QualifiedName> knownSubscriptions = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Creates a new MultiTenantAxonServerQueryBusConnector with the given {@code tenantProvider},
+     *
+     * @param tenantProvider    tenant provider to subscribe to for tenant changes and retrieve the current set of
+     *                          tenants from
+     * @param tenantResolver    tenant resolver to determine the target tenant from a query message
+     * @param connectionManager connection manager to obtain connections for each tenant
+     * @param configuration     configuration to use for the connector
+     */
     public MultiTenantAxonServerQueryBusConnector(TenantProvider tenantProvider,
-                                                   TenantResolver<org.axonframework.messaging.core.Message> tenantResolver,
-                                                   AxonServerConnectionManager connectionManager,
-                                                   AxonServerConfiguration configuration) {
+                                                  TenantResolver<org.axonframework.messaging.core.Message> tenantResolver,
+                                                  AxonServerConnectionManager connectionManager,
+                                                  AxonServerConfiguration configuration) {
         this(tenantProvider, tenantResolver, connectionManager, configuration, null);
     }
 
+    /**
+     * Creates a new MultiTenantAxonServerQueryBusConnector with the given {@code tenantProvider},
+     * {@code tenantResolver}, {@code connectionManager} and {@code configuration}.
+     *
+     * @param tenantProvider    tenant provider to subscribe to for tenant changes and retrieve the current set of
+     *                          tenants from
+     * @param tenantResolver    tenant resolver to determine the target tenant from a query message
+     * @param connectionManager connection manager to obtain connections for each tenant
+     * @param configuration     configuration to use for the connector
+     * @param converter         message converter to use for converting messages
+     */
     public MultiTenantAxonServerQueryBusConnector(TenantProvider tenantProvider,
-                                                   TenantResolver<org.axonframework.messaging.core.Message> tenantResolver,
-                                                   AxonServerConnectionManager connectionManager,
-                                                   AxonServerConfiguration configuration,
-                                                   @Nullable MessageConverter converter) {
+                                                  TenantResolver<org.axonframework.messaging.core.Message> tenantResolver,
+                                                  AxonServerConnectionManager connectionManager,
+                                                  AxonServerConfiguration configuration,
+                                                  @Nullable MessageConverter converter) {
         super(configuration.getClientId(), configuration.getComponentName(), converter);
         this.tenantResolver = Objects.requireNonNull(tenantResolver, "The tenantResolver must not be null.");
         this.connectionManager = Objects.requireNonNull(connectionManager, "The connectionManager must not be null.");
@@ -115,16 +135,16 @@ public class MultiTenantAxonServerQueryBusConnector extends AbstractAxonServerQu
 
     @Override
     public MessageStream<QueryResponseMessage> subscriptionQuery(QueryMessage query,
-                                                                  @Nullable ProcessingContext context,
-                                                                  int updateBufferSize) {
+                                                                 @Nullable ProcessingContext context,
+                                                                 int updateBufferSize) {
         TenantState tenantState = resolveTenant(query);
         return doSubscriptionQuery(query, tenantState.connection(), updateBufferSize);
     }
 
     public CompletableFuture<Void> disconnect() {
         List<CompletableFuture<Void>> disconnects = tenantStates.values().stream()
-                                                                 .map(TenantState::disconnect)
-                                                                 .toList();
+                                                                .map(TenantState::disconnect)
+                                                                .toList();
         return disconnects.isEmpty()
                 ? CompletableFuture.completedFuture(null)
                 : CompletableFuture.allOf(disconnects.toArray(CompletableFuture[]::new));

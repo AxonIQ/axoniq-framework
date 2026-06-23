@@ -25,7 +25,7 @@ import java.util.function.Predicate;
  * to the tenant-aware infrastructure components. Used for dynamic registration of tenant-specific components.
  *
  * @author Stefan Dragisic
- * @since 4.6.0
+ * @since 5.3.0
  */
 @FunctionalInterface
 public interface TenantConnectPredicate extends Predicate<TenantDescriptor> {

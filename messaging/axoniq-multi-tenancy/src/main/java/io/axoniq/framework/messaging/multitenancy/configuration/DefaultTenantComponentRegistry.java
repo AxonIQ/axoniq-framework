@@ -34,7 +34,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default implementation of the {@link TenantComponentRegistry}.
+ *
  * @param <T> the type of component this registry manages
+ * @author Theo Emanuelsson
+ * @since 5.3.0
  */
 @Internal
 public class DefaultTenantComponentRegistry<T> implements TenantComponentRegistry<T> {
