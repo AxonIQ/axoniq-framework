@@ -523,6 +523,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     void close() {  // for testing purposes, to avoid junk exceptions
         eventMonitoringThread.interrupt();
+        try {
+            eventMonitoringThread.join(10_000);
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void monitorForNewEvents(Connection c) throws SQLException {

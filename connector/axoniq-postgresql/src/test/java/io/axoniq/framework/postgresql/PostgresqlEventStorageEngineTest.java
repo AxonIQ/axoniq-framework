@@ -43,6 +43,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import javax.sql.DataSource;
 
@@ -54,15 +56,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * @author John Hendrikx
  */
-@Tag("flaky") // TODO: had to mark this flaky because it broke the local build continuously.
 class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<PostgresqlEventStorageEngine> {
 
     private static final EventConverter CONVERTER = new DelegatingEventConverter(new JacksonConverter());
     private static final ResourceKey<Connection> CONNECTION = ResourceKey.withLabel("connection");
 
-    private static PostgreSQLContainer postgresContainer;
-    private static DataSource dataSource;
-    private static EntitlementManager entitlementManager;
+    private PostgreSQLContainer postgresContainer;
+    private DataSource dataSource;
+    private EntitlementManager entitlementManager;
+    private final List<HikariDataSource> createdDataSources = new ArrayList<>();
 
     @Override
     @SuppressWarnings("resource")
@@ -86,18 +88,24 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
         config.setMinimumIdle(1);
         config.setAutoCommit(false);
 
-        dataSource = new HikariDataSource(config);
+        HikariDataSource ds = new HikariDataSource(config);
+
+        createdDataSources.add(ds);
+        dataSource = ds;
 
         return new PostgresqlEventStorageEngine(dataSource, CONVERTER, entitlementManager);
     }
 
     @Override
     protected void disposeStorageEngine(PostgresqlEventStorageEngine engine) throws Exception {
+        // Blocks until the monitoring thread has fully stopped, so the datasource can be
+        // closed cleanly before the container is terminated in tearDownSuite().
         engine.close();
     }
 
     @Override
     protected void tearDownSuite() throws Exception {
+        createdDataSources.forEach(HikariDataSource::close);
         if (postgresContainer != null) {
             postgresContainer.stop();
         }
