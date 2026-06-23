@@ -25,7 +25,7 @@ import org.axonframework.common.infra.DescribableComponent;
  * Interface for components that can be registered with a {@link TenantProvider}.
  *
  * @author Stefan Dragisic
- * @since 4.6.0
+ * @since 5.3.0
  */
 public interface MultiTenantAwareComponent extends DescribableComponent {
 

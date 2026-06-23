@@ -29,7 +29,7 @@ import java.util.function.BiFunction;
  *
  * @param <M> The {@link Message} implementation this resolver acts on.
  * @author Stefan Dragisic
- * @since 4.6.0
+ * @since 5.3.0
  */
 public interface TenantResolver<M extends Message>
         extends BiFunction<M, Collection<TenantDescriptor>, TenantDescriptor> {

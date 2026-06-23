@@ -31,7 +31,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * for a projection or event processor segment.
  *
  * @author Jan Galinski
- * @since 5.2.0
+ * @since 5.3.0
  */
 @FunctionalInterface
 public interface TenantPersistentStreamMessageSourceFactory {

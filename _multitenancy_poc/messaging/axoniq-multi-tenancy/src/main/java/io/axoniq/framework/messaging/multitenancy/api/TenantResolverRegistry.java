@@ -41,7 +41,7 @@ import org.jspecify.annotations.Nullable;
  * fallback for all message types and can be retrieved directly via {@link #resolver(Configuration)}.
  *
  * @author Theo Emanuelsson
- * @since 5.2.0
+ * @since 5.3.0
  * @see TenantResolver
  * @see DefaultTenantResolverRegistry
  */

@@ -37,7 +37,7 @@ import java.util.Set;
  * @param <T> the type of component managed by this registry
  * @author Theo Emanuelsson
  * @see TenantComponentFactory
- * @since 5.2.0
+ * @since 5.3.0
  */
 public interface TenantComponentRegistry<T> extends MultiTenantAwareComponent {
 

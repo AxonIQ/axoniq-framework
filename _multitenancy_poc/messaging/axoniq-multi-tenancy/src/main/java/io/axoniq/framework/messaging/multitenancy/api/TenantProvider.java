@@ -30,7 +30,7 @@ import java.util.List;
  * {@code MultiTenantAwareComponents} accordingly.
  *
  * @author Stefan Dragisic
- * @since 4.6.0
+ * @since 5.3.0
  */
 public interface TenantProvider {
 

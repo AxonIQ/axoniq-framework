@@ -54,7 +54,7 @@ import java.util.function.Function;
  *
  * @param <T> the type of component this factory creates
  * @author Theo Emanuelsson
- * @since 5.2.0
+ * @since 5.3.0
  * @see TenantComponentRegistry
  */
 @FunctionalInterface
