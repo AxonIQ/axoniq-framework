@@ -28,7 +28,7 @@ We'd like to thank all the contributors who worked on this release!
 
 ==== Enhancements
 
-- Port (5.1.x) fix the slack-release-notification.yml link:https://github.com/AxonIQ/axoniq-framework/pull/142[#142]
+- Port (5.1.x): fix the slack-release-notification.yml link:https://github.com/AxonIQ/axoniq-framework/pull/142[#142]
 - Port (5.1.x): For convenience include the data protection module in the BOM link:https://github.com/AxonIQ/axoniq-framework/pull/131[#131]
 
 ==== Bug fixes
