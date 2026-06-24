@@ -32,6 +32,7 @@ import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantRoutingEve
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessor;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessorModule;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.TenantEventProcessorSegmentFactory;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.transaction.TenantTransactionManagerFactory;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.TenantTokenStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.inmemory.InMemoryTenantTokenStoreFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
@@ -51,15 +52,24 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceCachingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 /**
  * A configuration module for configuring and registering a {@link MultiTenantEventProcessor} backed by per-tenant
@@ -102,6 +112,8 @@ public class MultiTenantPooledStreamingEventProcessorModule
         implements EventProcessorModule, ModuleBuilder<MultiTenantPooledStreamingEventProcessorModule>,
         EventProcessorModule.EventHandlingPhase<MultiTenantPooledStreamingEventProcessorModule, PooledStreamingEventProcessorConfiguration>,
         EventProcessorModule.CustomizationPhase<MultiTenantPooledStreamingEventProcessorModule, PooledStreamingEventProcessorConfiguration> {
+
+    private static final Logger logger = LoggerFactory.getLogger(MultiTenantPooledStreamingEventProcessorModule.class);
 
     private final String processorName;
     private Map<String, ComponentBuilder<EventHandlingComponent>> eventHandlingComponentBuilders;
@@ -215,8 +227,10 @@ public class MultiTenantPooledStreamingEventProcessorModule
                 .withBuilder(cfg -> {
                     var tenantTokenStoreFactory = cfg.getOptionalComponent(TenantTokenStoreFactory.class)
                                                     .orElseGet(InMemoryTenantTokenStoreFactory::new);
+                    var tenantTransactionManagerFactory = cfg.getOptionalComponent(TenantTransactionManagerFactory.class);
                     TenantEventProcessorSegmentFactory tenantSegmentFactory = tenantDescriptor ->
-                            createTenantProcessor(tenantDescriptor, cfg, tenantTokenStoreFactory);
+                            createTenantProcessor(tenantDescriptor, cfg, tenantTokenStoreFactory,
+                                                  tenantTransactionManagerFactory);
                     var processor = new MultiTenantEventProcessor(processorName, tenantSegmentFactory);
                     // Register initial tenants if a TenantProvider is available
                     cfg.getOptionalComponent(TenantProvider.class).ifPresent(tenantProvider -> {
@@ -236,10 +250,11 @@ public class MultiTenantPooledStreamingEventProcessorModule
     }
 
     @SuppressWarnings("unchecked")
-    private PooledStreamingEventProcessor createTenantProcessor(
+    private StreamingEventProcessor createTenantProcessor(
             TenantDescriptor tenantDescriptor,
             Configuration parent,
-            TenantTokenStoreFactory tenantTokenStoreFactory
+            TenantTokenStoreFactory tenantTokenStoreFactory,
+            Optional<TenantTransactionManagerFactory> tenantTransactionManagerFactory
     ) {
         var processorConfig = customizedProcessorConfigurationBuilder.build(parent);
         String tenantProcessorName = processorName + "[" + tenantDescriptor.tenantId() + "]";
@@ -256,13 +271,19 @@ public class MultiTenantPooledStreamingEventProcessorModule
         TokenStore tenantTokenStore = tenantTokenStoreFactory.apply(tenantDescriptor);
         processorConfig.tokenStore(tenantTokenStore);
 
-        // Per-tenant event source from the TenantRoutingEventStore
-        parent.getOptionalComponent(EventStore.class)
-              .filter(TenantRoutingEventStore.class::isInstance)
-              .map(TenantRoutingEventStore.class::cast)
-              .map(TenantRoutingEventStore::tenantSegments)
-              .map(segments -> segments.get(tenantDescriptor))
-              .ifPresent(processorConfig::eventSource);
+        tenantTransactionManagerFactory.ifPresent(factory -> processorConfig.unitOfWorkFactory(
+                new TransactionalUnitOfWorkFactory(
+                        factory.apply(tenantDescriptor),
+                        processorConfig.unitOfWorkFactory()
+                )
+        ));
+
+        // Per-tenant event source from the TenantRoutingEventStore, even when wrapped by decorators.
+        processorConfig.eventSource(resolveTenantEventSource(parent, tenantDescriptor).orElseThrow(() ->
+                new IllegalStateException(
+                        "Could not resolve tenant event source for [" + tenantDescriptor.tenantId()
+                        + "] from the configured EventStore chain."
+                )));
 
         // Build per-tenant event handling components
         List<EventHandlingComponent> tenantComponents = eventHandlingComponentBuilders.entrySet().stream()
@@ -317,4 +338,53 @@ public class MultiTenantPooledStreamingEventProcessorModule
     private static ScheduledExecutorService defaultExecutor(int poolSize, String factoryName) {
         return Executors.newScheduledThreadPool(poolSize, new AxonThreadFactory(factoryName));
     }
+
+    private Optional<EventStore> resolveTenantEventSource(Configuration parent, TenantDescriptor tenantDescriptor) {
+        return parent.getOptionalComponent(EventStore.class)
+                     .flatMap(MultiTenantPooledStreamingEventProcessorModule::resolveTenantRoutingEventStore)
+                     .map(TenantRoutingEventStore::tenantSegments)
+                     .map(segments -> segments.get(tenantDescriptor));
+    }
+
+    static Optional<TenantRoutingEventStore> resolveTenantRoutingEventStore(Object candidate) {
+        return resolveTenantRoutingEventStore(candidate, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private static Optional<TenantRoutingEventStore> resolveTenantRoutingEventStore(
+            Object candidate,
+            Set<Object> visited
+    ) {
+        if (candidate == null || !visited.add(candidate)) {
+            return Optional.empty();
+        }
+        if (candidate instanceof TenantRoutingEventStore tenantRoutingEventStore) {
+            return Optional.of(tenantRoutingEventStore);
+        }
+
+        Class<?> currentType = candidate.getClass();
+        while (currentType != null && currentType != Object.class) {
+            for (Field field : currentType.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.setAccessible(true);
+                try {
+                    Object value = field.get(candidate);
+                    if (value instanceof EventStore nestedEventStore) {
+                        Optional<TenantRoutingEventStore> nested =
+                                resolveTenantRoutingEventStore(nestedEventStore, visited);
+                        if (nested.isPresent()) {
+                            return nested;
+                        }
+                    }
+                } catch (IllegalAccessException ignored) {
+                    // Best-effort unwrapping. If the field is inaccessible, continue scanning the chain.
+                }
+            }
+            currentType = currentType.getSuperclass();
+        }
+
+        return Optional.empty();
+    }
+
 }
