@@ -27,6 +27,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.TrackingTokenSource;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -60,6 +62,8 @@ import java.util.function.Function;
  * @since 5.3.0
  */
 public class MultiTenantEventProcessor implements StreamingEventProcessor, MultiTenantAwareComponent {
+
+    private static final Logger logger = LoggerFactory.getLogger(MultiTenantEventProcessor.class);
 
     /**
      * The decoration order for the multi-tenant event processor decorator.

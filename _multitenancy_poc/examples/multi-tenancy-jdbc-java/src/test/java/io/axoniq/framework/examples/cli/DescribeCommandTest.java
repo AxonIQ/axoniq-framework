@@ -39,6 +39,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +60,7 @@ class DescribeCommandTest {
 
         new ReplConsole(configuration, new ByteArrayInputStream(new byte[0]), output)
                 .commandLine()
-                .execute("describe");
+                .execute("describe", "--to-file=false");
 
         assertThat(output.toString())
                 .contains("Multi-tenant wiring")
@@ -79,7 +81,7 @@ class DescribeCommandTest {
 
         new ReplConsole(configuration, new ByteArrayInputStream(new byte[0]), output)
                 .commandLine()
-                .execute("describe", "--component", "sample");
+                .execute("describe", "--component", "sample", "--to-file=false");
 
         assertThat(output.toString())
                 .contains("description")
@@ -93,11 +95,40 @@ class DescribeCommandTest {
 
         new ReplConsole(configuration, new ByteArrayInputStream(new byte[0]), output)
                 .commandLine()
-                .execute("describe", "--component", "sample", "--pretty", "false");
+                .execute("describe", "--component", "sample", "--pretty", "false", "--to-file=false");
 
         assertThat(output.toString())
                 .doesNotContain("\n  \"description\"")
                 .contains("\"description\":\"example component\"");
+    }
+
+    @Test
+    void describeCommandWritesFullConfigurationToFile() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        AxonConfiguration configuration = new TestConfiguration();
+        Path describeFile = Files.createTempFile("describe-command", ".txt");
+        String previousDescribeFile = System.getProperty("DESCRIBE_FILE");
+
+        try {
+            System.setProperty("DESCRIBE_FILE", describeFile.toString());
+
+            new ReplConsole(configuration, new ByteArrayInputStream(new byte[0]), output)
+                    .commandLine()
+                    .execute("describe", "-f");
+
+            assertThat(Files.readString(describeFile))
+                    .contains("Multi-tenant wiring")
+                    .contains("TenantProvider:")
+                    .contains("CommandBusConnector:")
+                    .contains("Describable components:");
+        } finally {
+            if (previousDescribeFile == null) {
+                System.clearProperty("DESCRIBE_FILE");
+            } else {
+                System.setProperty("DESCRIBE_FILE", previousDescribeFile);
+            }
+            Files.deleteIfExists(describeFile);
+        }
     }
 
     private static final class TestConfiguration implements AxonConfiguration {

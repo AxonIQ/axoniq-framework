@@ -26,6 +26,10 @@ import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.Multi
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.pooled.MultiTenantPooledStreamingEventProcessorModule;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.TenantTokenStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.jdbc.JdbcTenantTokenStoreFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.JdbcTokenStoreConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.transaction.TenantTransactionManagerFactory;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.transaction.jdbc.JdbcTenantTransactionManager;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.h2.jdbcx.JdbcDataSource;
@@ -47,6 +51,8 @@ public enum CourseStatsConfiguration {
     public static final Logger logger = LoggerFactory.getLogger(CourseStatsConfiguration.class);
 
     private static final String PROJECTION_PROCESSOR = "Projection_CourseStats_Processor";
+    private static final JdbcTokenStoreConfiguration TOKEN_STORE_CONFIGURATION = JdbcTokenStoreConfiguration.DEFAULT
+            .schema(TokenSchema.builder().setTokenTable("token_entry").build());
 
     public static EventSourcingConfigurer configure(EventSourcingConfigurer configurer) {
         MultiTenantPooledStreamingEventProcessorModule projectionProcessor = MultiTenantEventProcessorModule
@@ -70,7 +76,11 @@ public enum CourseStatsConfiguration {
                 .componentRegistry(cr -> {
                     cr.registerComponent(TenantTokenStoreFactory.class, cfg ->
                             new JdbcTenantTokenStoreFactory(CourseStatsConfiguration::tenantDataSource,
-                                                            cfg.getComponent(Converter.class))
+                                                            cfg.getComponent(Converter.class),
+                                                            TOKEN_STORE_CONFIGURATION)
+                    );
+                    cr.registerComponent(TenantTransactionManagerFactory.class, cfg ->
+                            tenant -> new JdbcTenantTransactionManager(tenantDataSource(tenant))
                     );
                     cr.registerComponent(TenantComponentRegistry.class, cfg ->
                             new DefaultTenantComponentRegistry<>(

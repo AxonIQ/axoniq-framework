@@ -9,10 +9,14 @@ import org.axonframework.eventsourcing.annotation.reflection.EntityCreator;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.modelling.annotation.InjectEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
 class CreateCourseCommandHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(CreateCourseCommandHandler.class);
 
     @CommandHandler
     void handle(
@@ -35,6 +39,8 @@ class CreateCourseCommandHandler {
 
     @EventSourcedEntity(tagKey = FacultyTags.COURSE_ID)
     static final class State {
+
+        private static final Logger logger = LoggerFactory.getLogger(State.class);
 
         private boolean created;
 

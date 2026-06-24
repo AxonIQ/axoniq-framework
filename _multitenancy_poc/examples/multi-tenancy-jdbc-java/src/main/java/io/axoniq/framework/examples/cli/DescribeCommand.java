@@ -30,6 +30,9 @@ import picocli.CommandLine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.Comparator;
 import java.util.Map;
 
@@ -51,8 +54,33 @@ public final class DescribeCommand extends SubCommand {
                         defaultValue = "true")
     private boolean pretty = true;
 
+    @CommandLine.Option(names = {"-f", "--to-file"},
+                        description = "Output to file, not console")
+    private boolean toFile;
+
+    @Nullable
+    private StringBuilder fileBuffer;
+
     @Override
     public void run() {
+        if (toFile) {
+            Path logFile = resolveLogFile();
+            fileBuffer = new StringBuilder();
+            try {
+                describe();
+                Files.writeString(logFile, fileBuffer.toString());
+            } catch (IOException e) {
+                emit("Failed to write to file [%s]: %s", logFile, e.getMessage());
+            } finally {
+                fileBuffer = null;
+            }
+            return;
+        }
+
+        describe();
+    }
+
+    private void describe() {
         if (componentName == null || componentName.isBlank()) {
             describeConfiguration();
             return;
@@ -61,23 +89,23 @@ public final class DescribeCommand extends SubCommand {
         Map<String, DescribableComponent> components = repl.axonConfiguration.getComponents(DescribableComponent.class);
         DescribableComponent component = components.get(componentName);
         if (component == null) {
-            echo("No describable component named [%s] was found.", componentName);
+            emit("No describable component named [%s] was found.", componentName);
             return;
         }
 
         JacksonComponentDescriptor descriptor = new JacksonComponentDescriptor(objectMapper());
         component.describeTo(descriptor);
-        echo(descriptor.describe());
+        emit(descriptor.describe());
     }
 
     private void describeConfiguration() {
-        echo("Multi-tenant wiring:");
+        emit("Multi-tenant wiring:");
         describeWiringPoint("TenantProvider", TenantProvider.class);
         describeWiringPoint("TenantResolverRegistry", TenantResolverRegistry.class);
         describeWiringPoint("CommandBusConnector", CommandBusConnector.class);
         describeWiringPoint("CommandBus", org.axonframework.messaging.commandhandling.CommandBus.class);
 
-        echo("Describable components:");
+        emit("Describable components:");
         Map<String, DescribableComponent> components = repl.axonConfiguration.getComponents(DescribableComponent.class);
         components.entrySet()
                 .stream()
@@ -89,7 +117,7 @@ public final class DescribeCommand extends SubCommand {
         repl.axonConfiguration.getOptionalComponent(type)
                 .ifPresentOrElse(
                         component -> echoComponent(label, component),
-                        () -> echo("%s: <not registered>", label)
+                        () -> emit("%s: <not registered>", label)
                 );
     }
 
@@ -97,9 +125,9 @@ public final class DescribeCommand extends SubCommand {
         JacksonComponentDescriptor descriptor = new JacksonComponentDescriptor(objectMapper());
         try {
             component.describeTo(descriptor);
-            echo("%s = %s", displayName(name), descriptor.describe());
+            emit("%s = %s", displayName(name), descriptor.describe());
         } catch (Exception e) {
-            echo("%s = <left out due to error: %s>", displayName(name), rootCauseMessage(e));
+            emit("%s = <left out due to error: %s>", displayName(name), rootCauseMessage(e));
         }
     }
 
@@ -108,14 +136,23 @@ public final class DescribeCommand extends SubCommand {
             JacksonComponentDescriptor descriptor = new JacksonComponentDescriptor(objectMapper());
             try {
                 describable.describeTo(descriptor);
-                echo("%s:", label);
-                echo(descriptor.describe());
+                emit("%s:", label);
+                emit(descriptor.describe());
             } catch (Exception e) {
-                echo("%s: <left out due to error: %s>", label, rootCauseMessage(e));
+                emit("%s: <left out due to error: %s>", label, rootCauseMessage(e));
             }
             return;
         }
-        echo("%s: %s", label, component.getClass().getName());
+        emit("%s: %s", label, component.getClass().getName());
+    }
+
+    private void emit(String msg, Object... args) {
+        String line = msg.formatted(args);
+        if (fileBuffer != null) {
+            fileBuffer.append(line).append(System.lineSeparator());
+        } else {
+            super.echo(msg, args);
+        }
     }
 
     private ObjectMapper objectMapper() {
@@ -139,4 +176,14 @@ public final class DescribeCommand extends SubCommand {
         return message == null || message.isBlank() ? rootCause.getClass().getName() : message;
     }
 
+    static Path resolveLogFile() {
+        String configuredLogFile = System.getProperty("DESCRIBE_FILE");
+        if (configuredLogFile == null || configuredLogFile.isBlank()) {
+            configuredLogFile = System.getenv("DESCRIBE_FILE");
+        }
+        if (configuredLogFile == null || configuredLogFile.isBlank()) {
+            throw new IllegalStateException("DESCRIBE_FILE is not configured.");
+        }
+        return Path.of(configuredLogFile);
+    }
 }

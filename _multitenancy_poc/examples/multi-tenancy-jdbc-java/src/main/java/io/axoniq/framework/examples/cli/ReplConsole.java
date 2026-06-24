@@ -82,7 +82,7 @@ public final class ReplConsole implements Runnable {
 
     @Override
     public void run() {
-        output.println("University REPL started. Type 'help' to list commands and 'exit' to stop.");
+        output.println("University JDBC REPL started. Type 'help' to list commands and 'exit' to stop.");
         while (running.get()) {
             output.print("> ");
             output.flush();
