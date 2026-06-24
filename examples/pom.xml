@@ -35,6 +35,7 @@
 
     <modules>
         <module>multi-tenancy-java</module>
+        <module>multi-tenancy-jdbc-java</module>
     </modules>
 
     <dependencyManagement>

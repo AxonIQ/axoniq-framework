@@ -52,6 +52,11 @@
         </dependency>
 
         <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-distributed-messaging</artifactId>
             <version>${project.version}</version>

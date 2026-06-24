@@ -26,6 +26,8 @@ import io.axoniq.framework.examples.infrastructure.ConfigurationProperties;
 import io.axoniq.framework.examples.infrastructure.MultiTenancyConfiguration;
 import io.axoniq.platform.framework.AxoniqPlatformConfiguration;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +51,8 @@ public class UniversityMultiTenancyApplication implements Runnable {
             configurer.componentRegistry(cr -> cr.registerComponent(AxoniqPlatformConfiguration.class,
                                                                     properties.platform()
                                                                               .axoniqPlatformConfiguration()))
+                      .componentRegistry(cr -> cr.registerComponent(Converter.class,
+                                                                    cfg -> new JacksonConverter()))
                       .componentRegistry(cr -> cr.registerComponent(AxonServerConfiguration.class,
                                                                     properties.axonServerConfiguration()))
             ;

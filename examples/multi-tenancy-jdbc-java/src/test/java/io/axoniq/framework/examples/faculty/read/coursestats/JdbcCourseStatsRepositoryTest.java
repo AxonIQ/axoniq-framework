@@ -28,6 +28,11 @@ import org.junit.jupiter.api.Test;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
@@ -61,6 +66,10 @@ class JdbcCourseStatsRepositoryTest {
 
         assertThat(tenantDatabaseFiles(TENANT_A)).isGreaterThan(0);
         assertThat(tenantDatabaseFiles(TENANT_B)).isGreaterThan(0);
+        assertThat(tableExists(tenantDataSource(TENANT_A), "course_stats")).isTrue();
+        assertThat(tableExists(tenantDataSource(TENANT_A), "token_entry")).isTrue();
+        assertThat(tableExists(tenantDataSource(TENANT_B), "course_stats")).isTrue();
+        assertThat(tableExists(tenantDataSource(TENANT_B), "token_entry")).isTrue();
     }
 
     private static DataSource tenantDataSource(TenantDescriptor tenantDescriptor) {
@@ -73,6 +82,7 @@ class JdbcCourseStatsRepositoryTest {
                               + ";AUTO_SERVER=FALSE;DB_CLOSE_DELAY=-1");
             dataSource.setUser("sa");
             dataSource.setPassword("");
+            initializeTenantSchema(dataSource);
             return dataSource;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to create tenant data source", e);
@@ -90,6 +100,50 @@ class JdbcCourseStatsRepositoryTest {
                         .count();
         } catch (IOException e) {
             throw new IllegalStateException("Failed to inspect tenant database directory", e);
+        }
+    }
+
+    private static boolean tableExists(DataSource dataSource, String tableName) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metadata = connection.getMetaData();
+            try (ResultSet tables = metadata.getTables(null, null, "%", new String[]{"TABLE"})) {
+                while (tables.next()) {
+                    if (tableName.equalsIgnoreCase(tables.getString("TABLE_NAME"))) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException("Failed to inspect tenant database schema", e);
+        }
+    }
+
+    private static void initializeTenantSchema(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS course_stats (
+                        course_id VARCHAR(255) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        capacity INT NOT NULL,
+                        subscribed_students INT NOT NULL
+                    )
+                    """);
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS token_entry (
+                        processorName VARCHAR(255) NOT NULL,
+                        segment INTEGER NOT NULL,
+                        mask INTEGER NOT NULL,
+                        token BLOB NULL,
+                        tokenType VARCHAR(255) NULL,
+                        timestamp VARCHAR(255) NULL,
+                        owner VARCHAR(255) NULL,
+                        PRIMARY KEY (processorName, segment)
+                    )
+                    """);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to initialize tenant schema", e);
         }
     }
 }
