@@ -22,7 +22,7 @@ package io.axoniq.framework.integrationtests.axonserverconnector;
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamMessageSource;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.common.Registration;
@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test verifying that {@link PersistentStreamMessageSource} receives events published to Axon Server
+ * Integration test verifying that {@link PersistentStreamEventSource} receives events published to Axon Server
  * via a persistent stream, matching the declarative configuration documented in the connector reference guide.
  * <p>
  * Each test uses a unique stream name (UUID suffix) to prevent cross-test contamination when the shared Axon Server
@@ -96,7 +96,7 @@ class PersistentStreamAxonServerIT {
         void subscriberReceivesSinglePublishedEvent() {
             // given
             String streamName = "single-event-" + UUID.randomUUID();
-            PersistentStreamMessageSource source = buildPersistentStreamSource(streamName);
+            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
 
             CopyOnWriteArrayList<EventMessage> received = new CopyOnWriteArrayList<>();
             Registration subscription = source.subscribe((events, ctx) -> {
@@ -118,7 +118,7 @@ class PersistentStreamAxonServerIT {
         void subscriberReceivesMultiplePublishedEvents() {
             // given
             String streamName = "multi-event-" + UUID.randomUUID();
-            PersistentStreamMessageSource source = buildPersistentStreamSource(streamName);
+            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
 
             CopyOnWriteArrayList<EventMessage> received = new CopyOnWriteArrayList<>();
             Registration subscription = source.subscribe((events, ctx) -> {
@@ -150,7 +150,7 @@ class PersistentStreamAxonServerIT {
             String streamName = "ack-test-" + UUID.randomUUID();
 
             // Phase 1: subscribe and receive initial events
-            PersistentStreamMessageSource source = buildPersistentStreamSource(streamName);
+            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
             CopyOnWriteArrayList<EventMessage> phase1 = new CopyOnWriteArrayList<>();
             Registration subscription = source.subscribe((events, ctx) -> {
                 phase1.addAll(events);
@@ -168,7 +168,7 @@ class PersistentStreamAxonServerIT {
             publishEvents(new StreamTestEvent("new-1"), new StreamTestEvent("new-2"));
 
             // Phase 2: re-subscribe with the same stream name
-            PersistentStreamMessageSource source2 = buildPersistentStreamSource(streamName);
+            PersistentStreamEventSource source2 = buildPersistentStreamSource(streamName);
             CopyOnWriteArrayList<EventMessage> phase2 = new CopyOnWriteArrayList<>();
             Registration subscription2 = source2.subscribe((events, ctx) -> {
                 phase2.addAll(events);
@@ -188,7 +188,7 @@ class PersistentStreamAxonServerIT {
             String streamName = "restart-test-" + UUID.randomUUID();
 
             // Phase 1: subscribe and receive initial events with the first configuration
-            PersistentStreamMessageSource source = buildPersistentStreamSource(streamName);
+            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
             CopyOnWriteArrayList<EventMessage> phase1 = new CopyOnWriteArrayList<>();
             Registration subscription = source.subscribe((events, ctx) -> {
                 phase1.addAll(events);
@@ -214,7 +214,7 @@ class PersistentStreamAxonServerIT {
             publishEvents(new StreamTestEvent("after-restart-1"), new StreamTestEvent("after-restart-2"));
 
             // Phase 2: subscribe with the same stream name on the new configuration
-            PersistentStreamMessageSource source2 = buildPersistentStreamSource(streamName);
+            PersistentStreamEventSource source2 = buildPersistentStreamSource(streamName);
             CopyOnWriteArrayList<EventMessage> phase2 = new CopyOnWriteArrayList<>();
             Registration subscription2 = source2.subscribe((events, ctx) -> {
                 phase2.addAll(events);
@@ -232,13 +232,13 @@ class PersistentStreamAxonServerIT {
     // ----- helpers -------------------------------------------------------
 
     /**
-     * Constructs a {@link PersistentStreamMessageSource} for the given {@code streamName} using the same pattern as
+     * Constructs a {@link PersistentStreamEventSource} for the given {@code streamName} using the same pattern as
      * the declarative configuration documented in the connector reference guide.
      *
      * @param streamName the unique persistent stream identifier in Axon Server
-     * @return a ready-to-subscribe {@link PersistentStreamMessageSource}
+     * @return a ready-to-subscribe {@link PersistentStreamEventSource}
      */
-    private PersistentStreamMessageSource buildPersistentStreamSource(String streamName) {
+    private PersistentStreamEventSource buildPersistentStreamSource(String streamName) {
         AxonServerConnectionManager connectionManager =
                 configuration.getComponent(AxonServerConnectionManager.class);
         AxonServerConfiguration serverConfig =
@@ -255,7 +255,7 @@ class PersistentStreamAxonServerIT {
                 null
         );
 
-        return new PersistentStreamMessageSource(
+        return new PersistentStreamEventSource(
                 streamName,
                 connectionManager,
                 serverConfig,

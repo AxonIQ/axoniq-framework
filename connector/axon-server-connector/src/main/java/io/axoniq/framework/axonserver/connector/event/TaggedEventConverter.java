@@ -25,6 +25,7 @@ import io.axoniq.axonserver.grpc.event.dcb.TaggedEvent;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -53,16 +54,22 @@ import java.util.stream.Collectors;
 public class TaggedEventConverter implements DescribableComponent {
 
     private final EventConverter converter;
+    private final EventTypeResolver eventTypeResolver;
 
     /**
      * Constructs a {@code TaggedEventConverter} using the given {@code converter} to convert the
-     * {@link EventMessage#payload() event payload}.
+     * {@link EventMessage#payload() event payload} and the given {@code eventTypeResolver} to resolve
+     * {@link MessageType MessageTypes} when reading events back from Axon Server.
      *
-     * @param converter The converter used to {@link EventConverter#convert(Object, Class)} the
-     *                  {@link EventMessage#payload()} for the {@link Event}.
+     * @param converter         the converter used to {@link EventConverter#convert(Object, Class)} the
+     *                          {@link EventMessage#payload()} for the {@link Event}
+     * @param eventTypeResolver the resolver used to construct a {@link MessageType} from the event name and version
+     *                          stored in Axon Server, handling missing or empty versions for legacy events
      */
-    public TaggedEventConverter(EventConverter converter) {
+    public TaggedEventConverter(EventConverter converter,
+                                EventTypeResolver eventTypeResolver) {
         this.converter = Objects.requireNonNull(converter, "The EventConverter cannot be null.");
+        this.eventTypeResolver = Objects.requireNonNull(eventTypeResolver, "The EventTypeResolver cannot be null.");
     }
 
     /**
@@ -127,12 +134,12 @@ public class TaggedEventConverter implements DescribableComponent {
      * <p>
      * Used to map Axon Server events to Axon Framework events while sourcing and streaming.
      *
-     * @param event The event to convert into an {@link EventMessage}.
-     * @return An {@code EventMessage} based on the given {@code event}.
+     * @param event the event to convert into an {@link EventMessage}
+     * @return an {@code EventMessage} based on the given {@code event}
      */
     public EventMessage convertEvent(Event event) {
         return new GenericEventMessage(event.getIdentifier(),
-                                       new MessageType(event.getName(), event.getVersion()),
+                                       eventTypeResolver.resolve(event.getName(), event.getVersion()),
                                        event.getPayload().toByteArray(),
                                        event.getMetadataMap(),
                                        Instant.ofEpochMilli(event.getTimestamp())
@@ -142,5 +149,6 @@ public class TaggedEventConverter implements DescribableComponent {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("eventTypeResolver", eventTypeResolver);
     }
 }

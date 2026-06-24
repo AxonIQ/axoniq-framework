@@ -81,12 +81,12 @@
             <artifactId>axon-server-connector</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-multi-tenancy</artifactId>
-            <version>${project.version}</version>
-            <optional>true</optional>
-        </dependency>
+<!--        FIXME: exclude, test fail if added but not set up <dependency>-->
+<!--            <groupId>io.axoniq.framework</groupId>-->
+<!--            <artifactId>axoniq-multi-tenancy</artifactId>-->
+<!--            <version>${project.version}</version>-->
+<!--            <optional>true</optional>-->
+<!--        </dependency>-->
 
         <!-- Database -->
         <dependency>

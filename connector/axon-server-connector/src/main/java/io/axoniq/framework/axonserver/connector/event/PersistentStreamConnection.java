@@ -52,7 +52,7 @@ import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -71,6 +71,9 @@ import static io.axoniq.axonserver.connector.event.PersistentStreamSegment.PENDI
  * {@link BiFunction} for each batch. The batch consumer returns a {@link CompletableFuture} that must complete before
  * the token for the last event in the batch is acknowledged to Axon Server. On consumer failure the batch is retried
  * with exponential back-off.
+ * <p>
+ * This is an internal helper for the {@link PersistentStreamEventSource} managing the gRPC based persistent stream
+ * with Axon Server. This class is usually not used directly by users.
  *
  * @author Marc Gathier
  * @author Jakob Hatzl
@@ -81,7 +84,9 @@ public class PersistentStreamConnection {
 
     private static final int MAX_RETRY_INTERVAL_SECONDS = 60;
     private static final int MIN_RETRY_INTERVAL_SECONDS = 1;
-    private final Logger logger = LoggerFactory.getLogger(PersistentStreamConnection.class);
+    private static final BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>
+            NO_OP_CONSUMER = (events, ctx) -> CompletableFuture.completedFuture(null);
+    private static final Logger logger = LoggerFactory.getLogger(PersistentStreamConnection.class);
 
     private final String streamId;
     private final AxonServerConnectionManager connectionManager;
@@ -92,8 +97,6 @@ public class PersistentStreamConnection {
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
     private final AtomicBoolean closing = new AtomicBoolean(false);
 
-    private static final BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>
-            NO_OP_CONSUMER = (events, ctx) -> CompletableFuture.completedFuture(null);
     private final AtomicReference<BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>>
             consumer = new AtomicReference<>(NO_OP_CONSUMER);
 
@@ -103,7 +106,7 @@ public class PersistentStreamConnection {
     private final Map<Integer, SegmentConnection> segments = new ConcurrentHashMap<>();
     private final AtomicInteger retrySeconds = new AtomicInteger(MIN_RETRY_INTERVAL_SECONDS);
 
-    private final @Nullable String defaultContext;
+    private final @Nullable String context;
 
     /**
      * Instantiates a {@code PersistentStreamConnection}.
@@ -147,7 +150,7 @@ public class PersistentStreamConnection {
      * @param scheduler                  the scheduler thread pool to schedule tasks
      * @param unitOfWorkFactory          the unit of work factory
      * @param batchSize                  the maximum number of events to collect per batch
-     * @param defaultContext             the Axon Server context to connect to, or {@code null} to use
+     * @param context                    the Axon Server context to connect to, or {@code null} to use
      *                                   {@link AxonServerConfiguration#getContext()}
      */
     public PersistentStreamConnection(String streamId,
@@ -158,16 +161,20 @@ public class PersistentStreamConnection {
                                       ScheduledExecutorService scheduler,
                                       UnitOfWorkFactory unitOfWorkFactory,
                                       int batchSize,
-                                      @Nullable String defaultContext) {
-        this.streamId = streamId;
-        this.connectionManager = connectionManager;
-        this.serverConfig = serverConfig;
-        this.converter = converter;
-        this.persistentStreamProperties = persistentStreamProperties;
-        this.scheduler = scheduler;
-        this.unitOfWorkFactory = unitOfWorkFactory;
+                                      @Nullable String context) {
+        this.streamId = Objects.requireNonNull(streamId, "streamId must not be null");
+        this.connectionManager = Objects.requireNonNull(connectionManager, "connectionManager must not be null");
+        this.serverConfig = Objects.requireNonNull(serverConfig, "serverConfig must not be null");
+        this.converter = Objects.requireNonNull(converter, "converter must not be null");
+        this.persistentStreamProperties = Objects.requireNonNull(persistentStreamProperties,
+                                                                 "persistentStreamProperties must not be null");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler must not be null");
+        this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "unitOfWorkFactory must not be null");
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("batchSize must be positive, but was: " + batchSize);
+        }
         this.batchSize = batchSize;
-        this.defaultContext = defaultContext;
+        this.context = context;
     }
 
     /**
@@ -180,13 +187,10 @@ public class PersistentStreamConnection {
      *                 per event, it receives each event in a single callback {@link ProcessingContext} enriched with
      *                 the current {@link TrackingToken} and, when available, aggregate identity information, and must
      *                 return a {@link CompletableFuture} that completes when the event has been processed; events are
-     *                 still processed in batches as {@link PersistentStreamConnection#batchSize configured for the
-     *                 stream}, the persistent stream connection takes care of creating and spanning a unit of work
-     *                 over all events belonging to a single batch.
+     *                 still processed in batches as configured through the {@code batchSize} constructor argument,
+     *                 the persistent stream connection takes care of creating and spanning a unit of work
+     *                 over all events belonging to a single batch
      *
-     * @param consumer the consumer of batches of event messages; receives each batch and a {@code null}
-     *                 {@link ProcessingContext}, and must return a {@link CompletableFuture} that completes when the
-     *                 batch has been processed
      * @throws IllegalStateException if the stream was already opened
      */
     public void open(BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> consumer) {
@@ -199,8 +203,8 @@ public class PersistentStreamConnection {
     }
 
     private void start() {
-        String context = defaultContext != null && !defaultContext.isEmpty()
-                ? defaultContext
+        String context = this.context != null && !this.context.isEmpty()
+                ? this.context
                 : serverConfig.getContext();
         PersistentStreamCallbacks callbacks = new PersistentStreamCallbacks(this::segmentOpened,
                                                                             this::segmentClosed,
@@ -220,7 +224,7 @@ public class PersistentStreamConnection {
 
     private void segmentOpened(PersistentStreamSegment persistentStreamSegment) {
         logger.info("Segment opened: {}", persistentStreamSegment);
-        retrySeconds.set(1);
+        retrySeconds.set(MIN_RETRY_INTERVAL_SECONDS);
         segments.put(persistentStreamSegment.segment(), new SegmentConnection(persistentStreamSegment));
     }
 
@@ -253,10 +257,10 @@ public class PersistentStreamConnection {
      */
     public void close() {
         closing.set(true);
+        this.consumer.set(NO_OP_CONSUMER);
         PersistentStream persistentStream = persistentStreamHolder.getAndSet(null);
         if (persistentStream != null) {
             persistentStream.close();
-            this.consumer.set(NO_OP_CONSUMER);
         }
     }
 
@@ -451,22 +455,22 @@ public class PersistentStreamConnection {
             TrackingToken token = createToken(pse);
             processingContext.putResource(TrackingToken.RESOURCE_KEY, token);
 
-            Optional<String> aggregateIdentifier = getAggregateIdentifier(pse);
-            aggregateIdentifier.ifPresentOrElse(aggregateId -> {
+            // reset pre-existing legacy aggregate information
+            processingContext.removeResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY);
+            processingContext.removeResource(LegacyResources.AGGREGATE_TYPE_KEY);
+            processingContext.removeResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY);
+
+            String aggregateIdentifier = getAggregateIdentifier(pse);
+            if (aggregateIdentifier != null && !aggregateIdentifier.isEmpty()) {
                 // supply legacy aggregate information
-                processingContext.putResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY, aggregateId);
+                processingContext.putResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY, aggregateIdentifier);
                 String aggregateType = getAggregateType(pse);
                 if (aggregateType != null) {
                     processingContext.putResource(LegacyResources.AGGREGATE_TYPE_KEY, aggregateType);
                 }
                 processingContext.putResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY,
                                               getAggregateSequenceNumber(pse));
-            }, () -> {
-                // reset legacy aggregate information in case no aggregateId is present
-                processingContext.removeResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY);
-                processingContext.removeResource(LegacyResources.AGGREGATE_TYPE_KEY);
-                processingContext.removeResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY);
-            });
+            }
             return processingContext;
         }
 
@@ -480,9 +484,9 @@ public class PersistentStreamConnection {
                                                  new GlobalSequenceTrackingToken(event.getEvent().getToken()));
         }
 
-        private Optional<String> getAggregateIdentifier(PersistentStreamEvent pse) {
+        private @Nullable String getAggregateIdentifier(PersistentStreamEvent pse) {
             String aggregateIdentifier = pse.getEvent().getEvent().getAggregateIdentifier();
-            return aggregateIdentifier.isEmpty() ? Optional.empty() : Optional.of(aggregateIdentifier);
+            return aggregateIdentifier.isEmpty() ? null : aggregateIdentifier;
         }
 
         private @Nullable String getAggregateType(PersistentStreamEvent pse) {

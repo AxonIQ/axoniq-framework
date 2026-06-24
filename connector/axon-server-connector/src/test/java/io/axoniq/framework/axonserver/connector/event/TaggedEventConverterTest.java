@@ -24,6 +24,7 @@ import io.axoniq.axonserver.grpc.event.dcb.Event;
 import io.axoniq.axonserver.grpc.event.dcb.TaggedEvent;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -72,7 +73,7 @@ class TaggedEventConverterTest {
     void setUp() {
         converter = spy(new JacksonConverter());
 
-        testSubject = new TaggedEventConverter(new DelegatingEventConverter(converter));
+        testSubject = new TaggedEventConverter(new DelegatingEventConverter(converter), EventTypeResolver.DEFAULT);
 
         eventPayload = new TestEvent("Lorem Ipsum", 42, List.of(true, false));
         eventPayloadByteArray = converter.convert(eventPayload, byte[].class);
@@ -83,7 +84,14 @@ class TaggedEventConverterTest {
     @Test
     void throwsNullPointerExceptionForNullConverter() {
         //noinspection DataFlowIssue
-        assertThatThrownBy(() -> new TaggedEventConverter(null))
+        assertThatThrownBy(() -> new TaggedEventConverter(null, EventTypeResolver.DEFAULT))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void throwsNullPointerExceptionForNullEventTypeResolver() {
+        //noinspection DataFlowIssue
+        assertThatThrownBy(() -> new TaggedEventConverter(new DelegatingEventConverter(converter), null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -121,22 +129,28 @@ class TaggedEventConverterTest {
         assertThat(tagList)
                 .hasSize(3)
                 .contains(
-                    io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
-                                                       .setKey(ByteString.copyFrom("key", StandardCharsets.UTF_8))
-                                                       .setValue(ByteString.copyFrom("value", StandardCharsets.UTF_8))
-                                                       .build()
+                        io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
+                                                               .setKey(ByteString.copyFrom("key",
+                                                                                           StandardCharsets.UTF_8))
+                                                               .setValue(ByteString.copyFrom("value",
+                                                                                             StandardCharsets.UTF_8))
+                                                               .build()
                 )
                 .contains(
-                    io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
-                                                       .setKey(ByteString.copyFrom("key2", StandardCharsets.UTF_8))
-                                                       .setValue(ByteString.copyFrom("value2", StandardCharsets.UTF_8))
-                                                       .build()
+                        io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
+                                                               .setKey(ByteString.copyFrom("key2",
+                                                                                           StandardCharsets.UTF_8))
+                                                               .setValue(ByteString.copyFrom("value2",
+                                                                                             StandardCharsets.UTF_8))
+                                                               .build()
                 )
                 .contains(
-                    io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
-                                                       .setKey(ByteString.copyFrom("key3", StandardCharsets.UTF_8))
-                                                       .setValue(ByteString.copyFrom("value3", StandardCharsets.UTF_8))
-                                                       .build()
+                        io.axoniq.axonserver.grpc.event.dcb.Tag.newBuilder()
+                                                               .setKey(ByteString.copyFrom("key3",
+                                                                                           StandardCharsets.UTF_8))
+                                                               .setValue(ByteString.copyFrom("value3",
+                                                                                             StandardCharsets.UTF_8))
+                                                               .build()
                 );
     }
 
@@ -162,14 +176,14 @@ class TaggedEventConverterTest {
                                                 .getMetadataMap();
         // then...
         assertThat(result).hasSize(8)
-                .containsEntry("String", "Lorem Ipsum")
-                .containsEntry("Double", "3.53d")
-                .containsEntry("Float", "3.53f")
-                .containsEntry("Long", "42L")
-                .containsEntry("Integer", "42")
-                .containsEntry("Short", "42")
-                .containsEntry("Byte", "4")
-                .containsEntry("Boolean", "false");
+                          .containsEntry("String", "Lorem Ipsum")
+                          .containsEntry("Double", "3.53d")
+                          .containsEntry("Float", "3.53f")
+                          .containsEntry("Long", "42L")
+                          .containsEntry("Integer", "42")
+                          .containsEntry("Short", "42")
+                          .containsEntry("Byte", "4")
+                          .containsEntry("Boolean", "false");
     }
 
     @Test
@@ -201,6 +215,49 @@ class TaggedEventConverterTest {
         assertThat(result.timestamp().toEpochMilli()).isEqualTo(EVENT_TIMESTAMP);
 
         verify(converter).convert(eventPayloadByteArray, (Type) TestEvent.class);
+    }
+
+    @Nested
+    class WhenEventHasMissingVersion {
+
+        @Test
+        void defaultResolverSubstitutesMissingVersionDefault() {
+            // given...
+            Event testEvent = Event.newBuilder()
+                                   .setIdentifier(EVENT_ID)
+                                   .setTimestamp(EVENT_TIMESTAMP)
+                                   .setName(EVENT_NAME)
+                                   // no version set — proto default is empty string
+                                   .setPayload(ByteString.copyFrom(eventPayloadByteArray))
+                                   .build();
+            // when...
+            EventMessage result = testSubject.convertEvent(testEvent);
+            // then...
+            assertThat(result.type().name()).isEqualTo(EVENT_NAME);
+            assertThat(result.type().version()).isEqualTo(EventTypeResolver.MISSING_VERSION_DEFAULT);
+        }
+
+        @Test
+        void customResolverIsUsedWhenProvided() {
+            // given...
+            String customDefaultVersion = "1.0.0";
+            testSubject = new TaggedEventConverter(
+                    new DelegatingEventConverter(converter),
+                    EventTypeResolver.withDefaultVersion(customDefaultVersion)
+            );
+            Event testEvent = Event.newBuilder()
+                                   .setIdentifier(EVENT_ID)
+                                   .setTimestamp(EVENT_TIMESTAMP)
+                                   .setName(EVENT_NAME)
+                                   // no version set — proto default is empty string
+                                   .setPayload(ByteString.copyFrom(eventPayloadByteArray))
+                                   .build();
+            // when...
+            EventMessage result = testSubject.convertEvent(testEvent);
+            // then...
+            assertThat(result.type().name()).isEqualTo(EVENT_NAME);
+            assertThat(result.type().version()).isEqualTo(customDefaultVersion);
+        }
     }
 
     private record TestEvent(String stringState, Integer intState, List<Boolean> booleanState) {
