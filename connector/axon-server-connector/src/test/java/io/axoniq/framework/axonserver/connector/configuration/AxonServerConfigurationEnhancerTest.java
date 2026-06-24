@@ -34,6 +34,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -79,7 +80,7 @@ class AxonServerConfigurationEnhancerTest {
         assertThat(serverConfig.getComponentName()).contains(serverConfig.getClientId());
         assertThat(result.getComponent(AxonServerConnectionManager.class)).isNotNull();
         assertThat(result.getComponent(ManagedChannelCustomizer.class)).isInstanceOf(ManagedChannelCustomizer.class);
-        assertThat(result.getComponent(EventStorageEngine.class)).isInstanceOf(AxonServerEventStorageEngine.class);
+        assertThat(result.getComponent(EventStorageEngine.class)).isInstanceOf(SnapshotCapableEventStorageEngine.class);
         assertThat(result.getComponent(CommandBusConnector.class)).isInstanceOf(PayloadConvertingCommandBusConnector.class);
         assertThat(result.getComponent(QueryBusConnector.class)).isInstanceOf(PayloadConvertingQueryBusConnector.class);
         assertThat(result.getComponent(SnapshotStore.class)).isInstanceOf(AxonServerSnapshotStore.class);
