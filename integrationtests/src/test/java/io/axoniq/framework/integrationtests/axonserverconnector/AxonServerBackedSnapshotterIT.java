@@ -25,19 +25,19 @@ import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.conversion.Converter;
-import org.axonframework.eventsourcing.StoreBackedSnapshotterTestSuite;
+import org.axonframework.eventsourcing.SnapshottingEntityLifecycleHandlerTestSuite;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.eventsourcing.snapshot.store.StoreBackedSnapshotter;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Tests the {@link StoreBackedSnapshotter} with an {@link AxonServerSnapshotStore}.
+ * Tests the {@link org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler} with an
+ * {@link AxonServerSnapshotStore}.
  *
  * @author John Hendrikx
  */
 @Testcontainers
-public class AxonServerBackedSnapshotterIT extends StoreBackedSnapshotterTestSuite {
+public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHandlerTestSuite {
 
     @Container
     private static final AxonServerContainer CONTAINER = new AxonServerContainer().withDevMode(true)
