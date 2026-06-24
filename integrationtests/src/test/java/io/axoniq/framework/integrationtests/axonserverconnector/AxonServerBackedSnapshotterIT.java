@@ -24,15 +24,14 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.SnapshottingEntityLifecycleHandlerTestSuite;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Tests the {@link org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler} with an
- * {@link AxonServerSnapshotStore}.
+ * Tests the {@link org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler} with an {@link AxonServerSnapshotStore}.
  *
  * @author John Hendrikx
  */
@@ -56,7 +55,7 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
         registry.registerComponent(SnapshotStore.class, c -> {
             AxonServerConnectionManager component = c.getComponent(AxonServerConnectionManager.class);
 
-            return new AxonServerSnapshotStore(component.getConnection(), c.getComponent(Converter.class));
+            return new AxonServerSnapshotStore(component.getConnection(), c.getComponent(GeneralConverter.class));
         });
     }
 }

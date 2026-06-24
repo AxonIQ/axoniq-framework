@@ -29,11 +29,11 @@
     <name>Axoniq Framework - Root</name>
     <description>
         Axoniq Framework builds upon Axon Framework providing features and enhancements to improve an application's
-        production "readyness," specifically for message-driven and event-sourced applications.
+        production "readiness," specifically for message-driven and event-sourced applications.
     </description>
 
     <properties>
-        <revision>5.1.1-SNAPSHOT</revision>
+        <revision>5.1.2-SNAPSHOT</revision>
 
         <!-- Global Axoniq version properties -->
         <axon-framework.version>5.1.2</axon-framework.version>

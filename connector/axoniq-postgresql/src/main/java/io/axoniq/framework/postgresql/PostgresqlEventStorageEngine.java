@@ -476,10 +476,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                   CACHE 1
                   OWNED BY events.global_index;
 
-                -- BRIN index on global_index
-                CREATE INDEX IF NOT EXISTS events_global_index_brin
-                  ON events USING BRIN (global_index);
-
                 -- BTREE index on global_index in consistency_tags (for faster finalizations)
                 CREATE INDEX IF NOT EXISTS consistency_tags_global_index_idx
                   ON consistency_tags (global_index);
@@ -991,7 +987,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         Set<Tag> lockedTags = new HashSet<>();
 
         for(EventCriterion criterion : condition.criteria().flatten()) {
-            // TODO #10 Support type based append transactions
+            // TODO #52 Support type based append transactions
             for (Tag tag : criterion.tags()) {
                 // Only lock the tag if it wasn't already locked in this batch:
                 if (!batchLockedTags.contains(tag)) {

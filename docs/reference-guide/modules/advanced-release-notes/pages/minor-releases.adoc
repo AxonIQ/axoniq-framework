@@ -1,8 +1,28 @@
 = Axoniq Framework Minor Releases
-:navtitle: Axoniq Framework Minor Releases
+:navtitle: Minor Releases
 
 Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for Axoniq Framework features.
 
 [#release_5_1]
 == Release 5.1
+
+=== Release 5.1.1
+
+==== Enhancements
+
+* link:https://github.com/AxonIQ/axoniq-framework/pull/142[#142] Port (5.1.x) fix the slack-release-notification.yml
+* link:https://github.com/AxonIQ/axoniq-framework/pull/131[#131] Port (5.1.x): For convenience include the data protection module in the BOM
+
+==== Bug fixes
+
+* link:https://github.com/AxonIQ/axoniq-framework/pull/139[#139] Port (5.1.x): Fix failing tests
+* link:https://github.com/AxonIQ/axoniq-framework/pull/133[#133] Port (5.1.x): Adjust import for TerminalEventMessage
+
+==== Contributors
+
+We'd like to thank all the contributors who worked on this release!
+
+* link:https://github.com/smcvb[smcvb]
+* link:https://github.com/MateuszNaKodach[MateuszNaKodach]
+* link:https://github.com/hatzlj[hatzlj]
 

@@ -1,2 +1,8 @@
-** xref:advanced-release-notes:major-releases.adoc[]
-** xref:advanced-release-notes:minor-releases.adoc[]
+** [.advanced-framework]#Axoniq Framework#
+*** xref:advanced-release-notes:major-releases.adoc[]
+*** xref:advanced-release-notes:minor-releases.adoc[]
+ifdef::data-protection[]
+** [.advanced-framework]#Axoniq Data Protection#
+*** xref:data-protection-release-notes:major-releases.adoc[]
+*** xref:data-protection-release-notes:minor-releases.adoc[]
+endif::[]

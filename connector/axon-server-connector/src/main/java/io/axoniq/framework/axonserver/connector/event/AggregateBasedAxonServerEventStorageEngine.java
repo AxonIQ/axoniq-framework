@@ -134,6 +134,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
                 }
                 var modifiableMetadataMap = new HashMap<>(builder.getMetaDataMap());
                 buildMetadata(event.metadata(), modifiableMetadataMap);
+                builder.putAllMetaData(modifiableMetadataMap);
                 Event message = builder.build();
                 tx.appendEvent(message);
             });
