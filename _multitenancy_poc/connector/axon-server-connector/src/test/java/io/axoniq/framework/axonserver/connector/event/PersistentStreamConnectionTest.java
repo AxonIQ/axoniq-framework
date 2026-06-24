@@ -137,6 +137,53 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
+    void twoSegmentsAreProcessedIndependently() {
+        // given — segment 0 consumer blocks until released; segment 1 consumer records received events
+        CompletableFuture<Void> segment0ProcessingGate = new CompletableFuture<>();
+        AtomicBoolean segment0ConsumerStarted = new AtomicBoolean(false);
+        List<EventMessage> eventsReceived = Collections.synchronizedList(new LinkedList<>());
+
+        testSubject.open((events, ctx) -> {
+            long position = TrackingToken.fromContext(ctx).orElseThrow().position().orElseThrow();
+            // first event is published on segment 0, we block processing to test parallel processing of segment 1
+            if (position == 0L) {
+                segment0ConsumerStarted.set(true);
+                return segment0ProcessingGate.thenRun(() -> eventsReceived.addAll(events));
+            } else {
+                eventsReceived.addAll(events);
+                return CompletableFuture.completedFuture(null);
+            }
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        // when — publish to segment 0 and wait until its consumer is in progress (blocked on the gate)
+        mockPersistentStream.publish(0, eventWithToken(0, "agg-0", 0, "TestAggregate"));
+        await().atMost(Duration.ofSeconds(2)).until(segment0ConsumerStarted::get);
+
+        // when — publish to segment 1 while segment 0 is still blocked
+        mockPersistentStream.publish(1, eventWithToken(1, "agg-1", 0, "TestAggregate"));
+
+        // then — segment 1 processes and acknowledges without waiting for segment 0 to unblock
+        await().atMost(Duration.ofSeconds(2)).until(() -> eventsReceived.size() == 1);
+        assertThat(mockPersistentStream.lastAcknowledged(0))
+                .describedAs("segment 0 must not be acknowledged while its consumer is blocked")
+                .isEqualTo(-1);
+        assertThat(mockPersistentStream.lastAcknowledged(1))
+                .describedAs("segment 1 must be acknowledged independently of segment 0")
+                .isEqualTo(1);
+
+        // when — release segment 0
+        segment0ProcessingGate.complete(null);
+
+        // then — segment 0 also completes
+        await().atMost(Duration.ofSeconds(2)).until(() -> eventsReceived.size() == 2);
+        await().atMost(Duration.ofSeconds(2)).until(() -> mockPersistentStream.lastAcknowledged(0) == 0);
+
+        mockPersistentStream.closeSegment(0);
+        mockPersistentStream.closeSegment(1);
+    }
+
+    @Test
     void retryFailedHandler() {
         // given
         List<EventMessage> eventMessages = new LinkedList<>();
@@ -246,7 +293,6 @@ class PersistentStreamConnectionTest {
         mockPersistentStream.closeSegment(0);
     }
 
-
     @Test
     void processBatch_propagatesOriginalExceptionType() {
         // given — consumer always returns a failed future
@@ -277,8 +323,9 @@ class PersistentStreamConnectionTest {
         mockPersistentStream.publish(0, eventWithToken(5, "agg-1", 0, "TestAggregate"));
 
         // then — no ack before the gate opens
-        Thread.sleep(300);
-        assertThat(mockPersistentStream.lastAcknowledged(0)).isEqualTo(-1);
+        await()
+                .during(Duration.ofMillis(300))
+                .untilAsserted(() -> assertThat(mockPersistentStream.lastAcknowledged(0)).isEqualTo(-1));
 
         // when — complete the future
         consumerGate.complete(null);
@@ -289,7 +336,6 @@ class PersistentStreamConnectionTest {
 
         mockPersistentStream.closeSegment(0);
     }
-
 
 
     @Test
@@ -633,7 +679,8 @@ class PersistentStreamConnectionTest {
         firstStream.closeGracefully();
 
         // then — no new stream is opened; graceful close must not trigger reconnect
-        Thread.sleep(500);
+        // wait for at least the minimum retry interval that there is no new stream opened
+        Thread.sleep(1100);
         assertThat(mockPersistentStreams.get(STREAM_ID))
                 .describedAs("graceful stream close must not trigger a reconnect")
                 .isSameAs(firstStream);
@@ -664,6 +711,89 @@ class PersistentStreamConnectionTest {
                .until(() -> mockPersistentStream.lastAcknowledged(0) == PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
 
         mockPersistentStream.closeSegment(0);
+    }
+
+    @Nested
+    class Constructor {
+
+        private final AxonServerConnectionManager manager = mock(AxonServerConnectionManager.class);
+        private final AxonServerConfiguration config = new AxonServerConfiguration();
+        private final DelegatingEventConverter eventConverter = new DelegatingEventConverter(new JacksonConverter());
+        private final PersistentStreamProperties props =
+                new PersistentStreamProperties(STREAM_NAME, 2, "Seq", Collections.emptyList(), "0", null);
+
+        @Test
+        void rejectsNullStreamId() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    null, manager, config, eventConverter, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullConnectionManager() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, null, config, eventConverter, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullServerConfig() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, null, eventConverter, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullConverter() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, null, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullPersistentStreamProperties() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, null, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullScheduler() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, props, null,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullUnitOfWorkFactory() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, props, scheduler, null, 100))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsZeroBatchSize() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 0))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("batchSize");
+        }
+
+        @Test
+        void rejectsNegativeBatchSize() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, -1))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("batchSize");
+        }
     }
 
     private static EventWithToken eventWithToken(int token, String aggregateId, int seqNr, String aggregateType) {

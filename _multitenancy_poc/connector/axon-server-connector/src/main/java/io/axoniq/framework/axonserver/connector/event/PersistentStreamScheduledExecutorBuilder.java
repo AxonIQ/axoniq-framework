@@ -26,7 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiFunction;
 
 /**
- * Functional interface towards constructing a {@link ScheduledExecutorService} for a {@link PersistentStreamMessageSource}.
+ * Functional interface towards constructing a {@link ScheduledExecutorService} for a {@link PersistentStreamEventSource}.
  *
  * @author Steven van Beelen
  * @since 5.2.0
@@ -38,11 +38,11 @@ public interface PersistentStreamScheduledExecutorBuilder
     /**
      * Builds a {@link ScheduledExecutorService} using the given {@code threadCount} and {@code streamName}.
      *
-     * @param threadCount The requested thread count for the persistent stream. Can for example be used to define the
-     *                    pool size of the {@link ScheduledExecutorService} under construction.
-     * @param streamName The name of the persistent stream. Can, for example, be used to define the name of the
-     * {@link java.util.concurrent.ThreadFactory} given to a {@link ScheduledExecutorService}
-     * @return A {@link ScheduledExecutorService} based on the given {@code threadCount} and {@code streamName}.
+     * @param threadCount the requested thread count for the persistent stream, which can for example be used to define
+     *                    the pool size of the {@link ScheduledExecutorService} under construction
+     * @param streamName the name of the persistent stream, which can, for example, be used to define the name of the
+     *                   {@link java.util.concurrent.ThreadFactory} given to a {@link ScheduledExecutorService}
+     * @return a {@link ScheduledExecutorService} based on the given {@code threadCount} and {@code streamName}
      */
     default ScheduledExecutorService build(Integer threadCount, String streamName) {
         return apply(threadCount, streamName);
@@ -53,7 +53,7 @@ public interface PersistentStreamScheduledExecutorBuilder
      * the given {@code threadCount} as the pool size for the executor. Uses the given {@code streamName} to build an
      * {@link AxonThreadFactory} with the group name {@code "PersistentStream[{streamName}]"}.
      *
-     * @return The default {@link PersistentStreamScheduledExecutorBuilder}.
+     * @return the default {@link PersistentStreamScheduledExecutorBuilder}
      */
     static PersistentStreamScheduledExecutorBuilder defaultFactory() {
         return (threadCount, streamName) -> Executors.newScheduledThreadPool(
