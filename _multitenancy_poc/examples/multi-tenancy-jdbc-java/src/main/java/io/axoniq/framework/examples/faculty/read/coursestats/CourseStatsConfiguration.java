@@ -19,22 +19,16 @@
 
 package io.axoniq.framework.examples.faculty.read.coursestats;
 
-import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamMessageSource;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentRegistry;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.configuration.DefaultTenantComponentRegistry;
-import io.axoniq.framework.messaging.multitenancy.eventstreaming.MultiTenantPersistentStreamMessageSource;
-import org.h2.jdbcx.JdbcDataSource;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessorModule;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.pooled.MultiTenantPooledStreamingEventProcessorModule;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.TenantTokenStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.jdbc.JdbcTenantTokenStoreFactory;
+import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorModule;
+import org.h2.jdbcx.JdbcDataSource;
 import org.axonframework.messaging.queryhandling.configuration.QueryHandlingModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,8 +37,9 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.concurrent.Executors;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 public enum CourseStatsConfiguration {
     ;
@@ -52,22 +47,14 @@ public enum CourseStatsConfiguration {
     public static final Logger logger = LoggerFactory.getLogger(CourseStatsConfiguration.class);
 
     private static final String PROJECTION_PROCESSOR = "Projection_CourseStats_Processor";
-    private static final int SEGMENT_COUNT = 4;
-    private static final int BATCH_SIZE = 1024;
 
     public static EventSourcingConfigurer configure(EventSourcingConfigurer configurer) {
-        SubscribingEventProcessorModule projectionProcessor = EventProcessorModule
-                .subscribing(PROJECTION_PROCESSOR)
+        MultiTenantPooledStreamingEventProcessorModule projectionProcessor = MultiTenantEventProcessorModule
+                .pooledStreaming(PROJECTION_PROCESSOR)
                 .eventHandlingComponents(
                         c -> c.autodetected(cfg -> new CoursesStatsProjection())
                 )
-                .customized((cfg, subscribingConfig) -> {
-                    MultiTenantPersistentStreamMessageSource source = buildProjectionSource(cfg);
-                    if (cfg.hasComponent(TenantProvider.class)) {
-                        cfg.getComponent(TenantProvider.class).subscribe(source);
-                    }
-                    return subscribingConfig.eventSource(source);
-                });
+                .notCustomized();
 
         QueryHandlingModule getCourseStatsByIdQueryHandler = QueryHandlingModule.named("get-course-stats-by-id")
                 .queryHandlers()
@@ -81,18 +68,20 @@ public enum CourseStatsConfiguration {
 
         return configurer
                 .componentRegistry(cr -> {
+                    cr.registerComponent(TenantTokenStoreFactory.class, cfg ->
+                            new JdbcTenantTokenStoreFactory(CourseStatsConfiguration::tenantDataSource,
+                                                            cfg.getComponent(Converter.class))
+                    );
                     cr.registerComponent(TenantComponentRegistry.class, cfg ->
                             new DefaultTenantComponentRegistry<>(
                                     CourseStatsRepository.class,
                                     tenant -> new JdbcCourseStatsRepository(tenantDataSource(tenant), tenant.tenantId())
                             )
                     );
+                    cr.registerModule(projectionProcessor);
                 })
                 .registerQueryHandlingModule(getCourseStatsByIdQueryHandler)
-                .registerQueryHandlingModule(getAllCourseStatsQueryHandler)
-                .modelling(modelling -> modelling.messaging(messaging -> messaging.eventProcessing(eventProcessing ->
-                        eventProcessing.subscribing(subscribing -> subscribing.processor(projectionProcessor))
-                )));
+                .registerQueryHandlingModule(getAllCourseStatsQueryHandler);
     }
 
     private static DataSource tenantDataSource(TenantDescriptor tenantDescriptor) {
@@ -107,6 +96,7 @@ public enum CourseStatsConfiguration {
                               + ";AUTO_SERVER=FALSE;DB_CLOSE_DELAY=-1");
             dataSource.setUser("sa");
             dataSource.setPassword("");
+            initializeTenantSchema(dataSource);
             return dataSource;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to create file-based H2 datasource for tenant "
@@ -114,35 +104,31 @@ public enum CourseStatsConfiguration {
         }
     }
 
-    private static MultiTenantPersistentStreamMessageSource buildProjectionSource(
-            org.axonframework.common.configuration.Configuration cfg
-    ) {
-        return new MultiTenantPersistentStreamMessageSource(
-                PROJECTION_PROCESSOR,
-                new PersistentStreamProperties(
-                        PROJECTION_PROCESSOR,
-                        SEGMENT_COUNT,
-                        PersistentStreamSequencingPolicy.SEQUENTIAL_PER_AGGREGATE_POLICY,
-                        Collections.emptyList(),
-                        PersistentStreamProperties.HEAD_POSITION,
-                        null
-                ),
-                Executors.newScheduledThreadPool(SEGMENT_COUNT),
-                BATCH_SIZE,
-                null,
-                cfg,
-                (name, persistentStreamProperties, scheduler, batchSize, context, configuration, tenantDescriptor) ->
-                        new PersistentStreamMessageSource(
-                                name,
-                                configuration.getComponent(AxonServerConnectionManager.class),
-                                configuration.getComponent(AxonServerConfiguration.class),
-                                configuration.getComponent(EventConverter.class),
-                                persistentStreamProperties,
-                                scheduler,
-                                configuration.getComponent(UnitOfWorkFactory.class),
-                                batchSize,
-                                context
-                        )
-        );
+    private static void initializeTenantSchema(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS course_stats (
+                        course_id VARCHAR(255) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        capacity INT NOT NULL,
+                        subscribed_students INT NOT NULL
+                    )
+                    """);
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS token_entry (
+                        processorName VARCHAR(255) NOT NULL,
+                        segment INTEGER NOT NULL,
+                        mask INTEGER NOT NULL,
+                        token BLOB NULL,
+                        tokenType VARCHAR(255) NULL,
+                        timestamp VARCHAR(255) NULL,
+                        owner VARCHAR(255) NULL,
+                        PRIMARY KEY (processorName, segment)
+                    )
+                    """);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to initialize tenant schema", e);
+        }
     }
 }
