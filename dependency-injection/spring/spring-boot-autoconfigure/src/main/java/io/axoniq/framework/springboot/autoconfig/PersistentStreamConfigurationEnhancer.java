@@ -25,14 +25,21 @@ import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourc
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.configuration.DecoratorDefinition;
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
@@ -72,7 +79,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * Actual construction of each {@link PersistentStreamEventSource} is delegated to a
  * {@link PersistentStreamEventSourceFactory} to allow customization if needed.
  * <p>
- * The {@link PersistentStreamEventSourceRegistrar} also implements {@link DisposableBean} and keeps a reference of all
+ * The {@link PersistentStreamConfigurationEnhancer} also implements {@link DisposableBean} and keeps a reference of all
  * {@link ScheduledExecutorService} instances created during {@link #enhance(ComponentRegistry)} to shut them down again
  * when the Spring application context closes.
  * <p>
@@ -85,32 +92,88 @@ import java.util.concurrent.ScheduledExecutorService;
  * @since 5.2.0
  */
 @Internal
-public class PersistentStreamEventSourceRegistrar implements ConfigurationEnhancer, DisposableBean {
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhancer, DisposableBean {
 
-    private final AxonServerConfiguration axonServerConfig;
+    private static final Logger logger = LoggerFactory.getLogger(PersistentStreamConfigurationEnhancer.class);
+
+    private final ObjectProvider<AxonServerConfiguration> axonServerConfigProvider;
     private final PersistentStreamScheduledExecutorBuilder schedulerBuilder;
     private final PersistentStreamEventSourceFactory factory;
     private final List<ScheduledExecutorService> schedulers = new ArrayList<>();
 
     /**
-     * Instantiates a {@code PersistentStreamEventSourceRegistrar}.
+     * Instantiates a {@code PersistentStreamConfigurationEnhancer}.
      *
-     * @param axonServerConfig the Axon Server configuration containing persistent stream settings
-     * @param schedulerBuilder the builder used to create a per-stream {@link ScheduledExecutorService}
-     * @param factory          the factory used to construct each {@link PersistentStreamEventSource}
+     * @param axonServerConfigProvider provider for the Axon Server configuration containing persistent stream settings;
+     *                                 resolved lazily to avoid Spring lifecycle ordering issues with
+     *                                 {@link org.axonframework.extension.spring.config.SpringComponentRegistry}
+     * @param schedulerBuilder         the builder used to create a per-stream {@link ScheduledExecutorService}
+     * @param eventSourceFactory       the eventSourceFactory used to construct each {@link PersistentStreamEventSource}
      */
-    public PersistentStreamEventSourceRegistrar(
-            AxonServerConfiguration axonServerConfig,
+    public PersistentStreamConfigurationEnhancer(
+            ObjectProvider<AxonServerConfiguration> axonServerConfigProvider,
             PersistentStreamScheduledExecutorBuilder schedulerBuilder,
-            PersistentStreamEventSourceFactory factory
+            PersistentStreamEventSourceFactory eventSourceFactory
     ) {
-        this.axonServerConfig = axonServerConfig;
-        this.schedulerBuilder = schedulerBuilder;
-        this.factory = factory;
+        this.axonServerConfigProvider = Objects.requireNonNull(axonServerConfigProvider,
+                                                               "axonServerConfigProvider must not be null");
+        this.schedulerBuilder = Objects.requireNonNull(schedulerBuilder, "schedulerBuilder must not be null");
+        this.factory = Objects.requireNonNull(eventSourceFactory, "eventSourceFactory must not be null");
     }
 
     @Override
     public void enhance(ComponentRegistry registry) {
+        AxonServerConfiguration axonServerConfig = axonServerConfigProvider.getObject();
+        registerConfiguredEventSources(registry, axonServerConfig);
+        configureAutoPersistentStreams(registry, axonServerConfig);
+    }
+
+    private void configureAutoPersistentStreams(ComponentRegistry registry, AxonServerConfiguration axonServerConfig) {
+        if (axonServerConfig.isAutoPersistentStreamsEnabled()) {
+            AxonServerConfiguration.PersistentStreamSettings autoPersistentStreamsSettings = axonServerConfig.getAutoPersistentStreamsSettings();
+            registry.registerDecorator(
+                    DecoratorDefinition
+                            .forType(SubscribingEventProcessorConfiguration.class)
+                            .with((axonConfig, name, delegate) -> {
+                                String desiredStreamName = delegate.processorName() + "-stream";
+                                if (!registry.hasComponent(PersistentStreamEventSource.class, desiredStreamName)) {
+                                    PersistentStreamProperties properties = toPersistentStreamProperties(
+                                            desiredStreamName,
+                                            autoPersistentStreamsSettings);
+                                    ScheduledExecutorService scheduler = schedulerBuilder.build(
+                                            autoPersistentStreamsSettings.getThreadCount(),
+                                            desiredStreamName);
+                                    schedulers.add(scheduler);
+                                    PersistentStreamEventSource streamSource = factory.build(
+                                            desiredStreamName,
+                                            properties,
+                                            scheduler,
+                                            autoPersistentStreamsSettings.getBatchSize(),
+                                            axonConfig
+                                    );
+                                    // note that auto-persistent-streams event sources are NOT registered as
+                                    // spring beans, because decoration runs after beans components are exposed to
+                                    // the SpringComponentRegistry, but they don't need to be.
+                                    registry.registerComponent(
+                                            ComponentDefinition.ofTypeAndName(PersistentStreamEventSource.class,
+                                                                              desiredStreamName)
+                                                               .withBuilder(config -> streamSource)
+                                    );
+                                    delegate.eventSource(streamSource);
+                                } else {
+                                    logger.warn("""
+                                                     Persistent stream source <{}> explicitly configured while \
+                                                     auto-persistent-streams is enabled. The preconfigured stream \
+                                                     source will be reused.""", desiredStreamName);
+                                }
+                                return delegate;
+                            })
+            );
+        }
+    }
+
+    private void registerConfiguredEventSources(ComponentRegistry registry, AxonServerConfiguration axonServerConfig) {
         for (Map.Entry<String, AxonServerConfiguration.PersistentStreamSettings> entry
                 : axonServerConfig.getPersistentStreams().entrySet()) {
             String beanName = entry.getKey();

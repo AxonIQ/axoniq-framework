@@ -21,12 +21,11 @@ package io.axoniq.framework.axonserver.connector.api;
 
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
@@ -286,12 +285,12 @@ public class AxonServerConfiguration {
     /**
      * A toggle dictating whether to create persistent streams for all processing groups. Defaults to {@code false}.
      */
-    private boolean autoPersistentStreamsEnable = false;
+    private boolean autoPersistentStreamsEnabled = false;
 
     /**
      * Settings that are used to create persistent stream definition.
      */
-//    private PersistentStreamSettings autoPersistentStreamsSettings = new PersistentStreamSettings();
+    private PersistentStreamSettings autoPersistentStreamsSettings = new PersistentStreamSettings();
 
     /**
      * Instantiate a {@link Builder} to create an {@link AxonServerConfiguration}.
@@ -381,12 +380,23 @@ public class AxonServerConfiguration {
         return clientId;
     }
 
-    public boolean isAutoPersistentStreamsEnable() {
-        return autoPersistentStreamsEnable;
+    /**
+     * The auto persistent stream setting, controlling if all event processors should default to persistent streams.
+     *
+     * @return {@code true} if auto persistent streams are enabled, {@code false} otherwise
+     */
+    public boolean isAutoPersistentStreamsEnabled() {
+        return autoPersistentStreamsEnabled;
     }
 
-    public void setAutoPersistentStreamsEnable(boolean autoPersistentStreamsEnable) {
-        this.autoPersistentStreamsEnable = autoPersistentStreamsEnable;
+    /**
+     * Set the auto persistent stream setting, controlling if all event processors should default to persistent
+     * streams.
+     *
+     * @param autoPersistentStreamsEnabled the flag indicating auto persistent stream setting should be enabled
+     */
+    public void setAutoPersistentStreamsEnabled(boolean autoPersistentStreamsEnabled) {
+        this.autoPersistentStreamsEnabled = autoPersistentStreamsEnabled;
     }
 
     /**
@@ -394,18 +404,27 @@ public class AxonServerConfiguration {
      * <p>
      * Each persistent stream will be named according to the following pattern:
      * <p>
-     * processingGroupName + "-stream"
+     * processorName + "-stream"
      *
-     * @return Return the settings for all persistent streams that will be created automatically.
+     * @return return the settings for all persistent streams that will be created automatically
      */
-//    public PersistentStreamSettings getAutoPersistentStreamsSettings() {
-//        return autoPersistentStreamsSettings;
-//    }
+    public PersistentStreamSettings getAutoPersistentStreamsSettings() {
+        return autoPersistentStreamsSettings;
+    }
 
-//    public void setAutoPersistentStreamsSettings(
-//            PersistentStreamSettings autoPersistentStreamsSettings) {
-//        this.autoPersistentStreamsSettings = autoPersistentStreamsSettings;
-//    }
+    /**
+     * Set the settings for all persistent streams that will be created automatically.
+     * <p>
+     * Each persistent stream will be named according to the following pattern:
+     * <p>
+     * processorName + "-stream"
+     *
+     * @param autoPersistentStreamsSettings the settings for all persistent streams that will be created automatically
+     */
+    public void setAutoPersistentStreamsSettings(
+            PersistentStreamSettings autoPersistentStreamsSettings) {
+        this.autoPersistentStreamsSettings = autoPersistentStreamsSettings;
+    }
 
     /**
      * Sets the client identifier as it registers itself to Axon Server, must be unique.
