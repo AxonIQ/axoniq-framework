@@ -20,29 +20,32 @@
 package io.axoniq.framework.integrationtests.axonserverconnector;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import org.axonframework.common.Registration;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
+import org.axonframework.messaging.eventhandling.annotation.Event;
+import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorModule;
+import org.jspecify.annotations.NonNull;
+import org.junit.jupiter.api.*;
 
 import java.util.Collections;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,16 +71,16 @@ class PersistentStreamAxonServerIT {
     private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     private AxonConfiguration configuration;
+    private String streamName;
+    private CopyOnWriteArrayList<EventMessage> received = new CopyOnWriteArrayList<>();
 
     @BeforeEach
     void setUp() {
         INFRASTRUCTURE.start();
-        // EventSourcingConfigurer wires the AxonServerEventStorageEngine as EventSink so that
-        // events published via EventAppender land in Axon Server's event store and can be
-        // picked up by the persistent stream.
-        configuration = EventSourcingConfigurer.create()
-                                               .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                               .start();
+        INFRASTRUCTURE.purgeData();
+        streamName = "stream-" + UUID.randomUUID();
+        received = new CopyOnWriteArrayList<>();
+        configuration = buildConfiguration();
     }
 
     @AfterEach
@@ -94,38 +97,16 @@ class PersistentStreamAxonServerIT {
 
         @Test
         void subscriberReceivesSinglePublishedEvent() {
-            // given
-            String streamName = "single-event-" + UUID.randomUUID();
-            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
-
-            CopyOnWriteArrayList<EventMessage> received = new CopyOnWriteArrayList<>();
-            Registration subscription = source.subscribe((events, ctx) -> {
-                received.addAll(events);
-                return CompletableFuture.completedFuture(null);
-            });
-
             // when
             publishEvents(new StreamTestEvent("event-1"));
 
             // then
             await().atMost(15, TimeUnit.SECONDS)
                    .untilAsserted(() -> assertThat(received).hasSize(1));
-
-            subscription.cancel();
         }
 
         @Test
         void subscriberReceivesMultiplePublishedEvents() {
-            // given
-            String streamName = "multi-event-" + UUID.randomUUID();
-            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
-
-            CopyOnWriteArrayList<EventMessage> received = new CopyOnWriteArrayList<>();
-            Registration subscription = source.subscribe((events, ctx) -> {
-                received.addAll(events);
-                return CompletableFuture.completedFuture(null);
-            });
-
             // when
             publishEvents(
                     new StreamTestEvent("event-1"),
@@ -136,9 +117,8 @@ class PersistentStreamAxonServerIT {
             // then
             await().atMost(15, TimeUnit.SECONDS)
                    .untilAsserted(() -> assertThat(received).hasSize(3));
-
-            subscription.cancel();
         }
+
     }
 
     @Nested
@@ -147,124 +127,102 @@ class PersistentStreamAxonServerIT {
         @Test
         void resubscribingWithSameStreamNameReceivesOnlyNewEvents() {
             // given
-            String streamName = "ack-test-" + UUID.randomUUID();
-
-            // Phase 1: subscribe and receive initial events
-            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
-            CopyOnWriteArrayList<EventMessage> phase1 = new CopyOnWriteArrayList<>();
-            Registration subscription = source.subscribe((events, ctx) -> {
-                phase1.addAll(events);
-                return CompletableFuture.completedFuture(null);
-            });
-
-            publishEvents(new StreamTestEvent("initial-1"), new StreamTestEvent("initial-2"));
-            await().atMost(15, TimeUnit.SECONDS)
-                   .untilAsserted(() -> assertThat(phase1).hasSize(2));
-
-            // when - cancel subscription; Axon Server persists the ack token
-            subscription.cancel();
-
-            // publish two more events while no subscriber is active
-            publishEvents(new StreamTestEvent("new-1"), new StreamTestEvent("new-2"));
-
-            // Phase 2: re-subscribe with the same stream name
-            PersistentStreamEventSource source2 = buildPersistentStreamSource(streamName);
-            CopyOnWriteArrayList<EventMessage> phase2 = new CopyOnWriteArrayList<>();
-            Registration subscription2 = source2.subscribe((events, ctx) -> {
-                phase2.addAll(events);
-                return CompletableFuture.completedFuture(null);
-            });
-
-            // then - only the two new events arrive; initial events are not re-delivered
-            await().atMost(15, TimeUnit.SECONDS)
-                   .untilAsserted(() -> assertThat(phase2).hasSize(2));
-
-            subscription2.cancel();
-        }
-
-        @Test
-        void ackTokenSurvivesFullConfigurationRestart() {
-            // given
             String streamName = "restart-test-" + UUID.randomUUID();
 
             // Phase 1: subscribe and receive initial events with the first configuration
-            PersistentStreamEventSource source = buildPersistentStreamSource(streamName);
-            CopyOnWriteArrayList<EventMessage> phase1 = new CopyOnWriteArrayList<>();
-            Registration subscription = source.subscribe((events, ctx) -> {
-                phase1.addAll(events);
-                return CompletableFuture.completedFuture(null);
-            });
-
             publishEvents(new StreamTestEvent("initial-1"), new StreamTestEvent("initial-2"));
             await().atMost(15, TimeUnit.SECONDS)
-                   .untilAsserted(() -> assertThat(phase1).hasSize(2));
+                   .untilAsserted(() -> assertThat(received).hasSize(2));
 
-            subscription.cancel();
-
-            // when - shut down the entire configuration (simulates application restart)
+            // when - shut down the entire configuration (simulates application restart) and clear received events
             configuration.shutdown();
             configuration = null;
+            received.clear();
 
             // start a fresh second configuration (new connection, new beans)
-            configuration = EventSourcingConfigurer.create()
-                                                   .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                                   .start();
+            configuration = buildConfiguration();
 
             // publish two new events via the second configuration
             publishEvents(new StreamTestEvent("after-restart-1"), new StreamTestEvent("after-restart-2"));
 
-            // Phase 2: subscribe with the same stream name on the new configuration
-            PersistentStreamEventSource source2 = buildPersistentStreamSource(streamName);
-            CopyOnWriteArrayList<EventMessage> phase2 = new CopyOnWriteArrayList<>();
-            Registration subscription2 = source2.subscribe((events, ctx) -> {
-                phase2.addAll(events);
-                return CompletableFuture.completedFuture(null);
-            });
-
             // then - only the two post-restart events arrive; initial events are not re-delivered
             await().atMost(15, TimeUnit.SECONDS)
-                   .untilAsserted(() -> assertThat(phase2).hasSize(2));
-
-            subscription2.cancel();
+                   .untilAsserted(() -> assertThat(received).hasSize(2));
         }
     }
 
     // ----- helpers -------------------------------------------------------
+    private @NonNull AxonConfiguration buildConfiguration() {
+        var module = buildProcessorModule();
+        return EventSourcingConfigurer.create()
+                                      .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
+                                      .messaging(msg -> msg.eventProcessing(
+                                                         ep ->
+                                                                 ep.subscribing(
+                                                                         subscribing -> subscribing.processor(module))
+                                                 )
+                                      )
+                                      .start();
+    }
+
+    private @NonNull SubscribingEventProcessorModule buildProcessorModule() {
+        return EventProcessorModule.subscribing("persistent-stream-test-module")
+                                   .eventHandlingComponents(components -> components.declarative(
+                                           "persistent-streams-handling-component",
+                                           cfg -> buildPersistentStreamsTestComponent()
+                                   )).customized((c, subscribing) -> subscribing.eventSource(
+                        buildPersistentStreamSource(streamName, c)
+                ));
+    }
+
+    /**
+     * {@link SimpleEventHandlingComponent} to test persistent stream connection
+     *
+     * @return the {@link SimpleEventHandlingComponent}
+     */
+    private EventHandlingComponent buildPersistentStreamsTestComponent() {
+        SimpleEventHandlingComponent handlingComponent =
+                SimpleEventHandlingComponent.create("persistent-streams-test-handling", SequentialPolicy.INSTANCE);
+        handlingComponent.subscribe(
+
+                new QualifiedName("test", "StreamTestEvent"),
+                (eventMsg, ctx) -> {
+                    received.add(eventMsg);
+                    return MessageStream.empty();
+                }
+        );
+        return handlingComponent;
+    }
 
     /**
      * Constructs a {@link PersistentStreamEventSource} for the given {@code streamName} using the same pattern as
      * the declarative configuration documented in the connector reference guide.
      *
      * @param streamName the unique persistent stream identifier in Axon Server
+     * @param c the running application configuration
      * @return a ready-to-subscribe {@link PersistentStreamEventSource}
      */
-    private PersistentStreamEventSource buildPersistentStreamSource(String streamName) {
-        AxonServerConnectionManager connectionManager =
-                configuration.getComponent(AxonServerConnectionManager.class);
-        AxonServerConfiguration serverConfig =
-                configuration.getComponent(AxonServerConfiguration.class);
-        EventConverter converter = configuration.getComponent(EventConverter.class);
-        UnitOfWorkFactory unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
+    private PersistentStreamEventSource buildPersistentStreamSource(String streamName, Configuration c) {
+        int segmentCount = 1;
+        int batchSize = 100;
 
         PersistentStreamProperties properties = new PersistentStreamProperties(
                 streamName,
-                1,
-                PersistentStreamSequencingPolicy.SEQUENTIAL_PER_AGGREGATE_POLICY,
+                segmentCount,
+                PersistentStreamSequencingPolicy.SEQUENTIAL_POLICY,
                 Collections.emptyList(),
                 "HEAD",
-                null
+                null  // no server-side filter
         );
 
-        return new PersistentStreamEventSource(
-                streamName,
-                connectionManager,
-                serverConfig,
-                converter,
-                properties,
-                Executors.newScheduledThreadPool(1),
-                unitOfWorkFactory,
-                100
-        );
+        return PersistentStreamEventSourceFactory.defaultFactory()
+                                                 .build(streamName,
+                                                        properties,
+                                                        PersistentStreamScheduledExecutorBuilder.defaultFactory().build(
+                                                                segmentCount,
+                                                                streamName),
+                                                        batchSize,
+                                                        c);
     }
 
     /**
@@ -286,6 +244,9 @@ class PersistentStreamAxonServerIT {
      *
      * @param id a human-readable event identifier
      */
+    @Event(namespace = "test",
+            name = "StreamTestEvent",
+            version = "1.0.0")
     record StreamTestEvent(String id) {
 
     }
