@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.springboot.autoconfig;
 
+import io.axoniq.axonserver.connector.AxonServerConnection;
+import io.axoniq.axonserver.connector.event.EventChannel;
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.DefaultPersistentStreamEventSourceFactory;
@@ -28,8 +30,15 @@ import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourc
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import org.assertj.core.api.InstanceOfAssertFactories;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.SubscribableEventSource;
+import org.axonframework.messaging.core.annotation.Namespace;
+import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventhandling.processing.EventProcessor;
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessor;
+import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -59,7 +68,7 @@ class PersistentStreamAutoConfigurationTest {
     }
 
     @Nested
-    class DefaultFactory {
+    class DefaultEventSourceFactory {
 
         @Test
         void defaultFactoryIsRegisteredWhenNonePresent() {
@@ -181,6 +190,42 @@ class PersistentStreamAutoConfigurationTest {
         }
     }
 
+    @Nested
+    class AutoPersistentStreams {
+
+        @Test
+        void persistentStreamWiredAsEventSourceForSubscribingProcessorWhenEnabled() {
+            testContext
+                    .withPropertyValues("axon.axonserver.auto-persistent-streams-enabled=true")
+                    .withBean(TestEventHandlingComponent.class)
+                    .run(context -> {
+                        // given
+                        AxonConfiguration axonConfig = context.getBean(AxonConfiguration.class);
+                        SubscribingEventProcessor processor = axonConfig
+                                .getModuleConfiguration("EventProcessor[test-processor]")
+                                .flatMap(m -> m.getOptionalComponent(EventProcessor.class, "test-processor"))
+                                .filter(SubscribingEventProcessor.class::isInstance)
+                                .map(SubscribingEventProcessor.class::cast)
+                                .orElseThrow();
+
+                        // then
+                        assertThat(eventSourceOf(processor))
+                                .isInstanceOf(PersistentStreamEventSource.class)
+                                .hasFieldOrPropertyWithValue("name", "test-processor-stream");
+                    });
+        }
+    }
+
+    private static SubscribableEventSource eventSourceOf(SubscribingEventProcessor processor) {
+        try {
+            var field = processor.getClass().getDeclaredField("configuration");
+            field.setAccessible(true);
+            return ((SubscribingEventProcessorConfiguration) field.get(processor)).eventSource();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @ContextConfiguration
     @EnableAutoConfiguration
     @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
@@ -188,7 +233,12 @@ class PersistentStreamAutoConfigurationTest {
 
         @Bean
         AxonServerConnectionManager axonServerConnectionManager() {
-            return mock(AxonServerConnectionManager.class);
+            AxonServerConnectionManager mock = mock(AxonServerConnectionManager.class);
+            AxonServerConnection mockConnection = mock(AxonServerConnection.class);
+            when(mock.getConnection(anyString())).thenReturn(mockConnection);
+            EventChannel mockEventChannel = mock(EventChannel.class);
+            when(mockConnection.eventChannel()).thenReturn(mockEventChannel);
+            return mock;
         }
 
         @Bean(name = "eventConverter")
@@ -199,6 +249,15 @@ class PersistentStreamAutoConfigurationTest {
         @Bean
         Converter genericConverter() {
             return mock(Converter.class);
+        }
+    }
+
+    @Namespace("test-processor")
+    static class TestEventHandlingComponent {
+
+        @EventHandler
+        void on(String event) {
+            // intentionally blank
         }
     }
 }

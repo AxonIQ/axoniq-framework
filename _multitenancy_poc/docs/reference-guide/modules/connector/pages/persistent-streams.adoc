@@ -135,6 +135,7 @@ public class AxonConfig {
 The simplest way to configure a persistent stream in Spring Boot is through the properties file.
 Each entry under `axon.axonserver.persistent-streams` registers a `PersistentStreamEventSource` Spring bean named after the map key.
 The `source` value of the processor must match that key exactly.
+See the `io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.PersistentStreamSettings` Java class for all available persistent stream configuration properties.
 
 [source,text]
 ----
@@ -161,6 +162,24 @@ axon.axonserver.persistent-streams.payments-stream.initial-segment-count=4
 
 axon.axonserver.persistent-streams.orders-stream.name=Orders Stream
 axon.axonserver.persistent-streams.orders-stream.initial-segment-count=2
+----
+
+If you want to default all processors to use persistent streams, you could use the following shorthand configuration:
+
+[source,text]
+----
+axon.axonserver.auto-persistent-streams-enabled=true
+----
+
+This automatically configures a persistent stream named `[processor]-stream` for each processor that is not explicitly defined as xref:events:event-processors/streaming.adoc[streaming processor] in your configuration.
+To customize the auto-configured persistent streams further you can use the following configuration properties.
+Same as for individual persistent stream configurations, see the `io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.PersistentStreamSettings` Java class for all available persistent stream configuration properties.
+
+[source,text]
+----
+axon.axonserver.auto-persistent-streams-settings.batch-size=5
+axon.axonserver.auto-persistent-streams-settings.thread-count=10
+axon.axonserver.auto-persistent-streams-settings.initial-segment-count=10
 ----
 
 [#bean_based_config_persistent]
