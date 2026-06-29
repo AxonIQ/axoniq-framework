@@ -29,8 +29,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -1571,7 +1571,7 @@ public class AxonServerConfiguration {
     public static class PersistentStreamSettings {
 
         private static final String DEFAULT_SEQUENCING_POLICY =
-                PersistentStreamSequencingPolicy.SEQUENTIAL_PER_AGGREGATE_POLICY;
+                PersistentStreamSequencingPolicy.SEQUENTIAL_POLICY;
 
         /**
          * The number of segments for the persistent stream if it needs to be created. Defaults to 1.
@@ -1588,9 +1588,9 @@ public class AxonServerConfiguration {
          * <p>
          * Supported sequencing policies are:
          * <ul>
+         *     <li>{@link PersistentStreamSequencingPolicy#SEQUENTIAL_POLICY}</li>
          *     <li>{@link PersistentStreamSequencingPolicy#SEQUENTIAL_PER_AGGREGATE_POLICY} (default)</li>
          *     <li>{@link PersistentStreamSequencingPolicy#FULL_CONCURRENCY_POLICY}</li>
-         *     <li>{@link PersistentStreamSequencingPolicy#SEQUENTIAL_POLICY}</li>
          *     <li>{@link PersistentStreamSequencingPolicy#PROPERTY_SEQUENCING_POLICY}</li>
          *     <li>{@link PersistentStreamSequencingPolicy#METADATA_SEQUENCING_POLICY}</li>
          * </ul>
@@ -1600,7 +1600,7 @@ public class AxonServerConfiguration {
         /**
          * Parameters specified for the sequencing policy.
          */
-        private List<String> sequencingPolicyParameters = new LinkedList<>();
+        private List<String> sequencingPolicyParameters = new ArrayList<>();
 
         /**
          * Expression to filter out events in a persistent stream, expecting the Axon Server Query Language as its
@@ -1680,9 +1680,9 @@ public class AxonServerConfiguration {
          * <p>
          * Supported sequencing policies are:
          * <ul>
+         *     <li>SequentialPolicy</li>
          *     <li>SequentialPerAggregatePolicy (default)</li>
          *     <li>FullConcurrencyPolicy</li>
-         *     <li>SequentialPolicy</li>
          *     <li>PropertySequencingPolicy</li>
          *     <li>MetadataSequencingPolicy</li>
          * </ul>

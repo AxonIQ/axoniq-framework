@@ -107,7 +107,7 @@ public class AxonConfig {
         PersistentStreamProperties properties = new PersistentStreamProperties(
                 streamName,
                 segmentCount,
-                PersistentStreamSequencingPolicy.SEQUENTIAL_PER_AGGREGATE_POLICY,
+                PersistentStreamSequencingPolicy.SEQUENTIAL_POLICY,
                 Collections.emptyList(),
                 "HEAD",
                 null  // no server-side filter
