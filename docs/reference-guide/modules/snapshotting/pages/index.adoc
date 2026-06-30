@@ -71,6 +71,7 @@ Current implementations include:
 
 * *`InMemorySnapshotStore`* - Useful for testing or ephemeral scenarios.
 * *`AxonServerSnapshotStore`* - Stores snapshots in Axon Server with thread-safe, concurrent access.
+* *`PostgresqlEventStorageEngine`* - Postgres specific event storage engine that can store snapshots as well.
 
 Each snapshot contains the entity identifier, payload, position, version, timestamp, and optional metadata. By default, only a single snapshot per entity is retained; new snapshots overwrite the previous one. Future versions of the framework may allow storing multiple snapshots per entity, enabling scenarios such as rollbacks or retaining older snapshot versions.
 
