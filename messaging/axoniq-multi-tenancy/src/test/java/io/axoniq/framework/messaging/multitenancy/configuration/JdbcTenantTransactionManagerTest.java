@@ -49,8 +49,9 @@ import static org.mockito.Mockito.verify;
 
 class JdbcTenantTransactionManagerTest {
 
+    private static final String TOKEN_TABLE = "token_entry";
     private static final JdbcTokenStoreConfiguration TOKEN_STORE_CONFIGURATION = JdbcTokenStoreConfiguration.DEFAULT
-            .schema(TokenSchema.builder().setTokenTable("token_entry").build());
+            .schema(TokenSchema.builder().setTokenTable(TOKEN_TABLE).build());
 
     @Test
     void attachesConnectionExecutorAndAllowsTokenStoreStartup() {
@@ -156,7 +157,7 @@ class JdbcTenantTransactionManagerTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS token_entry (
+                    CREATE TABLE IF NOT EXISTS %s (
                         processorName VARCHAR(255) NOT NULL,
                         segment INTEGER NOT NULL,
                         mask INTEGER NOT NULL,
@@ -166,7 +167,7 @@ class JdbcTenantTransactionManagerTest {
                         owner VARCHAR(255) NULL,
                         PRIMARY KEY (processorName, segment)
                     )
-                    """);
+                    """.formatted(TOKEN_TABLE));
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to initialize tenant schema", e);
         }
@@ -175,7 +176,7 @@ class JdbcTenantTransactionManagerTest {
     private static long tokenEntryCount(DataSource dataSource) {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM token_entry")) {
+             ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM " + TOKEN_TABLE)) {
             resultSet.next();
             return resultSet.getLong(1);
         } catch (SQLException e) {

@@ -26,6 +26,7 @@ import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.Multi
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.pooled.MultiTenantPooledStreamingEventProcessorModule;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.TenantTokenStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.jdbc.JdbcTenantTokenStoreFactory;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.JdbcTokenStoreConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
 import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.transaction.TenantTransactionManagerFactory;
@@ -76,7 +77,7 @@ public enum CourseStatsConfiguration {
                 .componentRegistry(cr -> {
                     cr.registerComponent(TenantTokenStoreFactory.class, cfg ->
                             new JdbcTenantTokenStoreFactory(CourseStatsConfiguration::tenantDataSource,
-                                                            cfg.getComponent(Converter.class),
+                                                            cfg.getComponent(GeneralConverter.class),
                                                             TOKEN_STORE_CONFIGURATION)
                     );
                     cr.registerComponent(TenantTransactionManagerFactory.class, cfg ->
@@ -125,6 +126,9 @@ public enum CourseStatsConfiguration {
                         subscribed_students INT NOT NULL
                     )
                     """);
+
+            // The JDBC token store does not auto-create its table in this example, so the tenant DB bootstrap
+            // needs to create it up front.
             statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS token_entry (
                         processorName VARCHAR(255) NOT NULL,
