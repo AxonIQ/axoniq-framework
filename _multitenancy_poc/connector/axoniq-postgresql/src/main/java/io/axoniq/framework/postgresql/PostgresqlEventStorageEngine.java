@@ -19,10 +19,6 @@
 
 package io.axoniq.framework.postgresql;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.Registration;
@@ -40,9 +36,12 @@ import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.StreamSpliterator;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.SimpleEntry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionalExecutorProvider;
@@ -55,6 +54,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventstreaming.EventCriterion;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.jspecify.annotations.Nullable;
 import org.postgresql.PGConnection;
 import org.postgresql.PGNotification;
 import org.slf4j.Logger;
@@ -85,13 +85,13 @@ import java.util.stream.StreamSupport;
 import javax.sql.DataSource;
 
 /**
- * A {@link EventStorageEngine} implementation backed by PostgreSQL, providing
+ * A {@link EventStorageEngine} and {@link SnapshotStore} implementation backed by PostgreSQL, providing
  * reliable event persistence and streaming with support for tagging.
  *
  * @author John Hendrikx
- * @since 0.1.0
+ * @since 5.0.0
  */
-public final class PostgresqlEventStorageEngine implements EventStorageEngine {
+public final class PostgresqlEventStorageEngine implements EventStorageEngine, SnapshotStore {
 
     private record FinalizedEvent(long position, EventMessage event) {}
 
@@ -119,9 +119,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresqlEventStorageEngine.class);
     private static final TagFilter EMPTY = new TagFilter("", List.of());
     private static final ExecutorService FINALIZER_EXECUTOR = Executors.newSingleThreadExecutor(Thread.ofPlatform().name("PG-Finalizer").factory());  // must be a single thread
-    private static final TypeReference<Map<String, String>> STRING_TO_STRING_MAP_TYPE_REFERENCE = new TypeReference<>() {};
     private static final GlobalSequenceTrackingToken GLOBAL_INDEX_START = new GlobalSequenceTrackingToken(1);
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().configure(SerializationFeature.INDENT_OUTPUT, false);
 
     /**
      * Queries events in order starting from a given global index, limited by the given limit.
@@ -314,6 +312,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     private final DataSource dataSource;
     private final EventConverter converter;
     private final EntitlementManager entitlementManager;
+    private final PostgresqlSnapshotStore snapshotStore;
 
     /**
      * This is the maximum number of consistency tags that are kept track of in
@@ -431,6 +430,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
         this.converter = Objects.requireNonNull(converter, "converter");
         this.entitlementManager = Objects.requireNonNull(entitlementManager, "entitlementManager");
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
+        this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter);
 
         // TODO #7 Allow to configure tables, sequences and indices
         try (
@@ -609,6 +609,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
+        return snapshotStore.load(qualifiedName, identifier);
+    }
+
+    @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("dataSource", dataSource);
         descriptor.describeProperty("converter", converter);
@@ -656,7 +666,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                 eventInsert.setString(2, message.identifier());
                 eventInsert.setString(3, message.type().toString());
                 eventInsert.setBytes(4, converter.convertPayload(message, byte[].class));
-                eventInsert.setString(5, toString(message.metadata()));
+                eventInsert.setString(5, MetadataSerializer.toJson(message.metadata()));
                 eventInsert.execute();
 
                 try (ResultSet keys = eventInsert.getGeneratedKeys()) {
@@ -877,7 +887,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
                         String identifier = resultSet.getString(3);
                         MessageType messageType = MessageType.fromString(resultSet.getString(4));
                         byte[] payload = resultSet.getBytes(5);
-                        Map<String, String> metadata = toMetadata(resultSet.getString(6));
+                        Map<String, String> metadata = MetadataSerializer.fromJson(resultSet.getString(6));
 
                         list.add(new FinalizedEvent(
                             globalIndex,
@@ -1127,24 +1137,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine {
 
     private TransactionalExecutor<Connection> connectionExecutor(ProcessingContext processingContext) {
         return transactionalExecutorProvider.getTransactionalExecutor(processingContext);
-    }
-
-    private static Map<String, String> toMetadata(String json) {
-        try {
-            return OBJECT_MAPPER.readValue(json, STRING_TO_STRING_MAP_TYPE_REFERENCE);
-        }
-        catch (JsonProcessingException e) {  // should never occur
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static String toString(Map<String, String> metadata) {
-        try {
-            return OBJECT_MAPPER.writeValueAsString(metadata);
-        }
-        catch (JsonProcessingException e) {  // should never occur
-            throw new IllegalStateException(e);
-        }
     }
 
     /**
