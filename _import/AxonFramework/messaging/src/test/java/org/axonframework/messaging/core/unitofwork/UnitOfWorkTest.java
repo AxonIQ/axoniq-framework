@@ -28,6 +28,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
@@ -112,6 +113,51 @@ class UnitOfWorkTest extends ProcessingLifecycleTest<UnitOfWork> {
 
         assertTrue(actual.isCompletedExceptionally());
         assertInstanceOf(MockException.class, actual.exceptionNow());
+    }
+
+    @Test
+    void errorsThrownInInvocationAreReturnedInFutureInsteadOfHangingTheUnitOfWork() {
+        UnitOfWork testSubject = createTestSubject();
+        CompletableFuture<Object> actual = testSubject.executeWithResult(c -> {
+            throw new NoClassDefFoundError("Simulating a missing class on the classpath");
+        });
+
+        // An Error (not an Exception) thrown by the invocation must fail the future rather than escape #safe.
+        // Previously it left the invocation 'result' uncompleted and the thenCombine in #executeWithResult
+        // waited on it forever, hanging the Unit of Work with no exception surfaced.
+        assertTrue(actual.isDone(), "Unit of Work hung instead of failing when the invocation threw an Error");
+        assertTrue(actual.isCompletedExceptionally());
+        assertInstanceOf(NoClassDefFoundError.class, unwrap(actual.exceptionNow()));
+    }
+
+    @Test
+    void executeWithResultFailsFastWhenCommitFailsBeforeInvocationRuns() {
+        UnitOfWork testSubject = createTestSubject();
+        AtomicBoolean invoked = new AtomicBoolean(false);
+
+        // Fail in a phase that runs *before* INVOCATION, so the invocation action - and therefore the
+        // 'result' future it would have settled - never runs.
+        testSubject.on(ProcessingLifecycle.DefaultPhases.PRE_INVOCATION,
+                       c -> CompletableFuture.failedFuture(new MockException("pre-invocation failure")));
+        CompletableFuture<Object> actual = testSubject.executeWithResult(c -> {
+            invoked.set(true);
+            return new CompletableFuture<>(); // a 'result' that never completes on its own
+        });
+
+        assertFalse(invoked.get(), "Invocation action must not run after a pre-invocation failure");
+        // With the previous thenCombine this future would hang forever, since 'result' never completes;
+        // thenCompose propagates the commit failure immediately.
+        assertTrue(actual.isDone(), "executeWithResult hung instead of failing fast on commit failure");
+        assertTrue(actual.isCompletedExceptionally());
+        assertInstanceOf(MockException.class, unwrap(actual.exceptionNow()));
+    }
+
+    private static Throwable unwrap(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof CompletionException && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     @Test
