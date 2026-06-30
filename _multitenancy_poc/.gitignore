@@ -25,10 +25,15 @@ docs/_playbook/build
 
 # Claude Code
 .claude/settings.local.json
+.claude/worktrees/
 .ai/temp
 
 # AI ASSISTANT - Kiro
 .kiro
+
+# Spec-kit (local use only, not committed, testing out)
+.specify/
+.claude/skills/speckit-*/
 
 # AI ASSISTANT - Cursor
 .vscode
