@@ -1,0 +1,99 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.messaging.transformation.events.configuration;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
+import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
+import io.axoniq.framework.messaging.transformation.events.TransformingEventStore;
+import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.messaging.core.MessageType;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * End-to-end wiring: the {@link EventTransformationConfigurationEnhancer} is discovered via
+ * the {@code java.util.ServiceLoader} mechanism and installs the
+ * {@link TransformingEventStore} decorator only when the application has registered an
+ * {@link EventTransformerChain}.
+ */
+final class EventTransformationConfigurationEnhancerTest {
+
+    private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
+    private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+
+    @Test
+    void enhancerIsRegisteredAsAServiceLoaderProvider() throws Exception {
+        URL registration = getClass().getClassLoader()
+                .getResource("META-INF/services/" + ConfigurationEnhancer.class.getName());
+
+        assertThat(registration)
+                .as("META-INF/services entry must exist for the framework to auto-discover this enhancer")
+                .isNotNull();
+        try (InputStream stream = registration.openStream()) {
+            String contents = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(contents)
+                    .contains(EventTransformationConfigurationEnhancer.class.getName());
+        }
+    }
+
+    @Test
+    void noTransformingDecoratorWhenNoChainIsRegistered() {
+        EventStore delegate = Mockito.mock(EventStore.class);
+
+        EventStore resolved = EventSourcingConfigurer.create()
+                                                     .registerEventStore(config -> delegate)
+                                                     .build()
+                                                     .getComponent(EventStore.class);
+
+        // Other framework decorators (e.g., InterceptingEventStore) may still wrap; the
+        // contract is that OUR decorator is NOT installed when no chain is registered.
+        assertThat(resolved)
+                .as("absence of a chain MUST NOT install the TransformingEventStore decorator")
+                .isNotInstanceOf(TransformingEventStore.class);
+    }
+
+    @Test
+    void transformingDecoratorWrapsEventStoreWhenChainIsRegistered() {
+        EventStore delegate = Mockito.mock(EventStore.class);
+        EventTransformation v1ToV2Transformation = EventTransformation.from(V1).to(V2)
+                                                                .transform(JsonNode.class, (in, ctx) -> in.deepCopy());
+        EventTransformerChain chain = EventTransformerChain.builder().register(v1ToV2Transformation).build();
+
+        EventStore resolved = EventSourcingConfigurer.create()
+                                                     .registerEventStore(config -> delegate)
+                                                     .componentRegistry(cr -> cr.registerComponent(EventTransformerChain.class, c -> chain))
+                                                     .build()
+                                                     .getComponent(EventStore.class);
+
+        assertThat(resolved)
+                .as("registering a chain MUST cause the framework to install the transforming decorator")
+                .isInstanceOf(TransformingEventStore.class);
+    }
+}
