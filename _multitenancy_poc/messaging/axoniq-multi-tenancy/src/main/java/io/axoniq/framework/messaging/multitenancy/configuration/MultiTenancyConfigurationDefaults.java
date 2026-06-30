@@ -38,6 +38,8 @@ import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantRoutingEve
 import io.axoniq.framework.messaging.multitenancy.query.MultiTenantAxonServerQueryBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.StringUtils;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -113,6 +115,8 @@ import java.util.concurrent.CompletableFuture;
  * @author Jan Galinski
  * @since 5.3.0
  */
+@Internal
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer {
 
     /**
