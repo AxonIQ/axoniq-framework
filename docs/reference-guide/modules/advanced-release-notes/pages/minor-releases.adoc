@@ -5,4 +5,41 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 
 [#release_5_1]
 == Release 5.1
+=== Release 5.1.2
 
+==== Bug fixes
+
+- [#4625] Use `EventTypeResolver` in Axon Server `EventStorageEngines` to default `null` `revision` to default version link:https://github.com/AxonIQ/axoniq-framework/pull/186[#186]
+- fix(axonserver): preserve event metadata when appending aggregate-based events link:https://github.com/AxonIQ/axoniq-framework/pull/158[#158]
+
+==== Dependency upgrades
+
+- Upgrade Axon Framework to 5.1.2 and Entitlement Manager to 1.0.1 link:https://github.com/AxonIQ/axoniq-framework/pull/190[#190]
+
+==== Contributors
+
+We'd like to thank all the contributors who worked on this release!
+
+- link:https://github.com/smcvb[@smcvb]
+- link:https://github.com/MateuszNaKodach[@MateuszNaKodach]
+- link:https://github.com/hatzlj[@hatzlj]
+
+=== Release 5.1.1
+
+==== Enhancements
+
+- Port (5.1.x): fix the slack-release-notification.yml link:https://github.com/AxonIQ/axoniq-framework/pull/142[#142]
+- Port (5.1.x): For convenience include the data protection module in the BOM link:https://github.com/AxonIQ/axoniq-framework/pull/131[#131]
+
+==== Bug fixes
+
+- Port (5.1.x): Fix failing tests link:https://github.com/AxonIQ/axoniq-framework/pull/139[#139]
+- Port (5.1.x): Adjust import for TerminalEventMessage  link:https://github.com/AxonIQ/axoniq-framework/pull/133[#133]
+
+=== Contributors
+
+We'd like to thank all the contributors who worked on this release!
+
+- link:https://github.com/smcvb[@smcvb]
+- link:https://github.com/MateuszNaKodach[@MateuszNaKodach]
+- link:https://github.com/hatzlj[@hatzlj]

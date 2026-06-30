@@ -19,6 +19,7 @@ include::partial$advanced-modules.excalidraw[]
 |<<Axoniq Axon Server connector>> |`axon-server-connector`         |`io.axoniq.framework` |https://central.sonatype.com/search?q=io.axoniq.framework%3Aaxon-server-connector[available]
 |<<Axoniq distributed messaging>> |`axoniq-distributed-messaging`  |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-distributed-messaging[available]
 |<<Axoniq dead letter queue>>     |`axoniq-dead-letter-queue`      |`io.axoniq.framework` |https://central.sonatype.com/search?q=axoniq-dead-letter-queue[available]
+|<<Axoniq message transformation>> |`axoniq-message-transformation` |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-message-transformation[available]
 // |<<Axoniq tracing OpenTelemetry>> |`axon-tracing-opentelemetry`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-tracing-opentelemetry[available]
 ifdef::data-protection[]
 |<<Axoniq Data Protection>> |`axoniq-data-protection`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-data-protection[available]
@@ -44,6 +45,11 @@ This module provides distributed variants for messaging components (namely `Comm
 === Axoniq dead letter queue
 
 This module provides the dead letter queue functionality.
+
+=== Axoniq message transformation
+
+This module rewrites stored events as they are read, so handlers always receive the current version. It is the Axoniq Framework replacement for Axon Framework 4 upcasting.
+See the xref:message-transformation:index.adoc[event transformation reference] to get started.
 
 // === Axoniq tracing OpenTelemetry
 //
