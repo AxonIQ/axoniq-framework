@@ -1,0 +1,153 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.messaging.transformation.events;
+
+import io.axoniq.framework.messaging.transformation.ChainConfigurationException;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.concurrent.CompletionException;
+
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectMessages;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.eventOf;
+import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.neverInvokedConverter;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Verifies a payload mapping may not change a {@code QualifiedName} (it may change only the version); a genuine name
+ * change must use {@link EventTransformation#rename(MessageType, MessageType)}, which the chain accepts. A
+ * name-changing mapping with an exact {@code from} is rejected at registration; with a predicate {@code from} only at
+ * read time, as its matched name is known per-event.
+ */
+final class EventTransformerChainNameChangeRejectedTest {
+
+    private static final MessageType SAMPLE_V1 = new MessageType("com.example.Sample", "1.0.0");
+    private static final MessageType SAMPLE_V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageType RENAMED = new MessageType("com.example.Renamed", "1.0.0");
+    private static final MessageConverter CONVERTER = neverInvokedConverter();
+
+    @Nested final class ExactFrom {
+
+        @Test
+        void differentQualifiedNameRejectedAtRegistration() {
+            // given a payload mapping whose declared 'to' changes the qualified name, not just the version
+            EventTransformation nameChangingMapping = EventTransformation.from(SAMPLE_V1)
+                                                                         .to(RENAMED)
+                                                                         .transform(String.class, (in, ctx) -> in);
+            EventTransformerChain.Builder builder = EventTransformerChain.builder();
+
+            // when / then
+            assertThatThrownBy(() -> builder.register(nameChangingMapping))
+                    .isInstanceOf(ChainConfigurationException.class)
+                    .hasMessageContaining("rename")
+                    .hasMessageContaining(SAMPLE_V1.toString())
+                    .hasMessageContaining(RENAMED.toString());
+        }
+
+        @Test
+        void renameWithDifferentQualifiedNameIsAcceptedAtRegistration() {
+            // given a genuine rename (not a mapping) that changes the qualified name
+            EventTransformation rename = EventTransformation.rename(SAMPLE_V1, RENAMED);
+
+            // when / then a rename is exactly how a name change is expressed, so it is accepted
+            assertThatCode(() -> EventTransformerChain.builder().register(rename).build())
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void sameQualifiedNameVersionBumpApplied() {
+            // given
+            EventTransformation structuralUpcast = EventTransformation.from(SAMPLE_V1)
+                                                                      .to(SAMPLE_V2)
+                                                                      .transform(String.class,
+                                                                                 (in, ctx) -> in + "-upcasted");
+            EventTransformerChain chain = EventTransformerChain.builder()
+                                                               .register(structuralUpcast)
+                                                               .build();
+            EventMessage storedV1 = eventOf(SAMPLE_V1, "payload");
+
+            // when
+            List<EventMessage> outputs = collectMessages(chain.transform(
+                    MessageStream.fromIterable(List.of(storedV1)), null, CONVERTER, alwaysEmptyMessageTypeResolver()));
+
+            // then
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(SAMPLE_V2);
+            assertThat(outputs.getFirst().payload()).isEqualTo("payload-upcasted");
+        }
+    }
+
+    @Nested final class PredicateFrom {
+
+        @Test
+        void differentQualifiedNameRejectedAtReadTime() {
+            // given: registration is allowed because a predicate's matched source name is
+            // not known statically; the name change is only detectable once an event matches.
+            EventTransformation nameChangingMapping = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+                                                                         .to(RENAMED)
+                                                                         .transform(String.class, (in, ctx) -> in);
+            EventTransformerChain chain = EventTransformerChain.builder()
+                                                               .register(nameChangingMapping)
+                                                               .build();
+            EventMessage storedV1 = eventOf(SAMPLE_V1, "payload");
+            MessageStream<EventMessage> transformed = chain.transform(
+                    MessageStream.fromIterable(List.of(storedV1)), null, CONVERTER, alwaysEmptyMessageTypeResolver());
+
+            // when / then
+            assertThatThrownBy(() -> collectMessages(transformed))
+                    .isInstanceOf(CompletionException.class)
+                    .cause()
+                    .isInstanceOf(ChainConfigurationException.class)
+                    .hasMessageContaining("rename")
+                    .hasMessageContaining(SAMPLE_V1.toString())
+                    .hasMessageContaining(RENAMED.toString());
+        }
+
+        @Test
+        void sameQualifiedNameVersionBumpApplied() {
+            // given
+            EventTransformation structuralUpcast = EventTransformation.from(type -> type.equals(SAMPLE_V1))
+                                                                      .to(SAMPLE_V2)
+                                                                      .transform(String.class,
+                                                                                 (in, ctx) -> in + "-upcasted");
+            EventTransformerChain chain = EventTransformerChain.builder()
+                                                               .register(structuralUpcast)
+                                                               .build();
+            EventMessage storedV1 = eventOf(SAMPLE_V1, "payload");
+
+            // when
+            List<EventMessage> outputs = collectMessages(chain.transform(
+                    MessageStream.fromIterable(List.of(storedV1)), null, CONVERTER, alwaysEmptyMessageTypeResolver()));
+
+            // then
+            assertThat(outputs).hasSize(1);
+            assertThat(outputs.getFirst().type()).isEqualTo(SAMPLE_V2);
+            assertThat(outputs.getFirst().payload()).isEqualTo("payload-upcasted");
+        }
+    }
+}
