@@ -36,6 +36,7 @@
     <modules>
         <module>multi-tenancy-java</module>
         <module>multi-tenancy-jdbc-java</module>
+        <module>multi-tenancy-spring-boot-4</module>
     </modules>
 
     <dependencyManagement>
