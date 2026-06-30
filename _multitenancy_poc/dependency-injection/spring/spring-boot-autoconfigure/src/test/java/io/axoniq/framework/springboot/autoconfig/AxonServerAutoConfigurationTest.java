@@ -62,7 +62,7 @@ class AxonServerAutoConfigurationTest {
     void setUp() {
         testContext = new ApplicationContextRunner()
                 .withUserConfiguration(TestContext.class)
-                .withPropertyValues("axon.axonserver.enabled=true");
+                .withPropertyValues("axon.axonserver.enabled=true", "axon.multitenancy.enabled=false");
     }
 
     @BeforeAll
@@ -80,6 +80,7 @@ class AxonServerAutoConfigurationTest {
         testContext.withPropertyValues(
                            "axon.axonserver.enabled=false",
                            "axon.postgresql.enabled=false",
+                           "axon.multitenancy.enabled=false",
                            "axon.eventstorage.jpa.polling-interval=0")
                    .run(
                            context -> {
@@ -93,7 +94,7 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void disablingEventStoreViaProperty() {
-        testContext.withPropertyValues("axon.axonserver.event-store.enabled=false").run(
+        testContext.withPropertyValues("axon.axonserver.event-store.enabled=false", "axon.multitenancy.enabled=false").run(
                 context -> {
                     assertThat(context.getBean(AxonServerConfiguration.class).getEventStore().isEnabled())
                             .isFalse();
@@ -115,7 +116,7 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void distributedCommandBusThreadCountIsAdjustableThroughAxonServerConfiguration() {
-        testContext.withPropertyValues("axon.axonserver.command-threads=42").run(context -> {
+        testContext.withPropertyValues("axon.axonserver.command-threads=42", "axon.multitenancy.enabled=false").run(context -> {
             assertThat(context).hasSingleBean(AxonServerConfiguration.class);
             assertThat(context).hasSingleBean(DistributedCommandBusConfiguration.class);
 
@@ -128,7 +129,7 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void distributedQueryBusThreadCountIsAdjustableThroughAxonServerConfiguration() {
-        testContext.withPropertyValues("axon.axonserver.query-threads=42").run(context -> {
+        testContext.withPropertyValues("axon.axonserver.query-threads=42", "axon.multitenancy.enabled=false").run(context -> {
             assertThat(context).hasSingleBean(AxonServerConfiguration.class);
             assertThat(context).hasSingleBean(DistributedQueryBusConfiguration.class);
 
@@ -147,7 +148,8 @@ class AxonServerAutoConfigurationTest {
                    .withPropertyValues(
                            "axon.tags.region=Eu",
                            "axon.tags.country=It",
-                           "axon.tags.city=Rome"
+                           "axon.tags.city=Rome",
+                           "axon.multitenancy.enabled=false"
                    )
                    .run(context -> {
                        TagsConfiguration tagsConfiguration = context.getBean(TagsConfiguration.class);

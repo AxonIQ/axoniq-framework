@@ -18,7 +18,10 @@
  */
 
 /**
- * Spring Boot auto configuration for Axoniq Framework.
+ * Spring Boot auto-configuration for Axoniq Framework components.
+ *
+ * @author Jan Galinski
+ * @since 5.3.0
  */
 @org.jspecify.annotations.NullMarked
 package io.axoniq.framework.springboot.autoconfig;

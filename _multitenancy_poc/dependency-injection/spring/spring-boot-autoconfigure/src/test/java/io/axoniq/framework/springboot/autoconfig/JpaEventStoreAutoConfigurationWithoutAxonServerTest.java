@@ -50,6 +50,7 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
                 .withPropertyValues(
                         "axon.axonserver.enabled=false",
                         "axon.postgresql.enabled=false",
+                        "axon.multitenancy.enabled=false",
                         "axon.eventstorage.jpa.polling-interval=0"
                 )
                 .withUserConfiguration(EmptyTestContext.class)
@@ -63,7 +64,7 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void axonServerWinsIfEnabled() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=true")
+                .withPropertyValues("axon.axonserver.enabled=true", "axon.multitenancy.enabled=false")
                 .withUserConfiguration(EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(EventStore.class);
@@ -76,7 +77,11 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void notConstructIfEventStoreDefinitionPresent() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false")
+                .withPropertyValues(
+                        "axon.axonserver.enabled=false",
+                        "axon.postgresql.enabled=false",
+                        "axon.multitenancy.enabled=false"
+                )
                 .withUserConfiguration(ContextWithStore.class, EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context)
@@ -89,7 +94,11 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void notConstructIfEventStorageEngineDefinitionPresent() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=false", "axon.postgresql.enabled=false")
+                .withPropertyValues(
+                        "axon.axonserver.enabled=false",
+                        "axon.postgresql.enabled=false",
+                        "axon.multitenancy.enabled=false"
+                )
                 .withUserConfiguration(ContextWithEngine.class, EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context)
