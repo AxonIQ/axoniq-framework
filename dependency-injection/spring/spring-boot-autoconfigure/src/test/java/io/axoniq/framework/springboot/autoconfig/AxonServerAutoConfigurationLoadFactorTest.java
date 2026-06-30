@@ -39,7 +39,8 @@ class AxonServerAutoConfigurationLoadFactorTest {
 
     @BeforeEach
     void setUp() {
-        testContext = new ApplicationContextRunner();
+        testContext = new ApplicationContextRunner()
+                .withPropertyValues("axon.multitenancy.enabled=false");
     }
 
     @BeforeAll

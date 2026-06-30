@@ -36,7 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PostgresqlAutoConfigurationTest {
 
     private final ApplicationContextRunner testContext = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(PostgresqlAutoConfiguration.class));
+            .withConfiguration(AutoConfigurations.of(PostgresqlAutoConfiguration.class))
+            .withPropertyValues("axon.multitenancy.enabled=false");
 
     @Test
     void disablerCreatedWhenPropertyIsFalse() {

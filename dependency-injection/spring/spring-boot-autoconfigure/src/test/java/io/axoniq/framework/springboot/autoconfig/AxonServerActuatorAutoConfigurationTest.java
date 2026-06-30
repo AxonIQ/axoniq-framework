@@ -48,7 +48,8 @@ class AxonServerActuatorAutoConfigurationTest {
 
     @BeforeEach
     void setUp() {
-        testApplicationContext = new ApplicationContextRunner();
+        testApplicationContext = new ApplicationContextRunner()
+                .withPropertyValues("axon.multitenancy.enabled=false");
     }
 
     @BeforeAll
@@ -66,7 +67,8 @@ class AxonServerActuatorAutoConfigurationTest {
         testApplicationContext.withUserConfiguration(TestContext.class)
                               .withPropertyValues(
                                       "axon.axonserver.enabled:false",
-                                      "axon.postgresql.enabled:false"
+                                      "axon.postgresql.enabled:false",
+                                      "axon.multitenancy.enabled=false"
                               )
                               .run(context -> {
                                   assertThat(context).doesNotHaveBean(AxonServerHealthIndicator.class);
@@ -77,7 +79,7 @@ class AxonServerActuatorAutoConfigurationTest {
     @Test
     void axonServerHealthIndicatorIsCreated() {
         testApplicationContext.withUserConfiguration(TestContextWithMockAxonServer.class)
-                              .withPropertyValues("axon.axonserver.enabled:true")
+                              .withPropertyValues("axon.axonserver.enabled:true", "axon.multitenancy.enabled=false")
                               .run(context -> {
                                   assertThat(context).hasSingleBean(AxonServerHealthIndicator.class);
                                   assertThat(context).hasSingleBean(AxonServerStatusAggregator.class);
@@ -113,7 +115,7 @@ class AxonServerActuatorAutoConfigurationTest {
         testApplicationContext.withUserConfiguration(
                                       TestContextWithMockAxonServer.class, TestContextWithCustomBean.class
                               )
-                              .withPropertyValues("axon.axonserver.enabled:true")
+                              .withPropertyValues("axon.axonserver.enabled:true", "axon.multitenancy.enabled=false")
                               .run(context -> {
                                   //existence
                                   assertThat(context).hasSingleBean(CustomSimpleStatusAggregator.class);

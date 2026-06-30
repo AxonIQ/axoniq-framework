@@ -45,7 +45,8 @@ class DeadLetterQueueProcessorPropertiesTest {
             classes = MyContext.class,
             properties = {
                     "axon.axonserver.enabled=false",
-                    "axon.postgresql.enabled=false"
+                    "axon.postgresql.enabled=false",
+                    "axon.multitenancy.enabled=false"
             }
     )
     @Nested
@@ -71,6 +72,7 @@ class DeadLetterQueueProcessorPropertiesTest {
             properties = {
                     "axon.axonserver.enabled=false",
                     "axon.postgresql.enabled=false",
+                    "axon.multitenancy.enabled=false",
                     "axon.eventhandling.processors.my-processor.dlq.enabled=true",
                     "axon.eventhandling.processors.my-processor.dlq.cache.size=2048"
             }
@@ -109,6 +111,7 @@ class DeadLetterQueueProcessorPropertiesTest {
             properties = {
                     "axon.axonserver.enabled=false",
                     "axon.postgresql.enabled=false",
+                    "axon.multitenancy.enabled=false",
                     "axon.eventhandling.processors.processor-a.dlq.enabled=true",
                     "axon.eventhandling.processors.processor-b.dlq.enabled=true",
                     "axon.eventhandling.processors.processor-b.dlq.cache.size=512"

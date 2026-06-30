@@ -12,9 +12,11 @@ This list compares the current `axoniq-multi-tenancy` module against the local `
 ## Feature Work
 
 - Spring Boot auto-configuration
-    - Provide a Spring Boot starter that auto-registers the tenant multi-tenancy infrastructure.
-    - Expose tenant-aware beans through auto-configuration so applications do not need manual wiring.
-    - Keep the auto-configuration aligned with the existing non-Spring configuration path.
+  - Provide Spring Boot auto-configuration in `dependency-injection/spring/spring-boot-autoconfigure`.
+  - Expose the `MultiTenancyConfigurationDefaults` enhancer as a Spring bean so the existing Spring integration picks it up.
+  - Add `axon.multitenancy.enabled=false` opt-out support that disables the enhancer when multi-tenancy is not desired.
+  - Keep the multi-tenancy core module free of direct Spring dependencies.
+  - Add the thin `dependency-injection/spring/spring-boot-starter` dependency wrapper once the autoconfiguration is in place.
 
 
 

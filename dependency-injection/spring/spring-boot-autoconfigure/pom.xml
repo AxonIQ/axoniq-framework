@@ -59,6 +59,16 @@
         <!-- Axoniq -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-multi-tenancy</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>2.22</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-dead-letter</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>
