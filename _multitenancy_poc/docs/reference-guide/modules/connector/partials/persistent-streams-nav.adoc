@@ -1,1 +1,0 @@
-*** xref:connector:persistent-streams.adoc[[.advanced-framework]#Persistent Streams#]

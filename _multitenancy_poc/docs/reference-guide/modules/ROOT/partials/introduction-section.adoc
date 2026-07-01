@@ -1,7 +1,0 @@
-== What is Axoniq Framework
-
-Axoniq Framework adds to Axon Framework by providing production-grade features and tooling.
-As such, it enhances the message-driven architecture promoted by Axon Framework, making it more focused to develop and easier to maintain.
-You will find [.advanced-framework]#this icon# to mark Axoniq Framework features throughout this documentation.
-When no such icon is present, you are dealing with Axon Framework features.
-For an extensive write-down of the difference between Axon and Axoniq Framework, we recommend reading the xref:framework-comparison:index.adoc[Framework Comparison] page.

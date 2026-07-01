@@ -1,1 +1,0 @@
-* [.advanced-framework]#Axoniq Framework#, adding production-grade feature and tooling on top of Axon Framework
