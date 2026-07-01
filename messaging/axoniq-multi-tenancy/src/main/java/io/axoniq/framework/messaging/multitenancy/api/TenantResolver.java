@@ -31,6 +31,7 @@ import java.util.function.BiFunction;
  * @author Stefan Dragisic
  * @since 5.3.0
  */
+// TODO: Should we at least support passing the (nullable) ProcessingContext?
 public interface TenantResolver<M extends Message>
         extends BiFunction<M, Collection<TenantDescriptor>, TenantDescriptor> {
 

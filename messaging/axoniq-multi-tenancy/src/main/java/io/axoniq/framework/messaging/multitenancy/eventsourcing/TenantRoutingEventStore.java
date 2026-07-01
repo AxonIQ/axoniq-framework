@@ -78,6 +78,8 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     private final Map<TenantDescriptor, Registration> subscribeRegistrations = new ConcurrentHashMap<>();
 
     private final TenantEventSegmentFactory tenantSegmentFactory;
+
+    // TODO: either switch to TenantResolver<EventMessage> or remove the TenantResolverRegistry and always just use one default.
     private final TenantResolver<Message> tenantResolver;
 
     /**

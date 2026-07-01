@@ -16,6 +16,15 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.pooled;
 
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessor;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessorModule;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.TenantEventProcessorSegmentFactory;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.TenantTokenStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.inmemory.InMemoryTenantTokenStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.transaction.TenantTransactionManagerFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantRoutingEventStore;
 import org.axonframework.common.AxonThreadFactory;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -26,25 +35,13 @@ import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.common.configuration.ModuleBuilder;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.eventstore.EventStore;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantRoutingEventStore;
-import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessor;
-import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.MultiTenantEventProcessorModule;
-import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.TenantEventProcessorSegmentFactory;
-import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.transaction.TenantTransactionManagerFactory;
-import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.TenantTokenStoreFactory;
-import io.axoniq.framework.messaging.multitenancy.eventhandling.processing.streaming.token.store.inmemory.InMemoryTenantTokenStoreFactory;
+import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.configuration.DefaultEventHandlingComponentsConfigurer;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorCustomization;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-//import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue;
-//import org.axonframework.messaging.eventhandling.deadletter.CachingSequencedDeadLetterQueue;
-//import org.axonframework.messaging.eventhandling.deadletter.DeadLetteringEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.interception.InterceptingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessor;
@@ -52,24 +49,26 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceCachingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
-import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+
+//import org.axonframework.messaging.deadletter.SequencedDeadLetterQueue;
+//import org.axonframework.messaging.eventhandling.deadletter.CachingSequencedDeadLetterQueue;
+//import org.axonframework.messaging.eventhandling.deadletter.DeadLetteringEventHandlingComponent;
 
 /**
  * A configuration module for configuring and registering a {@link MultiTenantEventProcessor} backed by per-tenant
@@ -226,7 +225,7 @@ public class MultiTenantPooledStreamingEventProcessorModule
                 .ofTypeAndName(StreamingEventProcessor.class, processorName)
                 .withBuilder(cfg -> {
                     var tenantTokenStoreFactory = cfg.getOptionalComponent(TenantTokenStoreFactory.class)
-                                                    .orElseGet(InMemoryTenantTokenStoreFactory::new);
+                                                    .orElseGet(InMemoryTenantTokenStoreFactory::new); // TODO: needed?
                     var tenantTransactionManagerFactory = cfg.getOptionalComponent(TenantTransactionManagerFactory.class);
                     TenantEventProcessorSegmentFactory tenantSegmentFactory = tenantDescriptor ->
                             createTenantProcessor(tenantDescriptor, cfg, tenantTokenStoreFactory,
