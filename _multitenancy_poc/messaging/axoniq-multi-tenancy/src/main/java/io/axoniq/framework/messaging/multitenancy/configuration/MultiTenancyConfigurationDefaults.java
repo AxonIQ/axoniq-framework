@@ -233,6 +233,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         );
     }
 
+    // TODO: No fallback needed, no decorator
     private EventStore createTenantRoutingEventStore(Configuration config, EventStore delegate) {
         TenantResolverRegistry resolverRegistry = config.getComponent(TenantResolverRegistry.class);
         if (!config.hasComponent(TenantEventSegmentFactory.class) || !resolverRegistry.hasResolver()) {
@@ -354,6 +355,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 //        return multiTenantStore;
 //    }
 
+    // TenantEventSegmentFactory default implementation
     private EventStore defaultEventStoreSegment(Configuration config, TenantDescriptor tenant) {
         EventStore rawEventStore = config.getOptionalComponent(AxonServerConnectionManager.class)
                                          .map(ignored -> new StorageEngineBackedEventStore(
@@ -362,11 +364,14 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                                          config
                                                  ),
                                                  new SimpleEventBus(),
+                                                 // TODO: I need to choose other tagresolvers if required
                                                  new AnnotationBasedTagResolver()
                                          ))
+                                         // FIXME: Fallback to inmem?
                                          .orElseGet(() -> new StorageEngineBackedEventStore(
                                                  new InMemoryEventStorageEngine(),
                                                  new SimpleEventBus(),
+                                                 // TODO: I need to choose other tagresolvers if required
                                                  new AnnotationBasedTagResolver()
                                          ));
 
