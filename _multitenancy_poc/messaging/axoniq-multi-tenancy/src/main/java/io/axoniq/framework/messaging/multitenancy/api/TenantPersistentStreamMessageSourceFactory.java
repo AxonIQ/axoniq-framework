@@ -48,6 +48,7 @@ public interface TenantPersistentStreamMessageSourceFactory {
      * @param tenantDescriptor           The tenant to build the stream source for.
      * @return A tenant-specific persistent stream message source.
      */
+    // FIXME: remove context parameter
     PersistentStreamMessageSource build(String name,
                                         PersistentStreamProperties persistentStreamProperties,
                                         ScheduledExecutorService scheduler,

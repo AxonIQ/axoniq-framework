@@ -45,14 +45,45 @@ Derive tenant from message
 * Sequencing for commands - full sequential processing - policy per tenant
 
 
-## Events
+## Events Storage
+
+Each tenant has its own AxonServer event store, TenatRoutingEventStore reolves tenantId/context from message  and routes to the orrect one.
 
 * AxonServer only
 * StorageEngineBackedEventStore via AxonServerEventStorageEngineFactory - resolved per tenant
 
+### Questions
+
+* could this be solved on the level of EventStorageEngine instead of EventStore?
+
+## Event Handling/Sourcing
+
+Need to support
+
+* Subcribing
+* Pooling 
+* Streaming -> MultiTenantPersistentStreamMessageSource
+
+## TenantAware general components support
+
+* Generally: User can use a custom component registry to register components that are aware of the tenant context and inject them into Message Handling methods, so we get f.e. the correct sql datasource for storing the tenants data. 
+
+### Questions
+
+* More than one?
+* Spring boot autoconfiguration? how convenient?
+
 
 ## Queries
 
+* solved same as Command: QueryServerBisConnector is multi tenant aware
+
+
+## Spring Boot Autoconfiguration
+
+* provide enhancer as bean
+* disable feature/exclude enhancer
+* How to configure application specific components (TenantComponentRegistry)?
 
 
 

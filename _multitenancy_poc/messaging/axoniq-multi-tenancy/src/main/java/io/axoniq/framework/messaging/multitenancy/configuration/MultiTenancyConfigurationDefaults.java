@@ -198,6 +198,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                         scheduler,
                                         configuration.getComponent(UnitOfWorkFactory.class),
                                         batchSize,
+                                        // FIXME: just use tenantId as context, why overwrite?
                                         StringUtils.emptyOrNull(context) ? tenantDescriptor.tenantId() : context
                                 ))
         ).forEach(it -> it.accept(componentRegistry));

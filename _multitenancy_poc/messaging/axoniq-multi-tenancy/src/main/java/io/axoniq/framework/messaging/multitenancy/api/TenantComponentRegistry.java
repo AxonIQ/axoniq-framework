@@ -39,6 +39,7 @@ import java.util.Set;
  * @see TenantComponentFactory
  * @since 5.3.0
  */
+// TODO: TenantComponentProvider - orjust Component
 public interface TenantComponentRegistry<T> extends MultiTenantAwareComponent {
 
     /**
