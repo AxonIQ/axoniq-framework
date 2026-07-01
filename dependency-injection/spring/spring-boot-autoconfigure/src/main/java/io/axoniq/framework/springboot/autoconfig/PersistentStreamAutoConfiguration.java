@@ -19,109 +19,130 @@
 
 package io.axoniq.framework.springboot.autoconfig;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.event.DefaultPersistentStreamEventSourceFactory;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
+import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
-import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.springframework.beans.factory.annotation.Qualifier;
+import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
+import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.extension.spring.config.EventProcessorSettings;
+import org.axonframework.extension.springboot.EventProcessorProperties;
+import org.axonframework.extension.springboot.autoconfig.EventProcessingAutoConfiguration;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
-import org.springframework.core.env.Environment;
-
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Spring Boot autoconfiguration for Persistent Streams backed by Axon Server.
- * <p>
- * Registers a {@link PersistentStreamScheduledExecutorBuilder} and a
- * {@link PersistentStreamMessageSourceRegistrar} that reads
- * {@code axon.axonserver.persistent-streams.*} properties and creates a
- * {@link io.axoniq.framework.axonserver.connector.event.PersistentStreamMessageSource} Spring bean for each
- * configured stream. Those beans are resolved by name in the event-processing configuration through
- * {@code axon.eventhandling.processors.<name>.source=<stream-key>}.
- * <p>
- * This configuration is only active when {@code axon.axonserver.enabled} is {@code true} (the default).
+ * Spring Boot autoconfiguration that defines the required infrastructure for persistent streams by creating
+ * a {@link PersistentStreamScheduledExecutorBuilder}, a {@link PersistentStreamEventSourceFactory} and a named
+ * {@link PersistentStreamEventSource} bean for each entry under {@code axon.axonserver.persistent-streams} using
+ * the {@link PersistentStreamConfigurationEnhancer} configuration enhancer.
  *
- * @author Marc Gathier
- * @author Steven van Beelen
+ * @author Jakob Hatzl
  * @since 5.2.0
+ * @see PersistentStreamEventSource
+ * @see AxonServerConfiguration.PersistentStreamSettings
+ * @see PersistentStreamEventSourceFactory
  */
-@AutoConfiguration(after = AxonServerAutoConfiguration.class)
+@AutoConfiguration(
+        after = {AxonServerAutoConfiguration.class, DeadLetterQueueConfiguration.class},
+        before = EventProcessingAutoConfiguration.class
+)
 public class PersistentStreamAutoConfiguration {
 
     /**
-     * Creates a {@link PersistentStreamScheduledExecutorBuilder} that constructs a new
-     * {@link ScheduledExecutorService} for each persistent stream.
-     * <p>
-     * This bean is only created when no {@link PersistentStreamScheduledExecutorBuilder} bean exists and no bean
-     * named {@code "persistentStreamScheduler"} is present. When a {@code "persistentStreamScheduler"} bean
-     * exists, {@link #backwardsCompatiblePersistentStreamScheduledExecutorBuilder(ScheduledExecutorService)} is used
-     * instead.
+     * Creates the default {@link PersistentStreamScheduledExecutorBuilder} if no custom one is present.
      *
      * @return the default {@link PersistentStreamScheduledExecutorBuilder}
      */
     @Bean
-    @ConditionalOnMissingBean(value = PersistentStreamScheduledExecutorBuilder.class,
-            name = "persistentStreamScheduler")
-    @ConditionalOnProperty(name = "axon.axonserver.enabled", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "axon.axonserver.event-store.enabled", matchIfMissing = true)
     public PersistentStreamScheduledExecutorBuilder persistentStreamScheduledExecutorBuilder() {
         return PersistentStreamScheduledExecutorBuilder.defaultFactory();
     }
 
     /**
-     * Creates a {@link PersistentStreamScheduledExecutorBuilder} that always returns the same
-     * {@link ScheduledExecutorService}, for backwards compatibility with Axon Framework 4.10.0.
+     * Creates the default {@link PersistentStreamEventSourceFactory} if no custom one is present.
      * <p>
-     * This bean is only created when a bean named {@code "persistentStreamScheduler"} of type
-     * {@link ScheduledExecutorService} is present.
-     *
-     * @param persistentStreamScheduler the shared {@link ScheduledExecutorService} to use for all streams
-     * @return a {@link PersistentStreamScheduledExecutorBuilder} that always returns the given executor
+     * The default implementation is {@link DefaultPersistentStreamEventSourceFactory}. Declare a bean of type
+     * {@link PersistentStreamEventSourceFactory} to replace this with custom construction logic.
+     * @return the default {@link PersistentStreamEventSourceFactory}
      */
     @Bean
-    @ConditionalOnMissingBean(PersistentStreamScheduledExecutorBuilder.class)
-    @ConditionalOnBean(name = "persistentStreamScheduler")
-    @ConditionalOnProperty(name = "axon.axonserver.enabled", matchIfMissing = true)
-    public PersistentStreamScheduledExecutorBuilder backwardsCompatiblePersistentStreamScheduledExecutorBuilder(
-            @Qualifier("persistentStreamScheduler") ScheduledExecutorService persistentStreamScheduler
-    ) {
-        return (threadCount, streamName) -> persistentStreamScheduler;
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "axon.axonserver.event-store.enabled", matchIfMissing = true)
+    public PersistentStreamEventSourceFactory persistentStreamEventSourceFactory() {
+        return PersistentStreamEventSourceFactory.defaultFactory();
     }
 
     /**
-     * Constructs a {@link PersistentStreamMessageSourceRegistrar} that reads
-     * {@code axon.axonserver.persistent-streams.*} from the application environment and registers a
-     * {@link io.axoniq.framework.axonserver.connector.event.PersistentStreamMessageSource} Spring bean for each
-     * configured stream.
+     * Creates a {@link PersistentStreamConfigurationEnhancer} that registers a {@link PersistentStreamEventSource}
+     * component for each entry under {@code axon.axonserver.persistent-streams}.
+     * <p>
+     * By being a {@link org.axonframework.common.configuration.ConfigurationEnhancer} each component is registered
+     * under the map key as its name, making it retrievable via
+     * {@code configuration.getOptionalComponent(SubscribableEventSource.class, "&lt;stream-name&gt;")}. The
+     * {@link org.axonframework.extension.spring.config.SpringComponentRegistry} promotes these components to named
+     * Spring beans, which enables wiring through
+     * {@code axon.eventhandling.processors.&lt;name&gt;.source=&lt;stream-name&gt;}.
+     * <p>
+     * The returned bean also implements {@link org.springframework.beans.factory.DisposableBean} to shut down all
+     * created {@link java.util.concurrent.ScheduledExecutorService} instances when the Spring application context
+     * closes.
      *
-     * @param environment     the Spring {@link Environment}
-     * @param executorBuilder the {@link PersistentStreamScheduledExecutorBuilder} used to construct a
-     *                        {@link ScheduledExecutorService} per stream
-     * @return the {@link PersistentStreamMessageSourceRegistrar}
+     * @param axonServerConfigProvider provider for the Axon Server configuration containing persistent stream settings;
+     *                                 resolved lazily during {@link PersistentStreamConfigurationEnhancer#enhance} to
+     *                                 avoid Spring lifecycle ordering issues
+     * @param schedulerBuilder         the builder used to create a per-stream {@link java.util.concurrent.ScheduledExecutorService}
+     * @param factory                  the factory used to construct each {@link PersistentStreamEventSource}
+     * @return a {@link PersistentStreamConfigurationEnhancer} that registers {@link PersistentStreamEventSource}
+     *         components
      */
     @Bean
-    @ConditionalOnProperty(name = "axon.axonserver.enabled", matchIfMissing = true)
-    public PersistentStreamMessageSourceRegistrar persistentStreamRegistrar(
-            Environment environment,
-            PersistentStreamScheduledExecutorBuilder executorBuilder
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "axon.axonserver.event-store.enabled", matchIfMissing = true)
+    public PersistentStreamConfigurationEnhancer persistentStreamConfigurationEnhancer(
+            ObjectProvider<AxonServerConfiguration> axonServerConfigProvider,
+            PersistentStreamScheduledExecutorBuilder schedulerBuilder,
+            PersistentStreamEventSourceFactory factory
     ) {
-        return new PersistentStreamMessageSourceRegistrar(environment, executorBuilder);
+        return new PersistentStreamConfigurationEnhancer(axonServerConfigProvider, schedulerBuilder, factory);
     }
 
     /**
-     * No-op {@link ConfigurationEnhancer} placeholder for future DLQ sequencing-policy wiring for persistent streams.
-     * <p>
-     * When a {@link io.axoniq.framework.axonserver.connector.event.PersistentStreamMessageSource} is used as the
-     * event source for a subscribing event processor with a dead-letter queue, a matching sequencing policy should be
-     * applied. That wiring is deferred to a follow-up.
+     * Creates a {@link BeanPostProcessor} that overrides the default processor mode to
+     * {@link EventProcessorProperties.Mode#SUBSCRIBING subscribing processors}.
      *
-     * @return a no-op {@link ConfigurationEnhancer}
+     * @return the {@link BeanPostProcessor}
      */
     @Bean
-    @ConditionalOnProperty(name = "axon.axonserver.enabled", matchIfMissing = true)
-    public ConfigurationEnhancer persistentStreamProcessorsConfigurerModule() {
-        return componentRegistry -> {
+    @ConditionalOnProperty(name = "axon.axonserver.auto-persistent-streams-enabled")
+    static BeanPostProcessor autoPersistentStreamsDefaultProcessorModePostProcessor() {
+        return new BeanPostProcessor() {
+            @Override
+            public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+                if (bean instanceof EventProcessorSettings.MapWrapper(
+                        java.util.Map<String, EventProcessorSettings> settings
+                )) {
+                    EventProcessorSettings defaultSettings = settings.get(EventProcessorSettings.DEFAULT);
+                    if (defaultSettings instanceof EventProcessorProperties.ProcessorSettings defaultProcessorSettings) {
+                        defaultProcessorSettings.setMode(EventProcessorProperties.Mode.SUBSCRIBING);
+                    } else {
+                        throw new AxonConfigurationException(
+                                """
+                                        Auto persistent streams are configured, but the DEFAULT event processor \
+                                        settings use a custom EventProcessorSettings implementation. \
+                                        Be sure to use the default implementation instead.""");
+                    }
+                }
+                return bean;
+            }
         };
     }
 }
