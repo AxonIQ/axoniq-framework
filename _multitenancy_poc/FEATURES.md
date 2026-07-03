@@ -82,15 +82,23 @@
 
 ### Events Storage
 
-Each tenant has its own AxonServer event store, TenantRoutingEventStore resolves tenantId/context from message and routes to the correct one.
+#### Requirements
 
-* AxonServer only
-* StorageEngineBackedEventStore via AxonServerEventStorageEngineFactory - resolved per tenant
-* We also have the AggregateBasedAxonServerEventStorageEngine to consider
+* Each tenant must have its own isolated event store, backed by a dedicated Axon Server context
+* Events must be appended to and read from the correct tenant's event store, based on the tenant resolved from the message
 
 #### Questions
 
-* could this be solved on the level of EventStorageEngine instead of EventStore?
+* Could this be solved at the `EventStorageEngine` level instead of `EventStore`?
+* Should the aggregate-based storage engine be supported per tenant as well, or is the tag-based `AxonServerEventStorageEngineFactory` sufficient for all use cases? Not currently wired in for multi-tenancy.
+* Snapshot support: the analogous `SnapshotStore` decoration for multi-tenancy is currently disabled (commented out) in `MultiTenancyConfigurationDefaults` - do we need a tenant-routing snapshot store, and if so when?
+
+#### Implementation
+
+* `TenantRoutingEventStore` (`eventsourcing/TenantRoutingEventStore.java`) - implements `EventStore` and `MultiTenantAwareComponent`; resolves the tenant-specific `EventStore` segment from event metadata and delegates to it; `open(StreamingCondition, ProcessingContext)` intentionally throws `UnsupportedOperationException` (cross-tenant streaming is handled at a higher level, see `### Event Handling/Sourcing`)
+* `TenantEventSegmentFactory` (`api/TenantEventSegmentFactory.java`) - `Function<TenantDescriptor, EventStore>` used by `TenantRoutingEventStore` to build/obtain each tenant's segment
+* Default per-tenant segment (`MultiTenancyConfigurationDefaults.defaultEventStoreSegment(...)`) uses `AxonServerEventStorageEngineFactory.constructForContext(tenant.tenantId(), config)` wrapped in a `StorageEngineBackedEventStore`, falling back to an in-memory event storage engine when no `AxonServerConnectionManager` is present
+* Registered as an `EventStore` decorator (`DECORATION_ORDER = Integer.MIN_VALUE + 75`) by `MultiTenancyConfigurationDefaults`
 
 ### Event Handling/Sourcing
 
