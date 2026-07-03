@@ -39,10 +39,12 @@
 * Inbound/sourced messages must be enriched with the tenant determined by the connection they arrived on, written into their metadata
 * The tenant id must be propagated into the metadata of events appended during processing, so any downstream consumer can determine the tenant purely from the message
 * Axon Framework's transaction facilities must be tenant-aware, providing tenant-specific transactional resources (e.g. a per-tenant JDBC connection) to message processing (see `### Event Handling/Sourcing` `#### Implementation` for the current `JdbcTenantTransactionManager`)
-* A server API to create/remove tenants is needed to test dynamic tenant registration/removal in integration tests
+* Dynamic tenant registration/removal must be exercised in integration tests using Axon Server's existing Admin API to create/remove contexts (no new server-side API needs to be built)
+* For integration testing and examples, an offline Axon Server license file is needed to run CI
 
 #### Questions
 
+* Known issue: the PoC's `TenantDescriptor`'s equals/hashCode include `properties`, so it doesn't behave as identity based purely on `tenantId` - since it's used as a map key, two descriptors for the same tenant with differing properties won't match as the same key. Only `tenantId` should determine identity. Not yet fixed in code (`TenantDescriptor.java`).
 * Tenant name resolution: today tenant discovery is 1:1 with the Axon Server context name. A tenant spanning multiple contexts (e.g. multiple bounded contexts for one application) would need a naming scheme (e.g. `[tenant]-[context]`) and a resolver deriving the tenant id from it - not yet implemented
 * Tenant information: Only Metadata or needed in ProcessingContext (or both if not MetadataBasedTenantResolver)
   * con: map lookup is cheap, we have everything we need 
@@ -212,18 +214,67 @@
   * `disableMultiTenancyConfigurationEnhancer()` bean - when `axon.multitenancy.enabled=false`, registers a `ConfigurationEnhancer` that disables `MultiTenancyConfigurationDefaults`
 * Test: `MultiTenancyAutoConfigurationTest` covers all three states (auto-registered, disabled via property, user-provided enhancer preserved)
 
-
-
-
-## General Questions
-
-* The PoC's `TenantDescriptor`'s equals/hashCode include `properties`, so it doesn't behave as identity based purely on `tenantId` - since it's used as a map key, two descriptors for the same tenant with differing properties won't match as the same key. Only `tenantId` should determine identity. Known issue, not yet fixed in code (`TenantDescriptor.java`).
-* For integration testing and examples we want an offline license file to run CI
-
 ## References
 
 * AxoniqFramework issue: https://github.com/AxonIQ/axoniq-framework/issues/176
 * AxonFramework issue: https://github.com/AxonIQ/AxonFramework/issues/4324
 * Data Protection extension issue: https://github.com/AxonIQ/extension-data-protection/issues/8
 * AF4 multi-tenancy extension (prior art): https://github.com/AxonFramework/extension-multitenancy
+
+## Planning
+
+Incremental delivery plan for graduating `_multitenancy_poc` into a regular AxoniqFramework module - moving and reworking code from the POC into its final location issue by issue, rather than one big-bang port. One issue per feature area (mirrors the `###` sections above); each issue also resolves that area's open `#### Questions` as part of its own acceptance criteria (no separate design-spike issues). Dead Letter Queue and Data Protection are deferred past the end-of-July milestone. Proposed issues are children of AxoniqFramework issue #176 (see `## References`).
+
+Each bold-titled bullet below is a separate GitHub issue and PR. "Phase" headings are dependency/sequencing groups, not units of work - e.g. Phase 3 lists three independent issues that can be worked in parallel once Phase 1 and 2 land, not one combined issue.
+
+#176 becomes the tracking issue to complete once all required work is done with a github task list referencing sub-issues.  
+
+### Phase 0 - Prerequisites
+
+* **"Add an offline Axon Server license file for CI"** - unblocks integration tests for every subsequent issue (see `### Infrastructure` `#### Requirements`)
+* **"Scaffold the `axoniq-multi-tenancy` module in the main repo"** - empty module skeleton, POM/BOM wiring, CI pipeline wiring, package structure; no functional code moved yet
+
+### Phase 1 - Infrastructure (foundation; everything else depends on it)
+
+* **"Infrastructure: tenant registration, resolution and wiring skeleton"**
+  - Ports `TenantDescriptor`, `TenantProvider`/`AxonServerTenantProvider`, `TenantConnectPredicate`, `TenantResolver`/`MetadataBasedTenantResolver`/`TenantResolverRegistry`, `MultiTenantAwareComponent`, `NoSuchTenantException`, metadata propagation (`SimpleCorrelationDataProvider`), and the `MultiTenancyConfigurationDefaults` skeleton
+  - Fixes the `TenantDescriptor` equals/hashCode bug while porting (identity must be `tenantId`-only)
+  - Resolves: the `[tenant]-[context]` naming scheme for tenants spanning multiple contexts (implement, or explicitly scope out for July with a follow-up note); whether transaction-manager hooks need tenant info on `ProcessingContext`
+  - Wires integration tests to create/remove tenants dynamically via Axon Server's existing Admin API (no new server-side API needed)
+
+### Phase 2 - Tenant-aware component support (needed by Commands/Queries/Event Processing's handling side)
+
+* **"Tenant-aware components: per-tenant component registry and parameter injection"**
+  - Ports `TenantComponentRegistry`, `TenantComponentFactory`, `DefaultTenantComponentRegistry`, and the `TenantComponentResolver` `ParameterResolverFactory`
+  - Resolves: the `TenantComponentRegistry` naming fix (it holds many tenants' instances of one component type, not many component types) and clarifies the multiple-registries-per-type-T story
+
+### Phase 3 - Message dispatch & storage (can proceed in parallel once Phase 1+2 land)
+
+* **"Commands: multi-tenant command dispatching and handling"**
+  - Ports `MultiTenantAxonServerCommandBusConnector`; reconciles the POC's modified `AxonServerCommandBusConnector` with the mainline `axon-server-connector` module
+  - Resolves: the per-tenant sequencing policy design and implementation (shared with the Event Processing issue below - implement once here, reuse there)
+* **"Queries: multi-tenant query dispatching and handling"**
+  - Ports `MultiTenantAxonServerQueryBusConnector`; reconciles the POC's modified `AxonServerQueryBusConnector` with mainline
+* **"Events Storage: per-tenant event store routing"**
+  - Ports `TenantRoutingEventStore`, `TenantEventSegmentFactory`; reconciles the POC's modified `AxonServerEventStorageEngineFactory` with mainline
+  - Resolves: `EventStorageEngine`-vs-`EventStore`-level routing, whether the aggregate-based storage engine needs support, and the disabled multi-tenant snapshot store decoration
+
+### Phase 4 - Event processing (depends on Events Storage, Infrastructure, and Tenant-aware components)
+
+* **"Event Processing: per-tenant streaming, pooled and persistent-stream processors"**
+  - Ports `MultiTenantPersistentStreamMessageSource`, `MultiTenantEventProcessor`, `MultiTenantEventProcessorModule`, `MultiTenantPooledStreamingEventProcessorModule`, per-tenant token stores, per-tenant transaction managers
+  - Resolves: whether a subscribing-style processor is required, whether a single processor can multiplex per-tenant projections/tokens, and whether a dedicated module is needed vs. decorating existing components
+  - Reuses the sequencing policy implemented in the Commands issue
+  - Likely the largest issue in this plan given the number of open questions and classes involved - flag for a possible mid-review split if it grows too large for one PR
+
+### Phase 5 - Spring Boot wiring (depends on the phases above existing)
+
+* **"Spring Boot Autoconfiguration: wire up multi-tenancy support"**
+  - Ports `MultiTenancyAutoConfiguration` (enable-by-default / disable-via-property)
+  - Resolves: how to autoconfigure application-specific `TenantComponentRegistry` beans - implement the "auto-wire any Spring bean implementing a tenant-component interface" idea
+
+### Deferred past July
+
+* **"Dead Letter Queue: tenant-aware DLQ support"** - resolves whether the multi-tenancy module should depend on the DLQ module
+* **"Data Protection: tenant-aware crypto store fan-out"** - resolves the `CryptoEngine`-level fan-out approach identified above
 
