@@ -37,6 +37,7 @@
 * Outgoing messages must resolve which tenant's connection to dispatch/publish on, based on the tenant carried in the message
 * Inbound/sourced messages must be enriched with the tenant determined by the connection they arrived on, written into their metadata
 * The tenant id must be propagated into the metadata of events appended during processing, so any downstream consumer can determine the tenant purely from the message
+* Axon Framework's transaction facilities must be tenant-aware, providing tenant-specific transactional resources (e.g. a per-tenant JDBC connection) to message processing (see `### Event Handling/Sourcing` `#### Implementation` for the current `JdbcTenantTransactionManager`)
 * A server API to create/remove tenants is needed to test dynamic tenant registration/removal in integration tests
 
 #### Questions
@@ -46,6 +47,7 @@
   * con: map lookup is cheap, we have everything we need 
   * Resolved by the current implementation: metadata-only. The tenant-aware `ParameterResolverFactory` (`TenantComponentResolver` inside `MultiTenancyConfigurationDefaults`) reads tenantId directly from message metadata at resolution time - nothing is cached on `ProcessingContext`
   * Reasoning: metadata is unavoidable regardless - it's what survives the wire and is available before a ProcessingContext exists (dispatch interceptors, connector-level routing); a second cached value on ProcessingContext would risk drifting from the message's actual metadata; and it's ultimately about getting messages to the correct tenant, everything else (projections, etc.) derives from the message itself
+  * Exception to reconsider: transaction manager hooks may only receive `ProcessingContext`, not the original message - if so, tenant-specific transactional resource selection might require tenant information to be available on `ProcessingContext` as well, unlike the parameter-resolution case above
 
 #### Implementation
 
@@ -127,12 +129,23 @@
 
 ### TenantAware general components support
 
-* Generally: User can use a custom component registry to register components that are aware of the tenant context and inject them into Message Handling methods, so we get f.e. the correct sql datasource for storing the tenants data. 
+#### Requirements
+
+* Application developers must be able to register tenant-scoped components (e.g. a per-tenant SQL datasource) that get injected into message handling methods, so the correct tenant's resource is used
 
 #### Questions
 
-* More than one?
-* Spring boot autoconfiguration? how convenient?
+* Naming issue: `TenantComponentRegistry<T>`'s name suggests a registry that can hold many different tenant-aware component types, but it's actually generic over a single type `T` - each instance only holds per-tenant instances of that one component type. To support multiple component types, multiple separate `TenantComponentRegistry` instances are needed (one per type). Naming needs to be fixed to reflect this. Known issue, not yet fixed in code (`TenantComponentRegistry.java`).
+* Spring Boot autoconfiguration: how convenient should registration of application-specific components (`TenantComponentRegistry`) be made? Currently there is no autoconfiguration for this - only the `MultiTenancyConfigurationDefaults` enhancer bean is provided (see `### Spring Boot Autoconfiguration`)
+  * Idea: automatically wire any Spring bean implementing a designated tenant-component interface (e.g. `TenantComponentFactory`) so it becomes resolvable as a message-handling parameter without manual registration
+
+#### Implementation
+
+* `TenantComponentRegistry<T>` (`api/TenantComponentRegistry.java`) - extends `MultiTenantAwareComponent`; caches component instances per tenant, lazily created via a `TenantComponentFactory`, and cleans them up (if `AutoCloseable`) on tenant removal
+* `TenantComponentFactory<T>` (`api/TenantComponentFactory.java`) - user-implemented factory (`TenantDescriptor -> T`), e.g. building a per-tenant JDBC repository
+* `DefaultTenantComponentRegistry<T>` (`configuration/DefaultTenantComponentRegistry.java`, `@Internal`) - sole implementation
+* Injection: a `ParameterResolverFactory` (`TenantComponentResolver`, private nested class in `MultiTenancyConfigurationDefaults`) reads the tenantId from message metadata and resolves the component via `registry.getComponent(tenant)`
+* Demonstrated in the examples: `examples/multi-tenancy-java`, `examples/multi-tenancy-jdbc-java` (`CourseStatsConfiguration.java`, `JdbcCourseStatsRepositoryTest`), `examples/multi-tenancy-spring-boot-4` (`MultiTenancyConfiguration.java`)
 
 
 ### Queries
