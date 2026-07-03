@@ -61,20 +61,23 @@
 
 ### Commands
 
-* CommandGateway and CommandBus: No changes
-* Handler registrations on local segment (SimpleCommandBus - org.axonframework.messaging.commandhandling.SimpleCommandBus, AF5 core class from the AxonFramework repo)
-* New: MultiTenantAxonServerCommandBusConnector - uses same methods as AxonServerCommandBusConnector but internally holds map of tenant-specific connections
-* TenantResolver works on commandMessage because it is passed as a hard dependency in enhancer, not resolved from context 
+#### Requirements
 
-#### Handling
+* Multi-tenancy must not require changes to the existing CommandGateway/CommandBus public API
+* Command dispatching must route each command to the Axon Server context belonging to its resolved tenant
+* Command handlers must be able to resolve tenant-specific resources (e.g. a per-tenant datasource) needed during handling, based on the tenant information carried in the message's metadata (see `### Infrastructure`)
 
-* Reestablish tenant information on the ProcessingContext when a command is received on a tenant-specific connection (open question - see `### Infrastructure` `#### Questions`; metadata alone may be sufficient)
-* Select the tenant-specific resources (e.g. datasource) needed by the handler based on that tenant information - AF4 only did this for the datasource
+#### Questions
+
+* Sequencing: is it required that command sequencing must not affect other tenants, or should the application developer be able to configure a single full-sequential policy across all tenants? Likely answer: ship an additional per-tenant sequencing policy with the multi-tenancy extension that the application developer can configure - not yet implemented
+
+#### Implementation
+
+* Local handler registration is unaffected - handlers still register on the plain `SimpleCommandBus` (`org.axonframework.messaging.commandhandling.SimpleCommandBus`, AF5 core, unchanged)
+* `MultiTenantAxonServerCommandBusConnector` (`commandhandling/MultiTenantAxonServerCommandBusConnector.java`) - extends `AbstractAxonServerCommandBusConnector`, implements `MultiTenantAwareComponent`; keeps a per-tenant `TenantState` (own Axon Server connection, local subscription map, in-flight tracker), replays known subscriptions to newly-registered tenants, resolves the target tenant via the injected `TenantResolver`
+* The `TenantResolver` is injected into the connector as a hard dependency at construction (via the enhancer), rather than resolved from a registry/context per call
 * Events appended by the handler get their tenantId written back to metadata via the `SimpleCorrelationDataProvider` mechanism described under `### Infrastructure`
-
-#### Todo
-
-* Sequencing for commands - full sequential processing - policy per tenant
+* Registered as the `CommandBusConnector` by `MultiTenancyConfigurationDefaults`
 
 
 ### Events Storage
