@@ -199,9 +199,18 @@
 
 ### Spring Boot Autoconfiguration
 
-* provide enhancer as bean
-* disable feature/exclude enhancer
-* How to configure application specific components (TenantComponentRegistry)?
+#### Requirements
+
+* Multi-tenancy support must be automatically wired in Spring Boot applications by default (property-driven, no manual bean registration required)
+* It must be possible to disable multi-tenancy support entirely via configuration
+* Application-specific tenant-aware components (e.g. `TenantComponentRegistry`) must be configurable from Spring Boot - not yet implemented (see `### TenantAware general components support` `#### Questions`)
+
+#### Implementation
+
+* `MultiTenancyAutoConfiguration` (`dependency-injection/spring/spring-boot-autoconfigure/.../MultiTenancyAutoConfiguration.java`) - the sole Spring glue for multi-tenancy, keeping the core module Spring-free:
+  * `multiTenancyConfigurationDefaults()` bean - registers `MultiTenancyConfigurationDefaults` when `axon.multitenancy.enabled` is true/absent and no bean already exists (`@ConditionalOnProperty(matchIfMissing = true)` + `@ConditionalOnMissingBean`)
+  * `disableMultiTenancyConfigurationEnhancer()` bean - when `axon.multitenancy.enabled=false`, registers a `ConfigurationEnhancer` that disables `MultiTenancyConfigurationDefaults`
+* Test: `MultiTenancyAutoConfigurationTest` covers all three states (auto-registered, disabled via property, user-provided enhancer preserved)
 
 
 
