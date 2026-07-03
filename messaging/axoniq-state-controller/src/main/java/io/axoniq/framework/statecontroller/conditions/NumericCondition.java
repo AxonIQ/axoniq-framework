@@ -37,8 +37,8 @@ import java.util.function.Function;
  * <p>
  * Implementers describe the numeric domain through three atomic operations — {@link #zero()},
  * {@link #add(Comparable, Comparable)}, and {@link #subtract(Comparable, Comparable)} — plus
- * {@link Condition#asCompletableFuture()} on the base ({@link Condition#map(Function) map} and
- * {@link Condition#zip(Condition, java.util.function.BiFunction) zip} are defaulted). Every comparison and
+ * {@link Condition#resolveAsync()} on the base ({@link Condition#map(Function) map} and
+ * {@link Condition#combine(Condition, java.util.function.BiFunction) zip} are defaulted). Every comparison and
  * arithmetic operator on this interface is derived from those primitives. Lift an arbitrary {@code Condition<N>}
  * into a {@code NumericCondition} via
  * {@link #of(Condition, java.util.function.BinaryOperator, java.util.function.BinaryOperator, Comparable) of(...)}.
@@ -165,7 +165,7 @@ public interface NumericCondition<N extends Comparable<N>> extends Condition<N> 
      * @return a condition representing {@code this.value() + other.value()}
      */
     default NumericCondition<N> plus(Condition<N> other) {
-        return NumericCondition.of(zip(other, this::add), this::add, this::subtract, zero());
+        return NumericCondition.of(combine(other, this::add), this::add, this::subtract, zero());
     }
 
     /**
@@ -176,7 +176,7 @@ public interface NumericCondition<N extends Comparable<N>> extends Condition<N> 
      * @return a condition representing {@code this.value() - other.value()}
      */
     default NumericCondition<N> minus(Condition<N> other) {
-        return NumericCondition.of(zip(other, this::subtract), this::add, this::subtract, zero());
+        return NumericCondition.of(combine(other, this::subtract), this::add, this::subtract, zero());
     }
 
     /**
@@ -229,8 +229,8 @@ public interface NumericCondition<N extends Comparable<N>> extends Condition<N> 
         }
 
         @Override
-        public CompletableFuture<N> asCompletableFuture() {
-            return base.asCompletableFuture();
+        public CompletableFuture<N> resolveAsync() {
+            return base.resolveAsync();
         }
 
         @Override

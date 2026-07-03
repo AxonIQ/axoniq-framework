@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.statecontroller.decisions;
 
+import io.axoniq.framework.statecontroller.Outcome;
+import io.axoniq.framework.statecontroller.runtime.OutcomeDispatch;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandHandler;
 import org.axonframework.messaging.commandhandling.CommandHandlingComponent;
@@ -41,23 +43,24 @@ import java.util.function.BiFunction;
  * Declarative {@link CommandHandlingComponent} for registering State Controller decisions without annotations.
  * <p>
  * Each call to {@link #decide(Class, BiFunction)} subscribes a typed decision function — a
- * {@code BiFunction<P, DecisionContext, Decision>} — for the given command payload class. At dispatch time, the
+ * {@code BiFunction<P, DecisionContext, Outcome>} — for the given command payload class. At dispatch time, the
  * component:
  * <ul>
- *     <li>resolves the in-context {@link DecisionContext} via {@link DecisionDispatch#decisionContextFor},
- *         so all decisions for the same {@link ProcessingContext} share a single loading-context;</li>
+ *     <li>resolves the in-context {@link DecisionContext} via
+ *         {@link OutcomeDispatch#sessionFor OutcomeDispatch.sessionFor}, so all decisions for the same
+ *         {@link ProcessingContext} share a single loading session;</li>
  *     <li>invokes the decision function with the command's payload and the shared {@code DecisionContext};</li>
- *     <li>routes the returned {@link Decision} through {@link DecisionDispatch#apply}, which appends events
- *         on {@link Decision.Accept Accept} (returning the optional
- *         {@link Decision.Accept#result() result value}) and throws a
+ *     <li>routes the returned {@link Outcome} through {@link OutcomeDispatch#apply}, which appends events
+ *         on {@link Outcome.Accept Accept} (returning the optional
+ *         {@link Outcome.Accept#result() result value}) and throws a
  *         {@link org.axonframework.messaging.commandhandling.CommandExecutionException CommandExecutionException}
- *         on {@link Decision.Reject Reject} after appending any audit events.</li>
+ *         on {@link Outcome.Reject Reject} after appending any audit events.</li>
  * </ul>
  * The component is a drop-in {@link CommandHandlingComponent}: subscribe it directly to a
  * {@link org.axonframework.messaging.commandhandling.CommandBus CommandBus}, or contribute it to a
  * {@link org.axonframework.messaging.commandhandling.configuration.CommandHandlingModule CommandHandlingModule}
  * via {@code commandHandlingComponent(...)} for declarative wiring. From a command caller's perspective the
- * observable semantics are identical to the annotation-based {@code @StateController} path.
+ * observable semantics are identical to the annotation-based state-controlled {@code @CommandHandler} path.
  * <p>
  * The {@link MessageTypeResolver} supplied at construction is used to map registered command classes to their
  * {@link QualifiedName} for {@link #supportedCommands()} and routing. Pass a custom resolver here if your
@@ -72,9 +75,9 @@ import java.util.function.BiFunction;
  *             var closed  = account.contains(AccountClosed.class);
  *             var balance = account.sum(MoneyDeposited.class, MoneyDeposited::amount)
  *                                  .minus(account.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount));
- *             if (closed.isTrue())                            return Decision.reject("closed");
- *             if (balance.isLessThan(cmd.amount()).isTrue())  return Decision.reject("insufficient funds");
- *             return Decision.emit(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+ *             if (closed.isTrue())                            return Outcome.reject("closed");
+ *             if (balance.isLessThan(cmd.amount()).isTrue())  return Outcome.reject("insufficient funds");
+ *             return Outcome.accept(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
  *         });
  *
  * commandBus.subscribe(accounts);
@@ -116,10 +119,9 @@ public final class StateControllerComponent implements CommandHandlingComponent 
      * Subscribes a decision function for commands of type {@code commandType}.
      * <p>
      * On dispatch, the function receives the command's deserialized payload and a {@link DecisionContext}
-     * resolved from the current {@link ProcessingContext}. Its returned {@link Decision} is processed by
-     * {@link DecisionDispatch#apply}, so the observable side effects (events appended, result returned, or
-     * rejection thrown) are identical to those of an equivalent {@link StateController @StateController}
-     * method.
+     * resolved from the current {@link ProcessingContext}. Its returned {@link Outcome} is processed by
+     * {@link OutcomeDispatch#apply}, so the observable side effects (events appended, result returned, or
+     * rejection thrown) are identical to those of an equivalent state-controlled {@code @CommandHandler} method.
      *
      * @param commandType the payload class of the command this decision handles
      * @param decision    the decision function, taking the payload and a {@link DecisionContext}
@@ -127,7 +129,7 @@ public final class StateControllerComponent implements CommandHandlingComponent 
      * @return this component, for fluent registration
      */
     public <P> StateControllerComponent decide(Class<P> commandType,
-                                               BiFunction<? super P, DecisionContext, Decision> decision) {
+                                               BiFunction<? super P, DecisionContext, Outcome> decision) {
         Objects.requireNonNull(commandType, "commandType must not be null");
         Objects.requireNonNull(decision, "decision must not be null");
         QualifiedName qualifiedName = typeResolver.resolveOrThrow(commandType).qualifiedName();
@@ -136,13 +138,13 @@ public final class StateControllerComponent implements CommandHandlingComponent 
     }
 
     private static <P> CommandHandler handlerFor(Class<P> commandType,
-                                                 BiFunction<? super P, DecisionContext, Decision> decision) {
+                                                 BiFunction<? super P, DecisionContext, Outcome> decision) {
         return (command, processingContext) -> {
             try {
                 P payload = commandType.cast(command.payload());
-                DecisionContext decisionContext = DecisionDispatch.decisionContextFor(processingContext);
-                Decision outcome = decision.apply(payload, decisionContext);
-                Object result = DecisionDispatch.apply(outcome, processingContext);
+                DecisionContext decisionContext = OutcomeDispatch.sessionFor(processingContext);
+                Outcome outcome = decision.apply(payload, decisionContext);
+                Object result = OutcomeDispatch.apply(outcome, processingContext);
                 if (result == null) {
                     return MessageStream.<CommandResultMessage>empty().cast();
                 }
@@ -150,7 +152,7 @@ public final class StateControllerComponent implements CommandHandlingComponent 
                         new GenericCommandResultMessage(new MessageType(result.getClass()), result);
                 return MessageStream.just(resultMessage).cast();
             } catch (RuntimeException failure) {
-                // Includes the CommandExecutionException raised by DecisionDispatch.apply on Reject (rejection
+                // Includes the CommandExecutionException raised by OutcomeDispatch.apply on Reject (rejection
                 // reason as message, audit events as details), as well as programmer errors (NPE,
                 // ClassCastException, ...) raised inside the decision function. The caller distinguishes them
                 // by the exception type observed on the failed MessageStream.

@@ -17,9 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.statecontroller.decisions;
+package io.axoniq.framework.statecontroller.runtime;
 
-import io.axoniq.framework.statecontroller.runtime.OutcomeDispatch;
+import io.axoniq.framework.statecontroller.History;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
@@ -31,39 +31,42 @@ import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * {@link ParameterResolverFactory} that injects a {@link DecisionContext} (or any subinterface a user has extended it
- * with) into handler method parameters of that type.
+ * {@link ParameterResolverFactory} that injects the unbound root {@link History} into handler method parameters
+ * of that type — one half of the signature (together with an
+ * {@link io.axoniq.framework.statecontroller.Outcome Outcome} return type) that opts a plain
+ * {@code @CommandHandler} method into the State Controller.
  * <p>
  * Discovered by AF5 via {@link java.util.ServiceLoader ServiceLoader} (registered through
- * {@code META-INF/services/org.axonframework.messaging.core.annotation.ParameterResolverFactory}). On each handler
- * invocation, the resolver delegates to {@link OutcomeDispatch#sessionFor(ProcessingContext)} so the shared
- * loading session is reused across the {@link io.axoniq.framework.statecontroller.History History} surface,
- * the conditions surface, and declarative state-controller dispatch within the same {@link ProcessingContext}.
+ * {@code META-INF/services/org.axonframework.messaging.core.annotation.ParameterResolverFactory}). On each
+ * handler invocation, the resolver delegates to {@link OutcomeDispatch#sessionFor(ProcessingContext)} so the
+ * injected root shares the loading session — and therefore the batched reads and the DCB consistency marker —
+ * with any {@link io.axoniq.framework.statecontroller.decisions.DecisionContext DecisionContext} resolved for the
+ * same {@link ProcessingContext}.
  * <p>
- * Marked {@link Internal @Internal} because it is loaded by AF5's ServiceLoader and is not a designed extension point;
- * user code should not subclass it.
+ * Marked {@link Internal @Internal} because it is loaded by AF5's ServiceLoader and is not a designed extension
+ * point; user code should not subclass it.
  *
  * @author Allard Buijze
  * @since 5.2.0
  */
 @Internal
-public final class DecisionContextParameterResolverFactory
-        implements ParameterResolverFactory, ParameterResolver<DecisionContext> {
+public final class HistoryParameterResolverFactory
+        implements ParameterResolverFactory, ParameterResolver<History> {
 
     @Override
     public @Nullable ParameterResolver<?> createInstance(Executable executable,
                                                          Parameter[] parameters,
                                                          int parameterIndex) {
         Class<?> type = parameters[parameterIndex].getType();
-        if (!DecisionContext.class.isAssignableFrom(type)) {
+        if (!History.class.isAssignableFrom(type)) {
             return null;
         }
         return this;
     }
 
     @Override
-    public CompletableFuture<DecisionContext> resolveParameterValue(ProcessingContext context) {
-        return CompletableFuture.completedFuture(OutcomeDispatch.sessionFor(context));
+    public CompletableFuture<History> resolveParameterValue(ProcessingContext context) {
+        return CompletableFuture.completedFuture(OutcomeDispatch.sessionFor(context).history());
     }
 
     @Override
@@ -71,4 +74,3 @@ public final class DecisionContextParameterResolverFactory
         return true;
     }
 }
-

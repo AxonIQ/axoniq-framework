@@ -57,7 +57,7 @@ public final class FutureCondition<T> implements Condition<T> {
     }
 
     @Override
-    public CompletableFuture<T> asCompletableFuture() {
+    public CompletableFuture<T> resolveAsync() {
         return future;
     }
 }

@@ -19,32 +19,63 @@
 
 package io.axoniq.framework.statecontroller.sample.banking;
 
-import io.axoniq.framework.statecontroller.decisions.Decision;
-import io.axoniq.framework.statecontroller.decisions.DecisionContext;
-import io.axoniq.framework.statecontroller.decisions.StateController;
-import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.History;
+import io.axoniq.framework.statecontroller.Outcome;
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
+
+import static io.axoniq.framework.statecontroller.Outcome.accept;
+import static io.axoniq.framework.statecontroller.Outcome.reject;
 
 /**
- * Reproduces the section-3 target programming model verbatim so the State Controller API can be exercised end
- * to end at compile time. Decisions are not yet wired to a runtime; this class is here to validate the
- * developer-facing surface, not to execute.
+ * Banking decisions in the target programming model: plain {@link CommandHandler @CommandHandler} methods whose
+ * {@link History} parameter and {@link Outcome} return type opt them into the State Controller — no dedicated
+ * annotation.
+ * <p>
+ * Both handlers follow the idiomatic shape: declare every condition first, then resolve. The first
+ * {@code resolve()} loads all declared conditions — across all scopes — in a single event-store read whose criteria
+ * (the tags narrowed via {@code of(...)} and the event types the conditions name) double as the decision's DCB
+ * consistency boundary.
  */
 public class Accounts {
 
-    @StateController
-    public Decision withdraw(Withdraw cmd, DecisionContext ctx) {
-        EventStream account = ctx.scope("account", cmd.accountId());
+    @CommandHandler
+    public Outcome withdraw(Withdraw cmd, History history) {
+        History account = history.of("account", cmd.accountId());
 
-        var closed = account.contains(AccountClosed.class);
-        var balance = account.sum(MoneyDeposited.class, MoneyDeposited::amount)
-                             .minus(account.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount));
+        var closed = account.has(AccountClosed.class);
+        var balance = account.total(MoneyDeposited.class, MoneyDeposited::amount)
+                             .minus(account.total(MoneyWithdrawn.class, MoneyWithdrawn::amount));
 
-        if (closed.isTrue()) {
-            return Decision.reject("account closed");
+        if (closed.resolve()) {
+            return reject("account closed");
         }
-        if (balance.isLessThan(cmd.amount()).isTrue()) {
-            return Decision.reject("insufficient funds");
+        if (balance.resolve().compareTo(cmd.amount()) < 0) {
+            return reject("insufficient funds");
         }
-        return Decision.emit(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+        return accept(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+    }
+
+    @CommandHandler
+    public Outcome transfer(TransferMoney cmd, History history) {
+        History from = history.of("account", cmd.fromAccountId());
+        History to = history.of("account", cmd.toAccountId());
+
+        // Declaring conditions on both scopes before the first resolve() lets the framework load them together.
+        var fromClosed = from.has(AccountClosed.class);
+        var toClosed = to.has(AccountClosed.class);
+        var balance = from.total(MoneyDeposited.class, MoneyDeposited::amount)
+                          .minus(from.total(MoneyWithdrawn.class, MoneyWithdrawn::amount));
+
+        if (fromClosed.resolve()) {
+            return reject("source account closed");
+        }
+        if (toClosed.resolve()) {
+            return reject("target account closed");
+        }
+        if (balance.resolve().compareTo(cmd.amount()) < 0) {
+            return reject("insufficient funds");
+        }
+        return accept(new MoneyWithdrawn(cmd.fromAccountId(), cmd.amount()),
+                      new MoneyDeposited(cmd.toAccountId(), cmd.amount()));
     }
 }

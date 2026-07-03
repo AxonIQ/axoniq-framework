@@ -20,7 +20,6 @@
 package io.axoniq.framework.statecontroller.eventstream;
 
 import io.axoniq.framework.statecontroller.conditions.Condition;
-import io.axoniq.framework.statecontroller.conditions.FutureCondition;
 import io.axoniq.framework.statecontroller.conditions.MatchBuilder;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
@@ -43,10 +42,10 @@ import java.util.function.Function;
  * <ul>
  *     <li><strong>Pre-selected event mode</strong> — fed by
  *         {@link io.axoniq.framework.statecontroller.eventstream.EventCondition#matching EventCondition.matching}.
- *         The {@code selectionFuture} already narrows the loaded events to a single candidate (or empty); the
- *         builder applies whichever {@link #when(Class, Function) when(...)} mapper has a matching
- *         {@link QualifiedName} on the selected event. The terminal {@code orDefault(...)} returns a
- *         {@link FutureCondition} chained off the selection-future — no new accumulator is registered.</li>
+ *         The selection already narrows the loaded events to a single candidate (or empty); the builder applies
+ *         whichever {@link #when(Class, Function) when(...)} mapper has a matching {@link QualifiedName} on the
+ *         selected event. The terminal {@code orDefault(...)} returns a lazy {@code map} over the selection —
+ *         no new accumulator is registered and nothing resolves at declaration time.</li>
  *     <li><strong>Latest-of-registered-types mode</strong> — fed by
  *         {@link io.axoniq.framework.statecontroller.eventstream.EventStream#latestMatch EventStream.latestMatch}.
  *         No pre-selection; on {@link #orDefault(Object) orDefault(...)} the builder creates a
@@ -89,7 +88,7 @@ final class SourcedMatchBuilder<R> implements MatchBuilder<R> {
 
     /**
      * Constructs a builder in "pre-selected event" mode. The {@code selection} is the upstream source whose
-     * {@link SourcedEventSelection#asCompletableFuture() value-future} already narrows the loaded events to a
+     * {@link SourcedEventSelection#resolveAsync() value-future} already narrows the loaded events to a
      * single candidate; the terminal {@code orDefault(...)} materializes the future at that moment (which is
      * the point that seals the stream) and chains {@code thenApply} to apply whichever mapper matches. Holding
      * the {@link SourcedEventSelection} reference rather than its future keeps {@link #when when(...)} calls free
@@ -134,8 +133,8 @@ final class SourcedMatchBuilder<R> implements MatchBuilder<R> {
     public Condition<R> orDefault(R fallback) {
         List<TypedMapper<R>> snapshot = List.copyOf(mappers);
         if (selection != null) {
-            return new FutureCondition<>(
-                    selection.asCompletableFuture().thenApply(opt -> applyMappers(opt, snapshot, fallback)));
+            // Lazy projection: declaring the match must not resolve the selection (and seal the scope).
+            return selection.map(opt -> applyMappers(opt, snapshot, fallback));
         }
         return new LatestMatchCondition<>(stream, snapshot, fallback);
     }

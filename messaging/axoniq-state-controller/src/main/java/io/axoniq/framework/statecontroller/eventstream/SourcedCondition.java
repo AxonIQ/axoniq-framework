@@ -37,7 +37,7 @@ import java.util.concurrent.CompletableFuture;
  * them — the framework wires registration eagerly, and a post-seal construction raises
  * {@link LateConditionException} via the stream's {@link SourcedEventStream#register register} guard.
  * <p>
- * {@link #asCompletableFuture()} (inherited as the primary {@link Condition} operation) triggers
+ * {@link #resolveAsync()} (inherited as the primary {@link Condition} operation) triggers
  * {@link SourcedEventStream#seal seal} on first access and then returns this condition's value-future. When the
  * stream's underlying reduce completes, the stream calls {@link #complete()} (or
  * {@link #completeExceptionally(Throwable)} on failure) on every registered accumulator; that single
@@ -79,15 +79,15 @@ abstract class SourcedCondition<T> implements Condition<T> {
     /**
      * Returns the value this condition has accumulated up to seal time. Called by {@link #complete()} exactly
      * once after the stream's reduce has finished applying every event; its result is stored in the value
-     * future returned from {@link #asCompletableFuture()}.
+     * future returned from {@link #resolveAsync()}.
      *
      * @return the accumulated value
      */
     protected abstract T finalValue();
 
     @Override
-    public final CompletableFuture<T> asCompletableFuture() {
-        stream.seal();
+    public final CompletableFuture<T> resolveAsync() {
+        stream.triggerResolve();
         return future;
     }
 

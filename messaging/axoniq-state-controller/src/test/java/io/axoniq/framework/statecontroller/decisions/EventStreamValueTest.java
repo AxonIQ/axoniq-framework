@@ -25,6 +25,7 @@ import io.axoniq.framework.statecontroller.conditions.NumericCondition;
 import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
 import io.axoniq.framework.statecontroller.eventstream.EventCondition;
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.runtime.HistorySession;
 import io.axoniq.framework.statecontroller.sample.banking.AccountClosed;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyDeposited;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyWithdrawn;
@@ -96,8 +97,8 @@ class EventStreamValueTest {
         });
     }
 
-    private DecisionContextImpl newDecisionContext() {
-        return new DecisionContextImpl(eventStore, processingContext, Clock.systemUTC());
+    private HistorySession newDecisionContext() {
+        return new HistorySession(eventStore, processingContext, Clock.systemUTC());
     }
 
     private EventStream a1Scope() {
@@ -133,8 +134,8 @@ class EventStreamValueTest {
             BooleanCondition hasDeposits = a1Scope().contains(MoneyDeposited.class);
 
             // then
-            assertThat(hasDeposits.isTrue()).isTrue();
-            assertThat(hasDeposits.isFalse()).isFalse();
+            assertThat(hasDeposits.resolve()).isTrue();
+            assertThat(hasDeposits.not().resolve()).isFalse();
         }
 
         @Test
@@ -145,8 +146,8 @@ class EventStreamValueTest {
             BooleanCondition hasDeposits = a1Scope().contains(MoneyDeposited.class);
 
             // then
-            assertThat(hasDeposits.isTrue()).isFalse();
-            assertThat(hasDeposits.isFalse()).isTrue();
+            assertThat(hasDeposits.resolve()).isFalse();
+            assertThat(hasDeposits.not().resolve()).isTrue();
         }
 
         @Test
@@ -158,7 +159,7 @@ class EventStreamValueTest {
             BooleanCondition any = a1Scope().containsAnyOf(MoneyDeposited.class, MoneyWithdrawn.class);
 
             // then
-            assertThat(any.isTrue()).isTrue();
+            assertThat(any.resolve()).isTrue();
         }
 
         @Test
@@ -170,7 +171,7 @@ class EventStreamValueTest {
             BooleanCondition any = a1Scope().containsAnyOf(MoneyDeposited.class, MoneyWithdrawn.class);
 
             // then
-            assertThat(any.isTrue()).isFalse();
+            assertThat(any.resolve()).isFalse();
         }
 
         @Test
@@ -186,12 +187,12 @@ class EventStreamValueTest {
             BooleanCondition hasWithdrawn = stream.contains(MoneyWithdrawn.class);
 
             // then
-            assertThat(hasDeposit.and(isClosed).isTrue()).isTrue();
-            assertThat(hasDeposit.and(hasWithdrawn).isTrue()).isFalse();
-            assertThat(hasDeposit.or(hasWithdrawn).isTrue()).isTrue();
-            assertThat(hasWithdrawn.not().isTrue()).isTrue();
-            assertThat(hasDeposit.xor(isClosed).isTrue()).isFalse();
-            assertThat(hasDeposit.xor(hasWithdrawn).isTrue()).isTrue();
+            assertThat(hasDeposit.and(isClosed).resolve()).isTrue();
+            assertThat(hasDeposit.and(hasWithdrawn).resolve()).isFalse();
+            assertThat(hasDeposit.or(hasWithdrawn).resolve()).isTrue();
+            assertThat(hasWithdrawn.not().resolve()).isTrue();
+            assertThat(hasDeposit.xor(isClosed).resolve()).isFalse();
+            assertThat(hasDeposit.xor(hasWithdrawn).resolve()).isTrue();
         }
     }
 
@@ -209,7 +210,7 @@ class EventStreamValueTest {
             NumericCondition<Long> count = a1Scope().count(MoneyDeposited.class, MoneyWithdrawn.class);
 
             // then
-            assertThat(count.value()).isEqualTo(3L);
+            assertThat(count.resolve()).isEqualTo(3L);
         }
 
         @Test
@@ -222,7 +223,7 @@ class EventStreamValueTest {
             NumericCondition<Long> deposits = a1Scope().count(MoneyDeposited.class);
 
             // then
-            assertThat(deposits.value()).isEqualTo(1L);
+            assertThat(deposits.resolve()).isEqualTo(1L);
         }
 
         @Test
@@ -233,8 +234,8 @@ class EventStreamValueTest {
             NumericCondition<Long> count = a1Scope().count(MoneyDeposited.class);
 
             // then
-            assertThat(count.value()).isEqualTo(0L);
-            assertThat(count.isZero().isTrue()).isTrue();
+            assertThat(count.resolve()).isEqualTo(0L);
+            assertThat(count.isZero().resolve()).isTrue();
         }
     }
 
@@ -252,7 +253,7 @@ class EventStreamValueTest {
             NumericCondition<BigDecimal> total = a1Scope().sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then
-            assertThat(total.value()).isEqualByComparingTo("175");
+            assertThat(total.resolve()).isEqualByComparingTo("175");
         }
 
         @Test
@@ -264,7 +265,7 @@ class EventStreamValueTest {
             NumericCondition<BigDecimal> total = a1Scope().sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then
-            assertThat(total.value()).isEqualByComparingTo("0");
+            assertThat(total.resolve()).isEqualByComparingTo("0");
         }
 
         @Test
@@ -281,10 +282,10 @@ class EventStreamValueTest {
                                                                              MoneyWithdrawn::amount));
 
             // then
-            assertThat(balance.value()).isEqualByComparingTo("120");
-            assertThat(balance.isGreaterThan(BigDecimal.ZERO).isTrue()).isTrue();
-            assertThat(balance.isAtLeast(BigDecimal.valueOf(120)).isTrue()).isTrue();
-            assertThat(balance.isLessThan(BigDecimal.valueOf(200)).isTrue()).isTrue();
+            assertThat(balance.resolve()).isEqualByComparingTo("120");
+            assertThat(balance.isGreaterThan(BigDecimal.ZERO).resolve()).isTrue();
+            assertThat(balance.isAtLeast(BigDecimal.valueOf(120)).resolve()).isTrue();
+            assertThat(balance.isLessThan(BigDecimal.valueOf(200)).resolve()).isTrue();
         }
 
         @Test
@@ -296,12 +297,12 @@ class EventStreamValueTest {
             NumericCondition<BigDecimal> total = a1Scope().sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then
-            assertThat(total.isGreaterThan(BigDecimal.valueOf(50)).isTrue()).isTrue();
-            assertThat(total.isAtLeast(BigDecimal.valueOf(100)).isTrue()).isTrue();
-            assertThat(total.isAtMost(BigDecimal.valueOf(100)).isTrue()).isTrue();
-            assertThat(total.isEqualTo(BigDecimal.valueOf(100)).isTrue()).isTrue();
-            assertThat(total.isPositive().isTrue()).isTrue();
-            assertThat(total.isZero().isTrue()).isFalse();
+            assertThat(total.isGreaterThan(BigDecimal.valueOf(50)).resolve()).isTrue();
+            assertThat(total.isAtLeast(BigDecimal.valueOf(100)).resolve()).isTrue();
+            assertThat(total.isAtMost(BigDecimal.valueOf(100)).resolve()).isTrue();
+            assertThat(total.isEqualTo(BigDecimal.valueOf(100)).resolve()).isTrue();
+            assertThat(total.isPositive().resolve()).isTrue();
+            assertThat(total.isZero().resolve()).isFalse();
         }
 
         @Test
@@ -317,7 +318,7 @@ class EventStreamValueTest {
                                                                                MoneyWithdrawn::amount));
 
             // then
-            assertThat(totalMoved.value()).isEqualByComparingTo("50");
+            assertThat(totalMoved.resolve()).isEqualByComparingTo("50");
         }
     }
 
@@ -335,8 +336,8 @@ class EventStreamValueTest {
             OptionalCondition<MoneyDeposited> latest = a1Scope().latest(MoneyDeposited.class);
 
             // then
-            assertThat(latest.isPresent().isTrue()).isTrue();
-            assertThat(latest.value()).hasValueSatisfying(e ->
+            assertThat(latest.isPresent().resolve()).isTrue();
+            assertThat(latest.resolve()).hasValueSatisfying(e ->
                     assertThat(e.amount()).isEqualByComparingTo("30"));
         }
 
@@ -349,8 +350,8 @@ class EventStreamValueTest {
             OptionalCondition<MoneyDeposited> latest = a1Scope().latest(MoneyDeposited.class);
 
             // then
-            assertThat(latest.isAbsent().isTrue()).isTrue();
-            assertThat(latest.value()).isEmpty();
+            assertThat(latest.isAbsent().resolve()).isTrue();
+            assertThat(latest.resolve()).isEmpty();
         }
 
         @Test
@@ -363,7 +364,7 @@ class EventStreamValueTest {
             OptionalCondition<MoneyDeposited> first = a1Scope().first(MoneyDeposited.class);
 
             // then
-            assertThat(first.value()).hasValueSatisfying(e ->
+            assertThat(first.resolve()).hasValueSatisfying(e ->
                     assertThat(e.amount()).isEqualByComparingTo("10"));
         }
 
@@ -377,10 +378,10 @@ class EventStreamValueTest {
             EventCondition latest = a1Scope().latestOf(MoneyDeposited.class, MoneyWithdrawn.class);
 
             // then
-            assertThat(latest.isPresent().isTrue()).isTrue();
-            assertThat(latest.isA(MoneyWithdrawn.class).isTrue()).isTrue();
-            assertThat(latest.isA(MoneyDeposited.class).isTrue()).isFalse();
-            assertThat(latest.isAnyOf(MoneyDeposited.class, AccountClosed.class).isTrue()).isFalse();
+            assertThat(latest.isPresent().resolve()).isTrue();
+            assertThat(latest.isA(MoneyWithdrawn.class).resolve()).isTrue();
+            assertThat(latest.isA(MoneyDeposited.class).resolve()).isFalse();
+            assertThat(latest.isAnyOf(MoneyDeposited.class, AccountClosed.class).resolve()).isFalse();
         }
 
         @Test
@@ -393,7 +394,7 @@ class EventStreamValueTest {
             EventCondition first = a1Scope().firstOf(MoneyDeposited.class, MoneyWithdrawn.class);
 
             // then
-            assertThat(first.isA(MoneyDeposited.class).isTrue()).isTrue();
+            assertThat(first.isA(MoneyDeposited.class).resolve()).isTrue();
         }
 
         @Test
@@ -407,7 +408,7 @@ class EventStreamValueTest {
             OptionalCondition<MoneyDeposited> narrowed = latest.as(MoneyDeposited.class);
 
             // then
-            assertThat(narrowed.value()).hasValueSatisfying(e ->
+            assertThat(narrowed.resolve()).hasValueSatisfying(e ->
                     assertThat(e.amount()).isEqualByComparingTo("10"));
         }
 
@@ -420,8 +421,8 @@ class EventStreamValueTest {
             EventCondition latest = a1Scope().latestOf(MoneyDeposited.class);
 
             // then
-            assertThat(latest.isNamed(MoneyDeposited.class.getName()).isTrue()).isTrue();
-            assertThat(latest.isNamed("does.not.exist").isTrue()).isFalse();
+            assertThat(latest.isNamed(MoneyDeposited.class.getName()).resolve()).isTrue();
+            assertThat(latest.isNamed("does.not.exist").resolve()).isFalse();
         }
     }
 
@@ -442,7 +443,7 @@ class EventStreamValueTest {
                     .orDefault(new AccountStatus.Active());
 
             // then
-            assertThat(status.value()).isInstanceOf(AccountStatus.Closed.class);
+            assertThat(status.resolve()).isInstanceOf(AccountStatus.Closed.class);
         }
 
         @Test
@@ -463,7 +464,7 @@ class EventStreamValueTest {
 
             // then — even though MoneyWithdrawn is the chronologically latest event, the matcher narrows to
             // events whose type is registered via when(...), so MoneyDeposited wins
-            assertThat(status.value()).isInstanceOf(AccountStatus.Active.class);
+            assertThat(status.resolve()).isInstanceOf(AccountStatus.Active.class);
         }
 
         @Test
@@ -479,7 +480,7 @@ class EventStreamValueTest {
                     .orDefault(new AccountStatus.Unknown());
 
             // then
-            assertThat(status.value()).isInstanceOf(AccountStatus.Unknown.class);
+            assertThat(status.resolve()).isInstanceOf(AccountStatus.Unknown.class);
         }
 
         @Test
@@ -497,7 +498,7 @@ class EventStreamValueTest {
                     .orDefault(new AccountStatus.Unknown());
 
             // then — the latest event is MoneyWithdrawn, which maps to Active
-            assertThat(status.value()).isInstanceOf(AccountStatus.Active.class);
+            assertThat(status.resolve()).isInstanceOf(AccountStatus.Active.class);
         }
     }
 
@@ -515,7 +516,7 @@ class EventStreamValueTest {
             BigDecimal balance = a1Scope().fold(BigDecimal.ZERO)
                                           .event(MoneyDeposited.class, (sum, e) -> sum.add(e.amount()))
                                           .event(MoneyWithdrawn.class, (sum, e) -> sum.subtract(e.amount()))
-                                          .value();
+                                          .resolve();
 
             // then
             assertThat(balance).isEqualByComparingTo("120");
@@ -533,12 +534,12 @@ class EventStreamValueTest {
             BigDecimal viaFold = foldStream.fold(BigDecimal.ZERO)
                                            .event(MoneyDeposited.class, (s, e) -> s.add(e.amount()))
                                            .event(MoneyWithdrawn.class, (s, e) -> s.subtract(e.amount()))
-                                           .value();
+                                           .resolve();
 
             EventStream sumStream = a1Scope();
             BigDecimal viaSum = sumStream.sum(MoneyDeposited.class, MoneyDeposited::amount)
                                          .minus(sumStream.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount))
-                                         .value();
+                                         .resolve();
 
             // then
             assertThat(viaFold).isEqualByComparingTo(viaSum);
@@ -556,7 +557,7 @@ class EventStreamValueTest {
             // when
             BigDecimal total = a1Scope().fold(BigDecimal.ZERO)
                                         .event(custom, (sum, em) -> sum.add(((MoneyDeposited) em.payload()).amount()))
-                                        .value();
+                                        .resolve();
 
             // then
             assertThat(total).isEqualByComparingTo("75");
@@ -569,7 +570,7 @@ class EventStreamValueTest {
             // when
             BigDecimal total = a1Scope().fold(BigDecimal.valueOf(42))
                                         .event(MoneyDeposited.class, (s, e) -> s.add(e.amount()))
-                                        .value();
+                                        .resolve();
 
             // then
             assertThat(total).isEqualByComparingTo("42");
@@ -584,7 +585,7 @@ class EventStreamValueTest {
             Integer counts = a1Scope().fold(0)
                                       .event(MoneyDeposited.class, (n, e) -> n + 1)
                                       .event(MoneyDeposited.class, (n, e) -> n + 100)
-                                      .value();
+                                      .resolve();
 
             // then
             assertThat(counts).isEqualTo(1);
@@ -604,7 +605,7 @@ class EventStreamValueTest {
                                                   .map(b -> "balance=" + b);
 
             // then
-            assertThat(labelled.value()).isEqualTo("balance=100");
+            assertThat(labelled.resolve()).isEqualTo("balance=100");
         }
 
         @Test
@@ -617,10 +618,10 @@ class EventStreamValueTest {
             EventStream account = a1Scope();
             NumericCondition<Long> count = account.count(MoneyDeposited.class);
             NumericCondition<BigDecimal> total = account.sum(MoneyDeposited.class, MoneyDeposited::amount);
-            Condition<String> summary = count.zip(total, (c, t) -> c + " deposits totaling " + t);
+            Condition<String> summary = count.combine(total, (c, t) -> c + " deposits totaling " + t);
 
             // then
-            assertThat(summary.value()).isEqualTo("2 deposits totaling 150");
+            assertThat(summary.resolve()).isEqualTo("2 deposits totaling 150");
         }
 
         @Test
@@ -633,7 +634,7 @@ class EventStreamValueTest {
                                                      .orDefault(new MoneyDeposited("a1", BigDecimal.ZERO));
 
             // then
-            assertThat(dep.value().amount()).isEqualByComparingTo("0");
+            assertThat(dep.resolve().amount()).isEqualByComparingTo("0");
         }
 
         @Test
@@ -646,7 +647,7 @@ class EventStreamValueTest {
                                                                   .mapPresent(MoneyDeposited::amount);
 
             // then
-            assertThat(latestAmount.value()).hasValueSatisfying(a ->
+            assertThat(latestAmount.resolve()).hasValueSatisfying(a ->
                     assertThat(a).isEqualByComparingTo("40"));
         }
     }
@@ -680,12 +681,12 @@ class EventStreamValueTest {
             //        to the custom name. If the resolver were ignored, the stored event (published under the
             //        custom name) would not be matched.
             NumericCondition<BigDecimal> total =
-                    new DecisionContextImpl(eventStore, processingContext, Clock.systemUTC())
+                    new HistorySession(eventStore, processingContext, Clock.systemUTC())
                             .scope("account", "a1")
                             .sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then
-            assertThat(total.value()).isEqualByComparingTo("80");
+            assertThat(total.resolve()).isEqualByComparingTo("80");
         }
 
         @Test
@@ -706,10 +707,10 @@ class EventStreamValueTest {
             EventCondition latestDeposit = account.latestOf(MoneyDeposited.class);
 
             // then — all predicates correctly identify the event by its MessageType, with no payload touched
-            assertThat(hasDeposit.isTrue()).isTrue();
-            assertThat(deposits.value()).isEqualTo(1L);
-            assertThat(latestDeposit.isA(MoneyDeposited.class).isTrue()).isTrue();
-            assertThat(latestDeposit.isNamed(MoneyDeposited.class.getName()).isTrue()).isTrue();
+            assertThat(hasDeposit.resolve()).isTrue();
+            assertThat(deposits.resolve()).isEqualTo(1L);
+            assertThat(latestDeposit.isA(MoneyDeposited.class).resolve()).isTrue();
+            assertThat(latestDeposit.isNamed(MoneyDeposited.class.getName()).resolve()).isTrue();
         }
     }
 
@@ -723,15 +724,15 @@ class EventStreamValueTest {
             seed(new MoneyDeposited("a2", BigDecimal.valueOf(200)), Set.of(new Tag("account", "a2")));
 
             // when
-            DecisionContextImpl dc = newDecisionContext();
+            HistorySession dc = newDecisionContext();
             NumericCondition<BigDecimal> a1Balance = dc.scope("account", "a1")
                                                        .sum(MoneyDeposited.class, MoneyDeposited::amount);
             NumericCondition<BigDecimal> a2Balance = dc.scope("account", "a2")
                                                        .sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then
-            assertThat(a1Balance.value()).isEqualByComparingTo("100");
-            assertThat(a2Balance.value()).isEqualByComparingTo("200");
+            assertThat(a1Balance.resolve()).isEqualByComparingTo("100");
+            assertThat(a2Balance.resolve()).isEqualByComparingTo("200");
         }
 
         @Test
@@ -741,19 +742,19 @@ class EventStreamValueTest {
                  Set.of(new Tag("account", "a1"), new Tag("country", "NL")));
 
             // when
-            DecisionContextImpl dc = newDecisionContext();
+            HistorySession dc = newDecisionContext();
             BigDecimal viaComposite = dc.scope(java.util.Map.of("account", "a1", "country", "NL"))
                                         .sum(MoneyDeposited.class, MoneyDeposited::amount)
-                                        .value();
+                                        .resolve();
 
             // then
             assertThat(viaComposite).isEqualByComparingTo("100");
 
             // and when — composite scope with a non-matching country yields no events
-            DecisionContextImpl dc2 = newDecisionContext();
+            HistorySession dc2 = newDecisionContext();
             BigDecimal missingCountry = dc2.scope(java.util.Map.of("account", "a1", "country", "US"))
                                            .sum(MoneyDeposited.class, MoneyDeposited::amount)
-                                           .value();
+                                           .resolve();
 
             // then
             assertThat(missingCountry).isEqualByComparingTo("0");

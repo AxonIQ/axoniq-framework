@@ -26,18 +26,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
- * A {@link Condition} whose value is a boolean, with logical combinators and readable evaluation methods.
+ * A {@link Condition} whose value is a boolean, with logical combinators.
  * <p>
- * {@link #isTrue()} and {@link #isFalse()} are the idiomatic way to consume a {@code BooleanCondition} in a
- * decision body: they force the condition once and return a primitive {@code boolean} suitable for use directly
- * in an {@code if} statement. The logical combinators ({@link #and(BooleanCondition)}, {@link #or(BooleanCondition)},
- * {@link #not()}, {@link #xor(BooleanCondition)}) preserve the {@code BooleanCondition} type so chains stay fluent
- * without lifting back from {@link Condition}.
+ * Consume a {@code BooleanCondition} in a decision body by resolving it — {@code if (closed.resolve())} — like
+ * any other {@link Condition}. The logical combinators ({@link #and(BooleanCondition)},
+ * {@link #or(BooleanCondition)}, {@link #not()}, {@link #xor(BooleanCondition)}) compose without resolving and
+ * preserve the {@code BooleanCondition} type so chains stay fluent without lifting back from {@link Condition}.
  * <p>
- * Implementers need only supply {@link Condition#asCompletableFuture()}; every other operation — including
- * {@link #map(Function) map} and {@link Condition#zip(Condition, java.util.function.BiFunction) zip} — is
- * derived from that primitive. Lift an arbitrary {@code Condition<Boolean>} into a {@code BooleanCondition} via
- * {@link #of(Condition)}.
+ * Implementers need only supply {@link Condition#resolveAsync()}; every other operation — including
+ * {@link #map(Function) map} and {@link Condition#combine(Condition, java.util.function.BiFunction) combine} —
+ * is derived from that primitive. Lift an arbitrary {@code Condition<Boolean>} into a {@code BooleanCondition}
+ * via {@link #of(Condition)}.
  *
  * @author Allard Buijze
  * @since 5.2.0
@@ -56,31 +55,13 @@ public interface BooleanCondition extends Condition<Boolean> {
     }
 
     /**
-     * Forces this condition and returns whether its value is {@code true}.
-     *
-     * @return {@code true} if and only if the condition's value is {@link Boolean#TRUE}
-     */
-    default boolean isTrue() {
-        return Boolean.TRUE.equals(value());
-    }
-
-    /**
-     * Forces this condition and returns whether its value is {@code false}.
-     *
-     * @return {@code true} if and only if the condition's value is {@link Boolean#FALSE}
-     */
-    default boolean isFalse() {
-        return Boolean.FALSE.equals(value());
-    }
-
-    /**
      * Returns a condition equivalent to the logical conjunction of this and {@code other}.
      *
      * @param other the right-hand operand
      * @return a condition that is {@code true} when both operands are {@code true}
      */
     default BooleanCondition and(BooleanCondition other) {
-        return BooleanCondition.of(zip(other, (a, b) -> a && b));
+        return BooleanCondition.of(combine(other, (a, b) -> a && b));
     }
 
     /**
@@ -90,7 +71,7 @@ public interface BooleanCondition extends Condition<Boolean> {
      * @return a condition that is {@code true} when at least one operand is {@code true}
      */
     default BooleanCondition or(BooleanCondition other) {
-        return BooleanCondition.of(zip(other, (a, b) -> a || b));
+        return BooleanCondition.of(combine(other, (a, b) -> a || b));
     }
 
     /**
@@ -109,7 +90,7 @@ public interface BooleanCondition extends Condition<Boolean> {
      * @return a condition that is {@code true} when exactly one operand is {@code true}
      */
     default BooleanCondition xor(BooleanCondition other) {
-        return BooleanCondition.of(zip(other, (a, b) -> a ^ b));
+        return BooleanCondition.of(combine(other, (a, b) -> a ^ b));
     }
 
     /**
@@ -129,8 +110,8 @@ public interface BooleanCondition extends Condition<Boolean> {
         }
 
         @Override
-        public CompletableFuture<Boolean> asCompletableFuture() {
-            return base.asCompletableFuture();
+        public CompletableFuture<Boolean> resolveAsync() {
+            return base.resolveAsync();
         }
     }
 }

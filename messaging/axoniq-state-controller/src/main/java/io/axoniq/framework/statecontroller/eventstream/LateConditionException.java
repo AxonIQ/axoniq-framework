@@ -48,8 +48,8 @@ public final class LateConditionException extends IllegalStateException {
      */
     public LateConditionException(String description) {
         super("Cannot declare " + description + " after the scope has been sealed. "
-                      + "Declare every condition on a scope before forcing any of its conditions "
-                      + "(every Condition.value() / isTrue() / isPresent() / ... call on a scope's conditions "
-                      + "seals that scope).");
+                      + "This stream reference was sealed by an earlier resolution "
+                      + "(every Condition.resolve() / resolveAsync() call seals the declared scopes); "
+                      + "look the scope up again to declare more conditions via a supplementary read.");
     }
 }

@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.statecontroller.decisions;
+package io.axoniq.framework.statecontroller;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,22 +26,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
- * Pins the immediate value-level contracts on the {@link Decision} value type so they don't drift: null-handling
- * on the factories, the {@link Decision.Accept#returning(Object) returning} round-trip, and the
- * <em>replace, not append</em> semantics of {@link Decision.Reject#recording(Object...)}.
+ * Pins the immediate value-level contracts on the {@link Outcome} value type so they don't drift: null-handling
+ * on the factories, the {@link Outcome.Accept#returning(Object) returning} round-trip, and the
+ * <em>replace, not append</em> semantics of {@link Outcome.Reject#recording(Object...)}.
  *
  * @author Allard Buijze
  * @since 5.2.0
  */
-class DecisionContractTest {
+class OutcomeContractTest {
 
     @Nested
-    class EmitFactory {
+    class AcceptFactory {
 
         @Test
-        void emitWithoutEventsYieldsAnEmptyAcceptCarryingNoResult() {
+        void acceptWithoutEventsYieldsAnEmptyAcceptCarryingNoResult() {
             // when
-            Decision.Accept accept = Decision.emit();
+            Outcome.Accept accept = Outcome.accept();
 
             // then
             assertThat(accept.events()).isEmpty();
@@ -49,30 +49,30 @@ class DecisionContractTest {
         }
 
         @Test
-        void emitWithEventsCapturesThemInDeclaredOrder() {
+        void acceptWithEventsCapturesThemInDeclaredOrder() {
             // given
             Object e1 = new Object();
             Object e2 = new Object();
 
             // when
-            Decision.Accept accept = Decision.emit(e1, e2);
+            Outcome.Accept accept = Outcome.accept(e1, e2);
 
             // then
             assertThat(accept.events()).containsExactly(e1, e2);
         }
 
         @Test
-        void emitRejectsANullVarargsArray() {
-            assertThatNullPointerException().isThrownBy(() -> Decision.emit((Object[]) null));
+        void acceptRejectsANullVarargsArray() {
+            assertThatNullPointerException().isThrownBy(() -> Outcome.accept((Object[]) null));
         }
 
         @Test
         void returningAttachesAResultToAnExistingAccept() {
             // given
-            Decision.Accept base = Decision.emit("event");
+            Outcome.Accept base = Outcome.accept("event");
 
             // when
-            Decision.Accept withResult = base.returning("R-1");
+            Outcome.Accept withResult = base.returning("R-1");
 
             // then
             assertThat(withResult.events()).containsExactly("event");
@@ -84,10 +84,10 @@ class DecisionContractTest {
         @Test
         void returningCanClearAPreviouslySetResultByPassingNull() {
             // given
-            Decision.Accept withResult = Decision.emit("event").returning("R-1");
+            Outcome.Accept withResult = Outcome.accept("event").returning("R-1");
 
             // when
-            Decision.Accept cleared = withResult.returning(null);
+            Outcome.Accept cleared = withResult.returning(null);
 
             // then
             assertThat(cleared.result()).isNull();
@@ -100,7 +100,7 @@ class DecisionContractTest {
         @Test
         void rejectCarriesTheReasonAndAnEmptyAuditTrailByDefault() {
             // when
-            Decision.Reject reject = Decision.reject("nope");
+            Outcome.Reject reject = Outcome.reject("nope");
 
             // then
             assertThat(reject.reason()).isEqualTo("nope");
@@ -110,11 +110,11 @@ class DecisionContractTest {
         @Test
         void recordingReplacesAnyPreviouslyRecordedAuditEvents() {
             // given — first recording attaches one event
-            Decision.Reject first = Decision.reject("denied").recording("audit-1");
+            Outcome.Reject first = Outcome.reject("denied").recording("audit-1");
             assertThat(first.auditEvents()).containsExactly("audit-1");
 
             // when — recording a second time
-            Decision.Reject second = first.recording("audit-2", "audit-3");
+            Outcome.Reject second = first.recording("audit-2", "audit-3");
 
             // then — the previous trail is dropped, not concatenated
             assertThat(second.auditEvents()).containsExactly("audit-2", "audit-3");
@@ -125,7 +125,7 @@ class DecisionContractTest {
         @Test
         void recordingRejectsANullVarargsArray() {
             // given
-            Decision.Reject reject = Decision.reject("nope");
+            Outcome.Reject reject = Outcome.reject("nope");
 
             // when / then
             assertThatNullPointerException().isThrownBy(() -> reject.recording((Object[]) null));

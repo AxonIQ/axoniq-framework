@@ -19,22 +19,21 @@
 
 package io.axoniq.framework.statecontroller.sample.rental;
 
-import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
-import io.axoniq.framework.statecontroller.decisions.Decision;
-import io.axoniq.framework.statecontroller.decisions.DecisionContext;
-import io.axoniq.framework.statecontroller.decisions.StateController;
-import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.History;
+import io.axoniq.framework.statecontroller.Outcome;
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 
-import java.util.Optional;
+import static io.axoniq.framework.statecontroller.Outcome.accept;
+import static io.axoniq.framework.statecontroller.Outcome.reject;
 
 /**
  * Bike rental decisions, hand-tuned for a tight DCB consistency boundary in the separated-payment lifecycle: a
- * {@link RentBike} command merely records the {@link BikeRequested intent}; a downstream payment service subsequently
- * issues either an approve or reject command, which is what produces a {@link RequestApproved} or
- * {@link RequestRejected} event. A {@link ReturnBike} command produces a {@link BikeReturned} event when the renter
- * matches.
+ * {@link RentBike} command merely records the {@link BikeRequested intent}; a downstream payment service
+ * subsequently issues either an approve or reject command, which is what produces a {@link RequestApproved} or
+ * {@link RequestRejected} event. A {@link ReturnBike} command produces a {@link BikeReturned} event when the
+ * renter matches.
  * <p>
- * <h3>{@link #rentBike(RentBike, DecisionContext) rentBike}</h3>
+ * <h3>{@link #rentBike(RentBike, History) rentBike}</h3>
  * Reads {@code latestOf(BikeRequested, RequestRejected, BikeReturned)} on the per-bike scope and accepts iff that
  * latest event is <em>not</em> a {@link BikeRequested}:
  * <ul>
@@ -49,7 +48,7 @@ import java.util.Optional;
  * separate command. On reject, the decision throws without appending any audit events; an unavailable bike is
  * a pure error response.
  * <p>
- * <h3>{@link #returnBike(ReturnBike, DecisionContext) returnBike}</h3>
+ * <h3>{@link #returnBike(ReturnBike, History) returnBike}</h3>
  * Reads {@code latestOf(RequestApproved, BikeReturned)} on the per-bike scope. The bike is currently rented
  * <em>iff</em> the latest event from this pair is a {@link RequestApproved}; the approval's {@code userId}
  * identifies the current renter, which must match the command's {@code userId} for the return to succeed.
@@ -58,34 +57,30 @@ import java.util.Optional;
  */
 public class BikeRentals {
 
-    @StateController
-    public Decision rentBike(RentBike cmd, DecisionContext ctx) {
-        EventStream bike = ctx.scope("bike", cmd.bikeId());
-        var available = bike.latestOf(BikeRequested.class,
-                                      RequestRejected.class,
-                                      BikeReturned.class)
-                            .isA(BikeRequested.class)
-                            .not();
-        if (available.isTrue()) {
-            return Decision.emit(new BikeRequested(cmd.bikeId(), cmd.userId()));
+    @CommandHandler
+    public Outcome rentBike(RentBike cmd, History history) {
+        History bike = history.of("bike", cmd.bikeId());
+
+        // available unless the latest of these three is a pending/active request
+        if (bike.latestOf(BikeRequested.class, RequestRejected.class, BikeReturned.class).resolve()
+                instanceof BikeRequested) {
+            return reject("bike is not available for rental");
         }
-        return Decision.reject("bike is not available for rental");
+        return accept(new BikeRequested(cmd.bikeId(), cmd.userId()));
     }
 
-    @StateController
-    public Decision returnBike(ReturnBike cmd, DecisionContext ctx) {
-        EventStream bike = ctx.scope("bike", cmd.bikeId());
-        OptionalCondition<String> currentRenter = bike.latestOf(RequestApproved.class, BikeReturned.class)
-                                                      .as(RequestApproved.class)
-                                                      .mapPresent(RequestApproved::userId);
+    @CommandHandler
+    public Outcome returnBike(ReturnBike cmd, History history) {
+        History bike = history.of("bike", cmd.bikeId());
 
-        Optional<String> renter = currentRenter.value();
-        if (renter.isEmpty()) {
-            return Decision.reject("bike is not currently rented");
+        // rented iff the latest of this pair is an approval; its userId is the current renter
+        if (!(bike.latestOf(RequestApproved.class, BikeReturned.class).resolve()
+                instanceof RequestApproved approved)) {
+            return reject("bike is not currently rented");
         }
-        if (!renter.get().equals(cmd.userId())) {
-            return Decision.reject("bike is rented by another user");
+        if (!approved.userId().equals(cmd.userId())) {
+            return reject("bike is rented by another user");
         }
-        return Decision.emit(new BikeReturned(cmd.bikeId(), cmd.userId()));
+        return accept(new BikeReturned(cmd.bikeId(), cmd.userId()));
     }
 }

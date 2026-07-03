@@ -28,7 +28,7 @@ import java.util.function.Function;
 /**
  * Decorator {@link Condition} that lazily projects an upstream condition's value through a {@link Function}.
  * <p>
- * Its {@link #asCompletableFuture()} returns {@code source.asCompletableFuture().thenApply(fn)} — the upstream
+ * Its {@link #resolveAsync()} returns {@code source.resolveAsync().thenApply(fn)} — the upstream
  * future is the single source of truth, and this decorator never observes events or registers any accumulator
  * on the backing stream. Chained {@code .map(...)} calls fuse into a single {@code MappedCondition} so that
  * deep projection chains do not allocate intermediate condition objects per stage.
@@ -53,8 +53,8 @@ final class MappedCondition<T, U> implements Condition<U> {
     }
 
     @Override
-    public CompletableFuture<U> asCompletableFuture() {
-        return source.asCompletableFuture().thenApply(fn);
+    public CompletableFuture<U> resolveAsync() {
+        return source.resolveAsync().thenApply(fn);
     }
 
     @Override

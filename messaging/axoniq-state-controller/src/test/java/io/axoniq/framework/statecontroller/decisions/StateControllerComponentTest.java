@@ -19,7 +19,9 @@
 
 package io.axoniq.framework.statecontroller.decisions;
 
+import io.axoniq.framework.statecontroller.Outcome;
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.runtime.OutcomeDispatch;
 import io.axoniq.framework.statecontroller.sample.banking.AccountClosed;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyDeposited;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyWithdrawn;
@@ -160,32 +162,32 @@ class StateControllerComponentTest {
     // Decision functions shared by tests
     // ----------------------------------------------------------------------
 
-    private static Decision withdraw(Withdraw cmd, DecisionContext ctx) {
+    private static Outcome withdraw(Withdraw cmd, DecisionContext ctx) {
         EventStream account = ctx.scope("account", cmd.accountId());
         var closed = account.contains(AccountClosed.class);
         var balance = account.sum(MoneyDeposited.class, MoneyDeposited::amount)
                              .minus(account.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount));
-        if (closed.isTrue()) {
-            return Decision.reject("account closed");
+        if (closed.resolve()) {
+            return Outcome.reject("account closed");
         }
-        if (balance.isLessThan(cmd.amount()).isTrue()) {
-            return Decision.reject("insufficient funds");
+        if (balance.isLessThan(cmd.amount()).resolve()) {
+            return Outcome.reject("insufficient funds");
         }
-        return Decision.emit(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+        return Outcome.accept(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
     }
 
-    private static Decision register(RegisterAccount cmd, DecisionContext ctx) {
+    private static Outcome register(RegisterAccount cmd, DecisionContext ctx) {
         EventStream account = ctx.scope("account", cmd.accountId());
         var closed = account.contains(AccountClosed.class);
         var exists = account.contains(AccountOpened.class);
-        if (closed.isTrue()) {
-            return Decision.reject("account is closed")
+        if (closed.resolve()) {
+            return Outcome.reject("account is closed")
                            .recording(new AuditedRejection(cmd.accountId(), "closed"));
         }
-        if (exists.isTrue()) {
-            return Decision.reject("already exists");
+        if (exists.resolve()) {
+            return Outcome.reject("already exists");
         }
-        return Decision.emit(new AccountOpened(cmd.accountId())).returning("ACC-" + cmd.accountId());
+        return Outcome.accept(new AccountOpened(cmd.accountId())).returning("ACC-" + cmd.accountId());
     }
 
     @Nested
@@ -231,7 +233,7 @@ class StateControllerComponentTest {
             //         result; the dispatch path must surface null identically to the "no returning set" case
             var component = new StateControllerComponent("accounts")
                     .decide(RegisterAccount.class,
-                            (cmd, ctx) -> Decision.emit(new AccountOpened(cmd.accountId())).returning(null));
+                            (cmd, ctx) -> Outcome.accept(new AccountOpened(cmd.accountId())).returning(null));
 
             // when
             Object result = dispatch(component, new RegisterAccount("a-new"));
@@ -373,7 +375,7 @@ class StateControllerComponentTest {
 
         @Test
         void annotationAndDeclarativePathsShareTheSameDecisionContextForOneProcessingContext() {
-            // given — DecisionDispatch.decisionContextFor caches a DecisionContext on the ProcessingContext;
+            // given — OutcomeDispatch.sessionFor caches a DecisionContext on the ProcessingContext;
             //         both the declarative dispatch path and any subsequent direct lookup must observe the
             //         same instance
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(100)),
@@ -382,9 +384,9 @@ class StateControllerComponentTest {
                     .decide(Withdraw.class, StateControllerComponentTest::withdraw);
 
             // when — pre-resolve via the dispatch helper, then dispatch a command
-            DecisionContext preDispatch = DecisionDispatch.decisionContextFor(processingContext);
+            DecisionContext preDispatch = OutcomeDispatch.sessionFor(processingContext);
             dispatch(component, new Withdraw("a1", BigDecimal.valueOf(40)));
-            DecisionContext postDispatch = DecisionDispatch.decisionContextFor(processingContext);
+            DecisionContext postDispatch = OutcomeDispatch.sessionFor(processingContext);
 
             // then — same instance throughout
             assertThat(postDispatch).isSameAs(preDispatch);

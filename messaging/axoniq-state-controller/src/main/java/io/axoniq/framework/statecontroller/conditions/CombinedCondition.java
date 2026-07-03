@@ -28,8 +28,8 @@ import java.util.function.BiFunction;
 /**
  * Decorator {@link Condition} that combines two upstream conditions' values through a {@link BiFunction}.
  * <p>
- * Its {@link #asCompletableFuture()} returns
- * {@code left.asCompletableFuture().thenCombine(right.asCompletableFuture(), combiner)} — both upstream futures
+ * Its {@link #resolveAsync()} returns
+ * {@code left.resolveAsync().thenCombine(right.resolveAsync(), combiner)} — both upstream futures
  * are awaited together, and this decorator never observes events or registers any accumulator on the backing
  * stream. Because conditions on the same scope share a single sourced read, both upstream futures complete in
  * lock-step, so {@code thenCombine} resolves as soon as the reduce finishes.
@@ -45,13 +45,13 @@ import java.util.function.BiFunction;
  * @since 5.2.0
  */
 @Internal
-final class ZippedCondition<T, U, R> implements Condition<R> {
+final class CombinedCondition<T, U, R> implements Condition<R> {
 
     private final Condition<T> left;
     private final Condition<U> right;
     private final BiFunction<? super T, ? super U, ? extends R> combiner;
 
-    ZippedCondition(Condition<T> left,
+    CombinedCondition(Condition<T> left,
                     Condition<U> right,
                     BiFunction<? super T, ? super U, ? extends R> combiner) {
         this.left = Objects.requireNonNull(left, "left must not be null");
@@ -60,7 +60,7 @@ final class ZippedCondition<T, U, R> implements Condition<R> {
     }
 
     @Override
-    public CompletableFuture<R> asCompletableFuture() {
-        return left.asCompletableFuture().thenCombine(right.asCompletableFuture(), combiner);
+    public CompletableFuture<R> resolveAsync() {
+        return left.resolveAsync().thenCombine(right.resolveAsync(), combiner);
     }
 }

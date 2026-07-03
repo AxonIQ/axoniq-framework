@@ -20,7 +20,6 @@
 package io.axoniq.framework.statecontroller.eventstream;
 
 import io.axoniq.framework.statecontroller.conditions.BooleanCondition;
-import io.axoniq.framework.statecontroller.conditions.FutureCondition;
 import io.axoniq.framework.statecontroller.conditions.MatchBuilder;
 import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
 import org.axonframework.common.annotation.Internal;
@@ -41,10 +40,10 @@ import java.util.function.Predicate;
  * <h3>Composition, not inheritance</h3>
  * {@code SourcedEventCondition} does <em>not</em> itself extend {@link SourcedCondition}; the {@link SourcedEventSelection}
  * it wraps is the registering accumulator. All projection operators ({@link #isA(Class)}, {@link #isAnyOf(Class...)},
- * {@link #isNamed(String)}, {@link #as(Class)}, {@link #matching(Class)}) chain {@code thenApply} on the
- * selection's future and lift the result back into the {@link io.axoniq.framework.statecontroller.conditions.Condition
- * Condition} world via {@link FutureCondition}. Because the chain rides on the selection-future, no projection
- * needs its own seal/await handshake — the future itself encodes the await.
+ * {@link #isNamed(String)}, {@link #as(Class)}, {@link #matching(Class)}) are lazy
+ * {@link io.axoniq.framework.statecontroller.conditions.Condition#map(java.util.function.Function) map}
+ * decorators over the selection. Because the chain rides on the selection, no projection needs its own
+ * seal/await handshake — and declaring a projection never resolves the selection.
  * <p>
  * <h3>Metadata-only matching</h3>
  * {@link #isA(Class)}, {@link #isAnyOf(Class...)}, {@link #isNamed(String)} and {@link #as(Class)} compare
@@ -52,7 +51,7 @@ import java.util.function.Predicate;
  * {@link EventMessage#payload() payload()} for the type check, so they work correctly against events whose
  * payload arrives serialized (e.g. as {@code byte[]}). {@link #as(Class)} matches by {@link QualifiedName} first
  * and only touches {@code payload()} on a confirmed match, which is when deserialization is genuinely required.
- * The default {@link #asCompletableFuture()} (returning {@code Optional<Object>}) likewise only invokes
+ * The default {@link #resolveAsync()} (returning {@code Optional<Object>}) likewise only invokes
  * {@link EventMessage#payload() payload()} on a present selection.
  * <p>
  * Marked {@link Internal @Internal} because instances are produced by
@@ -88,11 +87,11 @@ final class SourcedEventCondition implements EventCondition {
      * {@code thenApply} on the selection without forcing payload extraction.
      */
     CompletableFuture<Optional<EventMessage>> selectionFuture() {
-        return selection.asCompletableFuture();
+        return selection.resolveAsync();
     }
 
     @Override
-    public CompletableFuture<Optional<Object>> asCompletableFuture() {
+    public CompletableFuture<Optional<Object>> resolveAsync() {
         // payload() is deferred to this terminal — and only invoked once the selection is non-empty.
         return selectionFuture().thenApply(opt -> opt.map(EventMessage::payload));
     }
@@ -125,35 +124,36 @@ final class SourcedEventCondition implements EventCondition {
     }
 
     /**
-     * Lifts a {@link QualifiedName}-level predicate over the selection-future into a {@link BooleanCondition}.
-     * The predicate is evaluated against the selected event's qualified name when present; an empty selection
-     * yields {@code false}. Used by {@link #isA}, {@link #isAnyOf}, and {@link #isNamed} to share a single
-     * future-chaining shape.
+     * Lifts a {@link QualifiedName}-level predicate over the selection into a {@link BooleanCondition}. The
+     * projection is a lazy {@link Condition#map(java.util.function.Function) map} — declaring it performs no
+     * resolution. The predicate is evaluated against the selected event's qualified name when present; an empty
+     * selection yields {@code false}. Used by {@link #isA}, {@link #isAnyOf}, and {@link #isNamed} to share a
+     * single shape.
      */
     private BooleanCondition booleanFromSelection(Predicate<QualifiedName> predicate) {
-        return BooleanCondition.of(new FutureCondition<>(
-                selectionFuture().thenApply(opt -> opt.map(em -> predicate.test(em.type().qualifiedName()))
-                                                      .orElse(false))));
+        return BooleanCondition.of(
+                selection.map(opt -> opt.map(em -> predicate.test(em.type().qualifiedName()))
+                                        .orElse(false)));
     }
 
     @Override
     public <E> OptionalCondition<E> as(Class<E> type) {
         Objects.requireNonNull(type, "type must not be null");
         QualifiedName name = stream.resolveType(type);
-        return OptionalCondition.of(new FutureCondition<>(
-                selectionFuture().thenApply(opt -> opt
+        return OptionalCondition.of(
+                selection.map(opt -> opt
                         .filter(em -> em.type().qualifiedName().equals(name))
                         // Match by QualifiedName first (no payload touch), then extract via payloadAs so a
                         // serialized payload is deserialized through the configured Converter only after the
                         // type has been confirmed.
-                        .map(em -> em.payloadAs(type, stream.converter())))));
+                        .map(em -> em.payloadAs(type, stream.converter()))));
     }
 
     @Override
     public <R> MatchBuilder<R> matching(Class<R> resultType) {
         Objects.requireNonNull(resultType, "resultType must not be null");
         // Pass the SourcedEventSelection itself (not its future) so the builder can defer
-        // asCompletableFuture() — and thus the stream's seal — until orDefault(...) is called,
+        // resolveAsync() — and thus the stream's seal — until orDefault(...) is called,
         // leaving room for further when(...) calls to register additional event types.
         return SourcedMatchBuilder.overSelectedMessage(stream, selection);
     }

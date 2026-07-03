@@ -35,7 +35,7 @@ import java.util.function.Function;
  * {@link #orDefault(Object)} unwraps to a plain {@link Condition} carrying the unconditional value.
  * <p>
  * All specialized operations are derived from {@link #map(Function)}; implementers only supply
- * {@link Condition#asCompletableFuture()} on the base ({@link Condition#map(Function) map} and
+ * {@link Condition#resolveAsync()} on the base ({@link Condition#map(Function) map} and
  * {@link Condition#zip(Condition, java.util.function.BiFunction) zip} are defaulted). Lift an arbitrary
  * {@code Condition<Optional<T>>} into an {@code OptionalCondition} via {@link #of(Condition)}.
  *
@@ -118,8 +118,8 @@ public interface OptionalCondition<T> extends Condition<Optional<T>> {
         }
 
         @Override
-        public CompletableFuture<Optional<T>> asCompletableFuture() {
-            return base.asCompletableFuture();
+        public CompletableFuture<Optional<T>> resolveAsync() {
+            return base.resolveAsync();
         }
     }
 }

@@ -21,11 +21,18 @@ package io.axoniq.framework.statecontroller.decisions;
 
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
- * The handle a {@link StateController @StateController} decision method receives to declare the slice of event
- * history it cares about.
+ * The lower-level handle a state-controlled command handler can receive to declare the slice of event history it
+ * cares about through raw, composable conditions.
+ * <p>
+ * This is the advanced counterpart to the {@link io.axoniq.framework.statecontroller.History History}
+ * surface: inject a {@code DecisionContext} when a decision needs the full
+ * {@link io.axoniq.framework.statecontroller.conditions.Condition Condition} vocabulary (custom folds, match
+ * builders) that the simpler History surface deliberately omits. Both surfaces share the same per-command loading
+ * session, so mixing them still batches reads and records one DCB consistency boundary.
  * <p>
  * {@link #scope(String, Object)} declares a single-tag scope (the common case);
  * {@link #scope(Map)} declares a composite scope across multiple tags. Each {@code scope(...)} call returns an
@@ -34,16 +41,16 @@ import java.util.Map;
  * <p>
  * Example:
  * <pre>{@code
- * @StateController
- * public Decision withdraw(Withdraw cmd, DecisionContext ctx) {
+ * @CommandHandler
+ * public Outcome withdraw(Withdraw cmd, DecisionContext ctx) {
  *     EventStream account = ctx.scope("account", cmd.accountId());
  *     var closed  = account.contains(AccountClosed.class);
  *     var balance = account.sum(MoneyDeposited.class, MoneyDeposited::amount)
  *                          .minus(account.sum(MoneyWithdrawn.class, MoneyWithdrawn::amount));
  *
- *     if (closed.isTrue())                           return Decision.reject("account closed");
- *     if (balance.isLessThan(cmd.amount()).isTrue()) return Decision.reject("insufficient funds");
- *     return Decision.emit(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+ *     if (closed.isTrue())                           return Outcome.reject("account closed");
+ *     if (balance.isLessThan(cmd.amount()).isTrue()) return Outcome.reject("insufficient funds");
+ *     return Outcome.accept(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
  * }
  * }</pre>
  *
@@ -71,4 +78,14 @@ public interface DecisionContext {
      * @return the lazily-loaded event stream for the composite tagged slice
      */
     EventStream scope(Map<String, ?> tags);
+
+    /**
+     * Returns the current time according to the framework-supplied clock.
+     * <p>
+     * Decision bodies should read the current time through this method rather than calling
+     * {@link Instant#now()} directly, so they stay deterministic under test.
+     *
+     * @return the current {@link Instant} as observed through the framework clock
+     */
+    Instant time();
 }

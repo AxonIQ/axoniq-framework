@@ -21,7 +21,6 @@ package io.axoniq.framework.statecontroller.eventstream;
 
 import io.axoniq.framework.statecontroller.conditions.BooleanCondition;
 import io.axoniq.framework.statecontroller.conditions.Condition;
-import io.axoniq.framework.statecontroller.conditions.FutureCondition;
 import io.axoniq.framework.statecontroller.conditions.MatchBuilder;
 import io.axoniq.framework.statecontroller.conditions.NumericCondition;
 import io.axoniq.framework.statecontroller.conditions.OptionalCondition;
@@ -101,21 +100,45 @@ public final class SourcedEventStream implements EventStream {
     private final MessageTypeResolver typeResolver;
     private final @Nullable Converter converter;
     private final Set<Tag> scopeTags;
+    private final Runnable resolveTrigger;
 
     private final Map<Class<?>, QualifiedName> resolvedTypes = new LinkedHashMap<>();
     private final Set<QualifiedName> additionalNames = new LinkedHashSet<>();
     private final List<SourcedCondition<?>> accumulators = new ArrayList<>();
     private boolean sealed;
 
+    /**
+     * Creates a stream for the given scope.
+     *
+     * @param eventStore        the event store to source from at seal time
+     * @param processingContext the processing context the sourced read participates in
+     * @param typeResolver      the resolver mapping registered payload classes to {@link QualifiedName}s
+     * @param scopeTags         the tag set identifying this scope
+     * @param resolveTrigger    invoked when any condition on this stream is resolved, before its future is
+     *                          returned; the loading session passes its seal-all hook here so the first
+     *                          resolution anywhere in a decision seals every declared scope at once
+     */
     public SourcedEventStream(EventStore eventStore,
-                           ProcessingContext processingContext,
-                           MessageTypeResolver typeResolver,
-                           Set<Tag> scopeTags) {
+                              ProcessingContext processingContext,
+                              MessageTypeResolver typeResolver,
+                              Set<Tag> scopeTags,
+                              Runnable resolveTrigger) {
         this.eventStore = Objects.requireNonNull(eventStore, "eventStore must not be null");
         this.processingContext = Objects.requireNonNull(processingContext, "processingContext must not be null");
         this.typeResolver = Objects.requireNonNull(typeResolver, "typeResolver must not be null");
         this.converter = resolveConverter(processingContext);
         this.scopeTags = Set.copyOf(scopeTags);
+        this.resolveTrigger = Objects.requireNonNull(resolveTrigger, "resolveTrigger must not be null");
+    }
+
+    /**
+     * Signals that a condition on this stream is being resolved. Runs the configured resolve trigger — the
+     * loading session's seal-all hook — so every scope declared in the in-flight decision seals together, then
+     * guarantees this stream itself is sealed (covering direct engine use without a session).
+     */
+    void triggerResolve() {
+        resolveTrigger.run();
+        seal();
     }
 
     /**
@@ -277,6 +300,17 @@ public final class SourcedEventStream implements EventStream {
     }
 
     /**
+     * Returns whether this stream has been sealed. Used by the runtime's loading session to decide whether a
+     * scope lookup can still register declarations on this stream or must mint a fresh one (the
+     * supplementary-read case).
+     *
+     * @return {@code true} when {@link #seal()} has run, {@code false} while declarations are still accepted
+     */
+    public boolean isSealed() {
+        return sealed;
+    }
+
+    /**
      * Seals the stream (idempotent) and <strong>kicks off</strong> the sourced read on the surrounding
      * {@link ProcessingContext}'s
      * {@link org.axonframework.eventsourcing.eventstore.EventStoreTransaction EventStoreTransaction}, returning
@@ -286,14 +320,18 @@ public final class SourcedEventStream implements EventStream {
      * {@link SourcedCondition#complete()} or {@link SourcedCondition#completeExceptionally(Throwable)} so its
      * value-future resolves.
      * <p>
+     * When the read actually sources (at least one accumulator and at least one registered type), the folded
+     * {@link EventCriteria} is recorded in {@link ReadBoundaries} for the in-flight {@link ProcessingContext},
+     * feeding the DCB coverage guard that runs before an accepted outcome's append.
+     * <p>
      * Each {@link SourcedCondition} exposes its own future through
-     * {@link Condition#asCompletableFuture() asCompletableFuture()}; callers block on that per-condition future
+     * {@link Condition#resolveAsync() resolveAsync()}; callers block on that per-condition future
      * when they need a synchronous value rather than on any central stream-level future. This split lets
      * multiple scopes on the same decision overlap their loads — once {@code seal()} runs on each scope, the
      * sourced reads execute in parallel, and a subsequent {@code value()} only blocks on the future for its
      * specific scope.
      */
-    void seal() {
+    public void seal() {
         if (sealed) {
             return;
         }
@@ -307,9 +345,10 @@ public final class SourcedEventStream implements EventStream {
             }
             return;
         }
-        SourcingCondition condition = buildSourcingCondition();
+        EventCriteria criteria = buildCriteria();
+        ReadBoundaries.record(processingContext, criteria);
         MessageStream<? extends EventMessage> stream =
-                eventStore.transaction(processingContext).source(condition);
+                eventStore.transaction(processingContext).source(SourcingCondition.conditionFor(criteria));
         stream.reduce(this, (host, entry) -> {
                   EventMessage event = entry.message();
                   for (SourcedCondition<?> a : host.accumulators) {
@@ -334,15 +373,14 @@ public final class SourcedEventStream implements EventStream {
     // Internals
     // ----------------------------------------------------------------------
 
-    private SourcingCondition buildSourcingCondition() {
+    private EventCriteria buildCriteria() {
         Set<QualifiedName> allTypes = new LinkedHashSet<>(resolvedTypes.size() + additionalNames.size());
         allTypes.addAll(resolvedTypes.values());
         allTypes.addAll(additionalNames);
         var tagged = EventCriteria.havingTags(scopeTags);
-        EventCriteria criteria = allTypes.isEmpty()
+        return allTypes.isEmpty()
                 ? tagged
                 : tagged.andBeingOneOfTypes(allTypes.toArray(new QualifiedName[0]));
-        return SourcingCondition.conditionFor(criteria);
     }
 
     private static Class<?>[] requireTypes(Class<?>[] types) {
@@ -362,15 +400,13 @@ public final class SourcedEventStream implements EventStream {
     }
 
     /**
-     * Lifts a {@link SourcedEventSelection} (whose value-future carries the selected {@link EventMessage}) into an
-     * {@link OptionalCondition} projecting that selection to its typed payload. Used by {@link #latest(Class)}
-     * and {@link #first(Class)} so they share the same "select then thenApply" pattern that
-     * {@link SourcedEventCondition} uses for the multi-type projections — keeping the source-side accumulator
-     * payload-free until the user actually asks for the value.
+     * Lifts a {@link SourcedEventSelection} (whose value carries the selected {@link EventMessage}) into an
+     * {@link OptionalCondition} projecting that selection to its typed payload. The projection is a lazy
+     * {@link Condition#map(Function) map} — declaring {@link #latest(Class)} or {@link #first(Class)} performs
+     * no resolution, keeping the source-side accumulator payload-free until the user actually asks for the
+     * value.
      */
     private <E> OptionalCondition<E> typedPayloadOf(SourcedEventSelection selection, Class<E> type) {
-        return OptionalCondition.of(new FutureCondition<>(
-                selection.asCompletableFuture()
-                         .thenApply(opt -> opt.map(em -> em.payloadAs(type, converter)))));
+        return OptionalCondition.of(selection.map(opt -> opt.map(em -> em.payloadAs(type, converter))));
     }
 }

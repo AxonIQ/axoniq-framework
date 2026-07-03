@@ -23,6 +23,7 @@ import io.axoniq.framework.statecontroller.conditions.BooleanCondition;
 import io.axoniq.framework.statecontroller.conditions.Condition;
 import io.axoniq.framework.statecontroller.eventstream.EventCondition;
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.runtime.HistorySession;
 import io.axoniq.framework.statecontroller.sample.banking.AccountClosed;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyDeposited;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyWithdrawn;
@@ -61,7 +62,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
  * Tests pinning down the future-backed shape of {@link Condition}: that
- * {@link Condition#asCompletableFuture() asCompletableFuture()} is the canonical operation and that the
+ * {@link Condition#resolveAsync() resolveAsync()} is the canonical operation and that the
  * synchronous {@link Condition#value() value()} bridge composes correctly with it.
  * <p>
  * These cases exercise paths that were either underspecified or fragile under the previous
@@ -72,7 +73,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  *         {@code seal()} but skipped the load-await, racing the projection against the still-running reduce.
  *         The future-backed shape eliminates the race because projections chain off the selection-future.</li>
  *     <li><strong>Direct async composition.</strong> Callers wanting to fan-out their own continuations should
- *         be able to chain {@code thenApply} on {@code asCompletableFuture()} and observe the completion as
+ *         be able to chain {@code thenApply} on {@code resolveAsync()} and observe the completion as
  *         soon as the underlying reduce finishes.</li>
  *     <li><strong>Exception propagation.</strong> When event processing fails, every registered condition's
  *         future must complete exceptionally, and {@link Condition#value() value()} must re-raise the cause
@@ -104,8 +105,8 @@ class ConditionFutureBackingTest {
         });
     }
 
-    private DecisionContextImpl newDecisionContext() {
-        return new DecisionContextImpl(eventStore, processingContext, Clock.systemUTC());
+    private HistorySession newDecisionContext() {
+        return new HistorySession(eventStore, processingContext, Clock.systemUTC());
     }
 
     private <P> void seed(P payload, Set<Tag> tags) {
@@ -140,7 +141,7 @@ class ConditionFutureBackingTest {
             BooleanCondition isClosed = latest.isA(AccountClosed.class);
 
             // then — projection observes the correct selected event (AccountClosed was last)
-            assertThat(isClosed.isTrue()).isTrue();
+            assertThat(isClosed.resolve()).isTrue();
         }
 
         @Test
@@ -155,7 +156,7 @@ class ConditionFutureBackingTest {
                     .latestOf(MoneyDeposited.class, MoneyWithdrawn.class);
 
             // then — payload extraction completes correctly even though the parent was never forced directly
-            assertThat(latest.as(MoneyWithdrawn.class).orDefault(null).value())
+            assertThat(latest.as(MoneyWithdrawn.class).orDefault(null).resolve())
                     .isInstanceOf(MoneyWithdrawn.class)
                     .extracting("amount")
                     .isEqualTo(BigDecimal.valueOf(20));
@@ -166,7 +167,7 @@ class ConditionFutureBackingTest {
     class DirectFutureComposition {
 
         @Test
-        void asCompletableFutureCompletesWithTheConditionValueWhenForced() {
+        void resolveAsyncCompletesWithTheConditionValueWhenForced() {
             // given
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(100)), a1Tag());
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(50)), a1Tag());
@@ -175,7 +176,7 @@ class ConditionFutureBackingTest {
             var sum = newDecisionContext()
                     .scope("account", "a1")
                     .sum(MoneyDeposited.class, MoneyDeposited::amount);
-            CompletableFuture<String> derived = sum.asCompletableFuture()
+            CompletableFuture<String> derived = sum.resolveAsync()
                                                    .thenApply(BigDecimal::toPlainString);
 
             // then — the chained continuation observes the reduced value
@@ -194,8 +195,8 @@ class ConditionFutureBackingTest {
             BooleanCondition closed = account.contains(AccountClosed.class);
             var total = account.sum(MoneyDeposited.class, MoneyDeposited::amount);
 
-            CompletableFuture<Boolean> closedFuture = closed.asCompletableFuture();
-            CompletableFuture<BigDecimal> totalFuture = total.asCompletableFuture();
+            CompletableFuture<Boolean> closedFuture = closed.resolveAsync();
+            CompletableFuture<BigDecimal> totalFuture = total.resolveAsync();
 
             // then — both futures are completed by the same underlying reduce
             assertThat(closedFuture.join()).isTrue();
@@ -224,18 +225,18 @@ class ConditionFutureBackingTest {
 
             // when / then — the failing reducer's own value() rethrows the original cause
             assertThatExceptionOfType(IllegalStateException.class)
-                    .isThrownBy(failing::value)
+                    .isThrownBy(failing::resolve)
                     .withMessage("reducer blew up");
 
             // and the sibling condition on the same scope is also failed by the fan-out — value() must
             // surface the same root cause rather than hang or return a stale default.
             assertThatExceptionOfType(IllegalStateException.class)
-                    .isThrownBy(hasDeposit::value)
+                    .isThrownBy(hasDeposit::resolve)
                     .withMessage("reducer blew up");
         }
 
         @Test
-        void asCompletableFutureExposesTheFailureViaCompletionException() {
+        void resolveAsyncExposesTheFailureViaCompletionException() {
             // given — failing reducer wired the same way
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(100)), a1Tag());
 
@@ -247,7 +248,7 @@ class ConditionFutureBackingTest {
                     });
 
             // when — chain a thenApply that should never run
-            CompletableFuture<Integer> doubled = failing.asCompletableFuture().thenApply(i -> i * 2);
+            CompletableFuture<Integer> doubled = failing.resolveAsync().thenApply(i -> i * 2);
 
             // then — the async path wraps the original cause in CompletionException (standard CF semantics);
             // the synchronous value() path unwraps it via joinAndUnwrap (verified in the test above)

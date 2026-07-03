@@ -17,9 +17,11 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.statecontroller.decisions;
+package io.axoniq.framework.statecontroller.runtime;
 
-import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.conditions.Condition;
+import io.axoniq.framework.statecontroller.History;
+import io.axoniq.framework.statecontroller.Outcome;
 import io.axoniq.framework.statecontroller.sample.banking.AccountClosed;
 import io.axoniq.framework.statecontroller.sample.banking.Accounts;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyDeposited;
@@ -37,6 +39,7 @@ import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageE
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.ClassBasedMessageTypeResolver;
 import org.axonframework.messaging.core.MessageStream;
@@ -63,25 +66,23 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+import static io.axoniq.framework.statecontroller.Outcome.accept;
+import static io.axoniq.framework.statecontroller.Outcome.reject;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Phase 3 end-to-end test: pins the annotation discovery + handler-enhancer + parameter-resolver flow.
+ * End-to-end flow test for the annotation-less dispatch path: plain {@link CommandHandler @CommandHandler}
+ * methods opt into the State Controller purely through their signature — a {@link History} parameter and an
+ * {@link Outcome} (or {@code CompletableFuture<Outcome>}) return type. The {@link OutcomeHandlerEnhancer} and
+ * {@link HistoryParameterResolverFactory} are discovered via ServiceLoader by
+ * {@link AnnotatedHandlerInspector#inspectType(Class)}, exactly as in a real configuration.
  * <p>
- * Specifically, this exercises the wiring that makes {@code @StateController} methods first-class command
- * handlers: {@link AnnotatedHandlerInspector} discovers the method through its meta-annotated
- * {@code @CommandHandler}, the {@link StateControllerHandlerEnhancer} (loaded via ServiceLoader) wraps the
- * resulting {@link MessageHandlingMember}, and the {@link DecisionContextParameterResolverFactory} (also loaded
- * via ServiceLoader) injects a {@link DecisionContext} resolved against the surrounding
- * {@link ProcessingContext}. On invocation, the enhancer translates the returned {@link Decision} into event
- * appends or a {@link CommandExecutionException} so the command caller observes outcomes through standard
- * AF5 semantics.
- *
- * @author Allard Buijze
- * @since 5.2.0
+ * The {@code Withdraw} flow exercises the imperative {@link Condition#resolve() resolve()} style through the
+ * {@link Accounts} sample; the {@code RegisterAccount} flow exercises the declarative
+ * {@code combine(...).resolveAsync()} style with a {@code CompletableFuture<Outcome>} return type.
  */
-class StateControllerAnnotationFlowTest {
+class StateControlledHandlerFlowTest {
 
     private InMemoryEventStorageEngine engine;
     private EventStore eventStore;
@@ -115,15 +116,18 @@ class StateControllerAnnotationFlowTest {
         // The enhancer uses EventAppender.forContext(pc), which appends through the same EventStoreTransaction.
         // Capturing here gives us a single point of truth for what the enhancer told the framework to write.
         eventStore.transaction(processingContext).onAppend(capturedAppends::add);
-        withdrawHandler = singleHandlerOf(Accounts.class);
-        registerHandler = singleHandlerOf(RegisterAccounts.class);
+        withdrawHandler = handlerFor(Accounts.class, Withdraw.class);
+        registerHandler = handlerFor(RegisterAccounts.class, RegisterAccount.class);
     }
 
-    private <T> MessageHandlingMember<? super T> singleHandlerOf(Class<T> type) {
+    private <T> MessageHandlingMember<? super T> handlerFor(Class<T> type, Class<?> payloadType) {
         var inspector = AnnotatedHandlerInspector.inspectType(type);
-        var handlers = inspector.getHandlers(type);
-        assertThat(handlers).hasSize(1);
-        return handlers.iterator().next();
+        return inspector.getHandlers(type)
+                        .stream()
+                        .filter(h -> h.canHandleType(payloadType))
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError(
+                                "no handler for " + payloadType.getSimpleName() + " on " + type.getSimpleName()));
     }
 
     private <P> void seed(P payload, Set<Tag> tags) {
@@ -143,7 +147,7 @@ class StateControllerAnnotationFlowTest {
     class Accept {
 
         @Test
-        void acceptedDecisionAppendsEventsAndCompletesWithoutValueWhenNoResultIsDeclared() {
+        void acceptedOutcomeAppendsEventsAndCompletesWithoutValueWhenNoResultIsDeclared() {
             // given — a healthy account with sufficient funds
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(200)), Set.of(new Tag("account", "a1")));
 
@@ -159,14 +163,14 @@ class StateControllerAnnotationFlowTest {
         }
 
         @Test
-        void acceptedDecisionWithReturningSurfacesTheResultValueToTheCaller() {
+        void asyncAcceptedOutcomeWithReturningSurfacesTheResultValueToTheCaller() {
             // given — empty stream; register accepts immediately
 
-            // when
+            // when — the async CompletableFuture<Outcome> handler flows through the same enhancer
             Object result = invoke(registerHandler, new RegisterAccounts(),
                                    new RegisterAccount("a-new"));
 
-            // then — Decision.emit(...).returning("ACC-a-new") flows back through the enhancer
+            // then — accept(...).returning("ACC-a-new") flows back through the enhancer
             assertThat(result).isEqualTo("ACC-a-new");
             assertThat(payloadsOf(AccountOpened.class))
                     .singleElement()
@@ -178,7 +182,7 @@ class StateControllerAnnotationFlowTest {
     class Reject {
 
         @Test
-        void rejectedDecisionThrowsCommandExecutionExceptionWithReason() {
+        void rejectedOutcomeThrowsCommandExecutionExceptionWithReason() {
             // given — an account with insufficient funds
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(10)), Set.of(new Tag("account", "a1")));
 
@@ -193,8 +197,8 @@ class StateControllerAnnotationFlowTest {
         }
 
         @Test
-        void rejectedDecisionAppendsAuditEventsThroughTheSameAppender() {
-            // given — a closed account; the register handler rejects with an audit event
+        void asyncRejectedOutcomeAppendsAuditEventsThroughTheSameAppender() {
+            // given — a closed account; the async register handler rejects with an audit event
             seed(new AccountClosed("blocked"), Set.of(new Tag("account", "blocked")));
 
             // when / then
@@ -224,11 +228,11 @@ class StateControllerAnnotationFlowTest {
     class ParameterResolution {
 
         @Test
-        void decisionContextIsInjectedAndScopedReadsWork() {
+        void historyIsInjectedAndScopedReadsWork() {
             // given — events for a different account so the handler observes an empty scope for "a1"
             seed(new MoneyDeposited("other", BigDecimal.valueOf(500)), Set.of(new Tag("account", "other")));
 
-            // when — the handler's body reads ctx.scope("account", "a1") to evaluate balance; without the
+            // when — the handler's body reads history.of("account", "a1") to evaluate balance; without the
             //        parameter resolver wiring this would fail before any business logic runs
             assertThatThrownBy(() -> invoke(withdrawHandler,
                                             new Accounts(),
@@ -288,26 +292,29 @@ class StateControllerAnnotationFlowTest {
     }
 
     /**
-     * A second state controller covering the {@link Accept} returning-value case and the {@link Reject}
-     * audit-events case. Kept inside this test class so the focus stays on the wiring.
+     * A second state-controlled handler covering the {@code CompletableFuture<Outcome>} return type, the
+     * declarative {@code combine(...).resolveAsync()} style, the {@link Accept} returning-value case, and the
+     * {@link Reject} audit-events case. Kept inside this test class so the focus stays on the wiring.
      */
     public static class RegisterAccounts {
 
-        @StateController
-        public Decision register(RegisterAccount cmd, DecisionContext ctx) {
-            EventStream account = ctx.scope("account", cmd.accountId());
-            // Declare all conditions before forcing any — per the Phase 2 contract.
-            var closed = account.contains(AccountClosed.class);
-            var exists = account.contains(AccountOpened.class);
+        @CommandHandler
+        public CompletableFuture<Outcome> register(RegisterAccount cmd, History history) {
+            History account = history.of("account", cmd.accountId());
+            var closed = account.has(AccountClosed.class);
+            var exists = account.has(AccountOpened.class);
 
-            if (closed.isTrue()) {
-                return Decision.reject("account is closed")
-                               .recording(new AuditedRejection(cmd.accountId(), "closed"));
-            }
-            if (exists.isTrue()) {
-                return Decision.reject("already exists");
-            }
-            return Decision.emit(new AccountOpened(cmd.accountId())).returning("ACC-" + cmd.accountId());
+            Condition<Outcome> decision = closed.combine(exists, (isClosed, doesExist) -> {
+                if (isClosed) {
+                    return reject("account is closed")
+                            .recording(new AuditedRejection(cmd.accountId(), "closed"));
+                }
+                if (doesExist) {
+                    return reject("already exists");
+                }
+                return accept(new AccountOpened(cmd.accountId())).returning("ACC-" + cmd.accountId());
+            });
+            return decision.resolveAsync();
         }
     }
 }

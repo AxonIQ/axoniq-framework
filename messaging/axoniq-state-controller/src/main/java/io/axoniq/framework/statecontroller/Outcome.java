@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.statecontroller.decisions;
+package io.axoniq.framework.statecontroller;
 
 import org.jspecify.annotations.Nullable;
 
@@ -25,25 +25,45 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The result of a {@link StateController @StateController} decision: either an {@link Accept} carrying the events
- * to append (optionally with a result value to surface to the command caller), or a {@link Reject} carrying a
- * reason (and optionally an audit trail).
+ * The result of a state-controlled command handler: either an {@link Accept} carrying the events to append
+ * (optionally with a result value to surface to the command caller), or a {@link Reject} carrying a reason (and
+ * optionally an audit trail).
  * <p>
- * Decisions are values. They never mutate state directly; the framework reads the decision and translates an
- * {@link Accept} into a conditional append against the event store using the DCB consistency boundary recorded
- * during the decision's condition evaluation, and a {@link Reject} into a denial of the command (with audit
- * events, if any, appended through the same {@code EventStoreTransaction}).
+ * Returning an {@code Outcome} from a plain
+ * {@link org.axonframework.messaging.commandhandling.annotation.CommandHandler @CommandHandler} method is what
+ * opts that handler into the State Controller: no dedicated annotation exists. The framework reads the outcome
+ * and translates an {@link Accept} into a conditional append against the event store using the DCB consistency
+ * boundary recorded during the decision's {@link History} reads, and a {@link Reject} into a denial of the
+ * command (with audit events, if any, appended through the same {@code EventStoreTransaction}). Handlers may
+ * equally return {@code CompletableFuture<Outcome>} for a fully non-blocking body; the translation is identical.
  * <p>
- * Use the static factories — {@link #emit(Object...)} for an accept, {@link #reject(String)} for a rejection —
- * rather than instantiating the records directly; the factories are the documented surface and read as the
- * intent does in a decision body. When the command caller needs to receive a value (for example a generated
- * identifier), chain {@link Accept#returning(Object)} on the accept to attach it; if no result is supplied, the
- * caller observes {@code null}.
+ * Outcomes are values. They never mutate state directly. Use the static factories — designed for static import so
+ * a decision body reads as plain language:
+ * <pre>{@code
+ * import static io.axoniq.framework.statecontroller.Outcome.accept;
+ * import static io.axoniq.framework.statecontroller.Outcome.reject;
+ *
+ * @CommandHandler
+ * public Outcome withdraw(Withdraw cmd, History history) {
+ *     History account = history.of("account", cmd.accountId());
+ *     var closed  = account.has(AccountClosed.class);
+ *     var balance = account.total(MoneyDeposited.class, MoneyDeposited::amount)
+ *                          .minus(account.total(MoneyWithdrawn.class, MoneyWithdrawn::amount));
+ *
+ *     if (closed.resolve())                              return reject("account closed");
+ *     if (balance.resolve().compareTo(cmd.amount()) < 0) return reject("insufficient funds");
+ *     return accept(new MoneyWithdrawn(cmd.accountId(), cmd.amount()));
+ * }
+ * }</pre>
+ * When the command caller needs to receive a value (for example a generated identifier), chain
+ * {@link Accept#returning(Object)} on the accept; if no result is supplied, the caller observes {@code null}.
+ * Chain {@link Reject#recording(Object...)} on a reject to leave an audit trail.
  *
  * @author Allard Buijze
+ * @author Stefan Dragisic
  * @since 5.2.0
  */
-public sealed interface Decision {
+public sealed interface Outcome {
 
     /**
      * Indicates the command was accepted and produces the events to append.
@@ -52,7 +72,7 @@ public sealed interface Decision {
      * @param result optional value to surface to the command caller as the handler's return value; {@code null}
      *               when the caller does not need a result
      */
-    record Accept(List<Object> events, @Nullable Object result) implements Decision {
+    record Accept(List<Object> events, @Nullable Object result) implements Outcome {
 
         /**
          * Compact constructor producing a defensive immutable copy of {@code events}.
@@ -65,7 +85,7 @@ public sealed interface Decision {
         /**
          * Returns a copy of this acceptance that carries the given {@code result} back to the command caller.
          * <p>
-         * Common use: a command handler that creates a new aggregate may want to surface the generated identifier
+         * Common use: a command handler that creates a new entity may want to surface the generated identifier
          * as the command's return value, while still appending the underlying creation event(s).
          *
          * @param result the value to return from the command dispatch; may be {@code null} to explicitly clear a
@@ -88,7 +108,7 @@ public sealed interface Decision {
      *                    {@link org.axonframework.messaging.commandhandling.CommandExecutionException#getDetails()
      *                    CommandExecutionException.getDetails()}
      */
-    record Reject(String reason, List<Object> auditEvents) implements Decision {
+    record Reject(String reason, List<Object> auditEvents) implements Outcome {
 
         /**
          * Compact constructor validating non-null arguments and producing a defensive immutable copy of
@@ -116,23 +136,26 @@ public sealed interface Decision {
     }
 
     /**
-     * Returns an {@link Accept} decision carrying the given events, to be appended under the recorded DCB
+     * Returns an {@link Accept} outcome carrying the given events, to be appended under the recorded DCB
      * consistency boundary. Chain {@link Accept#returning(Object)} to attach a result for the command caller.
+     * <p>
+     * Calling {@code accept()} with no events is a valid idempotent success: nothing is appended and the caller
+     * observes a normal completion.
      *
      * @param events the events to append on success; the array and its elements must not be {@code null}
-     * @return an {@code Accept} decision over those events with no result
+     * @return an {@code Accept} outcome over those events with no result
      */
-    static Accept emit(Object... events) {
+    static Accept accept(Object... events) {
         Objects.requireNonNull(events, "events must not be null");
         return new Accept(List.of(events), null);
     }
 
     /**
-     * Returns a {@link Reject} decision with the given reason and no audit events. Chain
+     * Returns a {@link Reject} outcome with the given reason and no audit events. Chain
      * {@link Reject#recording(Object...)} on the result to attach an audit trail.
      *
      * @param reason a short reason for the rejection, surfaced to the caller
-     * @return a {@code Reject} decision carrying {@code reason}
+     * @return a {@code Reject} outcome carrying {@code reason}
      */
     static Reject reject(String reason) {
         return new Reject(reason, List.of());

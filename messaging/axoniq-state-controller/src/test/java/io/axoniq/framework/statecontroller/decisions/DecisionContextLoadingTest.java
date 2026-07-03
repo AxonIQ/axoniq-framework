@@ -23,6 +23,7 @@ import io.axoniq.framework.statecontroller.conditions.BooleanCondition;
 import io.axoniq.framework.statecontroller.conditions.NumericCondition;
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
 import io.axoniq.framework.statecontroller.eventstream.LateConditionException;
+import io.axoniq.framework.statecontroller.runtime.HistorySession;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyDeposited;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyWithdrawn;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -61,7 +62,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Phase 2 mechanics test for the {@link DecisionContextImpl} loading lifecycle. The point of these tests is to
+ * Phase 2 mechanics test for the {@link HistorySession} loading lifecycle. The point of these tests is to
  * pin down the lifecycle invariants — single sourced read per decision, seal-on-first-force, refusal of late
  * registration — not the value-correctness of every {@link io.axoniq.framework.statecontroller.eventstream.EventStream}
  * helper. Per-helper value tests live with the Phase 1 acceptance suite.
@@ -91,8 +92,8 @@ class DecisionContextLoadingTest {
         });
     }
 
-    private DecisionContextImpl newDecisionContext() {
-        return new DecisionContextImpl(eventStore, processingContext, Clock.systemUTC());
+    private HistorySession newDecisionContext() {
+        return new HistorySession(eventStore, processingContext, Clock.systemUTC());
     }
 
     private <P> void seed(P payload, Set<Tag> tags) {
@@ -120,8 +121,8 @@ class DecisionContextLoadingTest {
             NumericCondition<BigDecimal> total = account.sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then
-            assertThat(hasDeposits.isTrue()).isTrue();
-            assertThat(total.value()).isEqualByComparingTo("150");
+            assertThat(hasDeposits.resolve()).isTrue();
+            assertThat(total.resolve()).isEqualByComparingTo("150");
             verify(eventStore, times(1)).transaction(processingContext);
         }
 
@@ -136,8 +137,8 @@ class DecisionContextLoadingTest {
             var hasDeposits = stream.contains(MoneyDeposited.class);
 
             // then — forcing once and then again must not re-issue the sourced read
-            assertThat(hasDeposits.isTrue()).isTrue();
-            assertThat(hasDeposits.isTrue()).isTrue();
+            assertThat(hasDeposits.resolve()).isTrue();
+            assertThat(hasDeposits.resolve()).isTrue();
             verify(eventStore, times(1)).transaction(processingContext);
         }
     }
@@ -153,7 +154,7 @@ class DecisionContextLoadingTest {
             var dc = newDecisionContext();
             var stream = dc.scope("account", "a1");
             // seal this scope by forcing a condition
-            stream.contains(MoneyDeposited.class).isTrue();
+            stream.contains(MoneyDeposited.class).resolve();
 
             // when / then
             assertThatExceptionOfType(LateConditionException.class)
@@ -173,13 +174,13 @@ class DecisionContextLoadingTest {
             seed(new MoneyDeposited("a2", BigDecimal.valueOf(200)), Set.of(new Tag("account", "a2")));
 
             var dc = newDecisionContext();
-            dc.scope("account", "a1").contains(MoneyDeposited.class).isTrue();
+            dc.scope("account", "a1").contains(MoneyDeposited.class).resolve();
 
             // when — open and use a second, independent scope
             var a2Total = dc.scope("account", "a2").sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then — the second scope loads independently, no LateConditionException
-            assertThat(a2Total.value()).isEqualByComparingTo("200");
+            assertThat(a2Total.resolve()).isEqualByComparingTo("200");
         }
     }
 
@@ -200,8 +201,8 @@ class DecisionContextLoadingTest {
             NumericCondition<BigDecimal> a2Total = a2.sum(MoneyDeposited.class, MoneyDeposited::amount);
 
             // then — each scope sees only its own events
-            assertThat(a1Total.value()).isEqualByComparingTo("100");
-            assertThat(a2Total.value()).isEqualByComparingTo("200");
+            assertThat(a1Total.resolve()).isEqualByComparingTo("100");
+            assertThat(a2Total.resolve()).isEqualByComparingTo("200");
             // and both scopes' source(...) calls share the same EventStoreTransaction handle (cached on the
             // ProcessingContext), so the recorded ConsistencyMarker accumulates across them
             assertThat(eventStore.transaction(processingContext))
@@ -209,22 +210,29 @@ class DecisionContextLoadingTest {
         }
 
         @Test
-        void scopesSealIndependentlyAndUnforcedScopesDoNotLoad() {
+        void resolvingOneScopeSealsEveryDeclaredScopeTogether() {
             // given — events for both accounts
             seed(new MoneyDeposited("a1", BigDecimal.valueOf(100)), Set.of(new Tag("account", "a1")));
             seed(new MoneyDeposited("a2", BigDecimal.valueOf(200)), Set.of(new Tag("account", "a2")));
 
-            // when — declare conditions on both scopes but force only a1
+            // when — declare conditions on both scopes but resolve only a1's
             var dc = newDecisionContext();
             var a1 = dc.scope("account", "a1");
             var a2 = dc.scope("account", "a2");
             NumericCondition<BigDecimal> a1Total = a1.sum(MoneyDeposited.class, MoneyDeposited::amount);
-            a2.contains(MoneyDeposited.class);
-            a1Total.value();
+            NumericCondition<BigDecimal> a2Total = a2.sum(MoneyDeposited.class, MoneyDeposited::amount);
+            a1Total.resolve();
 
-            // then — a1 was loaded; a2 is still open and accepts further declarations without raising
-            //        LateConditionException, proving it has not sealed.
-            assertThatNoException().isThrownBy(() -> a2.contains(MoneyWithdrawn.class));
+            // then — the first resolution sealed BOTH declared scopes into the coordinated read, so a2's
+            //        condition future is already completed without a resolve of its own
+            assertThat(a2Total.resolveAsync())
+                    .isCompletedWithValueMatching(t -> t.compareTo(BigDecimal.valueOf(200)) == 0);
+            // and — the held a2 stream reference is sealed: late declarations on it fail fast, while a fresh
+            //       scope lookup accepts new conditions via a supplementary read
+            assertThatExceptionOfType(LateConditionException.class)
+                    .isThrownBy(() -> a2.contains(MoneyWithdrawn.class));
+            assertThatNoException().isThrownBy(
+                    () -> dc.scope("account", "a2").contains(MoneyWithdrawn.class).resolve());
         }
 
         @Test
@@ -250,7 +258,7 @@ class DecisionContextLoadingTest {
             // when
             var dc = newDecisionContext();
             var stream = dc.scope("account", "a1");
-            stream.contains(MoneyDeposited.class).isTrue();
+            stream.contains(MoneyDeposited.class).resolve();
 
             // then
             verify(eventStore, times(1)).transaction(processingContext);

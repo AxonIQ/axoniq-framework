@@ -19,13 +19,18 @@
 
 
 /**
- * Root package of the Axoniq State Controller module.
+ * Root package of the Axoniq State Controller module: the public surface of state-controlled command handling.
  * <p>
- * State Controllers group decisions for a functional scope. Each decision is a procedural function from a command
- * and a scoped slice of event history to a decision result (accept with events, or reject). The module is layered
- * into three production sub-packages with a strict, one-directional dependency rule:
- * {@code decisions} &rarr; {@code eventstream} &rarr; {@code conditions}. This separation keeps the condition
- * primitives extractable to a shared utility module the moment a second consumer needs them.
+ * A state-controlled handler is a plain {@code @CommandHandler} method that receives a {@link History} and
+ * returns an {@link Outcome} (or {@code CompletableFuture<Outcome>}) — no dedicated annotation exists; the
+ * signature is the opt-in. Reads on a narrowed {@code History} declare
+ * {@link io.axoniq.framework.statecontroller.conditions.Condition Conditions}; the first
+ * {@link io.axoniq.framework.statecontroller.conditions.Condition#resolve() resolution} loads every declared
+ * condition in one event-store read whose criteria double as the decision's Dynamic Consistency Boundary.
+ * <p>
+ * Sub-packages, layered one-directionally: {@code runtime} (internal wiring) &rarr; {@code decisions} (the
+ * advanced condition-based surface) &rarr; {@code eventstream} &rarr; {@code conditions}. The condition
+ * primitives stay extractable to a shared utility module the moment a second consumer needs them.
  */
 @NullMarked
 package io.axoniq.framework.statecontroller;

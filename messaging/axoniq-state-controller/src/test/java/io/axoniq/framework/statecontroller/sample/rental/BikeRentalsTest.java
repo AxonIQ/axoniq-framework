@@ -36,7 +36,7 @@ import org.junit.jupiter.api.*;
  * <p>
  * The fixture configures one annotated {@link BikeRentals} component on top of an in-memory event store, and
  * lets the state-controller handler enhancer + parameter-resolver factory (both ServiceLoader-discovered)
- * wire the @{code @StateController} dispatch path automatically.
+ * wire the state-controlled {@code @CommandHandler} dispatch path automatically.
  *
  * @author Allard Buijze
  * @since 5.2.0
