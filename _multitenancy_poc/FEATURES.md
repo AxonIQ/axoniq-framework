@@ -69,7 +69,7 @@
 
 #### Questions
 
-* Sequencing: is it required that command sequencing must not affect other tenants, or should the application developer be able to configure a single full-sequential policy across all tenants? Likely answer: ship an additional per-tenant sequencing policy with the multi-tenancy extension that the application developer can configure - not yet implemented
+* Sequencing: is it required that sequencing must not affect other tenants, or should the application developer be able to configure a single full-sequential policy across all tenants? Likely answer: ship an additional per-tenant sequencing policy with the multi-tenancy extension that the application developer can configure - not yet implemented. Sequencing policies are built at the generic message level, not per message type, so the same policy applies to `### Event Handling/Sourcing` as well
 
 #### Implementation
 
@@ -100,26 +100,30 @@
 * Default per-tenant segment (`MultiTenancyConfigurationDefaults.defaultEventStoreSegment(...)`) uses `AxonServerEventStorageEngineFactory.constructForContext(tenant.tenantId(), config)` wrapped in a `StorageEngineBackedEventStore`, falling back to an in-memory event storage engine when no `AxonServerConnectionManager` is present
 * Registered as an `EventStore` decorator (`DECORATION_ORDER = Integer.MIN_VALUE + 75`) by `MultiTenancyConfigurationDefaults`
 
-### Event Handling/Sourcing
+### Event Processing
 
-Need to support
+#### Requirements
 
-* Subcribing
-* Pooling 
-* Streaming -> MultiTenantPersistentStreamMessageSource
-
-#### Handling
-
-* Reestablish tenant information on the ProcessingContext when an event is handled on a tenant-specific connection (open question - see `### Infrastructure` `#### Questions`; metadata alone may be sufficient)
-* Select the tenant-specific resources (e.g. datasource) needed by the handler, so it writes to the correct (tenant-specific) projection - AF4 only did this for the datasource
+* Event processing must support per-tenant pooled streaming processors
+* Event processing must support per-tenant persistent-stream-based processors
+* Event handlers must be able to resolve tenant-specific resources (e.g. a per-tenant datasource) needed during handling, based on the tenant information carried in the message's metadata (see `### Infrastructure`), so results are written to the correct tenant-specific projection
+* Sequencing uses the same per-tenant policy as commands (see `### Commands` `#### Questions`) - sequencing policies operate at the generic message level, not per message type
 
 #### Questions
 
+* Is a subscribing-style multi-tenant event processor required, or is pooled/persistent-stream sufficient? No `MultiTenantSubscribingEventProcessor` (or equivalent) currently exists.
 * Can a single event processor multiplex on projection/token per tenant, instead of one processor per tenant? What are the consequences?
+* Do we need a dedicated `MultiTenantEventProcessorModule`/`MultiTenantPooledStreamingEventProcessorModule` at all, or can multi-tenancy be achieved by decorating/wrapping the existing (single-tenant) event processor components, the same way `TenantRoutingEventStore` decorates `EventStore`?
 
-#### Todo
+#### Implementation
 
-* Sequencing for event handling shares the sequencing-policy concept with command handling (see `### Commands`), but works differently - needs its own per-tenant design
+* `MultiTenantPersistentStreamMessageSource` (`eventstreaming/MultiTenantPersistentStreamMessageSource.java`) - implements `SubscribableEventSource` and `MultiTenantAwareComponent`; fans a single consumer out to one `PersistentStreamMessageSource` per tenant, built via `TenantPersistentStreamMessageSourceFactory` (`api/TenantPersistentStreamMessageSourceFactory.java`)
+* `MultiTenantEventProcessor` (`eventhandling/processing/MultiTenantEventProcessor.java`) - implements `StreamingEventProcessor` and `MultiTenantAwareComponent`; decorator wrapping one `StreamingEventProcessor` per tenant, aggregating/fanning-out segment operations (`splitSegment`, `mergeSegment`, `releaseSegment`, `resetTokens`, `processingStatus`, `maxCapacity`)
+* `MultiTenantEventProcessorModule` (`eventhandling/processing/MultiTenantEventProcessorModule.java`) - static factory, the multi-tenant counterpart of `EventProcessorModule` (e.g. `MultiTenantEventProcessorModule.pooledStreaming("name")`)
+* `MultiTenantPooledStreamingEventProcessorModule` (`eventhandling/processing/streaming/pooled/...`) - fluent module producing per-tenant `PooledStreamingEventProcessor`s, each with an isolated event source, token store, executor threads, and dead letter queue
+* `TenantEventProcessorSegmentFactory` (`eventhandling/processing/TenantEventProcessorSegmentFactory.java`) - `Function<TenantDescriptor, EventProcessor>`
+* Per-tenant token stores: `TenantTokenStoreFactory` (interface) with `InMemoryTenantTokenStoreFactory`, `JdbcTenantTokenStoreFactory` (+ `TenantConnectionProviderFactory`), `JpaTenantTokenStoreFactory` - under `eventhandling/processing/streaming/token/store/`
+* Per-tenant transaction management: `TenantTransactionManagerFactory` (interface), `JdbcTenantTransactionManager` (`eventhandling/processing/transaction/`) - opens one JDBC connection per processing lifecycle, tied to the tenant's own datasource
 
 ### TenantAware general components support
 
