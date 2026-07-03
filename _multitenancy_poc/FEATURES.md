@@ -28,34 +28,36 @@
 
 ### Infrastructure
 
-Tenants need to be known by the system 
+#### Requirements
 
-* TenantDescriptor - id+meta
-* TenantProvider - knows all tenants, calls register hooks
-  * Registration/removal must support both static (startup-time) and dynamic (runtime) tenants
-* TenantConnectPredicate - should I use that as a tenant
-* Tenant name resolution: maps an Axon Server context name to a tenant id. Currently 1:1 (context name == tenant id), but a tenant may span multiple contexts (e.g. to represent multiple bounded contexts for one application), so we need a naming scheme (e.g. `[tenant]-[context]`) and a resolver that can derive the tenant id from it
-
-Tenant association must be known when processing messages (derived from the message or it's source)
-
-* TenantResolver - resolves tenant from message used 
-* TenantResolverRegistry - holds resolvers per concrete message type (C,Q,E) or global (? needed)
-* Propagate metadata tenantId via SimpleCorrelationDataProvider: sets tenantId in Metadata of appended event
-* Direction differs by flow: on dispatch/publish, the tenant resolved from metadata selects the outbound connection; on inbound/sourced messages, the connection that delivered the message determines the tenant, which is then written to metadata
+* Tenants must be known to the system, both via static (startup-time) configuration and dynamic (runtime) discovery/removal
+* The system must be able to filter out discovered contexts that should not be treated as tenants
+* New or removed tenants must trigger (un)registration hooks on all tenant-aware components (connectors, event store, event processors, component registries)
+* The tenant associated with a message must be resolvable when processing it, either from the message itself or from the connection it arrived on
+* Outgoing messages must resolve which tenant's connection to dispatch/publish on, based on the tenant carried in the message
+* Inbound/sourced messages must be enriched with the tenant determined by the connection they arrived on, written into their metadata
+* The tenant id must be propagated into the metadata of events appended during processing, so any downstream consumer can determine the tenant purely from the message
+* A server API to create/remove tenants is needed to test dynamic tenant registration/removal in integration tests
 
 #### Questions
 
+* Tenant name resolution: today tenant discovery is 1:1 with the Axon Server context name. A tenant spanning multiple contexts (e.g. multiple bounded contexts for one application) would need a naming scheme (e.g. `[tenant]-[context]`) and a resolver deriving the tenant id from it - not yet implemented
 * Tenant information: Only Metadata or needed in ProcessingContext (or both if not MetadataBasedTenantResolver)
   * con: map lookup is cheap, we have everything we need 
-  * Leaning: metadata as the sole source of truth; avoid caching resolved tenant identity in ProcessingContext unless a concrete hot path proves the lookup cost matters
-    * Metadata is unavoidable regardless - it's what survives the wire and is available before a ProcessingContext exists (dispatch interceptors, connector-level routing)
-    * A second, cached tenant value in ProcessingContext risks drifting from the message's actual metadata mid-processing - two sources of truth for the same fact
-    * Tenant-aware component resolution (e.g. per-tenant datasource, see `### TenantAware general components support`) will likely be a ParameterResolverFactory, which already receives both the message and the ProcessingContext at resolution time - so it can read tenantId from metadata directly without anything pre-populated in ProcessingContext
-    * In the end it's all about getting messages to the correct tenant; everything else (projections, etc.) derives from the message itself
+  * Resolved by the current implementation: metadata-only. The tenant-aware `ParameterResolverFactory` (`TenantComponentResolver` inside `MultiTenancyConfigurationDefaults`) reads tenantId directly from message metadata at resolution time - nothing is cached on `ProcessingContext`
+  * Reasoning: metadata is unavoidable regardless - it's what survives the wire and is available before a ProcessingContext exists (dispatch interceptors, connector-level routing); a second cached value on ProcessingContext would risk drifting from the message's actual metadata; and it's ultimately about getting messages to the correct tenant, everything else (projections, etc.) derives from the message itself
 
-#### Todo
+#### Implementation
 
-* Server API to create/remove tenants in integration tests, needed to test dynamic tenant registration/removal
+* `TenantDescriptor` (record: `tenantId` + `properties` map) - `api/TenantDescriptor.java`
+* `TenantProvider` - `api/TenantProvider.java`; sole impl `AxonServerTenantProvider` (`configuration/AxonServerTenantProvider.java`, `@Internal`) discovers tenants from static context names or the Axon Server Admin API, and can subscribe to runtime context add/remove events
+* `TenantConnectPredicate` - `api/TenantConnectPredicate.java`, functional predicate deciding whether a discovered tenant should be wired in, with a default `alwaysTrue()`
+* `TenantResolver<M>` - `api/TenantResolver.java`, resolves the tenant of a message; sole impl `MetadataBasedTenantResolver` (`configuration/MetadataBasedTenantResolver.java`) reads the `tenantId` metadata key (configurable), throws `NoSuchTenantException` if missing
+* `TenantResolverRegistry` - `api/TenantResolverRegistry.java`, holds resolvers per message type (command/query/event) plus a global fallback; sole impl `DefaultTenantResolverRegistry` (`configuration/DefaultTenantResolverRegistry.java`, `@Internal`)
+* `MultiTenantAwareComponent` - `api/MultiTenantAwareComponent.java`, the `registerTenant`/`unregisterTenant` contract implemented by every tenant-fanout component
+* `NoSuchTenantException` - `api/NoSuchTenantException.java`
+* Metadata propagation: `MultiTenancyConfigurationDefaults` decorates the `CorrelationDataProviderRegistry` with `SimpleCorrelationDataProvider(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY)`
+* Central wiring: `MultiTenancyConfigurationDefaults` (`configuration/MultiTenancyConfigurationDefaults.java`) - a `ConfigurationEnhancer` registering `TenantConnectPredicate.alwaysTrue()`, `AxonServerTenantProvider`, and `DefaultTenantResolverRegistry` by default
 
 ### Commands
 
