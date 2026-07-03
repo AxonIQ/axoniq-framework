@@ -180,8 +180,21 @@
 
 ### Data Protection
 
+#### Requirements
+
 * Support multi-tenancy for the data-protection extension: select the correct crypto store per tenant
-* AF4 has no special support for this; likely needs a tenant-aware crypto component, since a multitude of stores may be provided
+
+#### Questions
+
+* AF4 has no special support for this; likely needs a tenant-aware crypto component, since a multitude of stores may be provided - details tracked separately (see `## References` - Data Protection extension issue)
+* Is it feasible to fan out multi-tenancy at the crypto-store (`CryptoEngine`) level, or does the `FieldEncryptingConverter` itself need to become a multi-tenant-aware component?
+  * `FieldEncryptingConverter.convert(Object, Type)` has no access to `Message`/`ProcessingContext`/tenant info at all - making the converter itself tenant-aware would mean changing the core `Converter` SPI
+  * `CryptoEngine` (`getOrCreateKey(String id)`, `getKey`, `deleteKey`) is the natural fan-out seam instead: either namespace the key id with the tenant id inside a wrapping `CryptoEngine`, or use the same `TenantComponentRegistry`-style pattern used elsewhere in the POC to resolve a distinct `CryptoEngine` instance per tenant (needed for full physical isolation, e.g. separate Vault paths/JDBC schemas per tenant)
+  * Where would tenant info come from at that point? `CryptoEngine.getOrCreateKey/getKey` receives only a single opaque `String` (`prefix + @DataSubjectId field value`, both fixed by the object being converted and its class annotation) - no `Message`, `ProcessingContext`, or ambient context reaches that call, and `CryptoEngine` is a fixed singleton wired once at bootstrap, not resolved per call. So tenant info can only reach it via (a) making the `@DataSubjectId` value itself tenant-qualified (a data-model change), or (b) a tenant-aware `CryptoEngine` implementation consulting some ambient state set up at the edge around the conversion call (would need to respect the "no ThreadLocals except at edges" principle) - there is no existing plumbing to thread tenant identity through the conversion call chain
+
+#### Implementation
+
+* Not yet implemented - no crypto/data-protection code exists anywhere in this module; the data-protection extension itself lives in the separate `extension-data-protection` repo
 
 
 ### Spring Boot Autoconfiguration
