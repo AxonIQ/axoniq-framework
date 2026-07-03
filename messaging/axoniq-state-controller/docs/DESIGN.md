@@ -1,8 +1,9 @@
 # State Controller — Design Rationale
 
 *PoC design notes for `messaging/axoniq-state-controller`, branch `poc/state-controller`. Last updated
-2026-07-03. This is not a decision record: the module is a proof of concept, and everything here is input to
-that evaluation. When the module graduates, the decisions that survived should be distilled into proper ADRs.*
+2026-07-03. Distills the branch review and the design discussion of 2026-06-18. This is not a decision record:
+the module is a proof of concept, and everything here is input to that evaluation. When the module graduates,
+the decisions that survived should be distilled into proper ADRs.*
 
 ## The two prototypes
 
@@ -36,6 +37,28 @@ know the types mentioned *so far* — the separation between *declaring* the que
 is irreducible if the store is to be asked once, precisely. What is *not* irreducible is the ceremony: the
 original surface's problem was that consumption happened through condition-typed evaluators (`.isTrue()`,
 `.value()`, `OptionalCondition` unwrapping), not that conditions existed.
+
+The sharpest concrete illustration came from the enrollment sample in the 2026-06-18 discussion — a single
+*union* scope spanning two differently-tagged slices, with per-branch type restriction:
+
+```java
+History union = history.of("courseId", cmd.courseId())
+                       .and(CourseCreated.class, CourseCapacityChanged.class,
+                            StudentSubscribedToCourse.class, StudentUnsubscribedFromCourse.class)
+                       .or("studentId", cmd.studentId())
+                       .and(StudentEnrolledInFaculty.class);
+
+var notEnrolled   = union.never(StudentEnrolledInFaculty.class);
+var courseMissing = union.never(CourseCreated.class);
+if (notEnrolled.resolve())   return reject("student not enrolled in faculty");
+if (courseMissing.resolve()) return reject("course does not exist");
+```
+
+With eager, value-returning reads, each `never(...)` must materialize the union at the call site — two passes
+over the combined stream. With declared conditions, both questions ride one pass. The per-branch type varargs
+are also load-bearing here: when an event type could carry either tag, the declaration says which branch of the
+union it belongs to — something a post-hoc `.filter()` cannot express against the store. (The `and(types...)` /
+`or(tagKey, value)` union builder is not yet on the unified `History`; see follow-ups.)
 
 ## The merged design
 
@@ -117,7 +140,9 @@ The read vocabulary is ADR-0001's, unchanged: `has`, `never`, `count`, `total`, 
    a fresh stream; the late conditions are answered by a **supplementary read on the same transaction** —
    correct, one extra round-trip. This replaces `LateConditionException` as the user-facing policy (the
    exception survives only for resolving-then-reusing a *stale stream reference* on the advanced tier) and makes
-   data-dependent reads possible, which neither prototype allowed.
+   data-dependent reads possible, which neither prototype allowed. The hard seal's original purpose — preventing
+   accidental re-streams when people make mistakes — is not dropped but relocated: the planned strict-mode
+   diagnostic surfaces the mistake at development time instead of failing the command at runtime.
 
 The idiom is therefore a convention, not a straitjacket: *declare your conditions first, then resolve*. Idiomatic
 code gets exactly one round-trip per scope, concurrently; non-idiomatic code degrades gracefully and visibly
@@ -145,13 +170,28 @@ the optimistic lock guarding nothing.
   decider pattern (inner-circle vocabulary both prototypes' goals reject), and the signature makes any
   annotation redundant. `@CommandHandler` is plain English, is honest about what the method is, and means
   everything users know about command handlers (discovery, routing, interceptors, testing) transfers verbatim.
+  An independent strike against `@StateController` from the 2026-06-18 discussion: most Java developers'
+  first association is Spring's `@Controller`, which may well be sitting a few lines above it in the same file.
 
 ### Two tiers, one engine
 
-`History` is the documented surface. The advanced tier — `DecisionContext` with `EventStream`'s `fold`,
-`latestMatch`, and composite scopes — remains for cases the simple vocabulary omits, shares the same loading
-session (mixing tiers still batches into the same reads and one marker), and returns the same `Condition` types.
-The declarative `StateControllerComponent` registration path routes through the same `Outcome` dispatch.
+`History` is the documented surface; the expectation from the 2026-06-18 discussion is that ~99% of decisions
+inject nothing else. The advanced tier — `DecisionContext` with `EventStream`'s `fold`, `latestMatch`, and
+composite scopes — remains for cases the simple vocabulary omits, and is also where framework plumbing lives
+when a decision genuinely needs it: access to the `ProcessingContext` and its resources, and the deterministic
+`time()` clock. Both tiers share the same loading session (mixing them still batches into the same reads and
+one marker) and return the same `Condition` types. The declarative `StateControllerComponent` registration path
+routes through the same `Outcome` dispatch.
+
+### Future direction: `History` beyond command handlers
+
+`History` is deliberately shaped as a portable read abstraction, not a command-handling artifact — the
+2026-06-18 discussion floated injecting it into other decision-making places, workflows in particular. The hard
+requirement that surfaced there: **determinism under replay**. A workflow step that read a `History` must, on
+re-execution, observe exactly the events it observed originally — not the slice as it exists now. Lazy declared
+conditions fit that model naturally (a recorded read-set and position can be replayed; ad-hoc eager reads
+cannot), which is an additional, forward-looking reason the lazy engine won. Nothing in the current module
+implements this; it constrains the design rather than extending it.
 
 ## What this buys, and what it costs
 
@@ -205,6 +245,11 @@ Known costs and open edges:
   axis this whole design turns on. May return later as a prefetch hint, not as the model.
 - **Adaptive read-set prefetch** (remember each handler's historical (tag × type) read-set, speculatively source
   the union). Deferred: warm-up-dependent magic; only worth revisiting if the dynamic-read path proves common.
+- **`resolveXxx(...)` shortcut methods on `History`** (e.g. `history.resolveLatestOf(...)` skipping the
+  condition phase entirely — floated in the 2026-06-18 discussion alongside `.resolve()`). Dropped: the
+  shortcuts double every read into an eager and a lazy variant, and each eager call is a hidden round-trip —
+  exactly the cost model this design makes visible. One terminal, `latestOf(...).resolve()`, keeps the surface
+  single and the batching idiom learnable.
 - **A dedicated annotation** (`@StateController`, `@Decide`, `@Action`). Dropped: the `History` parameter plus
   `Outcome` return type carries strictly more information than any marker annotation, and reusing
   `@CommandHandler` keeps one mental model across the framework.
@@ -227,7 +272,9 @@ Points where pushback or a judgment call is specifically wanted before this hard
 
 1. Strict-mode round-trip diagnostic (fixture assertion + production metric) for decisions exceeding one batch.
 2. Position-pinning for supplementary reads (answer late conditions as of the first seal's position).
-3. Port the remaining business samples from the `bussnies-api` branch (enrollment, via-context variants,
+3. Union-scope builder on `History` (`and(types...)` / `or(tagKey, value)` with per-branch type restriction),
+   per the enrollment example above — the engine's criteria model supports it; only the surface is missing.
+4. Port the remaining business samples from the `bussnies-api` branch (enrollment, via-context variants,
    criteria and coverage suites) onto the unified surface.
-4. Reference-guide documentation: the simple way (`History` + `resolve()`), then the advanced way
+5. Reference-guide documentation: the simple way (`History` + `resolve()`), then the advanced way
    (`DecisionContext`, folds, matchers, reactive composition).
