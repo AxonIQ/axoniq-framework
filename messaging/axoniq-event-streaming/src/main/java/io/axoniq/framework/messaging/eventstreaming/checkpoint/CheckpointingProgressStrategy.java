@@ -161,6 +161,11 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     public CompletableFuture<Void> onSegmentReleased(ProcessingContext processingContext) {
         Segment segment = context.segment();
         TrackingToken upTo = context.lastConsumedToken();
+        if (upTo == null) {
+            // Nothing was ever handed to this segment: there is no position to drain the participants toward, nor
+            // anything to store.
+            return emptyCompletedFuture();
+        }
         return requestEach(participant -> participant.onSegmentReleased(segment, upTo)
                                                      .thenApply(this::resolveLatest))
                 .thenCompose(reported -> reconcile(reported).exceptionally(error -> {
@@ -176,12 +181,12 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
                 // release future failed (so no safe token could even be determined) or the store itself failed, leave
                 // the stored token where it is and let the uncovered tail be reprocessed from there on the next claim.
                 // Completing normally here ensures the Coordinator still releases the claim.
-                .exceptionally(error -> {
+                .exceptionallyCompose(error -> {
                     logger.warn("Failed to store a final checkpoint on release of {}; releasing the claim without "
                                         + "advancing the stored token. The uncovered tail will be reprocessed on the "
                                         + "next claim.",
                                 segment, error);
-                    return null;
+                    return emptyCompletedFuture();
                 });
     }
 
@@ -203,8 +208,12 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
             // segment released, or nothing handled yet: a late async ack has no safe point to record, so ignore it
             return;
         }
+        // The accumulator's `next` parameter is always `resolved`, but is typed by the reference's @Nullable element
+        // type; using the null-checked `resolved` keeps the non-null contract of TrackingToken#upperBound intact.
         requestedCheckpoint.accumulateAndGet(resolved,
-                                             (current, next) -> current == null ? next : current.upperBound(next));
+                                             (current, next) -> current == null
+                                                     ? resolved
+                                                     : current.upperBound(resolved));
         context.scheduleWorker();
     }
 
@@ -226,7 +235,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * @param reported the latest position reported by each participant
      * @return the single position every participant has durably reached (or {@code null} if none reported one)
      */
-    private CompletableFuture<TrackingToken> reconcile(Map<Checkpointing, TrackingToken> reported) {
+    private CompletableFuture<@Nullable TrackingToken> reconcile(Map<Checkpointing, @Nullable TrackingToken> reported) {
         TrackingToken agreed = TrackingTokenUtils.upperBound(reported.values());
         if (agreed == null || reported.size() == 1) {
             // Nothing reported, or a single participant that trivially agrees with itself: no reconciliation needed.
@@ -290,14 +299,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     /**
      * Invokes {@code request} on every participant concurrently, returning their reported tokens keyed by participant.
      */
-    private CompletableFuture<Map<Checkpointing, TrackingToken>> requestEach(
-            Function<Checkpointing, CompletableFuture<TrackingToken>> request
+    private CompletableFuture<Map<Checkpointing, @Nullable TrackingToken>> requestEach(
+            Function<Checkpointing, CompletableFuture<@Nullable TrackingToken>> request
     ) {
-        Map<Checkpointing, CompletableFuture<TrackingToken>> futures = new LinkedHashMap<>();
+        Map<Checkpointing, CompletableFuture<@Nullable TrackingToken>> futures = new LinkedHashMap<>();
         participants.forEach(participant -> futures.put(participant, request.apply(participant)));
         return CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0]))
                                 .thenApply(ignored -> {
-                                    Map<Checkpointing, TrackingToken> reported = new LinkedHashMap<>();
+                                    Map<Checkpointing, @Nullable TrackingToken> reported = new LinkedHashMap<>();
                                     futures.forEach((participant, future) -> reported.put(participant, future.join()));
                                     return reported;
                                 });

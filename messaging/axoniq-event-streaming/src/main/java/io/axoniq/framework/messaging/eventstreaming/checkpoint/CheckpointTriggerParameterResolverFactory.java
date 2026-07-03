@@ -44,7 +44,7 @@ import java.util.concurrent.CompletableFuture;
  * processor} places it there per batch whenever it has
  * <b>at least one</b> {@link Checkpointing} component. The trigger is <em>segment-scoped</em>: it is shared by every
  * handler in that processor on the claimed segment, not restricted to the checkpointing component(s). A requested
- * checkpoint therefore applies to all of the processor's components on that segment.
+ * checkpoint therefore applies to all the processor's components on that segment.
  * <p>
  * <b>Important:</b> a {@code CheckpointTrigger} is <em>not</em> available to every handler. The resolver always
  * {@link ParameterResolver#matches(ProcessingContext) matches} (so the handler is never silently skipped), but if no
@@ -101,7 +101,7 @@ public class CheckpointTriggerParameterResolverFactory implements ParameterResol
         @Override
         public boolean matches(ProcessingContext context) {
             // Match unconditionally: a false match here would make the whole handler unable to handle the event (it
-            // would be silently skipped). Instead the handler always participates and resolveParameterValue fails
+            // would be silently skipped). Instead, the handler always participates and resolveParameterValue fails
             // loudly when no trigger is available.
             return true;
         }
