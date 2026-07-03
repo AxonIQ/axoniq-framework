@@ -150,12 +150,15 @@
 
 ### Queries
 
-* Dispatching: solved same as Command - MultiTenantAxonServerQueryBusConnector (mirrors MultiTenantAxonServerCommandBusConnector, wrapping AxonServerQueryBusConnector) is multi-tenant aware
+#### Requirements
 
-#### Handling
+* Query dispatching must route each query to the Axon Server context belonging to its resolved tenant, mirroring the approach used for commands
+* Query handlers must be able to resolve tenant-specific resources (e.g. a per-tenant datasource) needed to read from the correct projection, based on the tenant information carried in the message's metadata (see `### Infrastructure`)
 
-* Reestablish tenant information on the ProcessingContext when a query is received on a tenant-specific connection (open question - see `### Infrastructure` `#### Questions`; metadata alone may be sufficient)
-* Select the tenant-specific resources (e.g. datasource) needed to read from the correct projection - AF4 only did this for the datasource
+#### Implementation
+
+* `MultiTenantAxonServerQueryBusConnector` (`query/MultiTenantAxonServerQueryBusConnector.java`) - extends `AbstractAxonServerQueryBusConnector`, implements `MultiTenantAwareComponent`; structurally mirrors `MultiTenantAxonServerCommandBusConnector` (per-tenant connection, subscription map, in-flight tracker, replay on tenant registration)
+* Registered as the `QueryBusConnector` by `MultiTenancyConfigurationDefaults`
 
 ### Dead Letter Queue
 
