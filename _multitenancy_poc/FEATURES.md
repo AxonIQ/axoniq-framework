@@ -196,15 +196,17 @@
 
 #### Requirements
 
-* Support multi-tenancy for the data-protection extension: select the correct crypto store per tenant
+* Support multi-tenancy for the data-protection extension which essentially boils down to tenant-aware key resolution
 
 #### Questions
 
-* AF4 has no special support for this; likely needs a tenant-aware crypto component, since a multitude of stores may be provided - details tracked separately (see `## References` - Data Protection extension issue)
+* AF4 has no special support for this; likely needs a tenant-aware crypto component, since a multitude of stores may be provided - tracked in https://github.com/AxonIQ/extension-data-protection/issues/8
 * Is it feasible to fan out multi-tenancy at the crypto-store (`CryptoEngine`) level, or does the `FieldEncryptingConverter` itself need to become a multi-tenant-aware component?
   * `FieldEncryptingConverter.convert(Object, Type)` has no access to `Message`/`ProcessingContext`/tenant info at all - making the converter itself tenant-aware would mean changing the core `Converter` SPI
   * `CryptoEngine` (`getOrCreateKey(String id)`, `getKey`, `deleteKey`) is the natural fan-out seam instead: either namespace the key id with the tenant id inside a wrapping `CryptoEngine`, or use the same `TenantComponentRegistry`-style pattern used elsewhere in the POC to resolve a distinct `CryptoEngine` instance per tenant (needed for full physical isolation, e.g. separate Vault paths/JDBC schemas per tenant)
   * Where would tenant info come from at that point? `CryptoEngine.getOrCreateKey/getKey` receives only a single opaque `String` (`prefix + @DataSubjectId field value`, both fixed by the object being converted and its class annotation) - no `Message`, `ProcessingContext`, or ambient context reaches that call, and `CryptoEngine` is a fixed singleton wired once at bootstrap, not resolved per call. So tenant info can only reach it via (a) making the `@DataSubjectId` value itself tenant-qualified (a data-model change), or (b) a tenant-aware `CryptoEngine` implementation consulting some ambient state set up at the edge around the conversion call (would need to respect the "no ThreadLocals except at edges" principle) - there is no existing plumbing to thread tenant identity through the conversion call chain
+  * Likely simplest answer (per Allard Buijze, unvalidated): fan out one layer below the `CryptoEngine`/`Converter` SPI, at datasource routing. If `JpaCryptoEngine` is combined with a tenant-routing `EntityManager`/`DataSource`, the crypto engine's per-message key load/decrypt should transparently hit the correct tenant's datasource with no code changes to the Data Protection module. `JdbcCryptoEngine` can achieve the same by wrapping its datasource in an `AbstractRoutingDataSource` keyed by an ambient "current tenant" lookup (see https://www.baeldung.com/multitenancy-with-spring-data-jpa)
+  * This needs a `TenantIdentifierResolver`-style bridge that sets the ambient "current tenant" lookup key (consumed by the routing datasource) from the tenant already resolved for the message being processed - inherently ThreadLocal-shaped (matches Hibernate's `CurrentTenantIdentifierResolver` pattern), which fits the framework's "ThreadLocals only at the edges" principle as long as it's scoped tightly to message processing. Not yet validated with a POC.
 
 #### Implementation
 
@@ -302,7 +304,7 @@ Each issue also adds or updates the corresponding Antora reference documentation
 ### Deferred past July
 
 * **"Dead Letter Queue: tenant-aware DLQ support"** - resolves whether the multi-tenancy module should depend on the DLQ module
-* **"Data Protection: tenant-aware crypto store fan-out"** - resolves the `CryptoEngine`-level fan-out approach identified above
+* **"Data Protection: tenant-aware crypto store fan-out"** - validates and documents a datasource-routing based approach (`JpaCryptoEngine`/`JdbcCryptoEngine` combined with a tenant-routing datasource and a `TenantIdentifierResolver`-style bridge) rather than changes to the `CryptoEngine`/`Converter` SPI; tracked in https://github.com/AxonIQ/extension-data-protection/issues/8
 * **"Aggregate-based event storage engine: per-tenant support"** - should-have, not must-have; resolves whether
   `AggregateBasedAxonServerEventStorageEngine` needs to be wired in per tenant alongside the tag-based
   `AxonServerEventStorageEngineFactory`
