@@ -249,10 +249,10 @@ Each issue also adds or updates the corresponding Antora reference documentation
 
 ### Phase 0 - Prerequisites
 
-* **"Add an offline Axon Server license file for CI"** - unblocks integration tests for every subsequent issue (see `### Infrastructure` `#### Requirements`)
 * **"Scaffold the `axoniq-multi-tenancy` module in the main repo"** - empty module skeleton, POM/BOM wiring, CI pipeline
   wiring, package structure; no functional code moved yet, create documentation skeleton for multitenancy feature (
-  create sections required)
+  create sections required); also adds an offline Axon Server license file for CI, unblocking integration tests for
+  every subsequent issue
 
 ### Phase 1 - Infrastructure (foundation; everything else depends on it)
 
