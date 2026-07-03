@@ -14,6 +14,7 @@
 * Components are multi-tenant-aware and fan out on connections internally
 * outbound messages carry tenant information that is resolved into the appropriate context connection
 * inbound messages are enriched with the appropriate tenant information provided by the context connection (and/or metadata)
+* Multi-tenancy will become a regular module of the AxoniqFramework repo (like dead-letter-queue), not remain a separate repo as for AF4
 
 ## Requirements Overview
 * Infrastructure: registration and removal of tenants, resolving and providing tenant information for message handling components
@@ -162,8 +163,20 @@
 
 ### Dead Letter Queue
 
-* Enqueueing dead letters is part of the event processing flow, so tenant-aware datasource selection should be covered by `### Event Handling/Sourcing` out of the box
+#### Requirements
+
+* Enqueueing dead letters must select tenant-aware datasource resources, and should be covered by `### Event Handling/Sourcing` out of the box (per-tenant pooled processors already build per-tenant handling components with dead letter queues, per the module's own Javadoc)
 * Processing dead letters is a separate flow: it needs a means to establish the correct tenant context before invoking the DLQ for processing
+
+#### Questions
+
+* Do we want the multi-tenancy module to depend on the DLQ module (to build tenant-aware DLQ support), or should DLQ integration remain optional/pluggable?
+
+#### Implementation
+
+* Not yet implemented - no tenant-aware DLQ class exists (e.g. no `TenantAwareSequencedDeadLetterQueue`)
+* `MultiTenantPooledStreamingEventProcessorModule`'s Javadoc already mentions "dead letter queues per tenant" as part of the per-tenant handling component decoration it builds (see `### Event Handling/Sourcing`), but this is not backed by a dedicated tenant-aware DLQ processing mechanism
+* Generic (non-tenant-aware) DLQ building blocks exist in `dependency-injection/spring/spring-boot-autoconfigure/`: `DeadLetterQueueAutoConfiguration`, `JdbcDeadLetterQueueAutoConfiguration`, `JpaDeadLetterQueueAutoConfiguration`, `DeadLetterQueueProcessorProperties` - not multi-tenancy-specific
 
 ### Data Protection
 
