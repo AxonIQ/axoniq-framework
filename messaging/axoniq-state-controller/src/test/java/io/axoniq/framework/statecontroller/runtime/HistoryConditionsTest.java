@@ -25,6 +25,11 @@ import io.axoniq.framework.statecontroller.UncoveredEventException;
 import io.axoniq.framework.statecontroller.sample.banking.AccountClosed;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyDeposited;
 import io.axoniq.framework.statecontroller.sample.banking.MoneyWithdrawn;
+import io.axoniq.framework.statecontroller.sample.enrollment.CourseCapacityChanged;
+import io.axoniq.framework.statecontroller.sample.enrollment.CourseCreated;
+import io.axoniq.framework.statecontroller.sample.enrollment.StudentEnrolledInFaculty;
+import io.axoniq.framework.statecontroller.sample.enrollment.StudentSubscribedToCourse;
+import io.axoniq.framework.statecontroller.sample.enrollment.StudentUnsubscribedFromCourse;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -252,6 +257,101 @@ class HistoryConditionsTest {
             assertThatIllegalStateException().isThrownBy(() -> root.total(MoneyDeposited.class,
                                                                            MoneyDeposited::amount));
             assertThatIllegalStateException().isThrownBy(() -> root.latestOf(MoneyDeposited.class));
+        }
+
+        @Test
+        void buildingBranchesOnTheUnboundRootFailsFast() {
+            History root = rootHistory();
+
+            // and(...) restricts a branch's types, or(...) adds a branch — both need a first of(...) scope
+            assertThatIllegalStateException().isThrownBy(() -> root.and(MoneyDeposited.class))
+                                             .withMessageContaining("of(");
+            assertThatIllegalStateException().isThrownBy(() -> root.or("account", "a1"))
+                                             .withMessageContaining("of(");
+        }
+    }
+
+    @Nested
+    class UnionScopes {
+
+        @Test
+        void unionConditionsAcrossDifferentlyTaggedBranchesResolveFromOneScope() {
+            // given — course-tagged events, a student-tagged enrolment, and a subscription carrying both tags
+            seed(new CourseCreated("c1"), Set.of(new Tag("courseId", "c1")));
+            seed(new CourseCapacityChanged("c1", 2), Set.of(new Tag("courseId", "c1")));
+            seed(new StudentEnrolledInFaculty("s1", "law"), Set.of(new Tag("studentId", "s1")));
+            seed(new StudentSubscribedToCourse("c1", "other"),
+                 Set.of(new Tag("courseId", "c1"), new Tag("studentId", "other")));
+
+            History union = rootHistory().of("courseId", "c1")
+                                         .and(CourseCreated.class, CourseCapacityChanged.class,
+                                              StudentSubscribedToCourse.class,
+                                              StudentUnsubscribedFromCourse.class)
+                                         .or("studentId", "s1")
+                                         .and(StudentEnrolledInFaculty.class);
+
+            // when — declare across both branches, then resolve
+            var enrolled = union.has(StudentEnrolledInFaculty.class);
+            var courseExists = union.has(CourseCreated.class);
+            var seatsTaken = union.count(StudentSubscribedToCourse.class);
+            var capacity = union.latest(CourseCapacityChanged.class);
+
+            // then — both branches' slices answer from the single union read
+            assertThat(enrolled.resolve()).isTrue();
+            assertThat(courseExists.resolve()).isTrue();
+            assertThat(seatsTaken.resolve()).isEqualTo(1);
+            assertThat(capacity.resolve()).map(CourseCapacityChanged::capacity).hasValue(2);
+        }
+
+        @Test
+        void perBranchTypeRestrictionKeepsForeignSlicesOutOfTheUnion() {
+            // given — the same student subscribed to a DIFFERENT course; that event carries the studentId tag,
+            //         so only the branch type restriction keeps it out of this course's seat count
+            seed(new CourseCreated("c1"), Set.of(new Tag("courseId", "c1")));
+            seed(new StudentEnrolledInFaculty("s1", "law"), Set.of(new Tag("studentId", "s1")));
+            seed(new StudentSubscribedToCourse("c2", "s1"),
+                 Set.of(new Tag("courseId", "c2"), new Tag("studentId", "s1")));
+
+            History union = rootHistory().of("courseId", "c1")
+                                         .and(CourseCreated.class, StudentSubscribedToCourse.class)
+                                         .or("studentId", "s1")
+                                         .and(StudentEnrolledInFaculty.class);
+
+            // when
+            var seatsTaken = union.count(StudentSubscribedToCourse.class);
+
+            // then — the c2 subscription is invisible: not courseId=c1, and excluded from the student branch
+            assertThat(seatsTaken.resolve()).isZero();
+        }
+
+        @Test
+        void aRestrictedScopeRejectsConditionsOnUndeclaredTypes() {
+            // given — a single-branch scope restricted to one event type
+            History account = rootHistory().of("account", "a1").and(MoneyDeposited.class);
+
+            // when / then — a condition on a type no branch declares could never match the sourced read
+            assertThatThrownBy(() -> account.has(AccountClosed.class))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("not declared by any branch");
+        }
+
+        @Test
+        void aBranchWithoutRestrictionStillAccumulatesConditionTypes() {
+            // given — a union whose student branch is left unrestricted
+            seedAccountActivity();
+            seed(new StudentEnrolledInFaculty("s1", "law"), Set.of(new Tag("studentId", "s1")));
+
+            History union = rootHistory().of("account", "a1")
+                                         .and(MoneyDeposited.class)
+                                         .or("studentId", "s1");
+
+            // when — the enrolment type is undeclared but lands in the unrestricted branch
+            var enrolled = union.has(StudentEnrolledInFaculty.class);
+            var deposits = union.count(MoneyDeposited.class);
+
+            // then
+            assertThat(enrolled.resolve()).isTrue();
+            assertThat(deposits.resolve()).isEqualTo(2);
         }
     }
 

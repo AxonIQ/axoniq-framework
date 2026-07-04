@@ -22,6 +22,7 @@ package io.axoniq.framework.statecontroller.runtime;
 import io.axoniq.framework.statecontroller.History;
 import io.axoniq.framework.statecontroller.decisions.DecisionContext;
 import io.axoniq.framework.statecontroller.eventstream.EventStream;
+import io.axoniq.framework.statecontroller.eventstream.ScopeBranch;
 import io.axoniq.framework.statecontroller.eventstream.SourcedEventStream;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -80,7 +81,7 @@ public final class HistorySession implements DecisionContext {
     private final ProcessingContext processingContext;
     private final MessageTypeResolver typeResolver;
     private final Clock clock;
-    private final Map<Set<Tag>, SourcedEventStream> scopes = new HashMap<>();
+    private final Map<List<ScopeBranch>, SourcedEventStream> scopes = new HashMap<>();
     private final History root = new RootHistory(this);
 
     /**
@@ -117,10 +118,23 @@ public final class HistorySession implements DecisionContext {
      * @return an unsealed event stream for the scope, ready to accept condition declarations
      */
     public SourcedEventStream scopeFor(Set<Tag> tags) {
-        SourcedEventStream current = scopes.get(tags);
+        return scopeFor(List.of(ScopeBranch.unrestricted(tags)));
+    }
+
+    /**
+     * Returns the current {@link SourcedEventStream} for the given branch list — a single branch for a simple
+     * scope, several for a union scope — creating one when none exists yet or when the cached stream has already
+     * been sealed (the supplementary-read case). Streams are cached per branch list, so two {@link History}
+     * values describing the same branches share one stream and one sourced read.
+     *
+     * @param branches the branches identifying the scope; at least one required
+     * @return an unsealed event stream for the scope, ready to accept condition declarations
+     */
+    public SourcedEventStream scopeFor(List<ScopeBranch> branches) {
+        SourcedEventStream current = scopes.get(branches);
         if (current == null || current.isSealed()) {
-            current = new SourcedEventStream(eventStore, processingContext, typeResolver, tags, this::sealAll);
-            scopes.put(tags, current);
+            current = new SourcedEventStream(eventStore, processingContext, typeResolver, branches, this::sealAll);
+            scopes.put(List.copyOf(branches), current);
         }
         return current;
     }

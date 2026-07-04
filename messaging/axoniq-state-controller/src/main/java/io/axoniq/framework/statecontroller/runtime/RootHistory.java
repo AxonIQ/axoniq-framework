@@ -82,6 +82,20 @@ final class RootHistory implements History {
     }
 
     @Override
+    public History and(Class<?>... types) {
+        throw new IllegalStateException(
+                "This History is unbound. Select a scope with of(...) before restricting its event types, "
+                        + "for example: history.of(\"account\", cmd.accountId()).and(AccountClosed.class)");
+    }
+
+    @Override
+    public History or(String tagKey, Object tagValue) {
+        throw new IllegalStateException(
+                "This History is unbound. A union scope starts from a first branch selected with of(...), "
+                        + "for example: history.of(\"course\", courseId).or(\"student\", studentId)");
+    }
+
+    @Override
     public BooleanCondition has(Class<?> type) {
         throw unbound();
     }

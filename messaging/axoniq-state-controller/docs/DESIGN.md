@@ -1,7 +1,7 @@
 # State Controller — Design Rationale
 
 *PoC design notes for `messaging/axoniq-state-controller`, branch `poc/state-controller`. Last updated
-2026-07-03. Distills the branch review and the design discussion of 2026-06-18. This is not a decision record:
+2026-07-04. Distills the branch review and the design discussion of 2026-06-18. This is not a decision record:
 the module is a proof of concept, and everything here is input to that evaluation. When the module graduates,
 the decisions that survived should be distilled into proper ADRs.*
 
@@ -57,8 +57,12 @@ if (courseMissing.resolve()) return reject("course does not exist");
 With eager, value-returning reads, each `never(...)` must materialize the union at the call site — two passes
 over the combined stream. With declared conditions, both questions ride one pass. The per-branch type varargs
 are also load-bearing here: when an event type could carry either tag, the declaration says which branch of the
-union it belongs to — something a post-hoc `.filter()` cannot express against the store. (The `and(types...)` /
-`or(tagKey, value)` union builder is not yet on the unified `History`; see follow-ups.)
+union it belongs to — something a post-hoc `.filter()` cannot express against the store. The `and(types...)` /
+`or(tagKey, value)` union builder is now on the unified `History`: each branch contributes one OR-term to the
+sourced read's criteria (its tags × its declared types), a branch left unrestricted accumulates the types its
+conditions read (the single-scope behavior), and a condition naming a type no branch declares fails fast with
+`IllegalArgumentException` — the read could never contain it. The full enrollment decision runs end-to-end in
+`sample/enrollment/CourseSubscriptions` against a real in-memory DCB store.
 
 ## The merged design
 
@@ -117,7 +121,7 @@ var toClosed   = to.has(AccountClosed.class);          // both scopes load toget
 
 | Concept | Type | Role |
 |---|---|---|
-| The event history | `History` | Injected unbound; narrowed with `of(tagKey, tagValue)`, then read. Reads on the unbound root fail fast. |
+| The event history | `History` | Injected unbound; narrowed with `of(tagKey, tagValue)` — optionally restricted with `and(types...)` and extended into a union scope with `or(tagKey, tagValue)` — then read. Reads on the unbound root fail fast. |
 | A declared question | `Condition<T>` (`BooleanCondition`, `NumericCondition`, `OptionalCondition`) | Returned by every `History` read. Lazy; composable via `map` / `combine` / `and` / `or` / `not` / `plus` / `minus`. |
 | The terminals | `resolve()` / `resolveAsync()` | The only ways to obtain a value. `resolveAsync()` is the non-blocking primitive; `resolve()` joins it with a 30-second safety-net timeout (`FutureUtils.joinAndUnwrap`). |
 | The result | `Outcome` | Sealed `Accept` / `Reject`; statically imported `accept(...)` / `reject(...)`, with `.returning(value)` and `.recording(events)`. |
@@ -272,9 +276,9 @@ Points where pushback or a judgment call is specifically wanted before this hard
 
 1. Strict-mode round-trip diagnostic (fixture assertion + production metric) for decisions exceeding one batch.
 2. Position-pinning for supplementary reads (answer late conditions as of the first seal's position).
-3. Union-scope builder on `History` (`and(types...)` / `or(tagKey, value)` with per-branch type restriction),
-   per the enrollment example above — the engine's criteria model supports it; only the surface is missing.
-4. Port the remaining business samples from the `bussnies-api` branch (enrollment, via-context variants,
-   criteria and coverage suites) onto the unified surface.
-5. Reference-guide documentation: the simple way (`History` + `resolve()`), then the advanced way
+3. Port the remaining business samples from the `bussnies-api` branch (via-context variants, criteria and
+   coverage suites) onto the unified surface. ~~Enrollment~~ — done: `sample/enrollment` carries the
+   `CourseSubscriptions` decision plus an `AxonTestFixture` end-to-end suite. The union-scope builder
+   (`and(types...)` / `or(tagKey, value)`, formerly follow-up 3) shipped with it.
+4. Reference-guide documentation: the simple way (`History` + `resolve()`), then the advanced way
    (`DecisionContext`, folds, matchers, reactive composition).

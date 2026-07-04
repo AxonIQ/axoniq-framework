@@ -96,6 +96,50 @@ public interface History {
     History of(Map<String, ?> tags);
 
     /**
+     * Restricts the current branch of this history to the given event types.
+     * <p>
+     * Without a restriction, a branch's consistency boundary narrows to the union of the event types its declared
+     * conditions read. An explicit restriction fixes the branch's type set instead: exactly these types are read
+     * and guarded for the branch's tags, whether or not every one of them is touched by a condition. The
+     * restriction is what makes a {@linkplain #or(String, Object) union scope} precise — when an event type could
+     * carry either branch's tag, naming it on one branch says which slice of the union it belongs to, something no
+     * after-the-fact filter can express against the store.
+     * <p>
+     * A condition declared on a restricted history may only read types that some branch declares (or that fall to
+     * a branch without a restriction); reading an undeclared type fails fast with
+     * {@link IllegalArgumentException}, because the sourced read could never contain it.
+     * <p>
+     * Repeated calls on the same branch accumulate types.
+     *
+     * @param types the event payload types the current branch reads; at least one required
+     * @return a history whose current branch is restricted to the given types
+     */
+    History and(Class<?>... types);
+
+    /**
+     * Adds a branch to this history, turning it into (or extending) a <em>union scope</em>: one history spanning
+     * multiple differently-tagged slices, read and guarded as a single consistency boundary.
+     * <p>
+     * The new branch starts scoped to the given key/value tag; subsequent {@link #of(String, Object) of(...)} and
+     * {@link #and(Class[]) and(...)} calls narrow <em>that</em> branch. All branches load together in one sourced
+     * read whose criteria are the union of each branch's tags × types:
+     * <pre>{@code
+     * History union = history.of("courseId", cmd.courseId())
+     *                        .and(CourseCreated.class, CourseCapacityChanged.class,
+     *                             StudentSubscribedToCourse.class, StudentUnsubscribedFromCourse.class)
+     *                        .or("studentId", cmd.studentId())
+     *                        .and(StudentEnrolledInFaculty.class);
+     * }</pre>
+     * Conditions declared on the union observe the combined slice; every declared condition still resolves from
+     * the same single read.
+     *
+     * @param tagKey   the tag key scoping the new branch
+     * @param tagValue the tag value, typically an entity identifier; converted with {@link Object#toString()}
+     * @return a history extended with a branch for the tagged slice
+     */
+    History or(String tagKey, Object tagValue);
+
+    /**
      * Declares the condition that an event of the given {@code type} ever occurred in this scope.
      *
      * @param type the event payload type to look for

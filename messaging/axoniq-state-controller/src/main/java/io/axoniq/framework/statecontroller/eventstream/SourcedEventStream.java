@@ -52,7 +52,11 @@ import java.util.function.Function;
 import java.util.function.ToLongFunction;
 
 /**
- * Concrete {@link EventStream} for a single scope, implemented as a streaming-accumulator host.
+ * Concrete {@link EventStream} for a single scope, implemented as a streaming-accumulator host. A scope is one
+ * or more {@link ScopeBranch branches}: simple scopes have exactly one, and union scopes (built with the
+ * {@code History} surface's {@code of(...).and(...).or(...)} chain) have several, OR-combined into one sourced
+ * read whose per-branch criteria narrow to each branch's tags and — when the branch is
+ * {@linkplain ScopeBranch#restricted() restricted} — its explicitly declared event types.
  * <p>
  * Each typed helper ({@link #contains}, {@link #count}, {@link #sum}, {@link #sumLong}, {@link #latest},
  * {@link #latestOf}, {@link #first}, {@link #firstOf}, {@link #latestMatch}, {@link #fold}) constructs a
@@ -99,16 +103,19 @@ public final class SourcedEventStream implements EventStream {
     private final ProcessingContext processingContext;
     private final MessageTypeResolver typeResolver;
     private final @Nullable Converter converter;
-    private final Set<Tag> scopeTags;
+    private final List<ScopeBranch> branches;
+    private final List<Set<QualifiedName>> branchNames;
+    private final Set<QualifiedName> restrictedNames;
+    private final boolean hasUnrestrictedBranch;
     private final Runnable resolveTrigger;
 
     private final Map<Class<?>, QualifiedName> resolvedTypes = new LinkedHashMap<>();
-    private final Set<QualifiedName> additionalNames = new LinkedHashSet<>();
+    private final Set<QualifiedName> conditionNames = new LinkedHashSet<>();
     private final List<SourcedCondition<?>> accumulators = new ArrayList<>();
     private boolean sealed;
 
     /**
-     * Creates a stream for the given scope.
+     * Creates a stream for a simple, single-branch scope with no type restriction.
      *
      * @param eventStore        the event store to source from at seal time
      * @param processingContext the processing context the sourced read participates in
@@ -123,11 +130,54 @@ public final class SourcedEventStream implements EventStream {
                               MessageTypeResolver typeResolver,
                               Set<Tag> scopeTags,
                               Runnable resolveTrigger) {
+        this(eventStore, processingContext, typeResolver,
+             List.of(ScopeBranch.unrestricted(scopeTags)), resolveTrigger);
+    }
+
+    /**
+     * Creates a stream over the given branches — a single branch for a simple scope, several for a union scope
+     * built with {@code History.of(...).and(...).or(...)}.
+     * <p>
+     * Each {@linkplain ScopeBranch#restricted() restricted} branch's payload types are resolved to
+     * {@link QualifiedName}s immediately; unrestricted branches accumulate the types registered by declared
+     * conditions instead.
+     *
+     * @param eventStore        the event store to source from at seal time
+     * @param processingContext the processing context the sourced read participates in
+     * @param typeResolver      the resolver mapping payload classes to {@link QualifiedName}s
+     * @param branches          the branches whose union this stream reads; at least one required
+     * @param resolveTrigger    invoked when any condition on this stream is resolved; the loading session passes
+     *                          its seal-all hook here so the first resolution anywhere in a decision seals every
+     *                          declared scope at once
+     */
+    public SourcedEventStream(EventStore eventStore,
+                              ProcessingContext processingContext,
+                              MessageTypeResolver typeResolver,
+                              List<ScopeBranch> branches,
+                              Runnable resolveTrigger) {
         this.eventStore = Objects.requireNonNull(eventStore, "eventStore must not be null");
         this.processingContext = Objects.requireNonNull(processingContext, "processingContext must not be null");
         this.typeResolver = Objects.requireNonNull(typeResolver, "typeResolver must not be null");
         this.converter = resolveConverter(processingContext);
-        this.scopeTags = Set.copyOf(scopeTags);
+        Objects.requireNonNull(branches, "branches must not be null");
+        if (branches.isEmpty()) {
+            throw new IllegalArgumentException("at least one scope branch is required");
+        }
+        this.branches = List.copyOf(branches);
+        this.branchNames = new ArrayList<>(this.branches.size());
+        this.restrictedNames = new LinkedHashSet<>();
+        boolean unrestricted = false;
+        for (ScopeBranch branch : this.branches) {
+            Set<QualifiedName> names = new LinkedHashSet<>(branch.payloadTypes().size());
+            for (Class<?> type : branch.payloadTypes()) {
+                names.add(resolvedTypes.computeIfAbsent(type,
+                                                        c -> typeResolver.resolveOrThrow(c).qualifiedName()));
+            }
+            branchNames.add(names);
+            restrictedNames.addAll(names);
+            unrestricted |= !branch.restricted();
+        }
+        this.hasUnrestrictedBranch = unrestricted;
         this.resolveTrigger = Objects.requireNonNull(resolveTrigger, "resolveTrigger must not be null");
     }
 
@@ -243,25 +293,52 @@ public final class SourcedEventStream implements EventStream {
      * Registers an event payload class with this scope and returns its resolved {@link QualifiedName}.
      * Resolution goes through the configured {@link MessageTypeResolver}; the result is cached, so multiple
      * registrations for the same {@link Class} resolve once.
+     * <p>
+     * A type already declared by a {@linkplain ScopeBranch#restricted() restricted} branch is resolved for
+     * matching only — the branch declaration, not the condition, decides the criteria. Otherwise the type joins
+     * the unrestricted branches' criteria; when every branch is restricted and none declares the type, the
+     * sourced read could never contain it, so registration fails fast with {@link IllegalArgumentException}.
      */
     QualifiedName registerType(Class<?> payloadType) {
         Objects.requireNonNull(payloadType, "payloadType must not be null");
         if (sealed) {
-            throw new LateConditionException("event type '" + payloadType.getName() + "' for scope " + scopeTags);
+            throw new LateConditionException(
+                    "event type '" + payloadType.getName() + "' for scope " + describeScope());
         }
-        return resolvedTypes.computeIfAbsent(payloadType,
-                                             c -> typeResolver.resolveOrThrow(c).qualifiedName());
+        QualifiedName name = resolvedTypes.computeIfAbsent(payloadType,
+                                                           c -> typeResolver.resolveOrThrow(c).qualifiedName());
+        noteConditionType(payloadType.getName(), name);
+        return name;
     }
 
     /**
-     * Registers an event type by {@link QualifiedName} (the cross-language path).
+     * Registers an event type by {@link QualifiedName} (the cross-language path). Subject to the same
+     * branch-coverage rules as {@link #registerType(Class)}.
      */
     void registerType(QualifiedName name) {
         Objects.requireNonNull(name, "name must not be null");
         if (sealed) {
-            throw new LateConditionException("event type '" + name + "' for scope " + scopeTags);
+            throw new LateConditionException("event type '" + name + "' for scope " + describeScope());
         }
-        additionalNames.add(name);
+        noteConditionType(name.toString(), name);
+    }
+
+    /**
+     * Routes a condition-registered type into the criteria: covered by a restricted branch's declaration means
+     * nothing to add; otherwise the type must have an unrestricted branch to land in, or the condition could
+     * never observe a matching event.
+     */
+    private void noteConditionType(String typeDescription, QualifiedName name) {
+        if (restrictedNames.contains(name)) {
+            return;
+        }
+        if (!hasUnrestrictedBranch) {
+            throw new IllegalArgumentException(
+                    "Event type '" + typeDescription + "' is not declared by any branch of scope "
+                            + describeScope() + ". A scope restricted with and(...) only reads the declared "
+                            + "types; add the type to a branch, or drop the restriction.");
+        }
+        conditionNames.add(name);
     }
 
     /**
@@ -294,7 +371,7 @@ public final class SourcedEventStream implements EventStream {
      */
     void register(SourcedCondition<?> accumulator) {
         if (sealed) {
-            throw new LateConditionException("condition on scope " + scopeTags);
+            throw new LateConditionException("condition on scope " + describeScope());
         }
         accumulators.add(accumulator);
     }
@@ -339,7 +416,7 @@ public final class SourcedEventStream implements EventStream {
         if (accumulators.isEmpty()) {
             return;
         }
-        if (resolvedTypes.isEmpty() && additionalNames.isEmpty()) {
+        if (conditionNames.isEmpty() && restrictedNames.isEmpty()) {
             for (SourcedCondition<?> a : accumulators) {
                 a.complete();
             }
@@ -373,14 +450,44 @@ public final class SourcedEventStream implements EventStream {
     // Internals
     // ----------------------------------------------------------------------
 
+    /**
+     * Folds the branches into one {@link EventCriteria}: each branch contributes its tags narrowed to either its
+     * explicit type declaration (restricted branches) or the union of condition-registered types (unrestricted
+     * branches); multiple branches are OR-combined so the union loads in a single sourced read.
+     */
     private EventCriteria buildCriteria() {
-        Set<QualifiedName> allTypes = new LinkedHashSet<>(resolvedTypes.size() + additionalNames.size());
-        allTypes.addAll(resolvedTypes.values());
-        allTypes.addAll(additionalNames);
-        var tagged = EventCriteria.havingTags(scopeTags);
-        return allTypes.isEmpty()
-                ? tagged
-                : tagged.andBeingOneOfTypes(allTypes.toArray(new QualifiedName[0]));
+        List<EventCriteria> parts = new ArrayList<>(branches.size());
+        for (int i = 0; i < branches.size(); i++) {
+            ScopeBranch branch = branches.get(i);
+            Set<QualifiedName> names = branch.restricted() ? branchNames.get(i) : conditionNames;
+            var tagged = EventCriteria.havingTags(branch.tags());
+            parts.add(names.isEmpty()
+                              ? tagged
+                              : tagged.andBeingOneOfTypes(names.toArray(new QualifiedName[0])));
+        }
+        return parts.size() == 1 ? parts.getFirst() : EventCriteria.either(parts);
+    }
+
+    /**
+     * Renders the scope for diagnostics: the tag set for a simple scope, the branch list (tags plus any type
+     * restriction) for a union scope.
+     */
+    private String describeScope() {
+        if (branches.size() == 1 && !branches.getFirst().restricted()) {
+            return branches.getFirst().tags().toString();
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < branches.size(); i++) {
+            ScopeBranch branch = branches.get(i);
+            if (i > 0) {
+                sb.append(" OR ");
+            }
+            sb.append(branch.tags());
+            if (branch.restricted()) {
+                sb.append(" of types ").append(branchNames.get(i));
+            }
+        }
+        return sb.append(']').toString();
     }
 
     private static Class<?>[] requireTypes(Class<?>[] types) {
