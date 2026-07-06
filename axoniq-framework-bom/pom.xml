@@ -79,6 +79,11 @@
                 <artifactId>axoniq-message-transformation</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-multi-tenancy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Axoniq Framework: Spring -->
             <dependency>
