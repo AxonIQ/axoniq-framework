@@ -120,6 +120,54 @@ class AddCommandAnnotationKotlinTest implements RewriteTest {
     }
 
     @Test
+    void explicitRoutingKeyWinsOverTargetEntityIdOnKotlinDataClass() {
+        // AF4 routing semantics: an explicit @RoutingKey wins over @TargetEntityId even when the
+        // target-identifier parameter is declared first. The Kotlin primary-constructor
+        // parameters travel the fallback path, so this also guards the capture-precedence logic
+        // there: the routing key is lifted from shardKey, its @RoutingKey annotation and import
+        // are removed, and @TargetEntityId is preserved on orderId.
+        rewriteRun(
+                kotlin(
+                        """
+                        package com.example
+                        import org.axonframework.commandhandling.CommandHandler
+                        import org.axonframework.commandhandling.RoutingKey
+                        import org.axonframework.modelling.annotation.TargetEntityId
+
+                        data class ReassignCommand(
+                            @TargetEntityId val orderId: String,
+                            @RoutingKey val shardKey: String
+                        )
+
+                        class ReassignHandler {
+                            @CommandHandler
+                            fun on(cmd: ReassignCommand) {
+                            }
+                        }
+                        """,
+                        """
+                        package com.example
+                        import org.axonframework.commandhandling.CommandHandler
+                        import org.axonframework.messaging.commandhandling.annotation.Command
+                        import org.axonframework.modelling.annotation.TargetEntityId
+
+                        @Command(routingKey = "shardKey")
+                        data class ReassignCommand(
+                            @TargetEntityId val orderId: String,
+                            val shardKey: String
+                        )
+
+                        class ReassignHandler {
+                            @CommandHandler
+                            fun on(cmd: ReassignCommand) {
+                            }
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
     void isIdempotentWhenAlreadyMigrated() {
         rewriteRun(
                 kotlin(

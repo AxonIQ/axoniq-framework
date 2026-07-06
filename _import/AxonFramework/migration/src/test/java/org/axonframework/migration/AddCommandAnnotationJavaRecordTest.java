@@ -204,6 +204,90 @@ class AddCommandAnnotationJavaRecordTest implements RewriteTest {
     }
 
     @Test
+    void explicitRoutingKeyWinsOverTargetEntityIdRegardlessOfOrder() {
+        // AF4 routing semantics: an explicit @RoutingKey takes precedence over
+        // @TargetEntityId even when the target-identifier component is declared first. The
+        // routing key must be lifted from the @RoutingKey component (shardKey), the @RoutingKey
+        // annotation removed (and its import dropped), and @TargetEntityId preserved on the field.
+        rewriteRun(
+                java(
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandHandler;
+                        import org.axonframework.commandhandling.RoutingKey;
+                        import org.axonframework.modelling.annotation.TargetEntityId;
+
+                        public record ReassignCommand(@TargetEntityId String orderId, @RoutingKey String shardKey) {
+                        }
+                        """,
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandHandler;
+                        import org.axonframework.messaging.commandhandling.annotation.Command;
+                        import org.axonframework.modelling.annotation.TargetEntityId;
+
+                        @Command(routingKey = "shardKey")
+                        public record ReassignCommand(@TargetEntityId String orderId, String shardKey) {
+                        }
+                        """
+                ),
+                java(
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandHandler;
+
+                        class ReassignHandler {
+                            @CommandHandler
+                            void on(ReassignCommand cmd) {
+                            }
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
+    void explicitRoutingKeyWinsOverTargetAggregateIdentifierWhenDeclaredFirst() {
+        // Same precedence rule with the AF4 @TargetAggregateIdentifier and the @RoutingKey
+        // component declared first: the explicit @RoutingKey still supplies the routing key.
+        rewriteRun(
+                java(
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandHandler;
+                        import org.axonframework.commandhandling.RoutingKey;
+                        import org.axonframework.modelling.command.TargetAggregateIdentifier;
+
+                        public record ReassignCommand(@RoutingKey String shardKey, @TargetAggregateIdentifier String orderId) {
+                        }
+                        """,
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandHandler;
+                        import org.axonframework.messaging.commandhandling.annotation.Command;
+                        import org.axonframework.modelling.command.TargetAggregateIdentifier;
+
+                        @Command(routingKey = "shardKey")
+                        public record ReassignCommand(String shardKey, @TargetAggregateIdentifier String orderId) {
+                        }
+                        """
+                ),
+                java(
+                        """
+                        package com.example;
+                        import org.axonframework.commandhandling.CommandHandler;
+
+                        class ReassignHandler {
+                            @CommandHandler
+                            void on(ReassignCommand cmd) {
+                            }
+                        }
+                        """
+                )
+        );
+    }
+
+    @Test
     void liftsRoutingKeyFromJavaRecordComponent() {
         rewriteRun(
                 java(

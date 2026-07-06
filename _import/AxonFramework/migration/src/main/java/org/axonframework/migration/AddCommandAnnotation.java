@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Scans for methods annotated with {@code @CommandHandler} and annotates their command parameter
@@ -46,6 +47,11 @@ import java.util.Set;
  * {@code @TargetAggregateIdentifier} (AF4) or its post-rename AF5 successor
  * {@code @TargetEntityId}, the field name is lifted onto {@code @Command#routingKey}; unlike
  * {@code @RoutingKey}, those annotations are <em>preserved</em> on the field.
+ * <p>
+ * <strong>Precedence</strong>: When a class declares both an explicit {@code @RoutingKey} field
+ * and a {@code @TargetAggregateIdentifier} / {@code @TargetEntityId} field, the explicit
+ * {@code @RoutingKey} field wins regardless of declaration order, matching AF4 routing semantics
+ * where {@code @RoutingKey} takes precedence over the target-identifier annotations.
  * <p>
  * <strong>Idempotent updates</strong>: If the class already carries a {@code @Command}
  * annotation whose {@code routingKey} attribute is missing or blank, the recipe adds the
@@ -93,6 +99,9 @@ public class AddCommandAnnotation extends ScanningRecipe<AddCommandAnnotation.Ac
     private static final String TARGET_ENTITY_ID_AF5 =
             "org.axonframework.modelling.annotation.TargetEntityId";
     private static final String ROUTING_KEY_FIELD_MESSAGE = "axon4to5.routingKeyField";
+    // Marks that the captured routing-key field carries an explicit @RoutingKey (Kotlin fallback),
+    // so a later @TargetEntityId / @TargetAggregateIdentifier parameter does not override it.
+    private static final String ROUTING_KEY_FIELD_EXPLICIT_MESSAGE = "axon4to5.routingKeyFieldExplicit";
 
     public static class Accumulator {
 
@@ -241,12 +250,24 @@ public class AddCommandAnnotation extends ScanningRecipe<AddCommandAnnotation.Ac
                 }
                 // Kotlin fallback: publish the captured parameter name so the enclosing
                 // visitClassDeclaration can pull it from the cursor message bus when its direct
-                // walk through `J.ClassDeclaration` returned nothing.
+                // walk through `J.ClassDeclaration` returned nothing. An explicit @RoutingKey
+                // parameter wins over a @TargetEntityId / @TargetAggregateIdentifier parameter
+                // regardless of order, matching AF4 routing semantics: an explicit match always
+                // (over)writes the captured name, while a target-identifier match is skipped once
+                // an explicit one has been captured.
                 if (!vd.getVariables().isEmpty()) {
                     String name = vd.getVariables().get(0).getSimpleName();
+                    boolean explicit = hasExplicitRoutingKeyAnnotation(vd);
                     Cursor enclosingClassCursor = getCursor()
                             .dropParentUntil(it -> it instanceof J.ClassDeclaration);
-                    enclosingClassCursor.putMessage(ROUTING_KEY_FIELD_MESSAGE, name);
+                    boolean alreadyExplicit = Boolean.TRUE.equals(
+                            enclosingClassCursor.getMessage(ROUTING_KEY_FIELD_EXPLICIT_MESSAGE));
+                    if (explicit || !alreadyExplicit) {
+                        enclosingClassCursor.putMessage(ROUTING_KEY_FIELD_MESSAGE, name);
+                        if (explicit) {
+                            enclosingClassCursor.putMessage(ROUTING_KEY_FIELD_EXPLICIT_MESSAGE, true);
+                        }
+                    }
                 }
                 // Only remove the @RoutingKey import when the variable actually carries a
                 // @RoutingKey annotation. @TargetAggregateIdentifier / @TargetEntityId are
@@ -261,18 +282,36 @@ public class AddCommandAnnotation extends ScanningRecipe<AddCommandAnnotation.Ac
     }
 
     /**
-     * Returns the name of the first field / record component that carries an {@code @RoutingKey},
-     * {@code @TargetAggregateIdentifier}, or {@code @TargetEntityId} annotation, walking both the
-     * primary-constructor record components and the class body. Returns {@code null} if no such
-     * field exists (e.g., for Kotlin {@code data class} primary-constructor parameters, which
-     * live outside {@code J.ClassDeclaration} and require the Kotlin-fallback path).
+     * Returns the name of the field / record component whose name should become the
+     * {@code @Command#routingKey}, walking both the primary-constructor record components and the
+     * class body. Returns {@code null} if no such field exists (e.g., for Kotlin
+     * {@code data class} primary-constructor parameters, which live outside
+     * {@code J.ClassDeclaration} and require the Kotlin-fallback path).
+     * <p>
+     * An explicit {@code @RoutingKey} field takes precedence over a
+     * {@code @TargetAggregateIdentifier} / {@code @TargetEntityId} field regardless of declaration
+     * order, matching AF4 routing semantics. Only when no explicit {@code @RoutingKey} field exists
+     * does the first target-identifier field supply the name.
      */
     private static String findRoutingKeyFieldName(J.ClassDeclaration cd) {
+        String explicit = findFieldName(cd, AddCommandAnnotation::hasExplicitRoutingKeyAnnotation);
+        if (explicit != null) {
+            return explicit;
+        }
+        return findFieldName(cd, AddCommandAnnotation::hasTargetIdentifierAnnotation);
+    }
+
+    /**
+     * Returns the name of the first field / record component matching {@code matcher}, walking the
+     * primary-constructor record components first and then the class body, or {@code null} when no
+     * field matches.
+     */
+    private static String findFieldName(J.ClassDeclaration cd, Predicate<J.VariableDeclarations> matcher) {
         if (cd.getPrimaryConstructor() != null) {
             for (Statement stmt : cd.getPrimaryConstructor()) {
                 if (stmt instanceof J.VariableDeclarations) {
                     J.VariableDeclarations vd = (J.VariableDeclarations) stmt;
-                    if (hasRoutingKeyAnnotation(vd) && !vd.getVariables().isEmpty()) {
+                    if (matcher.test(vd) && !vd.getVariables().isEmpty()) {
                         return vd.getVariables().get(0).getSimpleName();
                     }
                 }
@@ -282,7 +321,7 @@ public class AddCommandAnnotation extends ScanningRecipe<AddCommandAnnotation.Ac
             for (Statement stmt : cd.getBody().getStatements()) {
                 if (stmt instanceof J.VariableDeclarations) {
                     J.VariableDeclarations vd = (J.VariableDeclarations) stmt;
-                    if (hasRoutingKeyAnnotation(vd) && !vd.getVariables().isEmpty()) {
+                    if (matcher.test(vd) && !vd.getVariables().isEmpty()) {
                         return vd.getVariables().get(0).getSimpleName();
                     }
                 }
@@ -383,6 +422,20 @@ public class AddCommandAnnotation extends ScanningRecipe<AddCommandAnnotation.Ac
     private static boolean hasExplicitRoutingKeyAnnotation(J.VariableDeclarations vd) {
         for (J.Annotation ann : vd.getLeadingAnnotations()) {
             if (isRoutingKey(ann)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns {@code true} when {@code vd} carries a {@code @TargetAggregateIdentifier} or
+     * {@code @TargetEntityId} annotation (AF4 or AF5). Used to locate the routing-key field only
+     * when no explicit {@code @RoutingKey} field is present.
+     */
+    private static boolean hasTargetIdentifierAnnotation(J.VariableDeclarations vd) {
+        for (J.Annotation ann : vd.getLeadingAnnotations()) {
+            if (isTargetIdentifier(ann)) {
                 return true;
             }
         }
