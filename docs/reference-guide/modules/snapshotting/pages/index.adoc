@@ -67,11 +67,21 @@ SnapshotPolicy snapshotPolicy =
 
 Snapshots are persisted using a `SnapshotStore`, which abstracts the underlying storage mechanism. Note that `SnapshotStore` is currently a tentative API and may eventually be rolled into the `EventStore`. When using Axon Server, an `AxonServerSnapshotStore` is automatically provided.
 
+When sourcing an entity that has a snapshot, the framework performs two operations: it loads the latest compatible snapshot, then loads all events after the snapshot's position.
+If the `EventStorageEngine` and `SnapshotStore` are backed by the same storage system, these two operations can be combined into a single round-trip.
+If they use different backends, two separate queries are required regardless of how fast each individual store is: one for the snapshot and one for the events.
+
+For this reason, it is strongly recommended to use the same backend for both.
+The framework allows arbitrary combinations (for example, Axon Server for events and PostgreSQL for snapshots), but any such combination sacrifices the single round-trip benefit.
+Choose a different `SnapshotStore` only when there is a compelling reason to do so.
+
 Current implementations include:
 
 * *`InMemorySnapshotStore`* - Useful for testing or ephemeral scenarios.
 * *`AxonServerSnapshotStore`* - Stores snapshots in Axon Server with thread-safe, concurrent access.
-* *`PostgresqlEventStorageEngine`* - Postgres specific event storage engine that can store snapshots as well.
+* *`PostgresqlEventStorageEngine`* - Stores both events and snapshots in PostgreSQL.
+  When no other `SnapshotStore` is configured, it registers itself as the `SnapshotStore` as well,
+  enabling the single round-trip optimisation described above.
 
 Each snapshot contains the entity identifier, payload, position, version, timestamp, and optional metadata. By default, only a single snapshot per entity is retained; new snapshots overwrite the previous one. Future versions of the framework may allow storing multiple snapshots per entity, enabling scenarios such as rollbacks or retaining older snapshot versions.
 
