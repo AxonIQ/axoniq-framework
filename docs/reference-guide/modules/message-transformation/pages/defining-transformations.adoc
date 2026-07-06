@@ -274,6 +274,77 @@ If you write a custom xref:events:event-store-internals.adoc#event_criteria[`Eve
 A filter on `CoursePublished` also matches events stored as `CourseOffered`: Axon adds the old names for you, so renamed events are never missed.
 ====
 
+[#_splitting_an_event]
+== Splitting an event
+
+Sometimes a single stored event bundles several facts that later became separate events.
+`split(...)` replaces one stored event with several events on the read path, so each reaches the handlers written for it.
+
+An early catalog recorded a course and its initial seat count in one `CourseListedWithSeats` event.
+That later became two events: a `CoursePublished` and a `CourseCapacityChanged`.
+A split reads each stored `CourseListedWithSeats` back as both:
+
+[source,java]
+----
+private static final MessageType FROM             = new MessageType("coursecatalog.CourseListedWithSeats", "1.0.0");
+private static final MessageType COURSE_PUBLISHED = new MessageType("coursecatalog.CoursePublished", "1.0.0");
+private static final MessageType CAPACITY_CHANGED = new MessageType("coursecatalog.CourseCapacityChanged", "1.0.0");
+
+public static EventTransformation build() {
+    return EventTransformation.split(FROM)                                          // <1>
+                              .declaringToTypes(COURSE_PUBLISHED.qualifiedName(),    // <2>
+                                                CAPACITY_CHANGED.qualifiedName())
+                              .transform(Listing.class, CourseListedWithSeatsSplit::split); // <3>
+}
+
+private static List<TransformedEvent> split(Listing listing) { // <4>
+    PublishedV1 published = new PublishedV1(
+            listing.catalogId(), listing.courseId(), listing.name(), listing.seats());
+    CourseCapacityChanged capacityChanged = new CourseCapacityChanged(
+            new CourseId(listing.courseId().value()), new CapacityRange(listing.seats(), listing.seats()));
+
+    return List.of(
+            TransformedEvent.of(COURSE_PUBLISHED, published),        // <5>
+            TransformedEvent.of(CAPACITY_CHANGED, capacityChanged)
+    );
+}
+
+// Stored shapes: records mirroring the wire form, kept next to the transformation.
+record Listing(Id catalogId, Id courseId, String name, int seats) { }       // <6>
+record PublishedV1(Id catalogId, Id courseId, String name, int capacity) { }
+record Id(String value) { }
+----
+<1> `split(from)` matches the stored event by exact identity, like a concrete `from(...)`. It does not take a predicate.
+<2> `declaringToTypes(...)` names the identities this split produces. It is required: a split's outputs are decided only when the mapper runs, so you declare them up front (see the note below).
+<3> `transform(...)` reads the stored payload into the typed `Listing` record before calling your mapper, so field access is compile-checked.
+<4> The mapper returns a `List<TransformedEvent>` in the order the events should appear in the stream.
+<5> `TransformedEvent.of(identity, payload)` is one produced event, wrapped by the framework into an `EventMessage`.
+<6> The stored shapes are small `record` types that mirror the wire form, exactly as in <<_mapping_to_a_typed_event,mapping to a typed event>>. Keep them next to the transformation and out of your domain model.
+
+Each produced event re-enters the chain, exactly as a <<_renaming_an_event,rename>>'s output does.
+Register the split alongside the version-step transformations for a produced type, and an output emitted at an older version is lifted onward in turn.
+
+All produced events share the source event's stream position: they carry its tracking token and sequence number, along with its identifier, metadata, and timestamp, and appear in the order the mapper returned them.
+The framework does not renumber them.
+
+[IMPORTANT]
+.`declaringToTypes(...)` is required, and why
+====
+Unlike the other factories, a split cannot infer its output identities: the mapper decides them at read time.
+Declaring them up front lets the chain widen a read back to the source.
+This matters when you write a custom xref:events:event-store-internals.adoc#event_criteria[`EventCriteria`] (through an `@EventCriteriaBuilder` method or a `CriteriaResolver`) that filters by a produced type.
+A filter on `CoursePublished` is then widened to also fetch events stored as `CourseListedWithSeats`, so an entity sourced that way still observes the split.
+Without the declaration the chain has nothing to widen, and the split does not fire on such a read.
+This mirrors how a <<_renaming_an_event,rename>> widens a filter on its new name back to the old one.
+====
+
+[NOTE]
+.An empty result drops the event => use drop(...) if that is the intent
+====
+A mapper that returns an empty list produces no events, which removes the stored event from the read stream.
+Prefer <<_dropping_an_event,`drop(...)`>> when that is the intent: it states it plainly and converts no payload.
+====
+
 [#_dropping_an_event]
 == Dropping an event
 

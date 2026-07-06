@@ -7,6 +7,7 @@ The most common form was the `SingleEventUpcaster`: a one-to-one transform from 
 Axon Framework 5 replaces the single-event upcaster with an xref:message-transformation:index.adoc[event transformation]: the same idea, rewriting a stored event on the way out, expressed through a small declarative API.
 
 This path covers migrating one-to-one `SingleEventUpcaster` implementations to event transformations.
+It also covers <<_renaming_an_event,renaming>> and <<_splitting_an_event,splitting>>, which upcasters expressed by rewriting the stored type or emitting several events.
 Like the single-event upcaster, a payload-mapping transformation is one-to-one and keeps the event's qualified name: it may change the version and payload, but not the name. To change the name itself, use a <<_renaming_an_event,rename>>, which carries the payload over unchanged.
 You map a _deserialized_ payload (`JsonNode`, `Map<String, Object>`, ...) rather than an `IntermediateEventRepresentation`, and mappers must be deterministic and side-effect-free, exactly as upcasters were expected to be.
 
@@ -153,6 +154,54 @@ public final class CourseOfferedToCoursePublished {
 A renamed event keeps flowing through the chain, so a rename can sit in front of the version-step transformations that lift it the rest of the way.
 See xref:message-transformation:defining-transformations.adoc#_renaming_an_event[Renaming an event] for the full detail.
 
+[#_splitting_an_event]
+== Splitting an event
+
+An Axon Framework 4 upcaster could turn one stored event into several, emitting multiple representations from a single input.
+Axon Framework 5 makes that a first-class `split(...)`: declare the source identity, the identities it produces, and a mapper returning the replacement events.
+
+[source,java]
+----
+import io.axoniq.framework.messaging.transformation.events.EventTransformation;
+import io.axoniq.framework.messaging.transformation.events.TransformedEvent;
+import org.axonframework.messaging.core.MessageType;
+
+import java.util.List;
+
+public final class CourseListedWithSeatsSplit {
+
+    private static final MessageType FROM             = new MessageType("coursecatalog.CourseListedWithSeats", "1.0.0");
+    private static final MessageType COURSE_PUBLISHED = new MessageType("coursecatalog.CoursePublished", "1.0.0");
+    private static final MessageType CAPACITY_CHANGED = new MessageType("coursecatalog.CourseCapacityChanged", "1.0.0");
+
+    public static EventTransformation build() {
+        return EventTransformation.split(FROM)                                          // <1>
+                                  .declaringToTypes(COURSE_PUBLISHED.qualifiedName(),    // <2>
+                                                    CAPACITY_CHANGED.qualifiedName())
+                                  .transform(Listing.class, CourseListedWithSeatsSplit::split); // <3>
+    }
+
+    private static List<TransformedEvent> split(Listing listing) { // <4>
+        return List.of(
+                TransformedEvent.of(COURSE_PUBLISHED, new Published(listing.courseId(), listing.name(), listing.seats())),
+                TransformedEvent.of(CAPACITY_CHANGED, new CapacityChanged(listing.courseId(), listing.seats()))
+        );
+    }
+
+    // Stored shapes read in and written out, kept next to the transformation.
+    record Listing(String courseId, String name, int seats) { }
+    record Published(String courseId, String name, int capacity) { }
+    record CapacityChanged(String courseId, int capacity) { }
+}
+----
+<1> `split(from)` matches the source by exact identity, like a concrete `from(...)`.
+<2> `declaringToTypes(...)` names the identities the split produces. It is required, so a type-filtering read is widened back to the source.
+<3> `transform(...)` reads the stored payload into the typed `Listing` record before calling the mapper.
+<4> The mapper returns the replacement events in order. Each inherits the source event's stream position.
+
+Each produced event re-enters the chain, so version-step transformations registered for a produced type still lift it the rest of the way.
+See xref:message-transformation:defining-transformations.adoc#_splitting_an_event[Splitting an event] for the full example.
+
 == Registering the transformations
 
 In Axon Framework 4 you registered upcasters with an `EventUpcasterChain`.
@@ -182,9 +231,8 @@ See xref:message-transformation:configuring-transformations.adoc[Configuring tra
 
 == Structural changes not yet covered
 
-A couple of changes may arrive as the transformation API grows (see https://github.com/AxonFramework/AxonFramework/issues/3597[issue #3597]):
+One change may arrive as the transformation API grows (see https://github.com/AxonFramework/AxonFramework/issues/3597[issue #3597]):
 
-* *Splitting one event into several*: deriving multiple events from a single stored event.
 * *Adjusting metadata*: changing an event's metadata rather than its payload or identity.
 
 Combining or carrying state across events, such as merging several events into one or enriching an event with data from an earlier one (a _context-aware_ transformation), stays outside transformation by design: each event is transformed on its own as it is read, and a read can start anywhere in the stream, so reaching across events has no dependable view and would risk mixing data between unrelated entities.
