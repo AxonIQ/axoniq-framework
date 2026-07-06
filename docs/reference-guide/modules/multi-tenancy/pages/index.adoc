@@ -1,0 +1,46 @@
+[.axoniq-feature]
+= Multi-Tenancy
+
+Multi-tenancy support lets a single application instance serve multiple tenants while keeping each tenant's data separated, both in transit and at rest.
+Each tenant is represented by a dedicated Axon Server context: commands, events, and queries are routed to the context of the tenant they belong to, and every tenant's events are stored in its own event store.
+
+== Tenant management
+
+Covers how tenants become known to the application: static configuration at startup, dynamic discovery and removal at runtime through Axon Server, filtering which contexts are treated as tenants, and how the tenant of a message is resolved during processing.
+
+== Tenant-aware components
+
+Covers registering application-specific, tenant-scoped components, such as a per-tenant SQL datasource, and injecting the correct tenant's instance into message handling methods.
+
+== Commands
+
+Covers routing each command to the Axon Server context of its resolved tenant, and re-establishing tenant information on the handling side.
+
+== Queries
+
+Covers routing each query to the Axon Server context of its resolved tenant, mirroring the approach used for commands.
+
+== Event storage
+
+Covers per-tenant event stores: appending to and sourcing from the event store of the tenant resolved from the message.
+
+== Event processing
+
+Covers per-tenant streaming, pooled, and persistent-stream-based event processors, including per-tenant token stores and transaction management.
+
+== Spring Boot auto-configuration
+
+Covers the auto-configuration that wires multi-tenancy support into Spring Boot applications, how to disable it, and how to configure application-specific tenant-aware components.
+
+== Adding the module
+
+Multi-tenancy support ships in the `axoniq-multi-tenancy` module:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-multi-tenancy</artifactId>
+    <version>${axoniq.version}</version>
+</dependency>
+----
