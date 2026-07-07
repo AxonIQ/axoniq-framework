@@ -79,17 +79,21 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void purgeData() {
-        try {
-            LOG.info("Purging events from Axon Server.");
-            AxonServerContainerUtils.purgeEventsFromAxonServer(
-                    CONTAINER.getHost(),
-                    CONTAINER.getHttpPort(),
-                    "default",
-                    AxonServerContainerUtils.DCB_CONTEXT
-            );
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to purge AxonServer event storage", e);
-        }
+        LOG.info("Purging events from Axon Server.");
+        getContextManager().getContexts().stream().filter(c -> !"_admin".equals(c))
+                           .forEach(context -> {
+                               try {
+                                   AxonServerContainerUtils.purgeEventsFromAxonServer(
+                                           CONTAINER.getHost(),
+                                           CONTAINER.getHttpPort(),
+                                           context,
+                                           AxonServerContainerUtils.DCB_CONTEXT,
+                                           "default"
+                                   );
+                               } catch (IOException e) {
+                                   throw new RuntimeException("Failed to purge events from Axon Server", e);
+                               }
+                           });
     }
 
     @Override

@@ -208,8 +208,27 @@ public class AxonServerContainerUtils {
                                                  int port,
                                                  String context,
                                                  boolean dcbContext) throws IOException {
+        purgeEventsFromAxonServer(hostname, port, context, dcbContext, context);
+    }
+
+    /**
+     * Calls the API of Axon Server at given {@code hostname} and (http) {@code port} to purge events of the given
+     * {@code context}.
+     *
+     * @param hostname         The hostname where AxonServer can be reached.
+     * @param port             The HTTP port AxonServer listens to for API calls.
+     * @param context          The context to purge.
+     * @param dcbContext       A {@code boolean} stating whether a DCB or non-DCB context is being purged.
+     * @param replicationGroup The replication group to use for recreating the contest.
+     * @throws IOException When an error occurs communicating with Axon Server.
+     * @since 5.0.0
+     */
+    public static void purgeEventsFromAxonServer(String hostname,
+                                                 int port,
+                                                 String context,
+                                                 boolean dcbContext, String replicationGroup) throws IOException {
         deleteContext(hostname, port, context);
-        createContext(hostname, port, context, dcbContext);
+        createContext(hostname, port, context, dcbContext, replicationGroup);
         try {
             Thread.sleep(500);
         } catch (InterruptedException e) {
@@ -256,6 +275,24 @@ public class AxonServerContainerUtils {
      * @throws IOException When an error occurs communicating with Axon Server.
      */
     public static void createContext(String hostname, int port, String context, boolean dcbContext) throws IOException {
+        // TODO this retains the previous behavior but it is flawed, see https://github.com/AxonIQ/axoniq-framework/issues/223
+        createContext(hostname, port, context, dcbContext, context);
+    }
+
+    /**
+     * Calls the API of Axon Server at the given {@code hostname} and (http) {@code port} to create a context with the
+     * given {@code context} name. The {@code dcbContext} dictates whether the context to be created support DCB, yes or
+     * no.
+     *
+     * @param hostname         The hostname where Axon Server can be reached.
+     * @param port             The HTTP port Axon Server listens to for API calls.
+     * @param context          The context to create.
+     * @param dcbContext       A {@code boolean} stating whether a DCB or non-DCB context is being created.
+     * @param replicationGroup The replication group to be used.
+     * @throws IOException When an error occurs communicating with Axon Server.
+     */
+    public static void createContext(String hostname, int port, String context, boolean dcbContext,
+                                     String replicationGroup) throws IOException {
         URL url = URI.create(String.format("http://%s:%d/v1/context", hostname, port)).toURL();
         HttpURLConnection connection = null;
         try {
@@ -263,7 +300,7 @@ public class AxonServerContainerUtils {
                     "{\"context\": \"%s\", \"dcbContext\": %b, \"replicationGroup\": \"%s\", \"roles\": [{ \"node\": \"axonserver\", \"role\": \"PRIMARY\" }]}",
                     context,
                     dcbContext,
-                    context
+                    replicationGroup
             );
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestProperty("Content-Type", "application/json");
