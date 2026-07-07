@@ -23,6 +23,7 @@ import org.axonframework.common.DateTimeUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.LegacyTokenTypes;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa.TokenEntry;
 import org.axonframework.conversion.Converter;
 
@@ -101,6 +102,10 @@ public class JdbcTokenEntry {
     public TrackingToken getToken(Converter converter) {
         if (token == null || tokenType == null) {
             return null;
+        }
+        Class<? extends TrackingToken> axon5Type = LegacyTokenTypes.mappedType(tokenType);
+        if (axon5Type != null) {
+            return converter.convert(this.token, axon5Type);
         }
         Class<TrackingToken> type = ClassUtils.loadClass(this.tokenType);
         return converter.convert(this.token, type);

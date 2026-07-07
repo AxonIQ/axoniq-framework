@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2010-2026. Axon Framework
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.axonframework.messaging.eventhandling.processing.streaming.token.store;
+
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.MergedTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
+
+import java.util.Map;
+
+/**
+ * Maps Axon Framework 4 {@link TrackingToken} class names to their Axon Framework 5 counterparts, so a token store
+ * written by Axon Framework 4 can be read after upgrading. Reading yields an Axon Framework 5 token, so the next save
+ * stores the new name and the store migrates itself.
+ *
+ * @author Laura Devriendt
+ * @since 5.2.0
+ */
+@Internal
+public final class LegacyTokenTypes {
+
+    private static final Map<String, Class<? extends TrackingToken>> AXON_4_TO_AXON_5 = Map.of(
+            "org.axonframework.eventhandling.GlobalSequenceTrackingToken", GlobalSequenceTrackingToken.class,
+            "org.axonframework.eventhandling.GapAwareTrackingToken", GapAwareTrackingToken.class,
+            "org.axonframework.eventhandling.MergedTrackingToken", MergedTrackingToken.class,
+            "org.axonframework.eventhandling.tokenstore.ConfigToken", ConfigToken.class
+    );
+
+    private LegacyTokenTypes() {
+    }
+
+    /**
+     * Returns the Axon Framework 5 token class for the given Axon Framework 4 {@code tokenType}, or {@code null} if it
+     * is not a known Axon Framework 4 token name.
+     *
+     * @param tokenType the token class name read from the store
+     * @return the matching Axon Framework 5 token class, or {@code null} if unknown
+     */
+    @Nullable
+    public static Class<? extends TrackingToken> mappedType(String tokenType) {
+        return AXON_4_TO_AXON_5.get(tokenType);
+    }
+}

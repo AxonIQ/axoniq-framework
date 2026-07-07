@@ -29,6 +29,7 @@ import org.axonframework.common.DateTimeUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.LegacyTokenTypes;
 import org.axonframework.conversion.Converter;
 
 import java.time.Clock;
@@ -118,9 +119,14 @@ public class TokenEntry {
      * @return The deserialized token stored in this entry.
      */
     public TrackingToken getToken(Converter converter) {
-        return (token == null || tokenType == null)
-                ? null
-                : converter.convert(this.token, ClassUtils.loadClass(tokenType));
+        if (token == null || tokenType == null) {
+            return null;
+        }
+        Class<? extends TrackingToken> axon5Type = LegacyTokenTypes.mappedType(tokenType);
+        if (axon5Type != null) {
+            return converter.convert(this.token, axon5Type);
+        }
+        return converter.convert(this.token, ClassUtils.loadClass(tokenType));
     }
 
     /**
