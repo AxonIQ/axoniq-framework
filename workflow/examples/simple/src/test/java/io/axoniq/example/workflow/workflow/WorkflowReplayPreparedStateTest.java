@@ -63,7 +63,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
+import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;

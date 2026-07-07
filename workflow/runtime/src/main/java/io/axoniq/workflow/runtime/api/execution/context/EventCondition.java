@@ -23,6 +23,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
+import java.util.Set;
 import java.util.function.BiPredicate;
 
 /**
@@ -49,4 +50,14 @@ public interface EventCondition {
      */
     @Nonnull
     QualifiedName qualifiedName();
+
+    /**
+     * Returns canonical serialized associations carried by this condition, if any.
+     *
+     * @return serialized association strings
+     */
+    @Nonnull
+    default Set<String> serializedAssociations() {
+        return Set.of();
+    }
 }

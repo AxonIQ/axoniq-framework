@@ -41,7 +41,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
+import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
@@ -108,8 +108,7 @@ class WaitForCombineResultIntegrationTest
                                        .resolve(RegistrationReceivedEvent.class)
                                        .orElseThrow()
                                        .qualifiedName(),
-                                    (e, pc) -> associate(payloadProperty("status"),
-                                                         equalsTo("arrived")).build().test(e, pc)
+                                    associate(payloadProperty("status"), equalsTo("arrived"))
                             ),
                             step -> step.resultPayloadReducer(
                                                 CombineGlobalAndLocalPayloadReducer.INSTANCE

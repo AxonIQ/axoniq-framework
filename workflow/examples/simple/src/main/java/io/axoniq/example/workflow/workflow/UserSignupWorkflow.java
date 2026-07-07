@@ -34,7 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
+import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
@@ -49,7 +49,7 @@ public class UserSignupWorkflow {
     @Workflow(
             idProperty = "id",
             startOnEventClass = RegistrationReceivedEvent.class,
-            startOnConditions = {"status=vip"}
+            startOnConditions = {"payload:status=vip"}
     )
     public void execute(
             @Nonnull SimpleWorkflowContext ctx

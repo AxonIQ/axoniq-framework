@@ -40,6 +40,7 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
      */
     public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
+    public static final String QUALIFIER = "payload";
 
     private final String payloadPropertyName;
 
@@ -68,5 +69,15 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
     public Object apply(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         Map<String, Object> payloadMap = eventMessage.payloadAs(Map.class);
         return Objects.requireNonNull(payloadMap).get(payloadPropertyName);
+    }
+
+    @Override
+    public @Nonnull String qualifier() {
+        return QUALIFIER;
+    }
+
+    @Override
+    public @Nonnull String path() {
+        return payloadPropertyName;
     }
 }

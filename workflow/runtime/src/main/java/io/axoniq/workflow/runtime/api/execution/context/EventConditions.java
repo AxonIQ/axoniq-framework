@@ -18,7 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import io.axoniq.workflow.runtime.association.EventMessageProcessingPredicateBuilder;
+import io.axoniq.workflow.runtime.association.SerializedAssociation;
+import io.axoniq.workflow.runtime.association.Associations;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.messaging.core.MessageType;
@@ -78,33 +79,24 @@ public class EventConditions {
     }
 
     /**
-     * Constructs an event condition with a message predicate for the qualified name represented by the given type.
+     * Constructs an event condition with serialized associations for the qualified name represented by the given type.
      *
-     * @param clazz                 type of message (message type resolve will use this type to deduce the message
-     *                              type).
-     * @param eventMessagePredicate predicate for the message.
-     * @return event condition builder.
+     * @param clazz        type of message
+     * @param associations association constraints in canonical serial form
+     * @return event condition builder
      */
-    public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz,
-                                                            @Nonnull EventMessageProcessingPredicateBuilder eventMessagePredicate) {
+    public static ComponentBuilder<EventCondition> fromType(
+            @Nonnull Class<?> clazz,
+            @Nonnull Associations associations
+    ) {
         Objects.requireNonNull(clazz, "Class must not be null");
-        Objects.requireNonNull(eventMessagePredicate, "Predicate must not be null");
-        return (c) -> new EventCondition() {
-
-            @Nonnull
-            @Override
-            public BiPredicate<EventMessage, ProcessingContext> predicate() {
-                return eventMessagePredicate.build(c);
-            }
-
-            @Nonnull
-            @Override
-            public QualifiedName qualifiedName() {
-                return c.getComponent(MessageTypeResolver.class).resolve(clazz)
-                        .orElse(new MessageType(clazz))
-                        .qualifiedName();
-            }
-        };
+        Objects.requireNonNull(associations, "Associations must not be null");
+        return c -> serializedAssociationCondition(
+                c.getComponent(MessageTypeResolver.class).resolve(clazz)
+                 .orElse(new MessageType(clazz))
+                 .qualifiedName(),
+                associations
+        );
     }
 
     /**
@@ -129,31 +121,19 @@ public class EventConditions {
     }
 
     /**
-     * Constructs an event condition from the qualified name and a message predicate.
+     * Constructs an event condition from the qualified name and serialized associations.
      *
-     * @param qualifiedName qualified name.
-     * @param predicate     predicate on a message with context.
-     * @return event condition.
+     * @param qualifiedName qualified name
+     * @param associations  serialized association constraints
+     * @return event condition
      */
-    public static EventCondition fromQualifiedName(@Nonnull QualifiedName qualifiedName,
-                                                   @Nonnull BiPredicate<EventMessage, ProcessingContext> predicate) {
+    public static EventCondition fromQualifiedName(
+            @Nonnull QualifiedName qualifiedName,
+            @Nonnull Associations associations
+    ) {
         Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
-        Objects.requireNonNull(predicate, "Predicate name must not be null");
-
-        return new EventCondition() {
-
-            @Nonnull
-            @Override
-            public QualifiedName qualifiedName() {
-                return qualifiedName;
-            }
-
-            @Nonnull
-            @Override
-            public BiPredicate<EventMessage, ProcessingContext> predicate() {
-                return predicate;
-            }
-        };
+        Objects.requireNonNull(associations, "Associations must not be null");
+        return serializedAssociationCondition(qualifiedName, associations);
     }
 
     /**
@@ -187,5 +167,48 @@ public class EventConditions {
                 return qualifiedName;
             }
         };
+    }
+
+    @Nonnull
+    private static EventCondition serializedAssociationCondition(
+            @Nonnull QualifiedName qualifiedName,
+            @Nonnull Associations associations
+    ) {
+        return new EventCondition() {
+
+            private volatile BiPredicate<EventMessage, ProcessingContext> predicate;
+
+            @Override
+            public @Nonnull BiPredicate<EventMessage, ProcessingContext> predicate() {
+                var current = predicate;
+                if (current == null) {
+                    current = associationPredicate(associations);
+                    predicate = current;
+                }
+                return current;
+            }
+
+            @Override
+            public @Nonnull QualifiedName qualifiedName() {
+                return qualifiedName;
+            }
+
+            @Override
+            public @Nonnull java.util.Set<String> serializedAssociations() {
+                return associations.serializedAssociations();
+            }
+        };
+    }
+
+    @Nonnull
+    private static BiPredicate<EventMessage, ProcessingContext> associationPredicate(
+            @Nonnull Associations associations
+    ) {
+        var registry = associations.registry();
+        var predicates = associations.serializedAssociations().stream()
+                                     .map(serialized -> SerializedAssociation.parse(registry, serialized))
+                                     .map(serialized -> serialized.asEventMessagePredicate(registry))
+                                     .toList();
+        return (eventMessage, pc) -> predicates.stream().allMatch(predicate -> predicate.test(eventMessage, pc));
     }
 }

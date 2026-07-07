@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.dsl.api.AssociationsUtils.associate;
+import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;

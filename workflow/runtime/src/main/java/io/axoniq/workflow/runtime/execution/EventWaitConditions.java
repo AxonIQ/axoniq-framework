@@ -168,7 +168,11 @@ public class EventWaitConditions implements DescribableComponent {
 
         @Override
         public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-            descriptor.describeProperty(stepName, condition.qualifiedName().toString());
+            var description = condition.qualifiedName().toString();
+            if (!condition.serializedAssociations().isEmpty()) {
+                description += " where " + String.join(" && ", condition.serializedAssociations());
+            }
+            descriptor.describeProperty(stepName, description);
         }
     }
 }
