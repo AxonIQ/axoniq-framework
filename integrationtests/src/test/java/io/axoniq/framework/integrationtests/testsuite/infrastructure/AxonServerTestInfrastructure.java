@@ -55,12 +55,20 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerTestInfrastructure.class);
 
+    public static final String AXON_SERVER_TEST_LICENSE = "axon-server-test.license";
     private static final AxonServerContainer CONTAINER =
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
                     .withDevMode(true)
                     .withReuse(true)
-                    .withDcbContext(true);
+                    .withDcbContext(true)
+                    .withLicense(licenseExists()
+                                         ? AXON_SERVER_TEST_LICENSE
+                                         : null);
+
+    public static boolean licenseExists() {
+        return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
+    }
 
     @Override
     public void start() {
