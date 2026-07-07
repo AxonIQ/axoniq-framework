@@ -15,6 +15,9 @@
 * outbound messages carry tenant information that is resolved into the appropriate context connection
 * inbound messages are enriched with the appropriate tenant information provided by the context connection (and/or metadata)
 * Multi-tenancy will become a regular module of the AxoniqFramework repo (like dead-letter-queue), not remain a separate repo as for AF4
+* Design principle: when introducing new APIs that accept a message, also consider whether `ProcessingContext` should be
+  accepted alongside it - several tenant-aware resolution paths in this feature need both together (see
+  `### Infrastructure` `#### Questions` for the metadata-vs-`ProcessingContext` discussion)
 
 ## Requirements Overview
 * Infrastructure: registration and removal of tenants, resolving and providing tenant information for message handling components
@@ -41,6 +44,7 @@
 * Axon Framework's transaction facilities must be tenant-aware, providing tenant-specific transactional resources (e.g. a per-tenant JDBC connection) to message processing (see `### Event Handling/Sourcing` `#### Implementation` for the current `JdbcTenantTransactionManager`)
 * Dynamic tenant registration/removal must be exercised in integration tests using Axon Server's existing Admin API to create/remove contexts (no new server-side API needs to be built)
 * For integration testing and examples, an offline Axon Server license file is needed to run CI
+* Provide reference documentation section
 
 #### Questions
 
@@ -63,6 +67,7 @@
 * `NoSuchTenantException` - `api/NoSuchTenantException.java`
 * Metadata propagation: `MultiTenancyConfigurationDefaults` decorates the `CorrelationDataProviderRegistry` with `SimpleCorrelationDataProvider(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY)`
 * Central wiring: `MultiTenancyConfigurationDefaults` (`configuration/MultiTenancyConfigurationDefaults.java`) - a `ConfigurationEnhancer` registering `TenantConnectPredicate.alwaysTrue()`, `AxonServerTenantProvider`, and `DefaultTenantResolverRegistry` by default
+* Extend the AxonServerContainer to create/remove contexts
 
 ### Commands
 
@@ -84,7 +89,6 @@
 * Events appended by the handler get their tenantId written back to metadata via the `SimpleCorrelationDataProvider` mechanism described under `### Infrastructure`
 * Registered as the `CommandBusConnector` by `MultiTenancyConfigurationDefaults`
 
-
 ### Events Storage
 
 #### Requirements
@@ -95,7 +99,9 @@
 #### Questions
 
 * Could this be solved at the `EventStorageEngine` level instead of `EventStore`?
-* Should the aggregate-based storage engine be supported per tenant as well, or is the tag-based `AxonServerEventStorageEngineFactory` sufficient for all use cases? Not currently wired in for multi-tenancy.
+* Should the aggregate-based storage engine be supported per tenant as well, or is the tag-based
+  `AxonServerEventStorageEngineFactory` sufficient for all use cases? Not currently wired in for multi-tenancy - tracked
+  as a separate deferred issue (see `## Planning`), not part of the main Events Storage issue
 * Snapshot support: the analogous `SnapshotStore` decoration for multi-tenancy is currently disabled (commented out) in `MultiTenancyConfigurationDefaults` - do we need a tenant-routing snapshot store, and if so when?
 
 #### Implementation
@@ -110,6 +116,7 @@
 #### Requirements
 
 * Event processing must support per-tenant pooled streaming processors
+    * Support database transactions to span token and projection persistence
 * Event processing must support per-tenant persistent-stream-based processors
 * Event handlers must be able to resolve tenant-specific resources (e.g. a per-tenant datasource) needed during handling, based on the tenant information carried in the message's metadata (see `### Infrastructure`), so results are written to the correct tenant-specific projection
 * Sequencing uses the same per-tenant policy as commands (see `### Commands` `#### Questions`) - sequencing policies operate at the generic message level, not per message type
@@ -118,7 +125,10 @@
 
 * Is a subscribing-style multi-tenant event processor required, or is pooled/persistent-stream sufficient? No `MultiTenantSubscribingEventProcessor` (or equivalent) currently exists.
 * Can a single event processor multiplex on projection/token per tenant, instead of one processor per tenant? What are the consequences?
+    * consequences would be that we cannot have tenant-specific projection data sources that share the database
+      transaction with the token store to make sure the token is only persisted when the event is processed
 * Do we need a dedicated `MultiTenantEventProcessorModule`/`MultiTenantPooledStreamingEventProcessorModule` at all, or can multi-tenancy be achieved by decorating/wrapping the existing (single-tenant) event processor components, the same way `TenantRoutingEventStore` decorates `EventStore`?
+* Do we need to support event replays per tenant?
 
 #### Implementation
 
@@ -141,6 +151,8 @@
 * Naming issue: `TenantComponentRegistry<T>`'s name suggests a registry that can hold many different tenant-aware component types, but it's actually generic over a single type `T` - each instance only holds per-tenant instances of that one component type. To support multiple component types, multiple separate `TenantComponentRegistry` instances are needed (one per type). Naming needs to be fixed to reflect this. Known issue, not yet fixed in code (`TenantComponentRegistry.java`).
 * Spring Boot autoconfiguration: how convenient should registration of application-specific components (`TenantComponentRegistry`) be made? Currently there is no autoconfiguration for this - only the `MultiTenancyConfigurationDefaults` enhancer bean is provided (see `### Spring Boot Autoconfiguration`)
   * Idea: automatically wire any Spring bean implementing a designated tenant-component interface (e.g. `TenantComponentFactory`) so it becomes resolvable as a message-handling parameter without manual registration
+* Do we need to support dynamic tenant aware components (dynamically adding a new tenant adds a new repository instance
+  in the config connecting to the relevant database)?
 
 #### Implementation
 
@@ -184,15 +196,17 @@
 
 #### Requirements
 
-* Support multi-tenancy for the data-protection extension: select the correct crypto store per tenant
+* Support multi-tenancy for the data-protection extension which essentially boils down to tenant-aware key resolution
 
 #### Questions
 
-* AF4 has no special support for this; likely needs a tenant-aware crypto component, since a multitude of stores may be provided - details tracked separately (see `## References` - Data Protection extension issue)
+* AF4 has no special support for this; likely needs a tenant-aware crypto component, since a multitude of stores may be provided - tracked in https://github.com/AxonIQ/extension-data-protection/issues/8
 * Is it feasible to fan out multi-tenancy at the crypto-store (`CryptoEngine`) level, or does the `FieldEncryptingConverter` itself need to become a multi-tenant-aware component?
   * `FieldEncryptingConverter.convert(Object, Type)` has no access to `Message`/`ProcessingContext`/tenant info at all - making the converter itself tenant-aware would mean changing the core `Converter` SPI
   * `CryptoEngine` (`getOrCreateKey(String id)`, `getKey`, `deleteKey`) is the natural fan-out seam instead: either namespace the key id with the tenant id inside a wrapping `CryptoEngine`, or use the same `TenantComponentRegistry`-style pattern used elsewhere in the POC to resolve a distinct `CryptoEngine` instance per tenant (needed for full physical isolation, e.g. separate Vault paths/JDBC schemas per tenant)
   * Where would tenant info come from at that point? `CryptoEngine.getOrCreateKey/getKey` receives only a single opaque `String` (`prefix + @DataSubjectId field value`, both fixed by the object being converted and its class annotation) - no `Message`, `ProcessingContext`, or ambient context reaches that call, and `CryptoEngine` is a fixed singleton wired once at bootstrap, not resolved per call. So tenant info can only reach it via (a) making the `@DataSubjectId` value itself tenant-qualified (a data-model change), or (b) a tenant-aware `CryptoEngine` implementation consulting some ambient state set up at the edge around the conversion call (would need to respect the "no ThreadLocals except at edges" principle) - there is no existing plumbing to thread tenant identity through the conversion call chain
+  * Likely simplest answer (per Allard Buijze, unvalidated): fan out one layer below the `CryptoEngine`/`Converter` SPI, at datasource routing. If `JpaCryptoEngine` is combined with a tenant-routing `EntityManager`/`DataSource`, the crypto engine's per-message key load/decrypt should transparently hit the correct tenant's datasource with no code changes to the Data Protection module. `JdbcCryptoEngine` can achieve the same by wrapping its datasource in an `AbstractRoutingDataSource` keyed by an ambient "current tenant" lookup (see https://www.baeldung.com/multitenancy-with-spring-data-jpa)
+  * This needs a `TenantIdentifierResolver`-style bridge that sets the ambient "current tenant" lookup key (consumed by the routing datasource) from the tenant already resolved for the message being processed - inherently ThreadLocal-shaped (matches Hibernate's `CurrentTenantIdentifierResolver` pattern), which fits the framework's "ThreadLocals only at the edges" principle as long as it's scoped tightly to message processing. Not yet validated with a POC.
 
 #### Implementation
 
@@ -227,12 +241,18 @@ Incremental delivery plan for graduating `_multitenancy_poc` into a regular Axon
 
 Each bold-titled bullet below is a separate GitHub issue and PR. "Phase" headings are dependency/sequencing groups, not units of work - e.g. Phase 3 lists three independent issues that can be worked in parallel once Phase 1 and 2 land, not one combined issue.
 
-#176 becomes the tracking issue to complete once all required work is done with a github task list referencing sub-issues.  
+#176 becomes the tracking issue to complete once all required work is done with a github task list referencing
+sub-issues.
+
+Each issue also adds or updates the corresponding Antora reference documentation for that feature area (see
+`docs/CLAUDE.md`) as part of its own PR - documentation ships with the code, not as a follow-up.
 
 ### Phase 0 - Prerequisites
 
-* **"Add an offline Axon Server license file for CI"** - unblocks integration tests for every subsequent issue (see `### Infrastructure` `#### Requirements`)
-* **"Scaffold the `axoniq-multi-tenancy` module in the main repo"** - empty module skeleton, POM/BOM wiring, CI pipeline wiring, package structure; no functional code moved yet
+* **"Scaffold the `axoniq-multi-tenancy` module in the main repo"** - empty module skeleton, POM/BOM wiring, CI pipeline
+  wiring, package structure; no functional code moved yet, create documentation skeleton for multitenancy feature (
+  create sections required); also adds an offline Axon Server license file for CI, unblocking integration tests for
+  every subsequent issue
 
 ### Phase 1 - Infrastructure (foundation; everything else depends on it)
 
@@ -257,7 +277,9 @@ Each bold-titled bullet below is a separate GitHub issue and PR. "Phase" heading
   - Ports `MultiTenantAxonServerQueryBusConnector`; reconciles the POC's modified `AxonServerQueryBusConnector` with mainline
 * **"Events Storage: per-tenant event store routing"**
   - Ports `TenantRoutingEventStore`, `TenantEventSegmentFactory`; reconciles the POC's modified `AxonServerEventStorageEngineFactory` with mainline
-  - Resolves: `EventStorageEngine`-vs-`EventStore`-level routing, whether the aggregate-based storage engine needs support, and the disabled multi-tenant snapshot store decoration
+  - Resolves: `EventStorageEngine`-vs-`EventStore`-level routing, and the disabled multi-tenant snapshot store
+    decoration
+  - Does not include aggregate-based storage engine support - tracked separately (see "Deferred past July" below)
 
 ### Phase 4 - Event processing (depends on Events Storage, Infrastructure, and Tenant-aware components)
 
@@ -273,8 +295,17 @@ Each bold-titled bullet below is a separate GitHub issue and PR. "Phase" heading
   - Ports `MultiTenancyAutoConfiguration` (enable-by-default / disable-via-property)
   - Resolves: how to autoconfigure application-specific `TenantComponentRegistry` beans - implement the "auto-wire any Spring bean implementing a tenant-component interface" idea
 
+### Phase 6 - Documentation
+
+* **"Migration guide: AF4 `extension-multitenancy` to AF5 built-in multi-tenancy"** - reference documentation walking
+  existing AF4 extension users through migrating to the new built-in AF5 module (see `## Constraints` and
+  `## References` for the AF4 extension prior art)
+
 ### Deferred past July
 
 * **"Dead Letter Queue: tenant-aware DLQ support"** - resolves whether the multi-tenancy module should depend on the DLQ module
-* **"Data Protection: tenant-aware crypto store fan-out"** - resolves the `CryptoEngine`-level fan-out approach identified above
+* **"Data Protection: tenant-aware crypto store fan-out"** - validates and documents a datasource-routing based approach (`JpaCryptoEngine`/`JdbcCryptoEngine` combined with a tenant-routing datasource and a `TenantIdentifierResolver`-style bridge) rather than changes to the `CryptoEngine`/`Converter` SPI; tracked in https://github.com/AxonIQ/extension-data-protection/issues/8
+* **"Aggregate-based event storage engine: per-tenant support"** - should-have, not must-have; resolves whether
+  `AggregateBasedAxonServerEventStorageEngine` needs to be wired in per tenant alongside the tag-based
+  `AxonServerEventStorageEngineFactory`
 
