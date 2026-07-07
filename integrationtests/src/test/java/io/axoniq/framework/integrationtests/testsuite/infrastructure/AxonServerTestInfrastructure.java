@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
@@ -101,5 +102,78 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         // The container is shared across the JVM (static final, withReuse(true)).
         // Testcontainers + Ryuk handle cleanup on JVM exit; stopping per test would
         // defeat reuse. No-op on purpose.
+    }
+
+    public ContextManager getContextManager() {
+        return new ContextManager() {
+            @Override
+            public List<String> getContexts() {
+                try {
+                    return AxonServerContainerUtils.contexts(CONTAINER.getHost(),
+                                                             CONTAINER.getHttpPort());
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to list contexts from Axon Server", e);
+                }
+            }
+
+            @Override
+            public void createContext(String name, boolean dcb) {
+                try {
+                    AxonServerContainerUtils.createContext(CONTAINER.getHost(),
+                                                           CONTAINER.getHttpPort(),
+                                                           name,
+                                                           dcb,
+                                                           "default");
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to create context in Axon Server", e);
+                }
+            }
+
+            @Override
+            public void deleteContext(String name) {
+                try {
+                    AxonServerContainerUtils.deleteContext(CONTAINER.getHost(), CONTAINER.getHttpPort(), name);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to delete context in Axon Server", e);
+                }
+            }
+        };
+    }
+
+    /**
+     * Utility to manage contexts for an {@code AxonServerTestInfrastructure}
+     */
+    public interface ContextManager {
+
+        /**
+         * List all contexts
+         *
+         * @return the list of context names
+         */
+        List<String> getContexts();
+
+        /**
+         * Create a new DCB context
+         *
+         * @param name the context name
+         */
+        default void createContext(String name) {
+            createContext(name, true);
+        }
+
+        /**
+         * Create a new context
+         *
+         * @param name the context name
+         * @param dcb  flag to indicate if it should be a DCB context
+         */
+        void createContext(String name, boolean dcb);
+
+        /**
+         * Delete a context
+         *
+         * @param name the context name
+         */
+        void deleteContext(String name);
     }
 }
