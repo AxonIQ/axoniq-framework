@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
 
@@ -68,7 +69,7 @@ public class WorkflowEventTagResolver implements TagResolver {
         return Set.copyOf(tags);
     }
 
-    private static boolean isEnginePublishedWorkflowEvent(org.axonframework.messaging.core.Metadata metadata) {
+    private static boolean isEnginePublishedWorkflowEvent(Metadata metadata) {
         return MetadataUtils.hasWorkflowId().test(metadata)
                 && (MetadataUtils.getWorkflowStatus(metadata).isPresent()
                 || MetadataUtils.getStepStatus(metadata).isPresent());
