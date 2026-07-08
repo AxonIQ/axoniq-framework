@@ -24,18 +24,23 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
+import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
+import io.axoniq.workflow.runtime.execution.RunningWorkflows;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.WorkflowStateRehydrationSupport;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.modelling.repository.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -155,7 +160,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     cfg -> new WorkflowEngine(
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
-                            cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE)
+                            cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
+                            workflowStateRehydrationSupport(cfg)
                     )
             );
 
@@ -273,6 +279,29 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         // Append rather than replace: a single module can host multiple workflow definitions (e.g. several
         // @Workflow beans of the same context type, including multiple version variants of one workflow).
         this.workflowConfigurationBuilders.add(workflowConfigurationBuilder);
+    }
+
+    private WorkflowStateRehydrationSupport workflowStateRehydrationSupport(Configuration configuration) {
+        return new RepositoryBackedWorkflowStateRehydrationSupport(
+                runningWorkflowsRepository(configuration),
+                workflowStateRepository(configuration)
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Repository<String, RunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
+        return (Repository<String, RunningWorkflows>) configuration.getComponent(
+                Repository.class,
+                RunningWorkflows.componentName()
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Repository<String, EventSourcedWorkflowState> workflowStateRepository(Configuration configuration) {
+        return (Repository<String, EventSourcedWorkflowState>) configuration.getComponent(
+                Repository.class,
+                EventSourcedWorkflowState.componentName()
+        );
     }
 
     record ConditionedWorkflowConfiguration<C extends WorkflowContext>(

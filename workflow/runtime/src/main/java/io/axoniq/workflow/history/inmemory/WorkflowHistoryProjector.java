@@ -65,7 +65,14 @@ public class WorkflowHistoryProjector implements EventHandler {
             }, () -> {
                 historyRepository.save(new WorkflowHistory(workflowId,
                                                            new EventSourcedWorkflowState(
+                                                                   workflowId,
                                                                    new HashMap<>()
+                                                                   ,
+                                                                   MetadataUtils.getWorkflowDefinitionId(event.metadata())
+                                                                                .orElseThrow(() -> new IllegalStateException(
+                                                                                        "Workflow history for '%s' cannot be created without workflowDefinitionId metadata."
+                                                                                                .formatted(workflowId)
+                                                                                ))
                                                            ).evolve(event, context)));
             });
         }

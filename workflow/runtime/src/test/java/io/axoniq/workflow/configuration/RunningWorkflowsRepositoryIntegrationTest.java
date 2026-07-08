@@ -21,6 +21,7 @@ package io.axoniq.workflow.configuration;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.RunningWorkflows;
@@ -74,12 +75,13 @@ class RunningWorkflowsRepositoryIntegrationTest {
         configuration.start();
 
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
+        var definitionId = new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "0.0.1");
         var first = workflowContext("wf-1");
         var second = workflowContext("wf-2");
 
-        publish(EventMessageUtils.startedWorkflow(first, "OrderWorkflow", customizer));
-        publish(EventMessageUtils.startedWorkflow(second, "OrderWorkflow", customizer));
-        publish(EventMessageUtils.completedWorkflow(first, "OrderWorkflow", customizer));
+        publish(EventMessageUtils.startedWorkflow(first, "OrderWorkflow", definitionId, customizer));
+        publish(EventMessageUtils.startedWorkflow(second, "OrderWorkflow", definitionId, customizer));
+        publish(EventMessageUtils.completedWorkflow(first, "OrderWorkflow", definitionId, customizer));
 
         assertThat(lifecycleEvents()).hasSize(3);
         assertThat(load().workflowIds()).isEqualTo(Set.of("wf-2"));
@@ -88,6 +90,7 @@ class RunningWorkflowsRepositoryIntegrationTest {
                 second,
                 "OrderWorkflow",
                 Instant.parse("2026-07-08T12:00:00Z"),
+                definitionId,
                 customizer
         ));
 

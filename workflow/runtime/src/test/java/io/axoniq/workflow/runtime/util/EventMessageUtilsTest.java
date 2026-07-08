@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
@@ -48,6 +49,7 @@ class EventMessageUtilsTest {
 
     private WorkflowContext context;
     private EventNameCustomizer customizer;
+    private WorkflowDefinitionId workflowDefinitionId;
     private final String workflowId = "wf123";
     private final Map<String, Object> payload = Map.of("key", "value");
 
@@ -55,6 +57,7 @@ class EventMessageUtilsTest {
     void setUp() {
         context = mock(WorkflowContext.class);
         customizer = mock(EventNameCustomizer.class);
+        workflowDefinitionId = new WorkflowDefinitionId(new QualifiedName("myWorkflow"), "0.0.1");
 
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);
@@ -94,27 +97,29 @@ class EventMessageUtilsTest {
 
     @Test
     void testStartedWorkflow() {
-        EventMessage message = EventMessageUtils.startedWorkflow(context, "myWorkflow", customizer);
+        EventMessage message = EventMessageUtils.startedWorkflow(context, "myWorkflow", workflowDefinitionId, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.STARTED");
         assertThat(message.payload()).isEqualTo(payload);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.STARTED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(NAME);
     }
 
     @Test
     void testCompletedWorkflow() {
-        EventMessage message = EventMessageUtils.completedWorkflow(context, "myWorkflow", customizer);
+        EventMessage message = EventMessageUtils.completedWorkflow(context, "myWorkflow", workflowDefinitionId, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.COMPLETED");
         assertThat(message.payload()).isEqualTo(Map.of());
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.COMPLETED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
     void testFailedWorkflow() {
         Exception ex = new RuntimeException("fail");
-        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", ex, customizer);
+        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", ex, workflowDefinitionId, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.FAILED");
         assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
             assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
@@ -123,13 +128,14 @@ class EventMessageUtilsTest {
         });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.FAILED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
     void testFailedWorkflowCompactsCauseChain() {
         Throwable root = new IllegalStateException("root");
         Throwable wrapped = new RuntimeException("wrap", root);
-        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", (Exception) wrapped, customizer);
+        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", (Exception) wrapped, workflowDefinitionId, customizer);
         WorkflowError err = (WorkflowError) message.payload();
         assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
         assertThat(err.cause()).isNotNull();
@@ -141,32 +147,35 @@ class EventMessageUtilsTest {
     @Test
     void testTimeoutWorkflow() {
         Instant now = Instant.now();
-        EventMessage message = EventMessageUtils.timeoutWorkflow(context, "myWorkflow", now, customizer);
+        EventMessage message = EventMessageUtils.timeoutWorkflow(context, "myWorkflow", now, workflowDefinitionId, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.TIMED_OUT");
         assertThat(message.payload()).isEqualTo(now);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.TIMED_OUT);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
     void testCancelledWorkflow() {
-        EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", customizer);
+        EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", workflowDefinitionId, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
         assertThat(message.payload()).isEqualTo(Map.of());
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.CANCELLED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
     void testCancelledWorkflowWithCause() {
         Throwable cause = new RuntimeException("cancelled");
-        EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", cause, customizer);
+        EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", cause, workflowDefinitionId, customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
         assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
             assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
             assertThat(err.message()).isEqualTo("cancelled");
         });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test

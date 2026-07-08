@@ -28,12 +28,14 @@ import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -184,7 +186,10 @@ class WorkflowReplayPreparedStateTest {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowStarted"),
                     payload,
-                    MetadataUtils.create(workflowId, WorkflowStatus.STARTED)
+                    MetadataUtils.create(workflowId,
+                                         WorkflowStatus.STARTED,
+                                         new WorkflowDefinitionId(new org.axonframework.messaging.core.QualifiedName("ReplayAwareWorkflow"),
+                                                                  MessageType.DEFAULT_VERSION))
                                  .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                       CombineGlobalAndLocalPayloadReducer.NAME)
             ));
@@ -194,7 +199,10 @@ class WorkflowReplayPreparedStateTest {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowCompleted"),
                     Map.of(),
-                    MetadataUtils.create(workflowId, WorkflowStatus.COMPLETED)
+                    MetadataUtils.create(workflowId,
+                                         WorkflowStatus.COMPLETED,
+                                         new WorkflowDefinitionId(new org.axonframework.messaging.core.QualifiedName("ReplayAwareWorkflow"),
+                                                                  MessageType.DEFAULT_VERSION))
             ));
         }
 
@@ -219,7 +227,9 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private static Set<Tag> tagsFor(EventMessage eventMessage) {
-            return Set.of(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            var tags = new java.util.LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
+            tags.add(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            return Set.copyOf(tags);
         }
 
         private void seedSafePoint(TrackingToken token) {

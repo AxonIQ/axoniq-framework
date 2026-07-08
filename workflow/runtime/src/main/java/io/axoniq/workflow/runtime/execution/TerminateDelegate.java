@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
@@ -60,7 +61,6 @@ public class TerminateDelegate implements TerminatePrimitive {
     private final WorkflowContext workflowContext;
     private final WorkflowExecution workflowExecution;
     private final EventSink eventSink;
-    private final String workflowName;
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final Executor executor;
 
@@ -84,7 +84,6 @@ public class TerminateDelegate implements TerminatePrimitive {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
-        this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWork factory is mandatory");
         this.executor = Objects.requireNonNull(executor, "Executor is mandatory");
     }
@@ -102,7 +101,7 @@ public class TerminateDelegate implements TerminatePrimitive {
 
         var effectiveName = command.workflowNameOverride() != null
                 ? command.workflowNameOverride()
-                : workflowName;
+                : workflowExecution.workflowName();
 
         Throwable stepCause;
         if (command.error()) {
@@ -142,6 +141,7 @@ public class TerminateDelegate implements TerminatePrimitive {
     protected void failed(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
+        var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
         var exception = cause instanceof Exception
                 ? (Exception) cause
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
@@ -154,7 +154,11 @@ public class TerminateDelegate implements TerminatePrimitive {
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
-                                         failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer))
+                                         failedWorkflow(workflowContext,
+                                                        effectiveName,
+                                                        exception,
+                                                        workflowDefinitionId,
+                                                        eventNameCustomizer))
         ).join(); // FIXME join
 
         try {
@@ -169,6 +173,7 @@ public class TerminateDelegate implements TerminatePrimitive {
     protected void cancelled(@Nonnull TerminateCommand command, @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
+        var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
         ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
@@ -176,7 +181,11 @@ public class TerminateDelegate implements TerminatePrimitive {
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
-                                         cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer))
+                                         cancelledWorkflow(workflowContext,
+                                                           effectiveName,
+                                                           cause,
+                                                           workflowDefinitionId,
+                                                           eventNameCustomizer))
         ).join(); // FIXME join
 
         try {

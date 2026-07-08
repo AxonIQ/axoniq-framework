@@ -19,17 +19,20 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.workflow.runtime.execution.ConfigurationBackedProcessingContext;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentLifecycleHandler;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
@@ -170,6 +173,8 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                              var processor = cfg.getComponent(
                                                                      StreamingEventProcessor.class,
                                                                      moduleName);
+                                                             var unitOfWorkFactory = cfg.getComponent(
+                                                                     UnitOfWorkFactory.class);
                                                              var safePointStore = cfg.getComponent(
                                                                      SafePointStore.class,
                                                                      COMPONENT_SAFE_POINT_STORE
@@ -180,12 +185,14 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                                                                 engineComponentName)
                                                                              : cfg.getComponent(WorkflowEngine.class);
 
-                                                             return ensureSegmentsInitialized(tokenStore, eventSource)
-                                                                     .thenCompose(latestToken -> resetOrSwitchToLiveMode(
-                                                                             eventSource,
-                                                                             processor,
-                                                                             workflowEngine,
+                                                                     return ensureSegmentsInitialized(tokenStore, eventSource)
+                                                                             .thenCompose(latestToken -> resetOrSwitchToLiveMode(
+                                                                                     cfg,
+                                                                                     eventSource,
+                                                                                     processor,
+                                                                                     workflowEngine,
                                                                              safePointStore,
+                                                                             unitOfWorkFactory,
                                                                              latestToken
                                                                      ));
                                                          }
@@ -217,22 +224,42 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     CompletableFuture<Void> resetOrSwitchToLiveMode(
+            Configuration configuration,
             StreamableEventSource eventSource,
             StreamingEventProcessor processor,
             WorkflowEngine workflowEngine,
             SafePointStore safePointStore,
+            UnitOfWorkFactory unitOfWorkFactory,
             @Nullable TrackingToken latestToken
     ) {
         return determineResetToken(eventSource, safePointStore)
                 .thenCompose(resetToken -> {
-                    if (!requiresReplay(resetToken, latestToken)) {
-                        workflowEngine.initializeSafePoint(latestToken);
-                        workflowEngine.switchToLiveMode();
-                        return completedFuture(null);
-                    }
                     workflowEngine.initializeSafePoint(resetToken);
-                    return processor.resetTokens(resetToken);
+                    var executionContext = new ConfigurationBackedProcessingContext(configuration);
+                    return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
+                                            .executeWithResult(context -> {
+                                                workflowEngine.rehydrateRunningWorkflows(context, executionContext);
+                                                workflowEngine.startRehydratedExecutions();
+                                                return completedFuture(null);
+                                            })
+                                            .thenCompose(ignored -> switchToLiveOrReplay(
+                                                    processor,
+                                                    workflowEngine,
+                                                    resetToken,
+                                                    latestToken
+                                            ));
                 });
+    }
+
+    private CompletableFuture<Void> switchToLiveOrReplay(StreamingEventProcessor processor,
+                                                         WorkflowEngine workflowEngine,
+                                                         @Nullable TrackingToken resetToken,
+                                                         @Nullable TrackingToken latestToken) {
+        if (!requiresReplay(resetToken, latestToken)) {
+            workflowEngine.switchToLiveMode();
+            return completedFuture(null);
+        }
+        return processor.resetTokens(resetToken);
     }
 
     private CompletableFuture<TrackingToken> determineResetToken(
@@ -247,7 +274,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                      return eventSource.firstToken(null);
                                  });
     }
-
 
     boolean requiresReplay(@Nullable TrackingToken resetToken, @Nullable TrackingToken latestToken) {
         if (resetToken == null || latestToken == null) {

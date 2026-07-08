@@ -19,8 +19,10 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,8 @@ import static org.mockito.Mockito.when;
 class WorkflowEventTagResolverTest {
 
     private final WorkflowEventTagResolver resolver = new WorkflowEventTagResolver();
+    private final WorkflowDefinitionId workflowDefinitionId =
+            new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "0.0.1");
     private WorkflowContext context;
 
     @BeforeEach
@@ -50,8 +54,9 @@ class WorkflowEventTagResolverTest {
     @Test
     void workflowLifecycleEventsGetWorkflowIdAndLifecycleTags() {
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
-        var started = EventMessageUtils.startedWorkflow(context, "OrderWorkflow", customizer);
+        var started = EventMessageUtils.startedWorkflow(context, "OrderWorkflow", workflowDefinitionId, customizer);
         var timedOut = EventMessageUtils.timeoutWorkflow(context, "OrderWorkflow", Instant.parse("2026-07-08T10:15:00Z"),
+                                                        workflowDefinitionId,
                                                         customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(

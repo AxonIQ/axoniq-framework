@@ -18,8 +18,11 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.license.entitlement.EntitlementManager;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -30,6 +33,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.WrappedToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
@@ -41,6 +45,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -56,13 +61,14 @@ import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOK
  * @since 1.0.0
  */
 @Internal
-public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler {
+public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler, Checkpointing {
 
     private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final SafePointStore safePointStore;
+    private final WorkflowStateRehydrationSupport workflowStateRehydrationSupport;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final AtomicReference<TrackingToken> currentTrackingToken = new AtomicReference<>();
     private final AtomicReference<TrackingToken> lastProcessedTrackingToken = new AtomicReference<>();
@@ -73,16 +79,19 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
      * @param workflowConfigurationRegistry configuration registry.
      * @param workflowExecutionRepository   execution registry.
      * @param safePointStore                engine safe point tracking token store.
+     * @param workflowStateRehydrationSupport repository-backed rehydration support.
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
-            @Nonnull SafePointStore safePointStore
+            @Nonnull SafePointStore safePointStore,
+            @Nonnull WorkflowStateRehydrationSupport workflowStateRehydrationSupport
     ) {
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
         this.safePointStore = safePointStore;
+        this.workflowStateRehydrationSupport = workflowStateRehydrationSupport;
     }
 
     @Nonnull
@@ -167,15 +176,75 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             if (allExecution.isEmpty()) {
                 logger.info("No running workflow instances found.");
             } else {
-                logger.info("Restored {} running workflow instances, starting workflow execution.",
-                            allExecution.size());
-                for (var execution : allExecution) {
+                var executionsToStart = allExecution.stream()
+                                                    .filter(execution -> !execution.isExecutable())
+                                                    .toList();
+                logger.info("Restored {} running workflow instances, starting {} workflow execution(s).",
+                            allExecution.size(),
+                            executionsToStart.size());
+                for (var execution : executionsToStart) {
                     execute(execution);
                 }
                 logger.info("All workflow instances started.");
             }
         } else {
             logger.warn("Workflow Execution is already started.");
+        }
+    }
+
+    /**
+     * Loads running workflow ids and rehydrates fresh workflow executions from event-sourced workflow state.
+     *
+     * @param processingContext processing context used to load state and create restored executions
+     */
+    public void rehydrateRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
+                                          @Nonnull ProcessingContext executionContext) {
+        initializeRestoreProcessingContext(executionContext);
+        var runningWorkflows = workflowStateRehydrationSupport.loadRunningWorkflows(sourcingContext);
+        if (runningWorkflows.workflowIds().isEmpty()) {
+            logger.info("No running workflows to rehydrate.");
+            return;
+        }
+        logger.info("Rehydrating {} running workflow execution(s) from event-sourced state.",
+                    runningWorkflows.workflowIds().size());
+        for (var workflowId : runningWorkflows.workflowIds()) {
+            var state = workflowStateRehydrationSupport.loadWorkflowState(workflowId, sourcingContext);
+            var workflowConfiguration = resolveWorkflowConfiguration(workflowId, state);
+            var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
+                    state.payload(),
+                    workflowId,
+                    executionContext,
+                    workflowConfiguration
+            );
+            var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
+            if (!(execution instanceof WorkflowStateRehydratable restorable)) {
+                throw new IllegalStateException(
+                        "Workflow execution for workflowId '%s' does not support state rehydration."
+                                .formatted(workflowId)
+                );
+            }
+            restorable.rehydrate(state);
+            workflowExecutionRepository.save(workflowId, () -> execution);
+        }
+    }
+
+    /**
+     * Starts restored workflow executions before processor replay resumes so transient wait registrations are rebuilt.
+     */
+    public void startRehydratedExecutions() {
+        var executionsToStart = workflowExecutionRepository
+                .findAll()
+                .stream()
+                .filter(execution -> !execution.isExecutable())
+                .filter(execution -> !execution.state().workflowStatus().isTerminal())
+                .toList();
+        if (executionsToStart.isEmpty()) {
+            return;
+        }
+        logger.info("Starting {} rehydrated workflow execution(s) before replay catch-up.",
+                    executionsToStart.size());
+        for (var execution : executionsToStart) {
+            execute(execution);
         }
     }
 
@@ -254,6 +323,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                 );
     }
 
+    @Override
+    @Nonnull
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment, @Nonnull TrackingToken requested) {
+        // just do nothing
+        return CompletableFuture.completedFuture(requested);
+    }
+
+
     /**
      * Retrieve all workflow executions.
      *
@@ -294,6 +371,26 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         currentTrackingToken.set(safePoint);
     }
 
+    private WorkflowConfiguration<?> resolveWorkflowConfiguration(@Nonnull String workflowId,
+                                                                  @Nonnull EventSourcedWorkflowState state) {
+        WorkflowDefinitionId workflowDefinitionId = state.workflowDefinitionId();
+        return workflowConfigurationRegistry.getWorkflowConfiguration(workflowDefinitionId)
+                                            .orElseThrow(() -> new IllegalStateException(
+                                                    "No workflow configuration found for workflow '%s' with definition %s."
+                                                            .formatted(workflowId, workflowDefinitionId)
+                                            ));
+    }
+
+    private void initializeRestoreProcessingContext(@Nonnull ProcessingContext processingContext) {
+        var restartToken = lastProcessedTrackingToken.get();
+        if (!processingContext.resources().containsKey(RESTART_TOKEN_RESOURCE_KEY)) {
+            processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.ofNullable(restartToken));
+        }
+        if (restartToken != null && !processingContext.resources().containsKey(TrackingToken.RESOURCE_KEY)) {
+            processingContext.putResource(TrackingToken.RESOURCE_KEY, restartToken);
+        }
+    }
+
     @Nullable
     private TrackingToken captureCurrentTrackingToken(@Nonnull ProcessingContext processingContext) {
         var token = (TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY);
@@ -328,4 +425,5 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         }
         return earliestToken;
     }
+
 }

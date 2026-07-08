@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -39,6 +40,22 @@ import java.util.Set;
  */
 @Internal
 public interface WorkflowState extends DescribableComponent {
+
+    /**
+     * Returns the unique workflow execution identifier.
+     *
+     * @return workflow identifier.
+     */
+    @Nonnull
+    String workflowId();
+
+    /**
+     * Returns the stable workflow definition identity.
+     *
+     * @return workflow definition identity.
+     */
+    @Nonnull
+    WorkflowDefinitionId workflowDefinitionId();
 
     /**
      * Retrieves a list of step names in the workflow execution.

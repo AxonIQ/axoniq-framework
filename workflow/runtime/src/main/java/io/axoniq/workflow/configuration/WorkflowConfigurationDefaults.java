@@ -23,8 +23,10 @@ import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
 import io.axoniq.workflow.runtime.execution.RunningWorkflows;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
@@ -32,6 +34,7 @@ import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.WorkflowStateRehydrationSupport;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
@@ -133,6 +136,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerClock(componentRegistry);
         registerTagResolver(componentRegistry);
         registerRunningWorkflows(componentRegistry);
+        registerWorkflowStateRepository(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -154,10 +158,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerClock(ComponentRegistry componentRegistry) {
-        //  Issue AxonIQ/AxonFramework#3083 will introduce an ApplicationConfigurer wide Clock,
-        //  which should replace the GenericEventMessage and subsequently this Clock.
-        //noinspection deprecation
-        componentRegistry.registerIfNotPresent(Clock.class, cfg -> GenericEventMessage.clock);
+        componentRegistry.registerIfNotPresent(Clock.class, cfg -> Clock.systemUTC());
     }
 
     void registerTagResolver(ComponentRegistry componentRegistry) {
@@ -226,6 +227,44 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         // @formatter:on
     }
 
+    void registerWorkflowStateRepository(ComponentRegistry componentRegistry) {
+        var type = new TypeReference<Repository<String, EventSourcedWorkflowState>>() {
+        };
+        componentRegistry.registerIfNotPresent(
+                ComponentDefinition.ofTypeAndName(type, EventSourcedWorkflowState.componentName())
+                                   .withBuilder(c -> new EventSourcingRepository<>(
+                                           String.class,
+                                           EventSourcedWorkflowState.class,
+                                           workflowStateLifecycleHandler(c)
+                                   ))
+        );
+    }
+
+    private EntityLifecycleHandler<String, EventSourcedWorkflowState> workflowStateLifecycleHandler(
+            Configuration configuration
+    ) {
+        EventStore eventStore = configuration.getComponent(EventStore.class);
+        CriteriaResolver<String> criteriaResolver = (identifier, context) ->
+                EventSourcedWorkflowState.workflowEvents(identifier);
+        EventSourcedEntityFactory<String, EventSourcedWorkflowState> entityFactory =
+                (identifier, firstEvent, context) -> new EventSourcedWorkflowState(
+                        identifier,
+                        io.axoniq.workflow.runtime.util.MetadataUtils.getWorkflowDefinitionId(firstEvent.metadata())
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "Workflow state for '%s' cannot be created without workflowDefinitionId metadata."
+                                                .formatted(identifier)
+                                ))
+                );
+        var evolver = new InitializingEntityEvolver<>(
+                entityFactory,
+                (entity, eventMessage, context) -> {
+                    entity.evolve(eventMessage, context);
+                    return entity;
+                }
+        );
+        return new SimpleEntityLifecycleHandler<>(eventStore, criteriaResolver, evolver);
+    }
+
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(ExecutorService.class,
                                                WORKFLOW_ENGINE_EXECUTOR,
@@ -239,9 +278,33 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         .withBuilder(cfg -> new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class),
-                                cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE)
+                                cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
+                                workflowStateRehydrationSupport(cfg)
                         ))
                         .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
+        );
+    }
+
+    private WorkflowStateRehydrationSupport workflowStateRehydrationSupport(Configuration configuration) {
+        return new RepositoryBackedWorkflowStateRehydrationSupport(
+                runningWorkflowsRepository(configuration),
+                workflowStateRepository(configuration)
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Repository<String, RunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
+        return (Repository<String, RunningWorkflows>) configuration.getComponent(
+                Repository.class,
+                RunningWorkflows.componentName()
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Repository<String, EventSourcedWorkflowState> workflowStateRepository(Configuration configuration) {
+        return (Repository<String, EventSourcedWorkflowState>) configuration.getComponent(
+                Repository.class,
+                EventSourcedWorkflowState.componentName()
         );
     }
 

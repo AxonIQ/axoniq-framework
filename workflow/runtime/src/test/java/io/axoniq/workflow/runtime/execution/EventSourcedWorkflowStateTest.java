@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
@@ -25,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -41,12 +43,16 @@ import static org.mockito.Mockito.*;
 
 class EventSourcedWorkflowStateTest {
 
+    private static final String WORKFLOW_ID = "workflowId";
+    private static final WorkflowDefinitionId DEFINITION_ID =
+            new WorkflowDefinitionId(new QualifiedName("TestWorkflow"), "0.0.1");
+
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
 
     @BeforeEach
     void setUp() {
-        state = new EventSourcedWorkflowState();
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, DEFINITION_ID);
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
     }
@@ -149,7 +155,7 @@ class EventSourcedWorkflowStateTest {
     void testEvolveStepCompletedAndEvolvePayload() {
         String stepName = "testStep";
         Map<String, Object> initialPayload = Map.of("key1", "value1");
-        state = new EventSourcedWorkflowState(initialPayload);
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, initialPayload, DEFINITION_ID);
 
         Map<String, Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
@@ -200,7 +206,9 @@ class EventSourcedWorkflowStateTest {
         // Seed state with the workflow definition's configured version so that, when SimpleWorkflowExecution
         // constructs the STARTED event via startedWorkflow(...), the event's MessageType.version() reflects
         // the configured version (not the implicit "0.0.1" default).
-        var seeded = new EventSourcedWorkflowState(Map.of(), "1.2.3",
+        var seeded = new EventSourcedWorkflowState("wf-1",
+                                                   Map.of(),
+                                                   new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "1.2.3"),
                                                    mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
                                                    Map.of());
         assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.2.3");
@@ -212,7 +220,9 @@ class EventSourcedWorkflowStateTest {
         // started event in history carries the original version it was launched under (e.g. "1.0.0").
         // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
         // route to the matching sibling.
-        var seeded = new EventSourcedWorkflowState(Map.of(), "2.0.0",
+        var seeded = new EventSourcedWorkflowState("wf-1",
+                                                   Map.of(),
+                                                   new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "2.0.0"),
                                                    mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
                                                    Map.of());
 

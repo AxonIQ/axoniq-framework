@@ -20,11 +20,13 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -65,6 +67,7 @@ class TerminalStateGuardTest {
     private UnitOfWorkFactory unitOfWorkFactory;
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
+    private WorkflowDefinitionId workflowDefinitionId;
 
     /**
      * Concrete subclass to expose the protected methods for testing.
@@ -101,13 +104,12 @@ class TerminalStateGuardTest {
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
-        workflowState = new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of());
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
+        workflowDefinitionId = new WorkflowDefinitionId(new QualifiedName("test-workflow"), "0.0.1");
 
-        when(workflowExecution.state()).thenReturn(workflowState);
         when(workflowExecution.processingContext()).thenReturn(processingContext);
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
@@ -131,6 +133,12 @@ class TerminalStateGuardTest {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
+        workflowState = new EventSourcedWorkflowState("wf-1",
+                                                      Map.of(),
+                                                      workflowDefinitionId,
+                                                      workflowContext,
+                                                      Map.of());
+        when(workflowExecution.state()).thenReturn(workflowState);
 
         stepExecutor = new TestableStepExecutor(
                 workflowContext, workflowExecution, eventNameCustomizer,

@@ -20,12 +20,15 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive.TerminateCommand;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -59,16 +62,20 @@ class TerminateDelegateFailTest {
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
     private TerminateDelegate delegate;
+    private WorkflowDefinitionId workflowDefinitionId;
 
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
+        @SuppressWarnings("rawtypes")
+        WorkflowConfiguration workflowConfiguration = mock(WorkflowConfiguration.class);
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
+        workflowDefinitionId = new WorkflowDefinitionId(new QualifiedName("test-workflow"), "0.0.1");
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -80,7 +87,14 @@ class TerminateDelegateFailTest {
                     return action.apply(processingContext);
                 });
 
-        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of()));
+        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState("wf-1",
+                                                                                 Map.of(),
+                                                                                 workflowDefinitionId,
+                                                                                 workflowContext,
+                                                                                 Map.of()));
+        when(workflowExecution.workflowConfiguration()).thenReturn(workflowConfiguration);
+        when(workflowConfiguration.workflowName()).thenReturn("test-workflow");
+        when(workflowConfiguration.workflowVersion()).thenReturn("0.0.1");
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
@@ -155,7 +169,11 @@ class TerminateDelegateFailTest {
     @Test
     void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        EventSourcedWorkflowState state = new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of(WorkflowStatus.FAILED, listener));
+        EventSourcedWorkflowState state = new EventSourcedWorkflowState("wf-1",
+                                                                        Map.of(),
+                                                                        workflowDefinitionId,
+                                                                        workflowContext,
+                                                                        Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
 
         var cause = new RuntimeException("boom");
@@ -163,7 +181,11 @@ class TerminateDelegateFailTest {
                 new TerminateCommand(true, cause, eventNameCustomizer, "test-workflow", null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        state.evolve(EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, eventNameCustomizer), processingContext);
+        state.evolve(EventMessageUtils.failedWorkflow(workflowContext,
+                                                     "test-workflow",
+                                                     cause,
+                                                     workflowDefinitionId,
+                                                     eventNameCustomizer), processingContext);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));
     }

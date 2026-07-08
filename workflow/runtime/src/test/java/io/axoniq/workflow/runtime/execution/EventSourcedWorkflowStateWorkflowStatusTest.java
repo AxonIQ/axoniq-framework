@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -26,6 +27,7 @@ import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -41,13 +43,15 @@ import static org.mockito.Mockito.*;
 
 class EventSourcedWorkflowStateWorkflowStatusTest {
 
+    private static final WorkflowDefinitionId DEFINITION_ID =
+            new WorkflowDefinitionId(new QualifiedName("TestWorkflow"), "0.0.1");
     private final EventConverter converter = new DelegatingEventConverter(new JacksonConverter());
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
 
     @BeforeEach
     void setUp() {
-        state = new EventSourcedWorkflowState(Map.of("initialKey", "initialValue"));
+        state = new EventSourcedWorkflowState("wfId", Map.of("initialKey", "initialValue"), DEFINITION_ID);
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(converter);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
