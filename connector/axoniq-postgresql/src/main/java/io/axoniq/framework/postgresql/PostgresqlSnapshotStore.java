@@ -47,9 +47,11 @@ import javax.sql.DataSource;
  * {@link PostgresqlEventStorageEngine}.
  * <p>
  * Not intended for direct use - snapshot access is exposed through the engine, which implements
- * {@link SnapshotStore} and delegates to this class. This ensures the snapshot table is always
- * co-located with the event tables on the same {@link DataSource}, which is required for the
- * future single-round-trip source-with-snapshot query.
+ * {@link SnapshotStore} and delegates to this class for direct snapshot storage and retrieval.
+ * This ensures the snapshot table is always co-located with the event tables on the same
+ * {@link DataSource}, which is what allows the engine to source with a snapshot in a single
+ * round trip: rather than delegating to this class, it reads the snapshot and the tail events
+ * in one query against both tables.
  * <p>
  * Only {@link GlobalIndexPosition} is supported as a position type. Snapshots with any other
  * position type are rejected.
