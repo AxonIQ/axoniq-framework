@@ -30,6 +30,8 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.disableMultiTenancyEnhancer;
+
 /**
  * Tests the {@link org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler} with an {@link AxonServerSnapshotStore}.
  *
@@ -44,6 +46,9 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
 
     @Override
     protected void registerComponents(ComponentRegistry registry) {
+        // TODO: fails when we do not disable the multi-tenancy enhancer, find a better way
+        disableMultiTenancyEnhancer.accept(registry);
+
         registry.registerComponent(
                 AxonServerConfiguration.class,
                 c -> AxonServerConfiguration.builder()

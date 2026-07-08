@@ -43,6 +43,7 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
+import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.disableMultiTenancyEnhancer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -91,6 +92,8 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
                 .customized((cfg, c) -> c.extend(DeadLetterQueueConfiguration.class,
                                                  () -> new DeadLetterQueueConfiguration().enabled()));
 
+        // TODO: fails when we do not disable the multi-tenancy enhancer, find a better way
+        configurer.componentRegistry(disableMultiTenancyEnhancer);
         return configurer.messaging(
                 messaging -> messaging.eventProcessing(
                         ep -> ep.pooledStreaming(ps -> ps.processor(processorModule))

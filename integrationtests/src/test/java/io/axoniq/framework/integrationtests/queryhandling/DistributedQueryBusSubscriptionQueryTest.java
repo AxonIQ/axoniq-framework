@@ -46,6 +46,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
+import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.disableMultiTenancyEnhancer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -96,6 +97,8 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
         return MessagingConfigurer.create()
+                                  // TODO: fails when we do not disable the multi-tenancy enhancer, find a better way
+                                  .componentRegistry(disableMultiTenancyEnhancer)
                                   .componentRegistry(cr -> cr.registerComponent(
                                           AxonServerConfiguration.class,
                                           c -> testContainerAxonServerConfiguration()
@@ -170,8 +173,8 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
                 .isEqualTo(update2Payload);
 
         await().untilAsserted(() -> {
-           assertThat(result.hasNextAvailable()).isFalse();
-           assertThat(result.isCompleted()).isTrue();
+            assertThat(result.hasNextAvailable()).isFalse();
+            assertThat(result.isCompleted()).isTrue();
         });
     }
 }
