@@ -48,3 +48,4 @@ docs/_playbook/build
 # Private credentials
 .env.local
 axon-server-test.license
+.junie/
