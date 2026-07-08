@@ -24,6 +24,7 @@ The start trigger can be declared in two ways:
 Use exactly one of these attributes on a workflow method.
 `startOnConditions` can be combined with either form to further filter which events start a workflow.
 Use canonical qualified association strings such as `payload:status=vip` or `metadata:tenantId=acme`.
+The canonical association DSL is described in xref:waiting-for-events.adoc#_association_dsl[Association DSL].
 
 The declarative API offers the same capabilities plus additional options not available via annotations.
 The configuration is the same whether you use Java or Kotlin—the API is identical in both languages.
