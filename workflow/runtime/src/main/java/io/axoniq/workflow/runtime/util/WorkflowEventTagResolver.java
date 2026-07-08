@@ -55,10 +55,18 @@ public class WorkflowEventTagResolver implements TagResolver {
      * Value for completed, cancelled and timed-out waitForeEvent step.
      */
     public static final String TAG_WAIT_FOR_VALUE_TERMINAL = "terminal";
-
-    static final String WORKFLOW_ID_TAG = "workflowId";
-    static final String WORKFLOW_LIFECYCLE_TAG = "workflowLifecycle";
-    static final String WORKFLOW_WAIT_TAG = "workflowWait";
+    /**
+     * Tag key for workflow id.
+     */
+    public static final String WORKFLOW_ID_TAG = "workflowId";
+    /**
+     * Tag key for workflow lifecycle.
+     */
+    public static final String WORKFLOW_LIFECYCLE_TAG = "workflowLifecycle";
+    /**
+     * Tag key for workflow wait for event step lifecycle.
+     */
+    public static final String WORKFLOW_WAIT_TAG = "workflowWait";
 
     @Override
     @Nonnull
