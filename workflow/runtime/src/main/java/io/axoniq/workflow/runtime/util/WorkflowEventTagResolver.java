@@ -106,10 +106,8 @@ public class WorkflowEventTagResolver implements TagResolver {
         return switch (status) {
             case STARTED -> TAG_WAIT_FOR_VALUE_STARTED;
             case COMPLETED, TIMED_OUT, CANCELLED -> TAG_WAIT_FOR_VALUE_TERMINAL;
-            case FAILED -> throw new IllegalArgumentException(
-                    "Wait for step lifecycle tag is undefined for status FAILED");
-            case RETRYING -> throw new IllegalArgumentException(
-                    "Wait for step lifecycle tag is undefined for status RETRYING");
+            default -> throw new IllegalArgumentException(
+                    "Wait for step lifecycle tag is undefined for status " + status);
         };
     }
 }
