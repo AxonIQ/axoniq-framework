@@ -33,6 +33,8 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -92,10 +94,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
         if (!workflowExecution.state().containsStep(stepName)) {
             workflowExecution.guardAgainstReplayDrift(stepName);
+            var startedAt = clock.instant();
             workflowExecution.appendTask(i ->
-                                                 started(stepName,
-                                                         Map.of("startTime", clock.instant()),
-                                                         eventNameCustomizer)
+                                                 startedWaitForEvent(stepName,
+                                                                     startedPayload(eventCondition,
+                                                                                    startedAt,
+                                                                                    timeout),
+                                                                     eventNameCustomizer)
             );
             try {
                 workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
@@ -115,7 +120,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 workflowExecution.appendTask(i -> {
                     if (!i.state().getStep(stepName).status().isTerminal()) {
                         // FIXME - This is where we should publish using an append condition
-                        timedOut(stepName, clock.instant(), eventNameCustomizer);
+                        timedOutWaitForEvent(stepName, clock.instant(), eventNameCustomizer);
                     }
                 });
             } else {
@@ -131,7 +136,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                             workflowExecution.appendTask(i -> {
                                                              if (!i.state().getStep(stepName).status().isTerminal()) {
                                                                  // only timeout if we are not completed yet
-                                                                 timedOut(stepName, eventNameCustomizer);
+                                                                 timedOutWaitForEvent(stepName, eventNameCustomizer);
                                                              }
                                                          }
                             );
@@ -149,7 +154,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                         workflowExecution.appendTask(i -> {
                             // FIXME - This is where we should publish using an append condition
                             if (!i.state().getStep(stepName).status().isTerminal()) {
-                                cancelled(stepName, terminationCause, eventNameCustomizer);
+                                cancelledWaitForEvent(stepName, terminationCause, eventNameCustomizer);
                             }
                         });
                     }
@@ -173,15 +178,27 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         var payload = eventMessagePayload(awaited.eventMessage());
         workflowExecution.appendTask(state -> {
             try {
-                completed(awaited.stepName(),
-                          payload,
-                          awaited.payloadReducer().name(),
-                          awaited.eventNameCustomizer()).join();
+                completedWaitForEvent(awaited.stepName(),
+                                      payload,
+                                      awaited.payloadReducer().name(),
+                                      awaited.eventNameCustomizer()).join();
             } catch (Exception e) {
                 logger.warn("Failed to publish completed event for step '{}': {}",
                             awaited.stepName(),
                             e.getMessage());
             }
         });
+    }
+
+    @Nonnull
+    private Map<String, Object> startedPayload(@Nonnull io.axoniq.workflow.runtime.api.execution.context.EventCondition eventCondition,
+                                               @Nonnull Instant startedAt,
+                                               @Nonnull Duration timeout) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("startTime", startedAt);
+        payload.put("eventQualifiedName", eventCondition.qualifiedName().toString());
+        payload.put("serializedAssociations", eventCondition.serializedAssociations());
+        payload.put("timeoutTime", startedAt.plus(timeout));
+        return payload;
     }
 }

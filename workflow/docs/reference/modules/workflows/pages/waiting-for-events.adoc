@@ -43,22 +43,25 @@ Here's what the event store looks like when a `PaymentConfirmed` event arrives b
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="awaitEvent — happy path">
-1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z"}
+1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z", "eventQualifiedName": "io.myapp.payments.PaymentConfirmed", "serializedAssociations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:00Z"}
 2 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
 3 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
   </div>
 </div>
 ++++
 
-The STARTED event records when the wait began (`startTime` is used to recalculate remaining timeout on replay).
-When the external `PaymentConfirmed` event arrives, it unblocks the workflow and the matched payload is recorded in the COMPLETED event.
+The STARTED event records when the wait began, which event type is expected, the serialized association DSL, and the
+calculated timeout instant.
+These fields make the outstanding wait fully inspectable and replayable.
+When the external `PaymentConfirmed` event arrives, it unblocks the workflow and the matched payload is recorded in the
+COMPLETED event.
 
 If no matching event arrives within 15 minutes:
 
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="awaitEvent — timeout">
-1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z"}
+1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z", "eventQualifiedName": "io.myapp.payments.PaymentConfirmed", "serializedAssociations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:00Z"}
 2 timedout AwaitPaymentTimedOut {"timeout": "2026-03-25T10:15:00Z"}
   </div>
 </div>
@@ -171,7 +174,7 @@ Under the hood, this is a `waitForEvent` with an event condition that never matc
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="sleep — 10-day delay">
-1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z"}
+1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z", "eventQualifiedName": "java.lang.Void", "serializedAssociations": [], "timeoutTime": "2026-04-04T10:00:00Z"}
 2 timedout CooldownPeriodTimedOut {"timeout": "2026-04-04T10:00:00Z"}
   </div>
 </div>
@@ -255,7 +258,7 @@ Here's the full event store for this workflow:
 2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted
 4 completed ReserveStockCompleted {"__reserveStock": true}
-5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z"}
+5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z", "eventQualifiedName": "io.myapp.payments.PaymentConfirmed", "serializedAssociations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:05Z"}
 6 started InitiatePaymentStarted {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 7 completed InitiatePaymentCompleted
 8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}

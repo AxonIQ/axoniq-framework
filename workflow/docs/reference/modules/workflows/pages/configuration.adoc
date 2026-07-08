@@ -247,6 +247,9 @@ The engine attaches the following metadata to every workflow and step event:
 |`stepType`
 |The step's lifecycle phase: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
 
+|`stepPrimitive`
+|Internal step classification used by the engine, for example `WAIT_FOR_EVENT` on `waitForEvent` step events.
+
 |`workflowStatus`
 |The workflow status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (workflow events only).
 
@@ -255,6 +258,27 @@ The engine attaches the following metadata to every workflow and step event:
 |===
 
 These keys are managed by the engine and cannot be overridden.
+
+=== Engine-managed event-store tags
+
+Engine-published workflow events are also written with AF5 event-store tags.
+
+[cols="1,2"]
+|===
+|Tag |Description
+
+|`workflowId=<id>`
+|Added to every engine-published event that carries `workflowId` metadata.
+
+|`workflowLifecycle=<started|completed|failed|timeout|cancelled>`
+|Added to workflow lifecycle events.
+
+|`workflowWait=<started|completed|failed|timeout|cancelled>`
+|Added to `waitForEvent` step STARTED and terminal events.
+|===
+
+These tags are intended for event-sourced read models such as "currently running workflow executions" and "currently
+waiting steps".
 
 === Correlation data propagation
 

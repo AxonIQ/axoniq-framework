@@ -37,36 +37,63 @@ public class MetadataUtils {
 
     public static final String METADATA_KEY_WORKFLOW_ID = "workflowId";
     public static final String METADATA_KEY_TYPE = "stepType";
+    public static final String METADATA_KEY_STEP_PRIMITIVE = "stepPrimitive";
     public static final String METADATA_KEY_MODIFY_PAYLOAD = "modifyPayload";
     public static final String METADATA_KEY_STEP_NAME = "stepName";
     public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
     public static final String METADATA_KEY_VERSION_CHANGE_ID = "versionChangeId";
     public static final String METADATA_KEY_VERSION = "version";
+    public static final String STEP_PRIMITIVE_WAIT_FOR_EVENT = "WAIT_FOR_EVENT";
 
     private MetadataUtils() {
         // avoid
     }
 
+    /**
+     * Creates a new metadata instance with the given workflow id.
+     *
+     * @param workflowId the workflow id
+     * @return metadata instance
+     */
     public static Metadata create(String workflowId) {
         return Metadata
                 .with(METADATA_KEY_WORKFLOW_ID, workflowId);
     }
 
+    /**
+     * Creates a new metadata instance with the given workflow id and step name.
+     *
+     * @param workflowId the workflow id
+     * @param stepName   the step name
+     * @param stepStatus the step status
+     * @return metadata instance
+     */
     public static Metadata create(String workflowId, String stepName, StepStatus stepStatus) {
         return create(workflowId)
                 .and(METADATA_KEY_TYPE, stepStatus.name())
                 .and(METADATA_KEY_STEP_NAME, stepName);
     }
 
+    /**
+     * Creates a new metadata instance with the given workflow id and workflow status.
+     *
+     * @param workflowId     the workflow id
+     * @param workflowStatus the workflow status
+     * @return metadata instance
+     */
     public static Metadata create(String workflowId, WorkflowStatus workflowStatus) {
         return create(workflowId)
                 .and(METADATA_KEY_WORKFLOW_STATUS, workflowStatus.name());
     }
 
     /**
-     * Metadata for a version-marker event: a COMPLETED step event with {@code stepName = changeId}
-     * plus marker keys ({@code versionChangeId}, {@code version}) whose presence flags this as a
-     * version marker.
+     * Metadata for a version-marker event: a COMPLETED step event with {@code stepName = changeId} plus marker keys
+     * ({@code versionChangeId}, {@code version}) whose presence flags this as a version marker.
+     *
+     * @param workflowId the workflow id
+     * @param changeId   the change id
+     * @param version    the version
+     * @return metadata instance
      */
     public static Metadata createVersionMigrationStep(String workflowId, String changeId, String version) {
         return create(workflowId, changeId, StepStatus.COMPLETED)
@@ -74,6 +101,22 @@ public class MetadataUtils {
                 .and(METADATA_KEY_VERSION, version);
     }
 
+    /**
+     * Marks the given metadata as a step that is waiting for an event.
+     *
+     * @param metadata metadata to mark
+     * @return enriched metadata
+     */
+    public static Metadata markWaitForEventStep(Metadata metadata) {
+        return metadata.and(METADATA_KEY_STEP_PRIMITIVE, STEP_PRIMITIVE_WAIT_FOR_EVENT);
+    }
+
+    /**
+     * Returns the workflow status if present in the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return optional of workflow status
+     */
     public static Optional<WorkflowStatus> getWorkflowStatus(Metadata metadata) {
         if (metadata.containsKey(METADATA_KEY_WORKFLOW_STATUS)) {
             return Optional.of(WorkflowStatus.valueOf(metadata.get(METADATA_KEY_WORKFLOW_STATUS)));
@@ -81,6 +124,12 @@ public class MetadataUtils {
         return Optional.empty();
     }
 
+    /**
+     * Returns the step status if present in the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return optional of step status
+     */
     public static Optional<StepStatus> getStepStatus(Metadata metadata) {
         if (metadata.containsKey(METADATA_KEY_TYPE)) {
             return Optional.of(StepStatus.valueOf(metadata.get(METADATA_KEY_TYPE)));
@@ -89,19 +138,41 @@ public class MetadataUtils {
         }
     }
 
+    /**
+     * Returns the version change id if present in the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return optional of version change id
+     */
     public static Optional<String> getVersionChangeId(Metadata metadata) {
         return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION_CHANGE_ID, null));
     }
 
+    /**
+     * Returns the version if present in the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return optional of version
+     */
     public static Optional<String> getVersion(Metadata metadata) {
         return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION, null));
     }
 
-    /** {@code true} iff the metadata carries a {@code versionChangeId} key — i.e. it's a version marker. */
+    /**
+     * Returns whether the given metadata carries a version marker.
+     *
+     * @return {@code true} iff the metadata carries a {@code versionChangeId} key — i.e. it's a version marker.
+     */
     public static boolean isVersionMigrationStep(Metadata metadata) {
         return metadata.containsKey(METADATA_KEY_VERSION_CHANGE_ID);
     }
 
+    /**
+     * Returns the payload reducer if present in the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return optional of payload reducer
+     */
     public static Optional<String> payloadReducer(Metadata metadata) {
         if (metadata.containsKey(METADATA_KEY_MODIFY_PAYLOAD)) {
             return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_MODIFY_PAYLOAD, null));
@@ -110,6 +181,12 @@ public class MetadataUtils {
         }
     }
 
+    /**
+     * Returns the workflow id from the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return workflow id
+     */
     public static String getWorkflowId(Metadata metadata) {
         if (!hasWorkflowId().test(metadata)) {
             throw new IllegalArgumentException("Metadata contains no workflow id");
@@ -117,14 +194,41 @@ public class MetadataUtils {
         return metadata.get(METADATA_KEY_WORKFLOW_ID);
     }
 
+    /**
+     * Returns the step name from the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return step name
+     */
     public static String getStepName(Metadata metadata) {
         return metadata.getOrDefault(METADATA_KEY_STEP_NAME, null);
     }
 
+    /**
+     * Returns whether the given metadata carries a step that is waiting for an event.
+     *
+     * @param metadata metadata to inspect
+     * @return {@code true} iff the metadata carries a {@code stepPrimitive} key with value {@code WAIT_FOR_EVENT}.
+     */
+    public static boolean isWaitForEventStep(Metadata metadata) {
+        return STEP_PRIMITIVE_WAIT_FOR_EVENT.equals(metadata.getOrDefault(METADATA_KEY_STEP_PRIMITIVE, null));
+    }
+
+    /**
+     * Returns a predicate that matches metadata with the given workflow id.
+     *
+     * @param workflowId workflow id to match
+     * @return predicate on metadata
+     */
     public static Predicate<Metadata> workflowIdFilter(String workflowId) {
         return m -> m.containsKey(METADATA_KEY_WORKFLOW_ID) && workflowId.equals(m.get(METADATA_KEY_WORKFLOW_ID));
     }
 
+    /**
+     * Predicate that matches metadata that contain a workflow id.
+     *
+     * @return predicate on metadata
+     */
     public static Predicate<Metadata> hasWorkflowId() {
         return m -> m.containsKey(METADATA_KEY_WORKFLOW_ID);
     }

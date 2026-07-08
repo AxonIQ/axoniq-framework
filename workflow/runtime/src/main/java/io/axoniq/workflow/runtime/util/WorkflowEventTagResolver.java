@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+package io.axoniq.workflow.runtime.util;
+
+import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.eventsourcing.eventstore.TagResolver;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventstreaming.Tag;
+
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+/**
+ * Resolves workflow-specific event-store tags for engine-published events.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
+@Internal
+public class WorkflowEventTagResolver implements TagResolver {
+
+    static final String WORKFLOW_ID_TAG = "workflowId";
+    static final String WORKFLOW_LIFECYCLE_TAG = "workflowLifecycle";
+    static final String WORKFLOW_WAIT_TAG = "workflowWait";
+
+    @Override
+    @Nonnull
+    public Set<Tag> resolve(@Nonnull EventMessage eventMessage) {
+        var tags = new LinkedHashSet<Tag>();
+        var metadata = eventMessage.metadata();
+
+        if (isEnginePublishedWorkflowEvent(metadata)) {
+            tags.add(Tag.of(WORKFLOW_ID_TAG, MetadataUtils.getWorkflowId(metadata)));
+        }
+
+        MetadataUtils.getWorkflowStatus(metadata)
+                     .map(WorkflowEventTagResolver::lifecycleValue)
+                     .map(value -> Tag.of(WORKFLOW_LIFECYCLE_TAG, value))
+                     .ifPresent(tags::add);
+
+        if (MetadataUtils.isWaitForEventStep(metadata)) {
+            MetadataUtils.getStepStatus(metadata)
+                         .filter(status -> status == StepStatus.STARTED || status.isTerminal())
+                         .map(WorkflowEventTagResolver::lifecycleValue)
+                         .map(value -> Tag.of(WORKFLOW_WAIT_TAG, value))
+                         .ifPresent(tags::add);
+        }
+
+        return Set.copyOf(tags);
+    }
+
+    private static boolean isEnginePublishedWorkflowEvent(org.axonframework.messaging.core.Metadata metadata) {
+        return MetadataUtils.hasWorkflowId().test(metadata)
+                && (MetadataUtils.getWorkflowStatus(metadata).isPresent()
+                || MetadataUtils.getStepStatus(metadata).isPresent());
+    }
+
+    @Nonnull
+    private static String lifecycleValue(@Nonnull WorkflowStatus status) {
+        return switch (status) {
+            case NONE -> throw new IllegalArgumentException("Workflow lifecycle tag is undefined for status NONE");
+            case STARTED -> "started";
+            case COMPLETED -> "completed";
+            case FAILED -> "failed";
+            case TIMED_OUT -> "timeout";
+            case CANCELLED -> "cancelled";
+        };
+    }
+
+    @Nonnull
+    private static String lifecycleValue(@Nonnull StepStatus status) {
+        return switch (status) {
+            case STARTED -> "started";
+            case COMPLETED -> "completed";
+            case FAILED -> "failed";
+            case TIMED_OUT -> "timeout";
+            case CANCELLED -> "cancelled";
+            case RETRYING -> "retrying";
+        };
+    }
+}

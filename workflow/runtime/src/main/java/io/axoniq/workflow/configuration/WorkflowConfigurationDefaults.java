@@ -33,6 +33,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
+import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -40,6 +41,8 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
+import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
@@ -112,6 +115,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
+        registerTagResolver(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -137,6 +141,14 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         //  which should replace the GenericEventMessage and subsequently this Clock.
         //noinspection deprecation
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> GenericEventMessage.clock);
+    }
+
+    void registerTagResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerDecorator(
+                TagResolver.class,
+                0,
+                (cfg, name, delegate) -> new MultiTagResolver(delegate, new WorkflowEventTagResolver())
+        );
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
