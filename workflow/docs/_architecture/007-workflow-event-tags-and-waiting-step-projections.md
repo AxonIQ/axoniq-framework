@@ -56,8 +56,8 @@ This applies to the started event of a `waitForEvent` step and to its terminal e
 The started event payload of a `waitForEvent` step must contain:
 
 - `startTime`
-- `eventQualifiedName`
-- `serializedAssociations`
+- `eventName`
+- `associations`
 - `timeoutTime`
 
 `timeoutTime` is the calculated absolute timeout instant, not just the relative duration.
