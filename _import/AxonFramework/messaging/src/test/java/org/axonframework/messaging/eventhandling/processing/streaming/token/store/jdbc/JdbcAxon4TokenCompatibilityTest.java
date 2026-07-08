@@ -14,12 +14,8 @@
  * limitations under the License.
  */
 
-package org.axonframework.messaging.eventhandling.processing.streaming.token.store.jpa;
+package org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.EntityTransaction;
-import jakarta.persistence.Persistence;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.TestConverter;
@@ -29,8 +25,6 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Glob
 import org.axonframework.messaging.eventhandling.processing.streaming.token.MergedTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.ConfigToken;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -44,19 +38,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Validates that a JPA token store populated by Axon Framework 4 can be read by Axon Framework 5, which no longer has
- * the Axon Framework 4 token classes. Mirrors the JDBC
- * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.JdbcTokenEntry} coverage for
- * the JPA {@link TokenEntry}.
+ * Validates that a token store populated by Axon Framework 4 can be read by Axon Framework 5, which no longer has the
+ * Axon Framework 4 token classes.
  * <p>
  * The serialized forms below are the exact bytes produced by Axon Framework 4's Jackson serializer (captured by running
  * it against Axon Framework 4.13), so these cases reflect what a migrated store actually contains rather than a
- * reconstruction. Each case exercises the production read path through {@link TokenEntry} on a row hydrated from the
- * database by the JPA provider, on both the Jackson 3 and the Jackson 2 converter.
+ * reconstruction. Each case exercises the production read path through {@link JdbcTokenEntry}, on both the Jackson 3 and
+ * the Jackson 2 converter.
  */
-class Axon4TokenCompatibilityTest {
-
-    private static final String PROCESSOR_NAME = "my-processor";
+class JdbcAxon4TokenCompatibilityTest {
 
     private static final String AXON_4_GLOBAL = "org.axonframework.eventhandling.GlobalSequenceTrackingToken";
     private static final String AXON_4_GAP_AWARE = "org.axonframework.eventhandling.GapAwareTrackingToken";
@@ -76,45 +66,9 @@ class Axon4TokenCompatibilityTest {
                     + "\"context\":null}";
     private static final String CONFIG_JSON = "{\"config\":{\"id\":\"abc\"}}";
 
-    private final EntityManagerFactory entityManagerFactory = Persistence.createEntityManagerFactory("tokenstore");
-    private final EntityManager entityManager = entityManagerFactory.createEntityManager();
-
-    private EntityTransaction transaction;
-
-    @BeforeEach
-    void beginTransaction() {
-        transaction = entityManager.getTransaction();
-        transaction.begin();
-    }
-
-    @AfterEach
-    void rollbackTransaction() {
-        transaction.rollback();
-        entityManager.close();
-        entityManagerFactory.close();
-    }
-
-    /**
-     * Persists a valid row, rewrites the token and type columns into the exact shape Axon 4 wrote, then reloads it. The
-     * reload forces the JPA provider to hydrate the entry from the database, reproducing what an Axon 5 application sees
-     * when it starts against an Axon 4 store. There is no constructor that sets an arbitrary type name, because a live
-     * token always resolves its own class.
-     */
-    private TokenEntry axon4Row(String tokenJson, String axon4TokenType, Converter converter) {
-        TokenEntry seed = new TokenEntry(PROCESSOR_NAME, Segment.ROOT_SEGMENT,
-                                         new GlobalSequenceTrackingToken(0L), converter);
-        entityManager.persist(seed);
-        entityManager.flush();
-        entityManager.createQuery("UPDATE TokenEntry t SET t.tokenType = :type, t.token = :bytes "
-                                          + "WHERE t.processorName = :name AND t.segment = :segment")
-                     .setParameter("type", axon4TokenType)
-                     .setParameter("bytes", tokenJson.getBytes(StandardCharsets.UTF_8))
-                     .setParameter("name", PROCESSOR_NAME)
-                     .setParameter("segment", Segment.ROOT_SEGMENT.getSegmentId())
-                     .executeUpdate();
-        entityManager.clear();
-        return entityManager.find(TokenEntry.class,
-                                  new TokenEntry.PK(PROCESSOR_NAME, Segment.ROOT_SEGMENT.getSegmentId()));
+    private static JdbcTokenEntry axon4Row(String tokenJson, String axon4TokenType) {
+        return new JdbcTokenEntry(tokenJson.getBytes(StandardCharsets.UTF_8), axon4TokenType,
+                                  "2020-01-01T00:00:00.000Z", "owner", "my-processor", new Segment(0, 0));
     }
 
     @Nested
@@ -125,7 +79,7 @@ class Axon4TokenCompatibilityTest {
         void configTokenReadAtStartup(TestConverter testConverter) {
             // Every Axon 4 store has a config token row. Axon 5 reads it while starting up.
             Converter converter = testConverter.getConverter();
-            TokenEntry entry = axon4Row(CONFIG_JSON, AXON_4_CONFIG, converter);
+            JdbcTokenEntry entry = axon4Row(CONFIG_JSON, AXON_4_CONFIG);
 
             assertThat(entry.getToken(converter)).isEqualTo(new ConfigToken(Map.of("id", "abc")));
         }
@@ -134,7 +88,7 @@ class Axon4TokenCompatibilityTest {
         @EnumSource(value = TestConverter.class, names = {"JACKSON", "JACKSON2"})
         void globalSequenceTokenRead(TestConverter testConverter) {
             Converter converter = testConverter.getConverter();
-            TokenEntry entry = axon4Row(GLOBAL_JSON, AXON_4_GLOBAL, converter);
+            JdbcTokenEntry entry = axon4Row(GLOBAL_JSON, AXON_4_GLOBAL);
 
             assertThat(entry.getToken(converter)).isEqualTo(new GlobalSequenceTrackingToken(5L));
         }
@@ -143,7 +97,7 @@ class Axon4TokenCompatibilityTest {
         @EnumSource(value = TestConverter.class, names = {"JACKSON", "JACKSON2"})
         void gapAwareTokenRead(TestConverter testConverter) {
             Converter converter = testConverter.getConverter();
-            TokenEntry entry = axon4Row(GAP_JSON, AXON_4_GAP_AWARE, converter);
+            JdbcTokenEntry entry = axon4Row(GAP_JSON, AXON_4_GAP_AWARE);
 
             assertThat(entry.getToken(converter)).isEqualTo(GapAwareTrackingToken.newInstance(10L, List.of(3L, 7L)));
         }
@@ -158,7 +112,7 @@ class Axon4TokenCompatibilityTest {
             // A MergedTrackingToken stores its wrapped tokens with a package relative type name.
             // Remapping the outer type is enough for the wrapped tokens to resolve.
             Converter converter = testConverter.getConverter();
-            TokenEntry entry = axon4Row(MERGED_JSON, AXON_4_MERGED, converter);
+            JdbcTokenEntry entry = axon4Row(MERGED_JSON, AXON_4_MERGED);
 
             assertThat(entry.getToken(converter)).isEqualTo(new MergedTrackingToken(new GlobalSequenceTrackingToken(3L),
                                                                                     new GlobalSequenceTrackingToken(4L)));
@@ -172,24 +126,14 @@ class Axon4TokenCompatibilityTest {
         @EnumSource(value = TestConverter.class, names = {"JACKSON", "JACKSON2"})
         void tokenReadFromAxon4RowIsResavedUnderAxon5Name(TestConverter testConverter) {
             Converter converter = testConverter.getConverter();
-            TokenEntry entry = axon4Row(GLOBAL_JSON, AXON_4_GLOBAL, converter);
+            JdbcTokenEntry axon4Entry = axon4Row(GLOBAL_JSON, AXON_4_GLOBAL);
 
-            // Storing progress again writes the Axon 5 name, so later reads no longer need the mapping.
-            TrackingToken loaded = entry.getToken(converter);
-            entry.updateToken(loaded, converter);
-            entityManager.flush();
+            TrackingToken loaded = axon4Entry.getToken(converter);
+            JdbcTokenEntry resaved = new JdbcTokenEntry(loaded, converter);
 
-            assertThat(storedTokenType()).isEqualTo(GlobalSequenceTrackingToken.class.getName());
-            assertThat(entry.getToken(converter)).isEqualTo(new GlobalSequenceTrackingToken(5L));
-        }
-
-        private String storedTokenType() {
-            return entityManager.createQuery("SELECT t.tokenType FROM TokenEntry t "
-                                                     + "WHERE t.processorName = :name AND t.segment = :segment",
-                                             String.class)
-                                .setParameter("name", PROCESSOR_NAME)
-                                .setParameter("segment", Segment.ROOT_SEGMENT.getSegmentId())
-                                .getSingleResult();
+            // Saving the token again writes the Axon 5 name, so later reads no longer need the mapping.
+            assertThat(resaved.getTokenType()).isEqualTo(GlobalSequenceTrackingToken.class.getName());
+            assertThat(resaved.getToken(converter)).isEqualTo(new GlobalSequenceTrackingToken(5L));
         }
     }
 
@@ -201,13 +145,11 @@ class Axon4TokenCompatibilityTest {
         void tokenStoredUnderAxon5NameStillRead(TestConverter testConverter) {
             Converter converter = testConverter.getConverter();
             GlobalSequenceTrackingToken original = new GlobalSequenceTrackingToken(5L);
-            entityManager.persist(new TokenEntry(PROCESSOR_NAME, Segment.ROOT_SEGMENT, original, converter));
-            entityManager.flush();
-            entityManager.clear();
+            JdbcTokenEntry entry = new JdbcTokenEntry(converter.convert(original, byte[].class),
+                                                      GlobalSequenceTrackingToken.class.getName(),
+                                                      "2020-01-01T00:00:00.000Z", "owner", "my-processor",
+                                                      new Segment(0, 0));
 
-            TokenEntry entry = entityManager.find(TokenEntry.class,
-                                                  new TokenEntry.PK(PROCESSOR_NAME,
-                                                                    Segment.ROOT_SEGMENT.getSegmentId()));
             assertThat(entry.getToken(converter)).isEqualTo(original);
         }
     }
@@ -223,7 +165,7 @@ class Axon4TokenCompatibilityTest {
             String xStreamXml = "<org.axonframework.eventhandling.GlobalSequenceTrackingToken>"
                     + "<globalIndex>5</globalIndex>"
                     + "</org.axonframework.eventhandling.GlobalSequenceTrackingToken>";
-            TokenEntry entry = axon4Row(xStreamXml, AXON_4_GLOBAL, converter);
+            JdbcTokenEntry entry = axon4Row(xStreamXml, AXON_4_GLOBAL);
 
             // The class name resolves here, so the failure comes from the unreadable content and not a missing class.
             assertThatThrownBy(() -> entry.getToken(converter))
@@ -235,7 +177,7 @@ class Axon4TokenCompatibilityTest {
             // A ReplayToken changed shape between versions. Axon 4 named the field context, and Axon 5 renamed it to
             // resetContext and changed its type. So it is not mapped, and a replay must be completed or reset first.
             Converter converter = TestConverter.JACKSON.getConverter();
-            TokenEntry entry = axon4Row(REPLAY_JSON, AXON_4_REPLAY, converter);
+            JdbcTokenEntry entry = axon4Row(REPLAY_JSON, AXON_4_REPLAY);
 
             assertThatThrownBy(() -> entry.getToken(converter))
                     .hasMessageContaining(AXON_4_REPLAY);

@@ -31,6 +31,11 @@ import java.util.Map;
  * Maps Axon Framework 4 {@link TrackingToken} class names to their Axon Framework 5 counterparts, so a token store
  * written by Axon Framework 4 can be read after upgrading. Reading yields an Axon Framework 5 token, so the next save
  * stores the new name and the store migrates itself.
+ * <p>
+ * Marked {@link Internal} because it exists purely as a migration bridge for upgrading applications: it is invoked by
+ * the token stores while reading, never by application code, and its mapping table is the only thing keeping an Axon
+ * Framework 4 store readable. The set of mapped names may change between releases as tokens are added or as the
+ * migration window for older stores closes, so callers must not depend on it.
  *
  * @author Laura Devriendt
  * @since 5.2.0
@@ -54,10 +59,9 @@ public final class LegacyTokenTypes {
      *
      * @param tokenType the token class name read from the store
      * @return the matching Axon Framework 5 token class, or {@code null} if unknown
-     * @since 5.2.0
      */
     @Nullable
-    public static Class<? extends TrackingToken> mappedType(String tokenType) {
+    public static Class<? extends TrackingToken> currentTypeFor(String tokenType) {
         return AXON_4_TO_AXON_5.get(tokenType);
     }
 
@@ -73,7 +77,7 @@ public final class LegacyTokenTypes {
      * @since 5.2.0
      */
     public static TrackingToken deserialize(Converter converter, byte[] token, String tokenType) {
-        Class<? extends TrackingToken> axon5Type = mappedType(tokenType);
+        Class<? extends TrackingToken> axon5Type = currentTypeFor(tokenType);
         if (axon5Type != null) {
             return converter.convert(token, axon5Type);
         }

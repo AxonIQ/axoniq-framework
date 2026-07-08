@@ -28,23 +28,23 @@ class LegacyTokenTypesTest {
 
     @Test
     void returnsAxon5ClassForKnownAxon4Name() {
-        assertThat(LegacyTokenTypes.mappedType("org.axonframework.eventhandling.GlobalSequenceTrackingToken"))
+        assertThat(LegacyTokenTypes.currentTypeFor("org.axonframework.eventhandling.GlobalSequenceTrackingToken"))
                 .isEqualTo(GlobalSequenceTrackingToken.class);
     }
 
     @Test
     void returnsNullForAxon5Name() {
-        assertThat(LegacyTokenTypes.mappedType(GlobalSequenceTrackingToken.class.getName())).isNull();
+        assertThat(LegacyTokenTypes.currentTypeFor(GlobalSequenceTrackingToken.class.getName())).isNull();
     }
 
     @Test
     void returnsNullForUnknownName() {
-        assertThat(LegacyTokenTypes.mappedType("com.example.CustomTrackingToken")).isNull();
+        assertThat(LegacyTokenTypes.currentTypeFor("com.example.CustomTrackingToken")).isNull();
     }
 
     @Test
     void doesNotMapReplayToken() {
         // A ReplayToken changed shape between versions, so it is not mapped. Such a token must be reset instead.
-        assertThat(LegacyTokenTypes.mappedType("org.axonframework.eventhandling.ReplayToken")).isNull();
+        assertThat(LegacyTokenTypes.currentTypeFor("org.axonframework.eventhandling.ReplayToken")).isNull();
     }
 }
