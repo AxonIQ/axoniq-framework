@@ -25,41 +25,31 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
-import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Arrays;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class WaitForDelegateTest {
 
@@ -138,8 +128,8 @@ class WaitForDelegateTest {
 
         assertThat(eventCaptor.getValue().payload()).isEqualTo(Map.of(
                 "startTime", Instant.parse("2026-07-08T10:00:00Z"),
-                "eventQualifiedName", "io.acme.PaymentConfirmed",
-                "serializedAssociations", "payload:orderId=123;metadata:tenantId=eu",
+                "eventName", "io.acme.PaymentConfirmed",
+                "associations", Set.of("payload:orderId=123", "metadata:tenantId=eu"),
                 "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
         ));
         assertThat(eventCaptor.getValue().metadata().get("stepPrimitive")).isEqualTo("WAIT_FOR_EVENT");

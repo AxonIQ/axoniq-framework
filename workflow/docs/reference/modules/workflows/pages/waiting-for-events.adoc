@@ -123,7 +123,7 @@ Rules:
 ====
 Without associations, event matching is based solely on the event type.
 For production workflows, you will almost always want to use associations to ensure events reach the correct workflow instance.
-==== 
+====
 
 == Timeouts
 
@@ -284,7 +284,7 @@ Here's the full event store for this workflow:
 2 started OrderFulfillmentWorkflow#ExecuteStarted
 3 started ReserveStockStarted
 4 completed ReserveStockCompleted {"__reserveStock": true}
-5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z", "eventQualifiedName": "io.myapp.payments.PaymentConfirmed", "serializedAssociations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:05Z"}
+5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z", "eventName": "io.myapp.payments.PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:05Z"}
 6 started InitiatePaymentStarted {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
 7 completed InitiatePaymentCompleted
 8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}

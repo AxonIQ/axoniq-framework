@@ -197,8 +197,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                                @Nonnull Duration timeout) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("startTime", startedAt);
-        payload.put("eventQualifiedName", eventCondition.qualifiedName().toString());
-        payload.put("serializedAssociations", String.join(";", eventCondition.serializedAssociations()));
+        payload.put("eventName", eventCondition.qualifiedName().toString());
+        payload.put("associations", eventCondition.serializedAssociations());
         payload.put("timeoutTime", startedAt.plus(timeout));
         return payload;
     }
