@@ -16,26 +16,23 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
+
 package io.axoniq.framework.messaging.multitenancy.api;
 
-import java.util.function.Predicate;
+import java.util.List;
 
 /**
- * Predicate that during runtime determines whether a newly registered {@link TenantDescriptor tenant} should be added
- * to the tenant-aware infrastructure components. Used for dynamic registration of tenant-specific components.
+ * Interface for components that can provide a list of tenant descriptors.
  *
- * @author Stefan Dragisic
+ * @author Jan Galinski
  * @since 5.3.0
  */
-@FunctionalInterface
-public interface TenantConnectPredicate extends Predicate<TenantDescriptor> {
+public interface WithTenantDescriptors {
 
     /**
-     * A TenantConnectPredicate that always returns {@code true}.
-     * @return predicate that always returns {@code true}
+     * Returns a list of tenant descriptors.
+     *
+     * @return the list of tenant descriptors
      */
-    static TenantConnectPredicate alwaysTrue() {
-        return tenant -> true;
-    }
-
+    List<TenantDescriptor> tenants();
 }

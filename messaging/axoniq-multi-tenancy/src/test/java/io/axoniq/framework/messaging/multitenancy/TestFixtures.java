@@ -16,25 +16,12 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.messaging.multitenancy.api;
 
-import org.axonframework.common.AxonNonTransientException;
+package io.axoniq.framework.messaging.multitenancy;
 
-/**
- * Exception thrown when a tenant is not found.
- *
- * @author Stefan Dragisic
- * @since 5.3.0
- */
-@SuppressWarnings("java:S110")
-public class NoSuchTenantException extends AxonNonTransientException {
 
-    /**
-     * Construct a NoSuchTenantException referring to the given {@code tenantId}.
-     *
-     * @param tenantId The tenant identifier that could not be found.
-     */
-    public NoSuchTenantException(String tenantId) {
-        super("Tenant with identifier [" + tenantId + "] is unknown");
-    }
+public enum TestFixtures {
+    ;
+
+    // empty
 }

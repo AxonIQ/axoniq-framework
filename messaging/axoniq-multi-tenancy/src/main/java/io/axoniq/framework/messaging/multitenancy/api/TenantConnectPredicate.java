@@ -16,14 +16,17 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
+package io.axoniq.framework.messaging.multitenancy.api;
 
-package io.axoniq.framework.messaging;
+import java.util.function.Predicate;
 
-import com.tngtech.archunit.core.importer.ImportOption.DoNotIncludeTests;
-import com.tngtech.archunit.junit.AnalyzeClasses;
-import org.axonframework.common.archunit.MainArchUnitConventions;
-
-@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME, importOptions = DoNotIncludeTests.class)
-class ArchitectureTest implements MainArchUnitConventions {
-
+/**
+ * Predicate that during runtime determines whether a newly registered {@link TenantDescriptor tenant} should be added
+ * to the tenant-aware infrastructure components. Used for dynamic registration of tenant-specific components.
+ *
+ * @author Stefan Dragisic
+ * @since 5.3.0
+ */
+@FunctionalInterface
+public interface TenantConnectPredicate extends Predicate<TenantDescriptor> {
 }

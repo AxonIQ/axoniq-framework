@@ -17,10 +17,13 @@
  *  https://www.axoniq.io/pricing
  */
 
-/**
- * Part of the Axoniq Multi-Tenancy folder.
- */
-@NullMarked
 package io.axoniq.framework.messaging.multitenancy;
 
-import org.jspecify.annotations.NullMarked;
+import com.tngtech.archunit.core.importer.ImportOption.DoNotIncludeTests;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import org.axonframework.common.archunit.MainArchUnitConventions;
+
+@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME, importOptions = DoNotIncludeTests.class)
+class ArchitectureTest implements MainArchUnitConventions {
+
+}

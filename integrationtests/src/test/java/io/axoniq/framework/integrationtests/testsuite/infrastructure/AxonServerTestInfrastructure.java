@@ -29,8 +29,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
-import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_REPLICATION_GROUP;
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
 
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
@@ -185,5 +186,14 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
          * @param name the context name
          */
         void deleteContext(String name);
+
+        /**
+         * Delete all contexts except the default and admin contexts
+         */
+        default void deleteAllCustomContexts() {
+            getContexts().stream()
+                         .filter(it -> !Set.of(DEFAULT_CONTEXT, ADMIN_CONTEXT).contains(it))
+                         .forEach(this::deleteContext);
+        }
     }
 }

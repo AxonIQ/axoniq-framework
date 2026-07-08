@@ -17,10 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging;
+package io.axoniq.framework.messaging.multitenancy;
 
 import com.tngtech.archunit.junit.AnalyzeClasses;
-import com.tngtech.archunit.junit.ArchIgnore;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.library.DependencyRules;
@@ -34,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME)
 public class ArchUnitPackageRulesTest {
 
-    public static final String BASE_PACKAGE_NAME = "io.axoniq.framework.messaging";
+    public static final String BASE_PACKAGE_NAME = "io.axoniq.framework.messaging.multitenancy";
 
     @ArchTest
     private final ArchRule packagesShouldBeFreeOfCycles = slices()

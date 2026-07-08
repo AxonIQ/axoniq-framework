@@ -32,7 +32,7 @@ import java.util.List;
  * @author Stefan Dragisic
  * @since 5.3.0
  */
-public interface TenantProvider {
+public interface TenantProvider extends WithTenantDescriptors {
 
     /**
      * Subscribes the given {@code component} with this provider.
@@ -47,5 +47,6 @@ public interface TenantProvider {
      *
      * @return The list of registered {@link TenantDescriptor tenants}.
      */
-    List<TenantDescriptor> getTenants();
+    @Override
+    List<TenantDescriptor> tenants();
 }

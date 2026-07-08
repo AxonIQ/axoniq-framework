@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolverRegistry;
+import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
@@ -42,7 +43,18 @@ import org.jspecify.annotations.Nullable;
  * @see TenantResolverRegistry
  */
 @Internal
+// Todo: Do we really need message type specific resolvers? Or is a single resolver enough?
 public class DefaultTenantResolverRegistry implements TenantResolverRegistry {
+
+    // TODO use TypeReference in ComponentRegistry to dynamically register into the correct bucket.
+    private static final TypeReference<TenantResolver<Message>> TYPE_REF_MESSAGE = new TypeReference<>() {
+    };
+    private static final TypeReference<TenantResolver<? super CommandMessage>> TYPE_REF_COMMAND_MESSAGE = new TypeReference<>() {
+    };
+    private static final TypeReference<TenantResolver<? super EventMessage>> TYPE_REF_EVENT_MESSAGE = new TypeReference<>() {
+    };
+    private static final TypeReference<TenantResolver<? super QueryMessage>> TYPE_REF_QUERY_MESSAGE = new TypeReference<>() {
+    };
 
     private @Nullable ComponentBuilder<TenantResolver<Message>> generalBuilder;
     private @Nullable ComponentBuilder<TenantResolver<? super CommandMessage>> commandBuilder;

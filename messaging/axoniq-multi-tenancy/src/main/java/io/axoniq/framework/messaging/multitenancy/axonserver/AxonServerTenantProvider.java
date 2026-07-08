@@ -17,9 +17,10 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.axonserver.connector.ResultStream;
+import io.axoniq.axonserver.connector.admin.AdminChannel;
 import io.axoniq.axonserver.grpc.admin.ContextOverview;
 import io.axoniq.axonserver.grpc.admin.ContextUpdate;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
@@ -27,6 +28,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.WithTenantDescriptors;
 import org.axonframework.common.Registration;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
@@ -38,15 +40,15 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
+import static io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyUtils.tenantDescriptor;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -72,10 +74,9 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class AxonServerTenantProvider implements TenantProvider {
+public class AxonServerTenantProvider implements TenantProvider, WithTenantDescriptors {
 
     private static final Logger logger = LoggerFactory.getLogger(AxonServerTenantProvider.class);
-    private static final String ADMIN_CTX = "_admin";
 
     private final List<MultiTenantAwareComponent> tenantAwareComponents = new CopyOnWriteArrayList<>();
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
@@ -84,8 +85,12 @@ public class AxonServerTenantProvider implements TenantProvider {
     private final String preDefinedContexts;
     private final TenantConnectPredicate tenantConnectPredicate;
     private final AxonServerConnectionManager axonServerConnectionManager;
-
     private final ConcurrentHashMap<TenantDescriptor, List<Registration>> registrationMap = new ConcurrentHashMap<>();
+
+    /**
+     * Initialized in subscribeToUpdates() and closed in shutdown(). Used to receive context updates from Axon Server.
+     */
+    private ResultStream<ContextUpdate> contextUpdatesStream;
 
     /**
      * Constructs an AxonServerTenantProvider with the given connection manager and tenant connect predicate.
@@ -99,8 +104,8 @@ public class AxonServerTenantProvider implements TenantProvider {
     }
 
     /**
-     * Constructs an AxonServerTenantProvider with the given connection manager, tenant connect predicate, and
-     * optional predefined contexts.
+     * Constructs an AxonServerTenantProvider with the given connection manager, tenant connect predicate, and optional
+     * predefined contexts.
      *
      * @param axonServerConnectionManager the connection manager for Axon Server
      * @param tenantConnectPredicate      the predicate to filter which contexts become tenants
@@ -152,10 +157,8 @@ public class AxonServerTenantProvider implements TenantProvider {
     }
 
     private void subscribeToUpdates() {
-        try (ResultStream<ContextUpdate> contextUpdatesStream = axonServerConnectionManager.getConnection(ADMIN_CTX)
-                                                                                           .adminChannel()
-                                                                                           .subscribeToContextUpdates();
-        ) {
+        try {
+            contextUpdatesStream = adminChannel().subscribeToContextUpdates();
             contextUpdatesStream.onAvailable(() -> {
                 try {
                     ContextUpdate contextUpdate = contextUpdatesStream.nextIfAvailable();
@@ -186,11 +189,10 @@ public class AxonServerTenantProvider implements TenantProvider {
     private void handleContextCreated(ContextUpdate contextUpdate) {
         try {
             TenantDescriptor newTenant =
-                    toTenantDescriptor(axonServerConnectionManager.getConnection(ADMIN_CTX)
-                                                                  .adminChannel()
-                                                                  .getContextOverview(contextUpdate.getContext())
-                                                                  .orTimeout(30, TimeUnit.SECONDS)
-                                                                  .join());
+                    tenantDescriptor(adminChannel()
+                                             .getContextOverview(contextUpdate.getContext())
+                                             .orTimeout(30, TimeUnit.SECONDS)
+                                             .join());
             if (tenantConnectPredicate.test(newTenant) && !tenantDescriptors.contains(newTenant)) {
                 addTenant(newTenant);
             }
@@ -200,27 +202,20 @@ public class AxonServerTenantProvider implements TenantProvider {
     }
 
     @Override
-    public List<TenantDescriptor> getTenants() {
-        return new ArrayList<>(tenantDescriptors);
+    public List<TenantDescriptor> tenants() {
+        return List.copyOf(tenantDescriptors);
     }
 
     private List<TenantDescriptor> getTenantsAPI() {
-        return axonServerConnectionManager.getConnection(ADMIN_CTX)
-                                          .adminChannel()
-                                          .getAllContexts()
-                                          .orTimeout(30, TimeUnit.SECONDS)
-                                          .join()
-                                          .stream()
-                                          .map(this::toTenantDescriptor)
-                                          .filter(tenantConnectPredicate)
-                                          .toList();
-    }
+        List<ContextOverview> contexts = adminChannel()
+                .getAllContexts()
+                .orTimeout(30, TimeUnit.SECONDS)
+                .join();
 
-    private TenantDescriptor toTenantDescriptor(ContextOverview context) {
-        Map<String, String> metaDataMap = new HashMap<>(context.getMetaDataMap());
-        metaDataMap.putIfAbsent("replicationGroup", context.getReplicationGroup().getName());
-
-        return new TenantDescriptor(context.getName(), metaDataMap);
+        return contexts.stream()
+                       .map(AxonServerMultiTenancyUtils::tenantDescriptor)
+                       .filter(tenantConnectPredicate)
+                       .toList();
     }
 
     /**
@@ -300,10 +295,17 @@ public class AxonServerTenantProvider implements TenantProvider {
      * @return a {@link CompletableFuture} that completes when the provider has shut down
      */
     public CompletableFuture<Void> shutdown() {
+        if (!contextUpdatesStream.isClosed()) {
+            contextUpdatesStream.close();
+        }
         return CompletableFuture.runAsync(() -> registrationMap
                 .values()
                 .forEach(it -> it.reversed().forEach(Registration::cancel)
                 )
         );
+    }
+
+    private AdminChannel adminChannel() {
+        return axonServerConnectionManager.getConnection(ADMIN_CONTEXT).adminChannel();
     }
 }

@@ -18,6 +18,8 @@
  */
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
@@ -26,8 +28,7 @@ import java.util.Objects;
  * A descriptor for tenants.
  *
  * @param tenantId   The identifier of this tenant.
- * @param properties The properties of this tenant - usually context properties of an Axon Server context.
- *
+ * @param properties The (empty) properties of this tenant - usually context properties of an Axon Server context.
  * @author Stefan Dragisic
  * @author Jan Galinski
  * @since 5.3.0
@@ -54,5 +55,27 @@ public record TenantDescriptor(
      */
     public static TenantDescriptor tenantWithId(String tenantId) {
         return new TenantDescriptor(tenantId);
+    }
+
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        if (o == null) {
+            return false;
+        }
+        if (this == o) {
+            return true;
+        }
+        if (getClass() != o.getClass()) {
+            return false;
+        }
+        TenantDescriptor that = (TenantDescriptor) o;
+
+        return Objects.equals(tenantId, that.tenantId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(tenantId);
     }
 }
