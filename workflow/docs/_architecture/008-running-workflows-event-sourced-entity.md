@@ -28,8 +28,7 @@ No workflow payloads or step details are stored in this entity.
 
 The entity rebuilds from the workflow lifecycle tag slice introduced by ADR-007:
 
-- `workflowLifecycle=started`
-- `workflowLifecycle=terminal`
+- `workflowEvent=lifecycle`
 
 Those events are the tagged lifecycle markers that exist specifically for this projection.
 
@@ -45,22 +44,21 @@ The payload is ignored.
 
 ### AF5 construction
 
-The implementation uses standard AF5 event-sourced entity infrastructure:
+The implementation uses standard AF5 event-sourced entity infrastructure registered declaratively through
+`EventSourcedEntityModule`:
 
-- `EventSourcingRepository<String, RunningWorkflows>` as the reconstruction mechanism
-- an explicit lifecycle handler built from AF5 criteria resolution and entity evolution primitives
+- `EventSourcedEntityModule.declarative(String.class, RunningWorkflows.class)` as the reconstruction mechanism
+- a messaging model whose entity evolver reads only event metadata and updates the set of running workflow identifiers
+- an entity factory that always creates an empty `RunningWorkflows` singleton state
 - a criteria resolver that always selects the lifecycle-tagged workflow events
-- an empty-entity factory for singleton creation
-- a metadata-only evolver that updates the set of running workflow identifiers
 
 This keeps loading, replay, criteria-based sourcing, and repository behavior inside AF5 instead of reimplementing a
 custom tagged-stream reader.
 
-The lifecycle handler is intentionally the extension seam for future operational improvements:
+The declarative module registration is intentionally the extension seam for future operational improvements:
 
-- the default construction uses the standard simple AF5 lifecycle handler
-- if a named `SnapshotPolicy` and `SnapshotStore` are configured for `RunningWorkflows`, the same repository can switch
-  to AF5 snapshotting without changing the entity contract
+- the current default uses the standard AF5 event-sourced entity module wiring with a minimal metadata-only evolver
+- snapshot configuration can be added later without changing the entity contract
 - repository decoration can later add caching without changing the reconstruction model
 
 ### Shape

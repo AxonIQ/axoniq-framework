@@ -271,10 +271,10 @@ Engine-published workflow events are also written with AF5 event-store tags.
 |`workflowId=<id>`
 |Added to every engine-published event that carries `workflowId` metadata.
 
-|`workflowLifecycle=<started|completed|failed|timeout|cancelled>`
+|`workflowEvent=lifecycle`
 |Added to workflow lifecycle events.
 
-|`workflowWait=<started|completed|failed|timeout|cancelled>`
+|`workflowEvent=waitForStep`
 |Added to `waitForEvent` step STARTED and terminal events.
 |===
 
