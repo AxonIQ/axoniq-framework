@@ -34,6 +34,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
+
 /**
  * An {@link AbstractQueryInterceptorTestSuite} implementation validating query interceptor functionality with the
  * {@link DistributedQueryBus}.
@@ -59,7 +61,7 @@ public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptor
         // Mainly needed to create DBC context now:
         AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
                                                            container.getHttpPort(),
-                                                           "default",
+                                                           DEFAULT_CONTEXT,
                                                            AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());

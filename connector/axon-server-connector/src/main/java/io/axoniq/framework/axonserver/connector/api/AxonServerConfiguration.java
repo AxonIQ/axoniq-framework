@@ -44,7 +44,9 @@ import java.util.Map;
 public class AxonServerConfiguration {
 
     private static final String DEFAULT_SERVERS = "localhost";
-    private static final String DEFAULT_CONTEXT = "default";
+    public static final String DEFAULT_CONTEXT = "default";
+    public static final String ADMIN_CONTEXT = "_admin";
+    public static final String DEFAULT_REPLICATION_GROUP = "default";
 
     /**
      * Whether (automatic) configuration of the Axon Server Connector is enabled. When {@code false}, the connector will

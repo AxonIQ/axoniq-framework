@@ -30,6 +30,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.List;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_REPLICATION_GROUP;
+
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
  * Testcontainers.
@@ -97,7 +99,7 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                                            CONTAINER.getHttpPort(),
                                            context,
                                            AxonServerContainerUtils.DCB_CONTEXT,
-                                           "default"
+                                           DEFAULT_REPLICATION_GROUP
                                    );
                                } catch (IOException e) {
                                    throw new RuntimeException("Failed to purge events from Axon Server", e);
@@ -131,7 +133,7 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                                                            CONTAINER.getHttpPort(),
                                                            name,
                                                            dcb,
-                                                           "default");
+                                                           DEFAULT_REPLICATION_GROUP);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to create context in Axon Server", e);
                 }
