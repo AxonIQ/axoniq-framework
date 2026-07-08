@@ -84,16 +84,12 @@ class WorkflowEventTagsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
             assertThat(workflowEngine.workflowExecutions()).isEmpty();
         });
 
-        var startedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_STARTED));
-        var completedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_TERMINAL));
-        var startedWaitEvents = eventsWithTag(Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_STARTED));
-        var timeoutWaitEvents = eventsWithTag(Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_TERMINAL));
-        var workflowEvents = eventsWithTag(Tag.of("workflowId", "tags-tagged-user"));
+        var startedWorkflowEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE));
+        var startedWaitEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP));
+        var workflowEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_ID, "tags-tagged-user"));
 
-        assertThat(startedWorkflowEvents).hasSize(1);
-        assertThat(completedWorkflowEvents).hasSize(1);
-        assertThat(startedWaitEvents).hasSize(1);
-        assertThat(timeoutWaitEvents).hasSize(1);
+        assertThat(startedWorkflowEvents).hasSize(2);
+        assertThat(startedWaitEvents).hasSize(2);
 
         assertThat(workflowEvents)
                 .extracting(event -> event.type().qualifiedName().toString())

@@ -60,12 +60,12 @@ class WorkflowEventTagResolverTest {
                                                         customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_STARTED)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE)
         ));
         assertThat(resolver.resolve(timedOut)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_TERMINAL)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE)
         ));
     }
 
@@ -78,7 +78,7 @@ class WorkflowEventTagResolverTest {
                 Map.of(
                         "startTime", Instant.parse("2026-07-08T10:00:00Z"),
                         "eventQualifiedName", "io.acme.PaymentConfirmed",
-                        "serializedAssociations", Set.of("payload:orderId=123"),
+                        "criteria", Set.of("payload:orderId=123"),
                         "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
                 ),
                 customizer
@@ -92,12 +92,12 @@ class WorkflowEventTagResolverTest {
         );
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_STARTED)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
         ));
         assertThat(resolver.resolve(completed)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_TERMINAL)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
         ));
     }
 

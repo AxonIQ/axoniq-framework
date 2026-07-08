@@ -133,11 +133,12 @@ class RunningWorkflowsRepositoryIntegrationTest {
     private RunningWorkflows load() {
         var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
         return unitOfWorkFactory.create("load-running-workflows-test")
-                                .executeWithResult(context -> repository().loadOrCreate(
-                                                                                  RunningWorkflows.ENTITY_ID,
-                                                                                  context
-                                                                          )
-                                                                          .thenApply(managedEntity -> managedEntity.entity()))
+                                .executeWithResult(context -> repository()
+                                        .loadOrCreate(
+                                                RunningWorkflows.ENTITY_ID,
+                                                context
+                                        )
+                                        .thenApply(managedEntity -> managedEntity.entity()))
                                 .join();
     }
 
@@ -156,16 +157,10 @@ class RunningWorkflowsRepositoryIntegrationTest {
         var eventStorageEngine = configuration.getComponent(EventStorageEngine.class);
         MessageStream<EventMessage> stream = eventStorageEngine.source(
                 SourcingCondition.conditionFor(
-                        EventCriteria.either(
-                                EventCriteria.havingTags(Tag.of(
-                                        WorkflowEventTagResolver.WORKFLOW_LIFECYCLE_TAG,
-                                        WorkflowEventTagResolver.TAG_LIFECYCLE_VALUE_STARTED
-                                )),
-                                EventCriteria.havingTags(Tag.of(
-                                        WorkflowEventTagResolver.WORKFLOW_LIFECYCLE_TAG,
-                                        WorkflowEventTagResolver.TAG_LIFECYCLE_VALUE_TERMINAL
-                                ))
-                        )
+                        EventCriteria.havingTags(Tag.of(
+                                WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
+                                WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
+                        ))
                 )
         );
         try {

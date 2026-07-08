@@ -27,7 +27,7 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
 
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -44,10 +44,7 @@ public class RunningWorkflows {
      */
     public static final String ENTITY_ID = "running-workflows";
 
-    private final Set<String> workflowIds = new LinkedHashSet<>();
-
-    public RunningWorkflows() {
-    }
+    private final Set<String> workflowIds = new HashSet<>();
 
     /**
      * Criteria selecting the workflow lifecycle events introduced by ADR-007.
@@ -57,15 +54,10 @@ public class RunningWorkflows {
      */
     @Nonnull
     public static EventCriteria workflowLifecycleEvents(@Nonnull String ignoredEntityId) {
-        return EventCriteria.either(
-                EventCriteria.havingTags(Tag.of(
-                        WorkflowEventTagResolver.WORKFLOW_LIFECYCLE_TAG,
-                        WorkflowEventTagResolver.TAG_LIFECYCLE_VALUE_STARTED
-                )),
-                EventCriteria.havingTags(Tag.of(
-                        WorkflowEventTagResolver.WORKFLOW_LIFECYCLE_TAG,
-                        WorkflowEventTagResolver.TAG_LIFECYCLE_VALUE_TERMINAL
-                ))
+        return EventCriteria.havingTags(Tag.of(
+                                                WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
+                                                WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
+                                        )
         );
     }
 
@@ -100,16 +92,6 @@ public class RunningWorkflows {
      */
     public boolean contains(@Nonnull String workflowId) {
         return workflowIds.contains(workflowId);
-    }
-
-    /**
-     * Name of the repository component registered by AF5 for this entity.
-     *
-     * @return component name
-     */
-    @Nonnull
-    public static String componentName() {
-        return "%s#%s".formatted(RunningWorkflows.class.getName(), String.class.getName());
     }
 
     private void applyLifecycle(@Nonnull String workflowId, @Nonnull WorkflowStatus status) {

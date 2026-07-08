@@ -21,10 +21,9 @@ package io.axoniq.workflow.runtime.association;
 import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -35,52 +34,48 @@ import java.util.stream.Collectors;
  */
 public record Associations(
         @Nonnull ValueComparisonOperatorRegistry registry,
-        @Nonnull Set<String> serializedAssociations
+        @Nonnull Set<String> criteria
 ) {
 
     /**
      * Creates new associations.
      *
-     * @param registry               operator registry to use
-     * @param serializedAssociations serialized associations
+     * @param registry operator registry to use
+     * @param criteria association criteria
      */
     public Associations {
         registry = Objects.requireNonNull(registry, "Registry must not be null");
-        serializedAssociations = Collections.unmodifiableSet(
-                new TreeSet<>(
-                        Objects.requireNonNull(serializedAssociations,
-                                               "The set of serialized associations must not be null.")
-                )
-        );
+        criteria = Objects.requireNonNull(criteria, "The set of associations criteria must not be null.");
     }
 
     /**
-     * Create a builder with association.
+     * Create new associations providing the first one.
      *
-     * @param valueRetriever event value retriever.
-     * @param operator       operator for value comparison.
-     * @param value          value.
+     * @param retriever event value retriever.
+     * @param operator  operator for value comparison.
+     * @param value     value.
      * @return association builder.
      */
     public static Associations associate(
-            @Nonnull ValueRetriever valueRetriever,
+            @Nonnull ValueRetriever retriever,
             @Nonnull String operator,
             @Nonnull Object value
     ) {
         return new Associations(
                 new ValueComparisonOperatorRegistry(),
-                Set.of(SerializedAssociation.from(valueRetriever, operator, value).serialize())
+                Set.of(SerializedAssociation.from(retriever, operator, value).serialize())
         );
     }
 
     /**
-     * Create a builder with association.
+     * Create associations providing the first one.
      *
      * @param retriever value retriever, see {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param matcher   variable matcher, see {@link VariableMatcher} for example.
      * @return fluent builder association utils.
      */
-    public static Associations associate(@Nonnull ValueRetriever retriever, @Nonnull VariableMatcher matcher) {
+    public static Associations associate(@Nonnull ValueRetriever retriever,
+                                         @Nonnull VariableMatcher matcher) {
         return Associations.associate(
                 retriever,
                 matcher.operator,
@@ -88,6 +83,46 @@ public record Associations(
         );
     }
 
+
+    /**
+     * Creates new associations parsing string representations.
+     *
+     * @param registry     registry to use
+     * @param associations associations to parse
+     * @return associations instance
+     */
+    public static Associations parse(
+            @Nonnull ValueComparisonOperatorRegistry registry, String... associations) {
+        return new Associations(registry, normalizeAssociations(registry, associations));
+    }
+
+    /**
+     * Add additional associations to existing ones.
+     *
+     * @param retriever value retriever
+     * @param operator  operator for value comparison
+     * @param value     value
+     * @return new associations containing old associations and new one
+     */
+    public Associations and(@Nonnull ValueRetriever retriever,
+                            @Nonnull String operator,
+                            @Nonnull Object value) {
+        var newValues = new HashSet<>(this.criteria);
+        newValues.add(SerializedAssociation.from(retriever, operator, value).serialize());
+        return new Associations(this.registry, newValues);
+    }
+
+    /**
+     * Add additional association to existing ones.
+     *
+     * @param retriever       value retriever
+     * @param variableMatcher value matcher
+     * @return new associations containing old associations and new one
+     */
+    public Associations and(@Nonnull ValueRetriever retriever,
+                            @Nonnull VariableMatcher variableMatcher) {
+        return and(retriever, variableMatcher.operator, variableMatcher.value);
+    }
 
     /**
      * Encapsulates the value matcher containing of operator and the value.
@@ -103,61 +138,12 @@ public record Associations(
 
     }
 
-    /**
-     * Creates associations parsing string representations.
-     *
-     * @param registry     registry to use
-     * @param associations associations to parse
-     * @return associations object
-     */
-    public static Associations parse(
-            @Nonnull ValueComparisonOperatorRegistry registry, String... associations) {
-        return new Associations(registry, normalizeAssociations(registry, associations));
-    }
-
-    /**
-     * Creates a new builder containing all old and a new association.
-     *
-     * @param valueRetriever value retriever
-     * @param operator       operator for value comparison
-     * @param value          value
-     * @return association builder
-     */
-    public Associations and(@Nonnull ValueRetriever valueRetriever,
-                            @Nonnull String operator,
-                            @Nonnull Object value) {
-        var newValues = new TreeSet<>(this.serializedAssociations);
-        newValues.add(SerializedAssociation.from(valueRetriever, operator, value).serialize());
-        return new Associations(this.registry, newValues);
-    }
-
-    /**
-     * Creates a new builder containing all old and a new association.
-     *
-     * @param valueRetriever  value retriever
-     * @param variableMatcher value matcher
-     * @return association builder
-     */
-    public Associations and(@Nonnull ValueRetriever valueRetriever,
-                            @Nonnull VariableMatcher variableMatcher) {
-        return and(valueRetriever, variableMatcher.operator, variableMatcher.value);
-    }
-
-    /**
-     * Returns the canonical serialized associations represented by this builder.
-     *
-     * @return canonical serialized associations
-     */
-    @Nonnull
-    public Set<String> serializedAssociations() {
-        return serializedAssociations;
-    }
 
     @Nonnull
     private static Set<String> normalizeAssociations(@Nonnull ValueComparisonOperatorRegistry registry,
                                                      String... associations) {
         return Arrays.stream(associations)
                      .map(conditionString -> SerializedAssociation.parse(registry, conditionString).serialize())
-                     .collect(Collectors.toCollection(TreeSet::new));
+                     .collect(Collectors.toCollection(HashSet::new));
     }
 }
