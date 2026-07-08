@@ -37,8 +37,8 @@ class AssociationsTest {
         var associations = Associations.associate(payloadProperty("orderId"), "=", "123")
                                            .and(payloadProperty("customerId"), "=", "abc");
 
-        assertThat(associations.serializedAssociations())
-                .containsExactly("payload:customerId=abc", "payload:orderId=123");
+        assertThat(associations.criteria())
+                .containsExactlyInAnyOrder("payload:orderId=123", "payload:customerId=abc");
     }
 
     @Test
@@ -47,7 +47,7 @@ class AssociationsTest {
                                        .and(payloadProperty("a"), "=", "2")
                                        .and(payloadProperty("m"), "=", "3");
 
-        assertThat(associations.serializedAssociations())
+        assertThat(associations.criteria())
                 .containsExactly("payload:a=2", "payload:m=3", "payload:z=1");
     }
 
@@ -62,6 +62,6 @@ class AssociationsTest {
     void shouldParseMetadataAssociationsInCanonicalForm() {
         var associations = Associations.parse(new ValueComparisonOperatorRegistry(), "metadata:tenantId=acme");
 
-        assertThat(associations.serializedAssociations()).containsExactly("metadata:tenantId=acme");
+        assertThat(associations.criteria()).containsExactly("metadata:tenantId=acme");
     }
 }

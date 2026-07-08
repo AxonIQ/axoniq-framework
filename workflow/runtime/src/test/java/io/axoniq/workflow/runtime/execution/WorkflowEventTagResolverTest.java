@@ -73,7 +73,7 @@ class WorkflowEventTagResolverTest {
                 Map.of(
                         "startTime", Instant.parse("2026-07-08T10:00:00Z"),
                         "eventQualifiedName", "io.acme.PaymentConfirmed",
-                        "serializedAssociations", Set.of("payload:orderId=123"),
+                        "criteria", Set.of("payload:orderId=123"),
                         "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
                 ),
                 customizer

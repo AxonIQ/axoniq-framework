@@ -196,7 +196,7 @@ public class EventConditions {
 
             @Override
             public @Nonnull Set<String> serializedAssociations() {
-                return associations.serializedAssociations();
+                return associations.criteria();
             }
         };
     }
@@ -206,7 +206,7 @@ public class EventConditions {
             @Nonnull Associations associations
     ) {
         var registry = associations.registry();
-        var predicates = associations.serializedAssociations().stream()
+        var predicates = associations.criteria().stream()
                                      .map(serialized -> SerializedAssociation.parse(registry, serialized))
                                      .map(serialized -> serialized.asEventMessagePredicate(registry))
                                      .toList();

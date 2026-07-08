@@ -27,7 +27,7 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
 
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.Set;
 
 /**
@@ -63,8 +63,8 @@ public class WorkflowEventTagResolver implements TagResolver {
     @Override
     @Nonnull
     public Set<Tag> resolve(@Nonnull EventMessage eventMessage) {
-        var tags = new LinkedHashSet<Tag>();
-        var metadata = eventMessage.metadata();
+        var tags = new ArrayList<Tag>();
+        Metadata metadata = eventMessage.metadata();
 
         if (isEnginePublishedWorkflowEvent(metadata)) {
             tags.add(Tag.of(WORKFLOW_ID_TAG, MetadataUtils.getWorkflowId(metadata)));
