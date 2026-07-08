@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -131,6 +132,55 @@ class WorkflowReplayPreparedStateTest {
     }
 
     @Test
+    void restoredWaitingWorkflowConsumesReplayBacklogEventDuringCatchUp() {
+        var prepared = new PreparedState();
+        prepared.appendWarmupEvents();
+        prepared.appendStartReplayWorkflowEvent("first", "wait");
+        prepared.appendWorkflowStarted("first", payload("first", "wait"));
+        prepared.appendStepStarted("first", "waitForResume");
+        prepared.appendResumeReplayWorkflowEvent("first");
+        prepared.seedProcessorToken(prepared.tokenAt(1));
+
+        var executedWorkflowIds = new CopyOnWriteArrayList<String>();
+        try (var app = prepared.startApp(executedWorkflowIds)) {
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(app.workflowIds()).isEmpty();
+                assertThat(executedWorkflowIds).containsExactly("first");
+                assertThat(app.history("first"))
+                        .hasValueSatisfying(history -> {
+                            assertThat(history.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+                            assertThat(history.state().payload()).containsEntry("resumed", true);
+                        });
+            });
+        }
+    }
+
+    @Test
+    void restoredWaitingWorkflowTriggersTimeoutAfterStartup() {
+        var prepared = new PreparedState();
+        prepared.appendWarmupEvents();
+        prepared.appendStartReplayWorkflowEvent("first", "wait-timeout");
+        prepared.appendWorkflowStarted("first", payload("first", "wait-timeout"));
+        prepared.appendStepStarted("first", "waitForResume");
+        prepared.seedProcessorToken(prepared.tokenAt(1));
+
+        var executedWorkflowIds = new CopyOnWriteArrayList<String>();
+        try (var app = prepared.startApp(executedWorkflowIds)) {
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(app.workflowIds()).isEmpty();
+                assertThat(executedWorkflowIds).containsExactly("first");
+                assertThat(app.history("first"))
+                        .hasValueSatisfying(history -> {
+                            assertThat(history.state().workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
+                            assertThat(history.state().getStep("waitForResume").status()).isEqualTo(
+                                    StepStatus.TIMED_OUT
+                            );
+                        });
+            });
+        }
+    }
+
+    @Test
     void doesNotRestoreAnyWorkflowWhenProcessorTokenIsLatestTrackingToken() {
         var prepared = new PreparedState();
         prepared.appendWarmupEvents();
@@ -169,6 +219,10 @@ class WorkflowReplayPreparedStateTest {
 
         private void appendStartReplayWorkflowEvent(String id, String mode) {
             appendTypedPayloadEvent(StartReplayWorkflowEvent.class, payload(id, mode));
+        }
+
+        private void appendResumeReplayWorkflowEvent(String id) {
+            appendTypedPayloadEvent(ResumeReplayWorkflowEvent.class, Map.of("id", id));
         }
 
         private void appendTypedPayloadEvent(Class<?> payloadType, Map<String, Object> payload) {
@@ -312,6 +366,10 @@ class WorkflowReplayPreparedStateTest {
             return workflowEngine.workflowExecutions().stream().map(WorkflowExecution::workflowId).sorted().toList();
         }
 
+        private Optional<io.axoniq.workflow.history.api.WorkflowHistory> history(String workflowId) {
+            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId);
+        }
+
         @Override
         public void close() {
             workflowEngine.shutdown();
@@ -330,13 +388,22 @@ class WorkflowReplayPreparedStateTest {
         private void execute(SimpleWorkflowContext ctx) {
             executedWorkflowIds.add(ctx.workflowId());
 
-            if ("wait".equals(ctx.workflowPayload().get("mode"))) {
-                ctx.awaitEvent(
-                        "waitForResume",
-                        ResumeReplayWorkflowEvent.class,
-                        associate(payloadProperty("id"), equalsTo(ctx.workflowPayload().get("id"))),
-                        step -> step.timeout(Duration.ofSeconds(60))
-                );
+            var mode = String.valueOf(ctx.workflowPayload().get("mode"));
+            if ("wait".equals(mode) || "wait-timeout".equals(mode)) {
+                var timeout = "wait-timeout".equals(mode) ? Duration.ofMillis(200) : Duration.ofSeconds(60);
+                try {
+                    ctx.awaitEvent(
+                            "waitForResume",
+                            ResumeReplayWorkflowEvent.class,
+                            associate(payloadProperty("id"), equalsTo(ctx.workflowPayload().get("id"))),
+                            step -> step.timeout(timeout)
+                    );
+                } catch (Throwable t) {
+                    if ("wait-timeout".equals(mode)) {
+                        ctx.fail(t);
+                    }
+                    throw t;
+                }
                 ctx.awaitModifyPayload("markResumed", payload -> {
                     Map<String, Object> updated = new LinkedHashMap<>(payload);
                     updated.put("resumed", true);
