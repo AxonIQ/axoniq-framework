@@ -23,7 +23,6 @@ import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.annotation.SequencingPolicy;
 import org.axonframework.messaging.core.annotation.UnsupportedHandlerException;
 import org.axonframework.messaging.core.annotation.WrappedMessageHandlingMember;
-import org.axonframework.messaging.core.interception.annotation.MessageHandlerInterceptor;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.lang.reflect.Constructor;
@@ -46,9 +45,6 @@ import java.util.Optional;
  */
 public class MethodSequencingPolicyEventHandlerDefinition implements HandlerEnhancerDefinition {
 
-    private static final String INTERCEPTOR_MESSAGE_TYPE_ATTRIBUTE =
-            MessageHandlerInterceptor.class.getSimpleName() + ".messageType";
-
     @Override
     public <T> MessageHandlingMember<T> wrapHandler(MessageHandlingMember<T> original) {
         // Only wrap event handlers - check the message type to work through any existing wrappers
@@ -59,7 +55,7 @@ public class MethodSequencingPolicyEventHandlerDefinition implements HandlerEnha
         // Interceptor members (e.g. @ExceptionHandler methods) never participate in sequencing, and their
         // payload type may not be an event payload (e.g. an exception type), so building the policy against
         // it could fail
-        if (original.attribute(INTERCEPTOR_MESSAGE_TYPE_ATTRIBUTE).isPresent()) {
+        if (original.attribute(HandlerAttributes.INTERCEPTOR_MESSAGE_TYPE).isPresent()) {
             return original;
         }
 
