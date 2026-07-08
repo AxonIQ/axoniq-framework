@@ -38,7 +38,7 @@ class AssociationsTest {
                                            .and(payloadProperty("customerId"), "=", "abc");
 
         assertThat(associations.serializedAssociations())
-                .containsExactlyInAnyOrder("payload:orderId=123", "payload:customerId=abc");
+                .containsExactly("payload:customerId=abc", "payload:orderId=123");
     }
 
     @Test
