@@ -38,6 +38,14 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
+      - name: Fetch Axon Server License
+        if: ${{ secrets.LIBRARY_DEVBOT_TOKEN != '' }}
+        run: |
+          curl -s -H "Authorization: token ${{ secrets.LIBRARY_DEVBOT_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3.raw" \
+               -L "https://api.github.com/repos/AxonIQ/axon-server/contents/dev/developer.license?ref=master" \
+               -o integrationtests/src/test/resources/axon-server-test.license
+
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
